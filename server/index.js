@@ -546,6 +546,109 @@ function requireRole(...roles) {
   return (req, res, next) => { if (!req.admin || !roles.includes(req.admin.role)) return res.status(403).json({ error: 'your role cannot do this' }); next(); };
 }
 
+function renderSecurityOtpHtml({ storeName, title, subtitle, otp, userName, userEmail, expiresMin = 10, note }) {
+  const digits = String(otp).split('');
+  const digitBoxes = digits.map((d) => `
+    <td style="width:48px;height:56px;text-align:center;font-size:28px;font-weight:700;font-family:'SF Mono',Consolas,Menlo,monospace;color:#ffffff;background:#131c2e;border:1.5px solid #e7b486;border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,0.4);">${d}</td>
+  `).join('<td style="width:8px;"></td>');
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#090d16;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#090d16;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:500px;background:linear-gradient(180deg, #131c2e 0%, #0c121d 100%);border:1px solid rgba(255,255,255,0.12);border-radius:24px;box-shadow:0 24px 60px rgba(0,0,0,0.7),inset 0 1px 0 rgba(255,255,255,0.18);overflow:hidden;">
+          <tr>
+            <td style="height:4px;background:linear-gradient(90deg, #e7b486 0%, #f59e0b 50%, #38bdf8 100%);"></td>
+          </tr>
+          <tr>
+            <td style="padding:36px 32px 32px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td align="left">
+                    <div style="font-size:22px;font-weight:800;letter-spacing:-0.03em;color:#ffffff;">
+                      ${storeName || 'Store'}<span style="color:#e7b486;">.</span>
+                      <span style="display:inline-block;margin-left:6px;font-size:11px;font-weight:700;letter-spacing:0.08em;color:#94a3b8;text-transform:uppercase;background:rgba(255,255,255,0.06);padding:3px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);">ADMIN</span>
+                    </div>
+                  </td>
+                  <td align="right">
+                    <span style="display:inline-block;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:0.04em;color:#38bdf8;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);">
+                      🔒 2FA AUTH
+                    </span>
+                  </td>
+                </tr>
+              </table>
+
+              <div style="text-align:center;padding:28px 0 16px;">
+                <div style="display:inline-block;width:60px;height:60px;line-height:60px;border-radius:20px;background:rgba(231,180,134,0.14);border:1.5px solid rgba(231,180,134,0.35);text-align:center;font-size:28px;box-shadow:0 8px 24px rgba(231,180,134,0.18);margin-bottom:14px;">
+                  🛡️
+                </div>
+                <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.02em;">
+                  ${title}
+                </h1>
+                <p style="margin:0;font-size:14px;color:#94a3b8;line-height:1.5;">
+                  ${subtitle}
+                </p>
+              </div>
+
+              <div style="margin:24px 0 26px;text-align:center;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto;">
+                  <tr>
+                    ${digitBoxes}
+                  </tr>
+                </table>
+                <div style="margin-top:14px;font-size:12px;color:#64748b;letter-spacing:0.02em;">
+                  Single-use authentication passcode · Do not share with anyone
+                </div>
+              </div>
+
+              <div style="background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px 18px;margin-bottom:24px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td style="padding-bottom:8px;font-size:12.5px;color:#94a3b8;">
+                      <strong style="color:#e2e8f0;">⏱ Validity:</strong> Expires in <span style="color:#f59e0b;font-weight:600;">${expiresMin} minutes</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding-bottom:8px;font-size:12.5px;color:#94a3b8;">
+                      <strong style="color:#e2e8f0;">👤 Account:</strong> <span style="color:#e2e8f0;">${userName || 'Admin'}</span> (${userEmail})
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="font-size:12.5px;color:#94a3b8;">
+                      <strong style="color:#e2e8f0;">🛡 Security:</strong> High-grade session protection. All sessions auto-expire after 48h.
+                    </td>
+                  </tr>
+                </table>
+              </div>
+
+              <p style="margin:0;font-size:12px;color:#64748b;line-height:1.5;text-align:center;">
+                ${note || 'If you did not initiate this login attempt, someone may be trying to access your store. Please contact your security team immediately.'}
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:16px 32px;background:rgba(0,0,0,0.3);border-top:1px solid rgba(255,255,255,0.06);text-align:center;font-size:11.5px;color:#64748b;">
+              © ${new Date().getFullYear()} ${storeName || 'Store'}. Security Authentication Service.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+}
+
 // 1. Login Endpoint (validates password, triggers 6-digit OTP email)
 app.post('/api/admin/login', async (req, res) => {
   if (!hasAdminAccess()) return res.status(503).json({ error: 'admin disabled: set ADMIN_TOKEN' });
@@ -569,6 +672,8 @@ app.post('/api/admin/login', async (req, res) => {
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const tempToken = 't_' + randomBytes(16).toString('hex');
     const targetEmail = user.email || getOwnerEmail();
+    const st = getSettings();
+    const storeName = st.storeName || 'Store';
 
     pendingOtps.set(tempToken, {
       username: user.username,
@@ -582,17 +687,16 @@ app.post('/api/admin/login', async (req, res) => {
 
     sendEmail(
       targetEmail,
-      `dot. — Admin Security Login Code: ${otp}`,
-      `
-      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:480px;margin:0 auto;padding:28px;background:#17120E;color:#ECE4D8;border-radius:18px;border:1px solid rgba(231,180,134,0.3);">
-        <div style="font-size:24px;font-weight:700;letter-spacing:-.02em;margin-bottom:6px;color:#ECE4D8;">dot<span style="color:#E7B486;">.</span> <span style="font-size:14px;color:#A99E8E;font-weight:400;">admin</span></div>
-        <p style="color:#A99E8E;font-size:14px;margin:12px 0 20px;line-height:1.5;">Security verification for <b>${user.name} (${user.username})</b>. Use this 6-digit one-time passcode to sign in:</p>
-        <div style="background:rgba(231,180,134,0.12);border:1px solid rgba(231,180,134,0.4);border-radius:14px;padding:18px;text-align:center;font-size:32px;font-weight:700;letter-spacing:8px;color:#E7B486;margin-bottom:20px;">
-          ${otp}
-        </div>
-        <p style="color:#6F665A;font-size:12px;line-height:1.6;margin:0;">Valid for 10 minutes. For your store's security, all admin sessions automatically expire after 48 hours and require fresh OTP verification.</p>
-      </div>
-      `
+      `${storeName} — Admin Security Verification Code: ${otp}`,
+      renderSecurityOtpHtml({
+        storeName,
+        title: 'Admin Sign-In Verification',
+        subtitle: `A sign-in attempt was initiated for <strong>${user.name}</strong> (${user.username}). Enter this 6-digit passcode to authenticate:`,
+        otp,
+        userName: user.name,
+        userEmail: targetEmail,
+        expiresMin: 10
+      })
     ).catch(() => {});
 
     return res.json({
@@ -656,18 +760,21 @@ app.post('/api/admin/resend-otp', async (req, res) => {
   pending.expiresAt = Date.now() + 10 * 60 * 1000;
   pendingOtps.set(tempToken, pending);
 
+  const st = getSettings();
+  const storeName = st.storeName || 'Store';
+
   await sendEmail(
     pending.email,
-    `dot. — New Admin Login Code: ${otp}`,
-    `
-    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;background:#17120E;color:#ECE4D8;border-radius:14px;">
-      <h3 style="color:#E7B486;margin-top:0;">Your New Security Code</h3>
-      <div style="font-size:28px;font-weight:700;letter-spacing:6px;padding:14px;background:rgba(231,180,134,0.15);color:#E7B486;text-align:center;border-radius:8px;margin:14px 0;">
-        ${otp}
-      </div>
-      <p style="color:#A99E8E;font-size:12px;">Valid for 10 minutes.</p>
-    </div>
-    `
+    `${storeName} — New Admin Verification Code: ${otp}`,
+    renderSecurityOtpHtml({
+      storeName,
+      title: 'New Verification Code',
+      subtitle: `A new verification code was requested for your admin account. Use this 6-digit passcode to sign in:`,
+      otp,
+      userName: pending.name,
+      userEmail: pending.email,
+      expiresMin: 10
+    })
   );
 
   res.json({ ok: true, emailMasked: maskEmail(pending.email) });
@@ -687,6 +794,8 @@ app.post('/api/admin/forgot-password', async (req, res) => {
   const targetEmail = user.email || getOwnerEmail();
   const otp = String(Math.floor(100000 + Math.random() * 900000));
   const resetToken = 'r_' + randomBytes(16).toString('hex');
+  const st = getSettings();
+  const storeName = st.storeName || 'Store';
 
   pendingPasswordResets.set(resetToken, {
     username: user.username,
@@ -697,17 +806,17 @@ app.post('/api/admin/forgot-password', async (req, res) => {
 
   await sendEmail(
     targetEmail,
-    `dot. — Password Reset Security Code: ${otp}`,
-    `
-    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:480px;margin:0 auto;padding:28px;background:#17120E;color:#ECE4D8;border-radius:18px;border:1px solid rgba(231,180,134,0.3);">
-      <div style="font-size:22px;font-weight:700;margin-bottom:6px;color:#ECE4D8;">dot<span style="color:#E7B486;">.</span> Password Reset</div>
-      <p style="color:#A99E8E;font-size:14px;margin:12px 0 20px;">A password reset was requested for admin <b>${user.username}</b>. Use the 6-digit code below to set a new password:</p>
-      <div style="background:rgba(231,180,134,0.12);border:1px solid rgba(231,180,134,0.4);border-radius:14px;padding:18px;text-align:center;font-size:32px;font-weight:700;letter-spacing:8px;color:#E7B486;margin-bottom:20px;">
-        ${otp}
-      </div>
-      <p style="color:#6F665A;font-size:12px;">If you didn't request this reset, your account is safe and you can ignore this email.</p>
-    </div>
-    `
+    `${storeName} — Password Reset Code: ${otp}`,
+    renderSecurityOtpHtml({
+      storeName,
+      title: 'Admin Password Reset',
+      subtitle: `A password reset was requested for admin <strong>${user.username}</strong>. Use the 6-digit code below to set a new password:`,
+      otp,
+      userName: user.name || user.username,
+      userEmail: targetEmail,
+      expiresMin: 15,
+      note: "If you did not request this password reset, your account remains secure and you can safely ignore this email."
+    })
   );
 
   res.json({ ok: true, resetToken, emailMasked: maskEmail(targetEmail) });
@@ -802,7 +911,7 @@ app.post('/api/admin/users', adminAuth, requireRole('owner'), async (req, res) =
 
   // Send onboarding email to new staff member
   if (email) {
-    const host = req.get('host') || 'metrroma.com';
+    const host = req.get('host') || 'dot.metromaa.com';
     const loginUrl = `${req.protocol}://${host}/wp-admin`;
     sendEmail(
       email,
@@ -1885,7 +1994,7 @@ async function trackPurchase(order) {
           event_time: ts,
           event_id: eventId,
           action_source: 'website',
-          event_source_url: 'https://metrroma.com/',
+          event_source_url: 'https://dot.metromaa.com/',
           user_data: { ph: [ph] },
           custom_data: {
             currency: 'BDT',
