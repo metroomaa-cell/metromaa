@@ -1,6 +1,6 @@
 {
-  "storeName": "METROMAA",
-  "announce": "✨ FREE SHIPPING ACROSS BANGLADESH ON ORDERS OVER ৳1999 · CASH ON DELIVERY · 24/7 HELPLINE",
+  "storeName": "SECRATE",
+  "announce": "free discreet shipping over ৳2500 · cash on delivery nationwide",
   "deliveryInside": 80,
   "deliveryOutside": 130,
   "freeShipThreshold": 2500,
@@ -8,6 +8,23 @@
   "whatsapp": "",
   "phone": "8801878374762",
   "gtmId": "GTM-KFFN69B8",
+  "fbPixelId": "848875214054132",
+  "logo": "/uploads/logo_secrate.png",
+  "favicon": "/uploads/favicon_32.png",
+  "sliders": [
+    {
+      "id": "secrate-hero-1",
+      "active": true,
+      "image": "/uploads/banner_secrate_desktop.webp",
+      "mobileImage": "/uploads/banner_secrate_mobile.webp",
+      "badge": "🌿 DERMATOLOGICALLY CRAFTED · BOTANICAL CARE",
+      "title": "Pure Botanical Radiance",
+      "subtitle": "Elevated Everyday Skincare · Self-Care",
+      "description": "Nourish your skin barrier with clinically-inspired botanical cleansers, hydrating serums, and restorative moisture balms. Cash on delivery nationwide.",
+      "btnText": "EXPLORE SKINCARE →",
+      "btnLink": "shop"
+    }
+  ],
   "fraudDetector": {
     "enabled": true,
     "cooldownHours": 24,
