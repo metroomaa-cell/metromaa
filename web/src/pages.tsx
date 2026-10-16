@@ -795,7 +795,7 @@ export function Home() {
             {!loaded
               ? [0, 1, 2, 3, 4, 5, 6, 7].map((i) => <SkeletonCard key={i} />)
               : best.length > 0
-                ? best.slice(0, 8).map((p) => <ProductCard key={p.id} p={p} />)
+                ? best.slice(0, 24).map((p) => <ProductCard key={p.id} p={p} />)
                 : (
                   <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px 20px', color: '#6b645c' }}>
                     <div style={{ fontSize: 40, marginBottom: 12 }}>📦</div>
