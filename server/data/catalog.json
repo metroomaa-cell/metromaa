@@ -1,1 +1,61 @@
-﻿{"categories":[],"products":[]}
+{
+  "categories": [
+    {
+      "slug": "baby-care",
+      "name": "Baby Care",
+      "blurb": "Gentle & pure daily care for delicate baby skin",
+      "image": "/uploads/cat_baby-care.webp",
+      "adult": false
+    },
+    {
+      "slug": "beauty-care",
+      "name": "Beauty Care",
+      "blurb": "Botanical serums, glow moisturizers & skin essentials",
+      "image": "/uploads/cat_beauty-care.webp",
+      "adult": false
+    },
+    {
+      "slug": "makeup",
+      "name": "Makeup",
+      "blurb": "Flawless foundations, lip colors & luxury cosmetics",
+      "image": "/uploads/cat_makeup.webp",
+      "adult": false
+    },
+    {
+      "slug": "hair-care",
+      "name": "Hair Care",
+      "blurb": "Nourishing botanical hair oils & smoothing treatments",
+      "image": "/uploads/cat_hair-care.webp",
+      "adult": false
+    },
+    {
+      "slug": "femenine-care",
+      "name": "Femenine Care",
+      "blurb": "Gentle, pH-balanced intimate wellness & hygiene",
+      "image": "/uploads/cat_femenine-care.webp",
+      "adult": false
+    },
+    {
+      "slug": "mens-care",
+      "name": "Men's care",
+      "blurb": "Daily facewash, beard care & active grooming essentials",
+      "image": "/uploads/cat_mens-care.webp",
+      "adult": false
+    },
+    {
+      "slug": "health-care",
+      "name": "Health care",
+      "blurb": "Herbal extracts, daily vitamins & wellness supplements",
+      "image": "/uploads/cat_health-care.webp",
+      "adult": false
+    },
+    {
+      "slug": "wellness-corner",
+      "name": "Wellness Corner",
+      "blurb": "Intimate personal wellness, discreet & couple essentials",
+      "image": "/uploads/cat_wellness-corner-couple.webp",
+      "adult": true
+    }
+  ],
+  "products": []
+}
