@@ -798,7 +798,7 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
       {/* Sticky Bottom Order Bar for Mobile */}
       <div className="ll-mobile-sticky-bar">
         <a href={`tel:${phoneNum}`} className="ll-sticky-call" title="কল করুন">
-          <PhoneIcon size={18} />
+          <PhoneIcon size={15} />
           <span>কল</span>
         </a>
         <a
@@ -808,11 +808,11 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
           className="ll-sticky-wa"
           title="হোয়াটসঅ্যাপে অর্ডার করুন"
         >
-          <WhatsAppIcon size={20} variant="official" />
+          <WhatsAppIcon size={16} variant="official" />
           <span>WhatsApp</span>
         </a>
         <button onClick={scrollToOrder} className="ll-sticky-order">
-          <CartIcon size={20} />
+          <CartIcon size={17} />
           <span>অর্ডার করুন • {taka(total)}</span>
         </button>
       </div>

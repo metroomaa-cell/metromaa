@@ -3643,24 +3643,6 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   justify-content: center;
   gap: 8px;
 }
-.ll-sticky-wa {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
-  color: #ffffff;
-  border-radius: 14px;
-  padding: 6px 14px;
-  font-family: 'Hind Siliguri', sans-serif;
-  font-size: 11px;
-  font-weight: 800;
-  text-decoration: none;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 4px 14px rgba(37, 211, 102, 0.35);
-}
 .ll-wafloat {
   position: fixed;
   right: 22px;
@@ -3683,10 +3665,7 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
 }
 @media (max-width: 768px) {
   .ll-wafloat {
-    bottom: calc(85px + env(safe-area-inset-bottom));
-    right: 16px;
-    width: 50px;
-    height: 50px;
+    display: none !important;
   }
 }
 
@@ -4100,39 +4079,68 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   text-decoration: underline;
 }
 
-/* Sticky Bottom Mobile Bar: iPhone Glass Dock */
+/* Sticky Bottom Mobile Bar: Compact Modern Glass Dock */
 .ll-mobile-sticky-bar {
   display: none;
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(28px) saturate(190%);
-  -webkit-backdrop-filter: blur(28px) saturate(190%);
-  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-  box-shadow: 0 -10px 35px rgba(0, 0, 0, 0.08);
-  border-top: 1px solid rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  padding: 6px 10px calc(6px + env(safe-area-inset-bottom));
+  box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.08);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
   z-index: 9999;
-  gap: 10px;
+  gap: 8px;
+  align-items: center;
 }
 
 .ll-sticky-call {
   flex: 0 0 auto;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 5px;
   background: linear-gradient(135deg, #FFCC00 0%, #F59E0B 100%);
   color: #111827;
-  border-radius: 14px;
-  padding: 6px 14px;
+  border-radius: 8px;
+  padding: 0 12px;
+  height: 40px;
   font-family: 'Hind Siliguri', sans-serif;
-  font-size: 11.5px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 700;
   text-decoration: none;
   border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
+  transition: transform .15s ease;
+}
+.ll-sticky-call:active {
+  transform: scale(0.97);
+}
+
+.ll-sticky-wa {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 0 12px;
+  height: 40px;
+  font-family: 'Hind Siliguri', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 2px 8px rgba(37, 211, 102, 0.25);
+  transition: transform .15s ease;
+}
+.ll-sticky-wa:active {
+  transform: scale(0.97);
 }
 
 .ll-sticky-order {
@@ -4140,17 +4148,34 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   background: linear-gradient(135deg, #FF4B3A 0%, #CB202D 100%);
   color: #FFFFFF;
   border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 14px;
-  padding: 13px;
+  border-radius: 8px;
+  padding: 0 12px;
+  height: 40px;
   font-family: 'Hind Siliguri', sans-serif;
-  font-size: 16.5px;
+  font-size: 14px;
   font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(203, 32, 45, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 14px rgba(203, 32, 45, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  white-space: nowrap;
+  transition: transform .15s ease;
+}
+.ll-sticky-order:active {
+  transform: scale(0.98);
+}
+
+@media (max-width: 360px) {
+  .ll-sticky-call, .ll-sticky-wa {
+    padding: 0 8px;
+    font-size: 11.5px;
+  }
+  .ll-sticky-order {
+    font-size: 13px;
+    padding: 0 8px;
+  }
 }
 
 /* RESPONSIVE MEDIA QUERIES */
@@ -4209,6 +4234,6 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
     display: flex;
   }
   .ll-footer-sec {
-    padding-bottom: 95px;
+    padding-bottom: 65px;
   }
 }
