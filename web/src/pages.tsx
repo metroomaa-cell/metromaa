@@ -418,17 +418,20 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
     return (
       <section className="tabaya-hero">
         <div className="tabaya-hero-bg">
-          <img
-            src={isSkin
-              ? 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=1920&q=85'
-              : 'https://tabaya.com/cdn/shop/files/Cover_01.png?v=1778416287&width=1920'}
-            alt={isSkin ? 'Botanical Skincare & Essentials' : 'Contemporary Modest Living'}
-            onError={(e: any) => {
-              e.currentTarget.src = isSkin
-                ? 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=1920&q=85'
-                : 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=1920&q=85';
-            }}
-          />
+          <picture>
+            {isSkin && <source media="(max-width: 768px)" srcSet="/uploads/banner_secrate_mobile.webp" />}
+            <img
+              src={isSkin
+                ? '/uploads/banner_secrate_desktop.webp'
+                : 'https://tabaya.com/cdn/shop/files/Cover_01.png?v=1778416287&width=1920'}
+              alt={isSkin ? 'Botanical Skincare & Essentials' : 'Contemporary Modest Living'}
+              onError={(e: any) => {
+                e.currentTarget.src = isSkin
+                  ? 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=1920&q=85'
+                  : 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=1920&q=85';
+              }}
+            />
+          </picture>
         </div>
         <div className="tabaya-hero-overlay" />
         <div className="wrap tabaya-hero-wrap">
