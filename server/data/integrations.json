@@ -9,8 +9,8 @@
     "secure": false,
     "user": "",
     "pass": "",
-    "fromName": "dot.",
-    "fromEmail": "admin@dot.metromaa.com",
+    "fromName": "METROMAA",
+    "fromEmail": "support@metromaa.com",
     "hasPass": false
   },
   "sms": {
@@ -19,8 +19,8 @@
     "method": "GET",
     "senderId": "",
     "apiKey": "",
-    "templatePlaced": "dot.: order {id} received. total {total}. we will call to confirm. track: {track}",
-    "templateStatus": "dot.: order {id} is now {status}. {courier}",
+    "templatePlaced": "METROMAA: Order {id} received. Total Tk {total}. We will call to confirm. Track: {track}",
+    "templateStatus": "METROMAA: Order {id} is now {status}. {courier}",
     "hasApiKey": false
   },
   "couriers": [
