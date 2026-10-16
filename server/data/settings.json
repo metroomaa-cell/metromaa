@@ -1,0 +1,26 @@
+{
+  "storeName": "METROMAA",
+  "announce": "✨ FREE SHIPPING ACROSS BANGLADESH ON ORDERS OVER ৳1999 · CASH ON DELIVERY · 24/7 HELPLINE",
+  "deliveryInside": 80,
+  "deliveryOutside": 130,
+  "freeShipThreshold": 2500,
+  "lowStockAt": 5,
+  "whatsapp": "",
+  "phone": "8801878374762",
+  "gtmId": "GTM-KFFN69B8",
+  "fraudDetector": {
+    "enabled": true,
+    "cooldownHours": 24,
+    "maxOrdersPerDay": 5,
+    "minSecondsBetweenOrders": 30,
+    "blockByPhone": true,
+    "sameProductNotice": "You have already placed an order for this item recently. Please wait before ordering again, or contact our support team.",
+    "maxOrdersNotice": "You have reached the maximum daily order limit from this device. Please contact customer support for urgent orders.",
+    "rapidOrderNotice": "Please wait a moment before submitting another order."
+  },
+  "ownerPassword": {
+    "salt": "dc4eec36025b6745",
+    "hash": "dfed4e2a8d195bca01508e2b2a0c0e3244391c3e67390dcd7930e1c1e6b3b421",
+    "updatedAt": "2026-10-13T14:17:11.249Z"
+  }
+}
