@@ -663,11 +663,12 @@ app.post('/api/admin/login', async (req, res) => {
   const ig = getIntegrations();
   const emailActive = !!(ig.email?.enabled && (ig.email?.resendApiKey || ig.email?.host));
 
-  // If email is active, generate and send 6-digit OTP
-  if (emailActive) {
+  // If email is active and user has not opted out of OTP:
+  if (emailActive && !user.skipOtp) {
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const tempToken = 't_' + randomBytes(16).toString('hex');
-    const targetEmail = user.email || getOwnerEmail();
+    const targetEmail = (user.email || getOwnerEmail()).trim();
+    const ownerEmail = getOwnerEmail().trim();
     const st = getSettings();
     const storeName = st.storeName || 'Store';
 
@@ -681,7 +682,9 @@ app.post('/api/admin/login', async (req, res) => {
       expiresAt: Date.now() + 10 * 60 * 1000 // 10 minutes
     });
 
-    sendEmail(
+    let deliveredEmail = targetEmail;
+
+    const emailRes = await sendEmail(
       targetEmail,
       `${storeName} — Admin Security Verification Code: ${otp}`,
       renderSecurityOtpHtml({
@@ -693,16 +696,41 @@ app.post('/api/admin/login', async (req, res) => {
         userEmail: targetEmail,
         expiresMin: 10
       })
-    ).catch(() => {});
+    );
+
+    // If delivery to team member failed (e.g. Resend unverified domain restriction: only sends to owner's registered email)
+    if (!emailRes.ok) {
+      console.warn(`[OTP] Direct delivery to ${targetEmail} failed (${emailRes.error}). Forwarding OTP to Store Owner: ${ownerEmail}`);
+      if (targetEmail.toLowerCase() !== ownerEmail.toLowerCase()) {
+        const fwdRes = await sendEmail(
+          ownerEmail,
+          `${storeName} — [Team Member Login Code] ${user.name}: ${otp}`,
+          renderSecurityOtpHtml({
+            storeName,
+            title: `Team Member Login: ${user.name}`,
+            subtitle: `Team member <strong>${user.name}</strong> (${user.username}) is attempting to log in with email <code>${targetEmail}</code>.<br><br>⚠️ <em>Because your store domain is not yet verified in Resend, Resend restricted external delivery. Their 6-digit code has been delivered to your owner inbox:</em>`,
+            otp,
+            userName: `${user.name} (${user.username})`,
+            userEmail: targetEmail,
+            expiresMin: 10,
+            note: `Share this code with ${user.name} to allow them to sign in. To enable direct delivery to team members, verify your domain in Resend.com or configure SMTP in Settings.`
+          })
+        );
+        if (fwdRes.ok) {
+          deliveredEmail = `${ownerEmail} (Forwarded to Owner)`;
+        }
+      }
+    }
 
     return res.json({
       otpRequired: true,
       tempToken,
-      emailMasked: maskEmail(targetEmail)
+      emailMasked: deliveredEmail.includes('Forwarded to Owner') ? `Owner Inbox (${maskEmail(ownerEmail)})` : maskEmail(deliveredEmail),
+      notice: deliveredEmail.includes('Forwarded to Owner') ? `Verification code was delivered to Store Owner (${maskEmail(ownerEmail)}) because domain is in Resend test mode.` : undefined
     });
   }
 
-  // Fallback: direct 48-hour session if email is disabled
+  // Fallback: direct 48-hour session if email is disabled or skipOtp is enabled
   const token = 's_' + randomBytes(24).toString('hex');
   const expiresAt = Date.now() + SESSION_TTL_MS;
   sessions.set(token, { role: user.role, name: user.name, username: user.username, email: user.email || getOwnerEmail(), allowedProducts: Array.isArray(user.allowedProducts) ? user.allowedProducts : [], expiresAt });
@@ -758,8 +786,9 @@ app.post('/api/admin/resend-otp', async (req, res) => {
 
   const st = getSettings();
   const storeName = st.storeName || 'Store';
+  const ownerEmail = getOwnerEmail().trim();
 
-  await sendEmail(
+  let emailRes = await sendEmail(
     pending.email,
     `${storeName} — New Admin Verification Code: ${otp}`,
     renderSecurityOtpHtml({
@@ -773,7 +802,29 @@ app.post('/api/admin/resend-otp', async (req, res) => {
     })
   );
 
-  res.json({ ok: true, emailMasked: maskEmail(pending.email) });
+  let deliveredEmail = pending.email;
+  if (!emailRes.ok && pending.email.toLowerCase() !== ownerEmail.toLowerCase()) {
+    console.warn(`[OTP Resend] Delivery to ${pending.email} failed. Forwarding to Store Owner: ${ownerEmail}`);
+    const fwdRes = await sendEmail(
+      ownerEmail,
+      `${storeName} — [Team Member Login Code] ${pending.name}: ${otp}`,
+      renderSecurityOtpHtml({
+        storeName,
+        title: `Team Member Login: ${pending.name}`,
+        subtitle: `Team member <strong>${pending.name}</strong> (${pending.username}) requested a new code. Their 6-digit code has been delivered to your owner inbox:`,
+        otp,
+        userName: `${pending.name} (${pending.username})`,
+        userEmail: pending.email,
+        expiresMin: 10,
+        note: `Share this code with ${pending.name} so they can complete sign in.`
+      })
+    );
+    if (fwdRes.ok) {
+      deliveredEmail = `${ownerEmail} (Forwarded to Owner)`;
+    }
+  }
+
+  res.json({ ok: true, emailMasked: deliveredEmail.includes('Forwarded to Owner') ? `Owner Inbox (${maskEmail(ownerEmail)})` : maskEmail(deliveredEmail) });
 });
 
 // 4. Forgot Password (requests OTP to reset password)
@@ -887,7 +938,7 @@ app.put('/api/admin/security-email', adminAuth, requireRole('owner'), (req, res)
 
 app.get('/api/admin/me', adminAuth, (req, res) => res.json(req.admin));
 
-app.get('/api/admin/users', adminAuth, requireRole('owner'), (_q, res) => res.json(getUsers().map((u) => ({ id: u.id, username: u.username, name: u.name, email: u.email || '', role: u.role, allowedProducts: Array.isArray(u.allowedProducts) ? u.allowedProducts : [] }))));
+app.get('/api/admin/users', adminAuth, requireRole('owner'), (_q, res) => res.json(getUsers().map((u) => ({ id: u.id, username: u.username, name: u.name, email: u.email || '', role: u.role, skipOtp: !!u.skipOtp, allowedProducts: Array.isArray(u.allowedProducts) ? u.allowedProducts : [] }))));
 
 app.post('/api/admin/users', adminAuth, requireRole('owner'), async (req, res) => {
   const b = req.body || {};
@@ -897,11 +948,12 @@ app.post('/api/admin/users', adminAuth, requireRole('owner'), async (req, res) =
   const role = ['manager', 'staff'].includes(b.role) ? b.role : 'staff';
   const allowedProducts = Array.isArray(b.allowedProducts) ? b.allowedProducts.map(String) : [];
   const password = String(b.password || '');
+  const skipOtp = !!b.skipOtp;
   if (!username || password.length < 4) return res.status(400).json({ error: 'username and a 4+ character password are required' });
   const users = getUsers();
   if (users.find((u) => u.username === username)) return res.status(400).json({ error: 'username already exists' });
   const { salt, hash } = makeHash(password);
-  const newUser = { id: 'u' + Date.now().toString(36), username, name, email, role, allowedProducts, salt, hash, createdAt: new Date().toISOString() };
+  const newUser = { id: 'u' + Date.now().toString(36), username, name, email, role, skipOtp, allowedProducts, salt, hash, createdAt: new Date().toISOString() };
   users.push(newUser);
   saveUsers(users);
 
@@ -927,7 +979,7 @@ app.post('/api/admin/users', adminAuth, requireRole('owner'), async (req, res) =
     ).catch(() => {});
   }
 
-  res.status(201).json({ username, name, email, role, allowedProducts });
+  res.status(201).json({ username, name, email, role, skipOtp, allowedProducts });
 });
 
 app.patch('/api/admin/users/:id', adminAuth, requireRole('owner'), (req, res) => {
@@ -938,6 +990,7 @@ app.patch('/api/admin/users/:id', adminAuth, requireRole('owner'), (req, res) =>
   if (b.name != null) u.name = String(b.name).trim() || u.name;
   if (b.email != null) u.email = String(b.email).trim().toLowerCase();
   if (b.role && ['manager', 'staff'].includes(b.role)) u.role = b.role;
+  if (b.skipOtp != null) u.skipOtp = !!b.skipOtp;
   if (Array.isArray(b.allowedProducts)) u.allowedProducts = b.allowedProducts.map(String);
   if (b.password && String(b.password).length >= 4) {
     const { salt, hash } = makeHash(String(b.password));
@@ -945,7 +998,7 @@ app.patch('/api/admin/users/:id', adminAuth, requireRole('owner'), (req, res) =>
     u.hash = hash;
   }
   saveUsers(users);
-  res.json({ id: u.id, username: u.username, name: u.name, email: u.email || '', role: u.role, allowedProducts: Array.isArray(u.allowedProducts) ? u.allowedProducts : [] });
+  res.json({ id: u.id, username: u.username, name: u.name, email: u.email || '', role: u.role, skipOtp: !!u.skipOtp, allowedProducts: Array.isArray(u.allowedProducts) ? u.allowedProducts : [] });
 });
 
 app.delete('/api/admin/users/:id', adminAuth, requireRole('owner'), (req, res) => { saveUsers(getUsers().filter((u) => u.id !== req.params.id)); res.json({ ok: true }); });
