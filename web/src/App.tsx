@@ -1,0 +1,574 @@
+import { useEffect, useState, lazy, Suspense } from 'react';
+import { CartProvider, useCart, useRoute, go } from './cart';
+import { taka, getSettings, isSkincareSite, getCategories } from './api';
+import { initGTM, initFB, dl, trackEngagement, initInteractionTracking } from './analytics';
+import { Home, Shop, ProductPage, Checkout, Confirm, Track, SearchOverlay, InfoPage } from './pages';
+import { WhatsAppIcon } from './icons';
+const Admin = lazy(() => import('./admin').then((m) => ({ default: m.Admin })));
+const LoveLockLanding = lazy(() => import('./LoveLockLanding').then((m) => ({ default: m.LoveLockLanding })));
+
+function Effects() {
+  const route = useRoute();
+  useEffect(() => {
+    initInteractionTracking();
+    getSettings().then((s) => {
+      if (s.gtmId) initGTM(s.gtmId);
+      if (s.fbPixelId) initFB(s.fbPixelId);
+      if (s.favicon) {
+        let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
+        if (!link) {
+          link = document.createElement('link');
+          link.rel = 'icon';
+          document.head.appendChild(link);
+        }
+        link.href = s.favicon;
+      }
+    }).catch(() => {});
+  }, []);
+  useEffect(() => {
+    const p = '/' + (route.name === 'home' ? '' : route.name) + (route.param ? '/' + route.param : '');
+    dl({ event: 'page_view', page_location: location.href, page_path: p || '/' });
+  }, [route.name, route.param]);
+  useEffect(() => {
+    const p = '/' + (route.name === 'home' ? '' : route.name) + (route.param ? '/' + route.param : '');
+    trackEngagement(p || '/');
+  }, [route.name, route.param]);
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [route.name, route.param]);
+  useEffect(() => {
+    const isSkin = isSkincareSite();
+    const defaultBrand = isSkin ? 'SECRATE' : 'METROMAA';
+    getSettings().then((s) => {
+      const brand = s.storeName && s.storeName !== 'dot.' ? s.storeName : defaultBrand;
+      const t: any = isSkin
+        ? {
+            home: `${brand} | Pure Botanical Skincare & Self-Care Essentials`,
+            shop: `All Skincare & Beauty — ${brand}`,
+            track: `Track Your Order — ${brand}`,
+            checkout: `Checkout (Cash on Delivery) — ${brand}`,
+            confirm: `Order Placed Successfully — ${brand}`,
+            info: brand,
+            admin: `Admin Dashboard — ${brand}`,
+          }
+        : {
+            home: `${brand} | Contemporary Modest Fashion & Lifestyle`,
+            shop: `All Collections — ${brand}`,
+            track: `Track Your Order — ${brand}`,
+            checkout: `Checkout (Cash on Delivery) — ${brand}`,
+            confirm: `Order Placed Successfully — ${brand}`,
+            info: brand,
+            admin: `Admin Dashboard — ${brand}`,
+          };
+      document.title = t[route.name] || brand;
+    }).catch(() => {
+      document.title = isSkin ? 'SECRATE | Botanical Skincare' : 'METROMAA';
+    });
+
+    let md = document.querySelector('meta[name="description"]') as HTMLMetaElement | null;
+    if (!md) { md = document.createElement('meta'); md.name = 'description'; document.head.appendChild(md); }
+    md.content = isSkin
+      ? 'Premium botanical skincare, hydrating serums, gentle cleansers & self-care essentials delivered across Bangladesh with cash on delivery.'
+      : 'Contemporary modest fashion, abayas, panjabis & lifestyle essentials delivered across Bangladesh with cash on delivery.';
+  }, [route.name]);
+  useEffect(() => {
+    const io = new IntersectionObserver(
+      (es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }),
+      { threshold: 0.12 }
+    );
+    document.querySelectorAll('.reveal:not(.in)').forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [route.name, route.param]);
+
+  useEffect(() => {
+    const nav = document.querySelector('.navbar');
+    const h = () => nav?.classList.toggle('solid', scrollY > 40);
+    addEventListener('scroll', h); h();
+    return () => removeEventListener('scroll', h);
+  }, []);
+
+  return null;
+}
+
+function AnnouncementBar() {
+  const isSkin = isSkincareSite();
+  const defaultAnnounce = isSkin
+    ? '✨ Pure Botanical Skincare · Cash on Delivery Nationwide · Free Shipping Over ৳1,999'
+    : '✨ Cash on Delivery Nationwide | Free Shipping on Orders Over ৳1,999 | 24/7 Customer Helpline';
+  const [announce, setAnnounce] = useState(defaultAnnounce);
+  useEffect(() => {
+    getSettings().then((s) => {
+      if (s.announce) setAnnounce(s.announce);
+    }).catch(() => {});
+  }, []);
+  return (
+    <div className="tabaya-announcement">
+      <div className="wrap">
+        <span>{announce}</span>
+      </div>
+    </div>
+  );
+}
+
+function Header({ onSearch }: { onSearch: () => void }) {
+  const { count, setOpen } = useCart();
+  const [menu, setMenu] = useState(false);
+  const isSkin = isSkincareSite();
+  const [storeName, setStoreName] = useState(isSkin ? 'SECRATE' : 'METROMAA');
+  const [logo, setLogo] = useState('');
+  const [cats, setCats] = useState<{ slug: string; name: string }[]>([]);
+  const route = useRoute();
+  const nav = (p: string) => { go(p); setMenu(false); };
+
+  useEffect(() => {
+    getSettings().then((s) => {
+      if (s.storeName && s.storeName !== 'dot.') setStoreName(s.storeName);
+      else if (s.storeName === 'dot.' && isSkin) setStoreName('SECRATE');
+      if (s.logo) setLogo(s.logo);
+    }).catch(() => {});
+    getCategories().then((cs) => {
+      if (Array.isArray(cs)) setCats(cs);
+    }).catch(() => {});
+  }, [isSkin]);
+
+  const navLinks = [
+    { label: 'Home', path: 'home' },
+    { label: isSkin ? 'All Skincare' : 'All Collections', path: 'shop' },
+    ...cats.map((c) => ({ label: c.name, path: 'shop/' + c.slug })),
+    { label: 'Track Order', path: 'track' },
+  ];
+
+  return (
+    <>
+      <AnnouncementBar />
+      <header className="tabaya-header">
+        <div className="tabaya-header-inner">
+          {/* Left Column: Brand Logo + Mobile Hamburger */}
+          <div className="tabaya-header-left">
+            <button
+              className="tabaya-hamburger-btn"
+              onClick={() => setMenu(true)}
+              aria-label="Open Navigation Menu"
+            >
+              <svg width="18" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <path d="M1 3.5H13" />
+                <path d="M1 10.5H13" />
+              </svg>
+            </button>
+            <div className="tabaya-header-logo" onClick={() => nav('home')}>
+              {logo ? (
+                <img
+                  src={logo}
+                  alt={storeName}
+                  style={{ maxHeight: 38, maxWidth: 160, objectFit: 'contain', display: 'block' }}
+                />
+              ) : (
+                storeName
+              )}
+            </div>
+          </div>
+
+          {/* Center Column: Navigation Menu (Tabaya Style) */}
+          <nav className="tabaya-header-center" aria-label="Main Navigation">
+            <ul className="tabaya-nav-menu">
+              {navLinks.map((item) => {
+                const isActive = (item.path === 'home' && route.name === 'home') ||
+                  (item.path === 'shop' && route.name === 'shop' && !route.param) ||
+                  (route.name === 'shop' && route.param && item.path.endsWith('/' + route.param)) ||
+                  (item.path === 'track' && route.name === 'track');
+                return (
+                  <li key={item.path}>
+                    <a
+                      className={'tabaya-nav-item' + (isActive ? ' active' : '')}
+                      onClick={() => nav(item.path)}
+                    >
+                      {item.label}
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+
+          {/* Right Column: Search Icon & Cart Bag */}
+          <div className="tabaya-header-right">
+            <button
+              className="tabaya-h-btn"
+              onClick={onSearch}
+              aria-label="Search collections"
+              title="Search"
+            >
+              <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="9" r="5.5" />
+                <path d="m13 13 4 4" />
+              </svg>
+            </button>
+
+            <button
+              className="tabaya-h-btn tabaya-h-cart-btn"
+              onClick={() => setOpen(true)}
+              aria-label="Shopping Cart"
+              title="Cart"
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3.5 6.8h13v8.2a1.8 1.8 0 0 1-1.8 1.8H5.3a1.8 1.8 0 0 1-1.8-1.8V6.8z" />
+                <path d="M7 6.8V5.2a3 3 0 0 1 6 0v1.6" />
+              </svg>
+              {count > 0 && <span className="tabaya-h-cart-badge">{count}</span>}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Mobile Backdrop & Drawer Navigation */}
+      {menu && <div className="tabaya-mmenu-overlay" onClick={() => setMenu(false)} />}
+      <div className={'tabaya-mmenu' + (menu ? ' open' : '')}>
+        <div className="tabaya-mmenu-head">
+          <span className="tabaya-header-logo" style={{ fontSize: 20 }}>{storeName}</span>
+          <button
+            className="tabaya-mmenu-close"
+            onClick={() => setMenu(false)}
+            aria-label="Close menu"
+          >
+            ×
+          </button>
+        </div>
+        <div className="tabaya-mmenu-links">
+          {navLinks.map((item) => (
+            <a
+              key={item.path}
+              onClick={() => nav(item.path)}
+              className="tabaya-mmenu-link"
+            >
+              {item.label}
+            </a>
+          ))}
+          <a
+            onClick={() => { setOpen(true); setMenu(false); }}
+            className="tabaya-mmenu-link"
+            style={{ color: '#8B1E1E', fontWeight: 600 }}
+          >
+            Shopping Bag ({count} {count === 1 ? 'item' : 'items'})
+          </a>
+        </div>
+        <div className="tabaya-mmenu-foot">
+          <div>🚚 Cash on Delivery Nationwide</div>
+          <div style={{ marginTop: 4 }}>📞 Helpline: Available 24/7</div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Footer() {
+  const [phone, setPhone] = useState('+880 1878-374762');
+  const [whatsapp, setWhatsapp] = useState('');
+  const isSkin = isSkincareSite();
+  const [name, setName] = useState(isSkin ? 'SECRATE' : 'METROMAA');
+  const [logo, setLogo] = useState('');
+  useEffect(() => {
+    getSettings().then((s) => {
+      if (s.phone) setPhone(s.phone);
+      if (s.whatsapp) setWhatsapp(s.whatsapp);
+      if (s.storeName && s.storeName !== 'dot.') setName(s.storeName);
+      else if (s.storeName === 'dot.' && isSkin) setName('SECRATE');
+      if (s.logo) setLogo(s.logo);
+    }).catch(() => {});
+  }, [isSkin]);
+  return (
+    <footer className="tabaya-footer">
+      <div className="wrap">
+        <div className="tabaya-footer-grid">
+          <div>
+            <div className="tabaya-footer-logo serif">
+              {logo ? (
+                <img
+                  src={logo}
+                  alt={name}
+                  style={{ maxHeight: 42, maxWidth: 170, objectFit: 'contain', marginBottom: 12, display: 'block' }}
+                />
+              ) : (
+                name
+              )}
+            </div>
+            <p className="tabaya-footer-desc">
+              {isSkin
+                ? 'Dermatologically-inspired botanical skincare & everyday self-care rituals. Clean, gentle formulations crafted with active botanicals, delivered across Bangladesh with cash on delivery.'
+                : 'Contemporary modest fashion & lifestyle brand. Ethically crafted timeless modest attire, abayas, panjabis & essentials delivered across Bangladesh with cash on delivery.'}
+            </p>
+            <div className="tabaya-trust-pill">
+              <span>🚚 Cash on Delivery Nationwide</span>
+              <span>{isSkin ? '🌿 100% Authentic Quality Guaranteed' : '🔄 7-Day Easy Exchange Policy'}</span>
+            </div>
+          </div>
+          <div>
+            <h4>Collections</h4>
+            {isSkin ? (
+              <>
+                <a onClick={() => go('shop')}>All Skincare & Beauty</a>
+                <a onClick={() => go('shop/skincare')}>Facial Cleansers & Serums</a>
+                <a onClick={() => go('shop/body')}>Body Balms & Washes</a>
+                <a onClick={() => go('shop/intimates')}>Intimate & Wellness Care</a>
+              </>
+            ) : (
+              <>
+                <a onClick={() => go('shop')}>All Collections</a>
+                <a onClick={() => go('shop/modest-wear')}>Modest Abayas</a>
+                <a onClick={() => go('shop/panjabi')}>Premium Panjabi</a>
+                <a onClick={() => go('shop/bestsellers')}>Best Sellers</a>
+              </>
+            )}
+          </div>
+          <div>
+            <h4>Customer Care</h4>
+            <a onClick={() => go('track')}>Track Your Order</a>
+            <a onClick={() => go('info/shipping')}>Shipping & Delivery</a>
+            <a onClick={() => go('info/returns')}>Returns & Exchanges</a>
+            <a onClick={() => go('info/contact')}>Contact Customer Support</a>
+          </div>
+          <div>
+            <h4>Hotline & Inquiries</h4>
+            <p style={{ fontSize: 14, color: '#9ca3af', lineHeight: 1.6 }}>
+              Need assistance? Call or WhatsApp our helpline:
+            </p>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff', margin: '8px 0' }}>
+              <a href={`tel:${phone}`} style={{ color: '#fff', textDecoration: 'none' }}>📞 {phone}</a>
+            </div>
+            {whatsapp && (
+              <div style={{ marginTop: 6 }}>
+                <a
+                  href={`https://wa.me/${whatsapp}?text=${encodeURIComponent(`Hello! I have an inquiry about ${name}.`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    color: '#25D366',
+                    textDecoration: 'none',
+                    fontSize: 14,
+                    fontWeight: 600,
+                  }}
+                >
+                  <WhatsAppIcon size={18} variant="official" />
+                  <span>WhatsApp: +{whatsapp.replace(/[^0-9]/g, '')}</span>
+                </a>
+              </div>
+            )}
+            <div style={{ fontSize: 13, color: '#9ca3af', marginTop: 8 }}>
+              Everyday: 10:00 AM – 10:00 PM
+            </div>
+          </div>
+        </div>
+        <div className="tabaya-footer-bottom">
+          <span>© 2026 {name}. All Rights Reserved.</span>
+          <span>Cash on Delivery · Steadfast Courier · 100% Authentic Quality Guaranteed</span>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+function CartDrawer() {
+  const { lines, total, open, setOpen, setQty, remove } = useCart();
+  const freeThreshold = 2000;
+  const progress = Math.min(100, Math.round((total / freeThreshold) * 100));
+  const remainingForFree = Math.max(0, freeThreshold - total);
+
+  return (
+    <>
+      <div className={'pc-cart-overlay' + (open ? ' open' : '')} onClick={() => setOpen(false)} />
+      <aside className={'pc-cart-drawer' + (open ? ' open' : '')}>
+        <div className="pc-drawer-head">
+          <div style={{ display: 'flex', alignItems: 'baseline' }}>
+            <span className="pc-drawer-title">Shopping Bag</span>
+            <span className="pc-drawer-count">({lines.length} {lines.length === 1 ? 'ITEM' : 'ITEMS'})</span>
+          </div>
+          <button className="pc-drawer-close" onClick={() => setOpen(false)} aria-label="Close cart">×</button>
+        </div>
+
+        {/* Free Shipping Progress Meter */}
+        <div className="tabaya-free-meter">
+          {remainingForFree === 0 ? (
+            <span style={{ color: '#15803d', fontWeight: 600 }}>✓ Free Delivery Unlocked!</span>
+          ) : (
+            <span>Add <b>{taka(remainingForFree)}</b> more for <b>Free Delivery</b></span>
+          )}
+          <div className="tabaya-meter-bar">
+            <div className="tabaya-meter-fill" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+
+        <div className="pc-drawer-items">
+          {lines.length === 0 ? (
+            <div className="pc-drawer-empty">
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🛍️</div>
+              <h4 style={{ fontFamily: 'Playfair Display, Georgia, serif', fontSize: 20, margin: '0 0 6px', color: '#1f3147' }}>Your Bag is Empty</h4>
+              <p style={{ fontSize: 13, color: '#6b645c', margin: '0 0 18px', maxWidth: 240, lineHeight: 1.5 }}>Discover our latest modest attire and add your favorite pieces.</p>
+              <button className="pc-checkout-btn" style={{ maxWidth: 220 }} onClick={() => { setOpen(false); go('shop'); }}>
+                EXPLORE SHOP
+              </button>
+            </div>
+          ) : (
+            lines.map((l) => (
+              <div className="pc-cart-item" key={l.id}>
+                <img className="pc-cart-item-img" src={l.image} alt={l.name} />
+                <div className="pc-cart-item-body">
+                  <h4 className="pc-cart-item-title">{l.name}</h4>
+                  <div className="pc-cart-item-variant">
+                    {(l.size || l.color)
+                      ? [l.color ? `Color: ${l.color}` : null, l.size ? `Size: ${l.size}` : null].filter(Boolean).join(' · ')
+                      : (l.variantId ? 'Selected Fit' : 'Standard Fit')}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div className="pc-cart-item-qty">
+                      <button className="pc-qty-btn" onClick={() => setQty(l.id, l.qty - 1)}>−</button>
+                      <span className="pc-qty-num">{l.qty}</span>
+                      <button className="pc-qty-btn" onClick={() => setQty(l.id, l.qty + 1)}>+</button>
+                    </div>
+                    <span className="pc-cart-item-price">{taka(l.price * l.qty)}</span>
+                  </div>
+                  <button className="pc-remove-btn" onClick={() => remove(l.id)}>Remove</button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {lines.length > 0 && (
+          <div className="pc-drawer-foot">
+            <div className="pc-subtotal-row">
+              <span className="pc-subtotal-label">SUBTOTAL</span>
+              <span className="pc-subtotal-val">{taka(total)}</span>
+            </div>
+            <button className="pc-checkout-btn" onClick={() => { setOpen(false); go('checkout'); }}>
+              PROCEED TO CHECKOUT →
+            </button>
+            <div style={{ textAlign: 'center', fontSize: 11, color: '#888', marginTop: 10, letterSpacing: '0.04em' }}>
+              🔒 Cash on Delivery · Inspect Before Payment
+            </div>
+          </div>
+        )}
+      </aside>
+    </>
+  );
+}
+
+function MobileTabs() {
+  const route = useRoute();
+  const { count, setOpen } = useCart();
+  return (
+    <nav className="tabbar">
+      <a className={'tab' + (route.name === 'home' ? ' on' : '')} onClick={() => go('home')}>
+        <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10.5 12 4l9 6.5" /><path d="M5.5 9.5V20h13V9.5" /></svg><span>Home</span>
+      </a>
+      <a className={'tab' + (route.name === 'shop' ? ' on' : '')} onClick={() => go('shop')}>
+        <svg viewBox="0 0 24 24"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v6H4zM14 15h6v6h-6z" /></svg><span>Shop</span>
+      </a>
+      <a className="tab" onClick={() => setOpen(true)}>
+        <span className="tabcart"><svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8h12l-.8 11.6a1 1 0 0 1-1 .9H7.8a1 1 0 0 1-1-.9L6 8z" /><path d="M9 8V7a3 3 0 0 1 6 0v1" /></svg>{count > 0 && <i className="badge" key={count}>{count}</i>}</span><span>Bag</span>
+      </a>
+      <a className={'tab' + (route.name === 'track' ? ' on' : '')} onClick={() => go('track')}>
+        <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-6.5-5-6.5-10.5A6.5 6.5 0 0 1 18.5 10.5C18.5 16 12 21 12 21z" /><circle cx="12" cy="10.5" r="2.3" /></svg><span>Track</span>
+      </a>
+    </nav>
+  );
+}
+
+function WhatsAppFloat() {
+  const [num, setNum] = useState('');
+  useEffect(() => { fetch('/api/settings').then((r) => r.json()).then((s) => setNum(s.whatsapp || '')).catch(() => {}); }, []);
+  if (!num) return null;
+  const href = `https://wa.me/${num}?text=${encodeURIComponent('Hello! I have an inquiry about METROMAA.')}`;
+  return (
+    <a className="wafloat" href={href} target="_blank" rel="noopener noreferrer" aria-label="Chat with us on WhatsApp" title="WhatsApp Chat">
+      <WhatsAppIcon size={32} variant="official" />
+    </a>
+  );
+}
+
+function Toast() {
+  const { toast } = useCart();
+  return <div className={'toast' + (toast ? ' show' : '')} aria-live="polite">{toast}</div>;
+}
+
+function CartFab() {
+  const { count, total, setOpen } = useCart();
+  const route = useRoute();
+  if (route.name === 'checkout' || route.name === 'confirm') return null;
+  return (
+    <button className="tabaya-floating-cart" onClick={() => setOpen(true)} aria-label="Open your shopping bag">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 8h12l-.8 11.6a1 1 0 0 1-1 .9H7.8a1 1 0 0 1-1-.9L6 8z" />
+        <path d="M9 8V7a3 3 0 0 1 6 0v1" />
+      </svg>
+      <span className="tabaya-floating-cart-count">{count}</span>
+      <span style={{ fontWeight: 600 }}>{taka(total)}</span>
+    </button>
+  );
+}
+
+function Shell() {
+  const route = useRoute();
+  const [searchOpen, setSearchOpen] = useState(false);
+  if (route.name === 'admin') return <Suspense fallback={<div style={{ minHeight: '100vh' }} />}><Admin /></Suspense>;
+
+  // Dedicated Landing Page Funnel (Standalone high-converting page)
+  const isLanding =
+    route.name === 'page' ||
+    route.name === 'pages' ||
+    route.name === 'lp' ||
+    route.name === 'landing' ||
+    route.name === 'step' ||
+    route.name === 'funnel' ||
+    route.name === 'lovelock' ||
+    route.name === 'love-lock' ||
+    route.name === 'magic-condom';
+
+  if (isLanding) {
+    const landingSlug = (route.name === 'page' || route.name === 'pages' || route.name === 'lp' || route.name === 'landing' || route.name === 'step' || route.name === 'funnel')
+      ? (route.param || 'lovelock')
+      : route.name;
+    return (
+      <Suspense fallback={<div style={{ minHeight: '100vh', background: '#0b0f19' }} />}>
+        <Effects />
+        <LoveLockLanding slug={landingSlug} />
+        <Toast />
+      </Suspense>
+    );
+  }
+
+  let page;
+  if (route.name === 'shop') page = <Shop category={route.param} />;
+  else if (route.name === 'product') page = <ProductPage slug={route.param} />;
+  else if (route.name === 'checkout') page = <Checkout />;
+  else if (route.name === 'track') page = <Track />;
+  else if (route.name === 'info') page = <InfoPage slug={route.param} />;
+  else if (route.name === 'confirm') page = <Confirm id={route.param} />;
+  else page = <Home />;
+  return (
+    <>
+      <div className="amb"><span className="orb o1" /><span className="orb o2" /><span className="orb o3" /></div><div className="cursor" id="cur" /><div className="grain" />
+      <Effects />
+      <Header onSearch={() => setSearchOpen(true)} />
+      <main><div className="page-in" key={route.name + ':' + route.param}>{page}</div></main>
+      <Footer />
+      <CartDrawer />
+      <MobileTabs />
+      <WhatsAppFloat />
+      <CartFab />
+      <Toast />
+      <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <CartProvider>
+      <Shell />
+    </CartProvider>
+  );
+}
