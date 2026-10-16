@@ -9,23 +9,80 @@ function SearchSelect({ value, onChange, options, placeholder, disabled }: { val
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
-    const h = (e: any) => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setQ(''); } };
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQ('');
+      }
+    };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
-  const shown = options.filter((o) => o.toLowerCase().includes(q.trim().toLowerCase()));
+
+  const shown = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return options;
+    return options.filter((o) => o.toLowerCase().includes(term));
+  }, [options, q]);
+
   return (
-    <div className={'ssel' + (disabled ? ' off' : '')} ref={ref}>
-      <input className="field" readOnly={disabled} disabled={disabled} value={open ? q : value} placeholder={placeholder}
-        onFocus={() => { if (!disabled) { setOpen(true); setQ(''); } }}
-        onChange={(e) => { setQ(e.target.value); setOpen(true); }} />
+    <div className={'ssel' + (disabled ? ' off' : '') + (open ? ' open' : '')} ref={ref}>
+      <div className="ssel-wrap">
+        <input
+          className="field ssel-input"
+          readOnly={disabled}
+          disabled={disabled}
+          value={open ? q : (value || '')}
+          placeholder={placeholder}
+          onFocus={() => {
+            if (!disabled) {
+              setOpen(true);
+              setQ('');
+            }
+          }}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setOpen(true);
+          }}
+        />
+        <div
+          className="ssel-arrow"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!disabled) {
+              setOpen((prev) => !prev);
+              setQ('');
+            }
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </div>
+      </div>
       {open && !disabled && (
         <div className="ssel-list">
-          {shown.length === 0 && <div className="ssel-empty">no match</div>}
-          {shown.slice(0, 80).map((o) => (
-            <div className={'ssel-opt' + (o === value ? ' on' : '')} key={o} onMouseDown={(e) => { e.preventDefault(); onChange(o); setOpen(false); setQ(''); }}>{o}</div>
-          ))}
+          {shown.length === 0 ? (
+            <div className="ssel-empty">No matching location found</div>
+          ) : (
+            shown.slice(0, 100).map((o) => (
+              <div
+                className={'ssel-opt' + (o === value ? ' on' : '')}
+                key={o}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onChange(o);
+                  setOpen(false);
+                  setQ('');
+                }}
+              >
+                <span>{o}</span>
+                {o === value && <span className="ssel-check">✓</span>}
+              </div>
+            ))
+          )}
         </div>
       )}
     </div>
@@ -1304,7 +1361,7 @@ export function ProductPage({ slug }: { slug: string }) {
             </div>
 
             {/* Product Overview Summary & Jump to Full Description */}
-            <div style={{ marginBottom: 22, padding: '14px 18px', background: '#f8f6f2', borderLeft: '3px solid #b48e4c', borderRight: '1px solid rgba(180, 150, 100, 0.25)', borderTop: '1px solid rgba(180, 150, 100, 0.25)', borderBottom: '1px solid rgba(180, 150, 100, 0.25)' }}>
+            <div style={{ marginBottom: 22, padding: '14px 18px', background: '#f8f6f2', borderLeft: '3px solid #b48e4c', borderRight: '1px solid rgba(180, 150, 100, 0.25)', borderTop: '1px solid rgba(180, 150, 100, 0.25)', borderBottom: '1px solid rgba(180, 150, 100, 0.25)', borderRadius: 6 }}>
               <p style={{ fontSize: 13.5, color: '#4b5563', lineHeight: 1.6, margin: '0 0 10px' }}>
                 {p.shortDesc || p.desc}
               </p>
@@ -1544,10 +1601,9 @@ export function ProductPage({ slug }: { slug: string }) {
                   <span>{activeAcc === 'desc' ? '−' : '+'}</span>
                 </div>
                 {activeAcc === 'desc' && (
-                  <div style={{ paddingBottom: 16, fontSize: 14, color: '#4b5563', lineHeight: 1.6 }}>
-                    <p style={{ marginBottom: 8 }}>{p.desc}</p>
-                    {p.longDesc && <p style={{ whiteSpace: 'pre-line' }}>{p.longDesc}</p>}
-                    <ul style={{ paddingLeft: 20, marginTop: 10 }}>
+                  <div style={{ paddingBottom: 16, fontSize: 14, color: '#4b5563', lineHeight: 1.6 }} className="product-rich-desc">
+                    <div dangerouslySetInnerHTML={{ __html: p.longDesc || `<p>${p.desc}</p>` }} />
+                    <ul style={{ paddingLeft: 20, marginTop: 12 }}>
                       {isSkin ? (
                         <>
                           <li>Pure botanical extracts gentle on sensitive skin</li>
@@ -1681,18 +1737,14 @@ export function ProductPage({ slug }: { slug: string }) {
             {pdpTab === 'desc' && (
               <div>
                 <div style={{ maxWidth: 840, margin: '0 auto' }}>
-                  <h3 className="serif" style={{ fontSize: 24, color: '#1f3147', marginBottom: 14, fontWeight: 500 }}>
+                  <h3 className="serif" style={{ fontSize: 24, color: '#1f3147', marginBottom: 18, fontWeight: 500 }}>
                     {p.name}
                   </h3>
-                  <p style={{ fontSize: 15, color: '#374151', lineHeight: 1.8, marginBottom: 20 }}>
-                    {p.desc}
-                  </p>
-
-                  {p.longDesc && (
-                    <div style={{ fontSize: 14.5, color: '#4b5563', lineHeight: 1.8, whiteSpace: 'pre-line', padding: '20px 24px', background: '#f8f6f2', border: '1px solid rgba(180, 150, 100, 0.25)', marginBottom: 28 }}>
-                      {p.longDesc}
-                    </div>
-                  )}
+                  <div
+                    className="product-rich-desc"
+                    style={{ fontSize: 15, color: '#374151', lineHeight: 1.8, marginBottom: 28 }}
+                    dangerouslySetInnerHTML={{ __html: p.longDesc || `<p>${p.desc}</p>` }}
+                  />
 
                   {/* 4 Feature Highlights Grid */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, marginTop: 24 }}>
