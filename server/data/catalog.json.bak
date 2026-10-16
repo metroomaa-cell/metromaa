@@ -1,0 +1,331 @@
+{
+  "categories": [
+    {
+      "slug": "sunglass",
+      "name": "Designer Sunglasses",
+      "adult": false,
+      "blurb": "Premium UV400 polarized, Wayfarer & luxury designer sunglasses for men",
+      "image": "https://metrroma.com/wp-content/uploads/2026/09/metroomaa-cat-sunglass.webp"
+    },
+    {
+      "slug": "gift",
+      "name": "Luxury Gift Collections",
+      "adult": false,
+      "blurb": "Romantic Love Forever rose boxes & timeless gift sets",
+      "image": "https://metrroma.com/wp-content/uploads/2026/09/metroomaa-cat-gift.webp"
+    }
+  ],
+  "products": [
+    {
+      "id": "mm-47264",
+      "wpId": 47264,
+      "name": "Rayban Stylish Premium Quality Wayfarer Sunglass For Men’s | RB2140 | First Grade",
+      "slug": "rayban-stylish-premium-quality-wayfarer-sunglass-for-mens-rb2140-first-grade",
+      "category": "sunglass",
+      "price": 850,
+      "compareAt": 1105,
+      "image": "https://royalman.com.bd/wp-content/uploads/2026/09/Rayban-Stylish-Premium-Quality-Wayfarer-Sunglass.webp",
+      "images": [
+        "https://royalman.com.bd/wp-content/uploads/2026/09/Rayban-Stylish-Premium-Quality-Wayfarer-Sunglass.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/09/Rayban-Stylish-Premium-2140-Quality-Wayfarer-Sunglass.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/09/Rayban-Stylish-Premium-Quality-Wayfarer-Sunglass-royalman.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/09/Rayban-Stylish-Premium-Quality-Wayfarer-Sunglass-for-men.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/09/Rayban-Stylish-Premium-Quality-Wayfarer-Sunglass-by-royalman.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/09/Rayban-Stylish-Premium-Quality-Wayfarer-Sunglass-luxury.webp"
+      ],
+      "desc": "Ray-Ban Style Premium Quality Wayfarer Sunglasses for Men | RB2140 Upgrade your everyday look with this stylish Wayfarer-style sunglasses designed for a smart, ...",
+      "longDesc": "Ray-Ban Style Premium Quality Wayfarer Sunglasses for Men | RB2140 Upgrade your everyday look with this stylish Wayfarer-style sunglasses designed for a smart, modern, and premium appearance. The classic frame shape, glossy finish, dark glass lenses, and comfortable fit make it suitable for daily wear, driving, travel, and outdoor use. Its timeless design pairs easily with casual, streetwear, and semi-formal outfits, making it a versatile accessory for men of different ages. Product Features: Model: RB2140 Frame Color: As Shown in Picture Lens Color: As Shown in Picture Eye Size: 50 mm Bridge Size: 22 mm Temple Length: 140 mm UV Protected Glossy Finish Glass Lens Durable Frame Comfortable for Everyday Wear Classic Wayfarer Design Suitable for Driving, Travel, Outdoor Use & Casual Wear &nbsp; Package Includes: 1 × Sunglasses 1 × Leather Box 1 × Royalman Courier box A timeless style designed to add a smart and confident touch to your everyday look. Thanks Royalman",
+      "inStock": true,
+      "featured": false,
+      "adult": false,
+      "tags": []
+    },
+    {
+      "id": "mm-47257",
+      "wpId": 47257,
+      "name": "RayBan Polarized Sunglass | Premium Quality Sunglass | RB 57 B",
+      "slug": "rayban-polarized-sunglass-premium-quality-sunglass-rb-57-b",
+      "category": "sunglass",
+      "price": 790,
+      "compareAt": 1000,
+      "image": "https://royalman.com.bd/wp-content/uploads/2026/09/RayBan-Polarized-Sunglass-Premium-Quality-Sunglass-RB-57-B-4.webp",
+      "images": [
+        "https://royalman.com.bd/wp-content/uploads/2026/09/RayBan-Polarized-Sunglass-Premium-Quality-Sunglass-RB-57-B-4.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/09/RayBan-Polarized-Sunglass-Premium-Quality-Sunglass-RB-57-B-3.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/09/RayBan-Polarized-Sunglass-Premium-Quality-Sunglass-RB-57-B-2.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/09/RayBan-Polarized-Sunglass-Premium-Quality-Sunglass-RB-57-B-1.webp"
+      ],
+      "desc": "RayBan Polarized Sunglass | Premium Quality Sunglass | RB 57 B Ray-Ban Sunglasses – Product Specifications Brand Name: Ray-Ban Product Type: Sunglasses Gender: ...",
+      "longDesc": "RayBan Polarized Sunglass | Premium Quality Sunglass | RB 57 B Ray-Ban Sunglasses – Product Specifications Brand Name: Ray-Ban Product Type: Sunglasses Gender: Men & Women / Unisex Frame Color: As Shown in the Picture Lens Color: Black / As Shown in the Picture Eye Size: 59 mm Bridge Size: 18 mm Temple Length: 141 mm UV Protection: 100% UV Protected Polarized: Yes Lens Material: Polarized Glass Frame Material: Alloy / Acetate / Shell Lens Technology: Anti-Reflective Frame Quality: Durable Frame Product Line: Original Box: Frame Box Included Free Gift: Glass Cleaner Included Note Actual product color may vary slightly from the pictures due to lighting conditions, photography, and individual screen/display settings.",
+      "inStock": true,
+      "featured": false,
+      "adult": false,
+      "tags": []
+    },
+    {
+      "id": "mm-47252",
+      "wpId": 47252,
+      "name": "RayBan Fancy Sunglass For Daily Causal Evergreen UV Protected For Men",
+      "slug": "rayban-fancy-sunglass-for-daily-causal-evergreen-uv-protected-for-men",
+      "category": "sunglass",
+      "price": 900,
+      "compareAt": 1170,
+      "image": "https://royalman.com.bd/wp-content/uploads/2026/08/RayBan-Fancy-Sunglass-For-Daily-Causal-Evergreen-UV-Protected-For-Men-3.webp",
+      "images": [
+        "https://royalman.com.bd/wp-content/uploads/2026/08/RayBan-Fancy-Sunglass-For-Daily-Causal-Evergreen-UV-Protected-For-Men-3.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/08/RayBan-Fancy-Sunglass-For-Daily-Causal-Evergreen-UV-Protected-For-Men-4.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/08/RayBan-Fancy-Sunglass-For-Daily-Causal-Evergreen-UV-Protected-For-Men-2.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/08/RayBan-Fancy-Sunglass-For-Daily-Causal-Evergreen-UV-Protected-For-Men-1.webp"
+      ],
+      "desc": "RayBan Fancy Sunglass – Stylish & UV Protected Upgrade your everyday look with this stylish RayBan Fancy Sunglass, designed for both fashion and comfort. Featur...",
+      "longDesc": "RayBan Fancy Sunglass – Stylish & UV Protected Upgrade your everyday look with this stylish RayBan Fancy Sunglass, designed for both fashion and comfort. Featuring a modern square shape, elegant grey frame, and sleek black lenses, this sunglass is perfect for daily casual wear, travel, outdoor activities, and more. The UV400 protected lenses help provide protection from harmful sun rays, while the lightweight polycarbonate frame ensures comfortable all-day wear. Its versatile unisex design makes it suitable for both men and women and complements a wide range of face shapes. Product Specifications Product Type: Fancy Casual Sunglass Lens Protection: UV400 Protected Lens Color: Black Frame Color: Grey Frame Material: Polycarbonate Gender: Unisex Frame Shape: Square Size: Free Size Suitable For: All Face Shapes Nose Pin: Fixed Weight: Approx. 67g Package Includes ✔ 1 × Sunglass ✔ 1 × Premium Chain cover box ✔ 1 × Cleaning Cloth A perfect combination of style, comfort, and everyday eye protection—an ideal accessory for your daily casual look.",
+      "inStock": true,
+      "featured": false,
+      "adult": false,
+      "tags": []
+    },
+    {
+      "id": "mm-47247",
+      "wpId": 47247,
+      "name": "PRADA Silver Blue Sunglass | PDA 05 C",
+      "slug": "prada-silver-blue-sunglass-pda-05-c",
+      "category": "sunglass",
+      "price": 950,
+      "compareAt": 1235,
+      "image": "https://royalman.com.bd/wp-content/uploads/2026/08/Prada-Sunglass-Silver-Blue.webp",
+      "images": [
+        "https://royalman.com.bd/wp-content/uploads/2026/08/Prada-Sunglass-Silver-Blue.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/3_831d14b8-f26e-4ba5-8a1b-dbc005e0d9b5.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/1_597486a5-c902-46d5-9b2e-af3e187842d9.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/2_5ae70259-e8cf-4cb5-886a-069c4247aa9c.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/4_dbafd380-c60a-491c-87ab-c8dc9e9b11ce.webp"
+      ],
+      "desc": "Frame Color: As Like Picture Lens Color: As Like Picture Color may differ as a result of Lighting and Screen Condition Eye Size: 53 Bridge Size: 19 Temple Lengt...",
+      "longDesc": "Frame Color: As Like Picture Lens Color: As Like Picture Color may differ as a result of Lighting and Screen Condition Eye Size: 53 Bridge Size: 19 Temple Length: 148 Model: 5252 UV Protected Durable Frame Box: Carry Box Extra: Glass Cleaner, Wiping Cloth",
+      "inStock": true,
+      "featured": false,
+      "adult": false,
+      "tags": []
+    },
+    {
+      "id": "mm-47241",
+      "wpId": 47241,
+      "name": "PRADA Silver Black Sunglass | PDA 05 A",
+      "slug": "prada-silver-black-sunglass-pda-05-a",
+      "category": "sunglass",
+      "price": 950,
+      "compareAt": 1235,
+      "image": "https://royalman.com.bd/wp-content/uploads/2026/08/Prada-Sunglass-Silver-Black.webp",
+      "images": [
+        "https://royalman.com.bd/wp-content/uploads/2026/08/Prada-Sunglass-Silver-Black.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/3_18833cc7-127c-4a03-b71c-8057135d6ec5.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/1_4126f97a-cc6b-444e-9c9e-9702bd87e247.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/4_fb0b7e41-fe4c-4c88-bb1e-30096dad1626.webp"
+      ],
+      "desc": "Frame Color: As Like Picture Lens Color: As Like Picture Color may differ as a result of Lighting and Screen Condition Eye Size: 53 Bridge Size: 19 Temple Lengt...",
+      "longDesc": "Frame Color: As Like Picture Lens Color: As Like Picture Color may differ as a result of Lighting and Screen Condition Eye Size: 53 Bridge Size: 19 Temple Length: 148 Model: 5252 UV Protected Durable Frame Box: Carry Box Extra: Glass Cleaner, Wiping Cloth",
+      "inStock": true,
+      "featured": false,
+      "adult": false,
+      "tags": []
+    },
+    {
+      "id": "mm-47236",
+      "wpId": 47236,
+      "name": "PRADA Full Black Sunglass | PDA 05 B",
+      "slug": "prada-full-black-sunglass-pda-05-b",
+      "category": "sunglass",
+      "price": 950,
+      "compareAt": 1235,
+      "image": "https://royalman.com.bd/wp-content/uploads/2026/08/Prada-Sunglass-Full-Black.webp",
+      "images": [
+        "https://royalman.com.bd/wp-content/uploads/2026/08/Prada-Sunglass-Full-Black.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/3_c58f5f04-4b64-47bd-af12-9ccd7b27ef06.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/Prada-sunglass-by-royalman.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/1_ce942d4a-33b4-4df2-a9a0-effb8495c74f.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/2_1cfcf608-77aa-4925-a1d8-b8928a85537b.webp"
+      ],
+      "desc": "Frame Color: As Like Picture Lens Color: As Like Picture Color may differ as a result of Lighting and Screen Condition Eye Size: 53 Bridge Size: 19 Temple Lengt...",
+      "longDesc": "Frame Color: As Like Picture Lens Color: As Like Picture Color may differ as a result of Lighting and Screen Condition Eye Size: 53 Bridge Size: 19 Temple Length: 148 Model: 5252 UV Protected Durable Frame Box: Carry Box Extra: Glass Cleaner, Wiping Cloth",
+      "inStock": true,
+      "featured": false,
+      "adult": false,
+      "tags": []
+    },
+    {
+      "id": "mm-47230",
+      "wpId": 47230,
+      "name": "Mascot Rectangle Sunglasses – Transparent Frame – Black Glasses",
+      "slug": "mascot-rectangle-sunglasses-transparent-frame-black-glasses",
+      "category": "sunglass",
+      "price": 990,
+      "compareAt": 1287,
+      "image": "https://royalman.com.bd/wp-content/uploads/2026/08/Mascot-Rectangle-Sunglasses-Transparent-Frame-Black-Glasses-3.webp",
+      "images": [
+        "https://royalman.com.bd/wp-content/uploads/2026/08/Mascot-Rectangle-Sunglasses-Transparent-Frame-Black-Glasses-3.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/08/Mascot-Rectangle-Sunglasses-Transparent-Frame-Black-Glasses-1.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/08/Mascot-Rectangle-Sunglasses-Transparent-Frame-Black-Glasses-2.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/08/Mascot-Rectangle-Sunglasses-Transparent-Frame-Black-Glasses-4.webp"
+      ],
+      "desc": "Mascot Rectangle Sunglasses &#8211; Transparent Frame &#8211; Black Glasses Product Features Durable & Lightweight Construction Made with a lightweight and dura...",
+      "longDesc": "Mascot Rectangle Sunglasses &#8211; Transparent Frame &#8211; Black Glasses Product Features Durable & Lightweight Construction Made with a lightweight and durable PC frame, designed for comfortable everyday wear. UV380 Eye Protection Features UV380 lenses that help protect your eyes from harmful ultraviolet rays during outdoor activities. Gradient Lenses Stylish mixed-color gradient lenses provide a modern look while offering comfortable vision in bright conditions. Frameless Design The sleek frameless construction delivers a clean, modern, and sporty appearance suitable for various occasions. Comfortable for Everyday Wear Designed for adult men with a lightweight structure that provides a comfortable fit for sports, travel, and casual use. Specifications Occasion: Sports Gender: Men Coating: Waterproof Function: Far Sight UV Protection: UV380 Frame Type: Frameless Glasses Bag: No Lens Color: Mixed Color Frame Material: PC Lens Optical Attribute: Gradient Department: Adult Type: Adumbral Style: Casual",
+      "inStock": true,
+      "featured": false,
+      "adult": false,
+      "tags": []
+    },
+    {
+      "id": "mm-47225",
+      "wpId": 47225,
+      "name": "Double Poly Sunglass For Men – Polarized UV400 High Quality – Black Color",
+      "slug": "double-poly-sunglass-for-men-polarized-uv400-high-quality-black-color",
+      "category": "sunglass",
+      "price": 760,
+      "compareAt": 1100,
+      "image": "https://royalman.com.bd/wp-content/uploads/2026/08/Orginal-Double-Polo-Sunglass.webp",
+      "images": [
+        "https://royalman.com.bd/wp-content/uploads/2026/08/Orginal-Double-Polo-Sunglass.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/4DDjA1b58c057e79944bbb018167f17b6e2e5s-ezgif.com-jpg-to-webp-converter.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/0908567_double-poly-sunglasses-for-men.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/0908568_double-poly-sunglasses-for-men.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/0908569_double-poly-sunglasses-for-men.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/5778468ba9e5a1c7f0764d57e731a19d.jpg_960x960q80.jpg_.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/c65b7496e208da910227e9496f150ba7-ezgif.com-jpg-to-webp-converter.webp"
+      ],
+      "desc": "Frame Material : TR90 Lens Material : TAC Lens Technology : UV400 Protected weight : 24G Both Side Poly UV resistance rating: UV400 Applicable scene: sun protec...",
+      "longDesc": "Frame Material : TR90 Lens Material : TAC Lens Technology : UV400 Protected weight : 24G Both Side Poly UV resistance rating: UV400 Applicable scene: sun protection, outdoor sports, fashion wear, driving, parties Glasses: high quality sheet Sunglasses: drive ultra clear Overall frame width: 5.7 inch Lens Width: 2.44 inch Frame Height: 1.77 inch Temple Length: 5.94inch",
+      "inStock": true,
+      "featured": true,
+      "adult": false,
+      "tags": []
+    },
+    {
+      "id": "mm-47217",
+      "wpId": 47217,
+      "name": "Cartier Sunglasses For Men – Black & Golden",
+      "slug": "cartier-sunglasses-for-men-black-golden",
+      "category": "sunglass",
+      "price": 750,
+      "compareAt": 850,
+      "image": "https://royalman.com.bd/wp-content/uploads/2026/08/Cartier-Sunglasses.webp",
+      "images": [
+        "https://royalman.com.bd/wp-content/uploads/2026/08/Cartier-Sunglasses.webp"
+      ],
+      "desc": "Product Type: Cartier Sunglass Main Material: Glass and Metal UV Protection Glass Gender: Men Color: Gold & Mercury Standard Size 100% Quality Full Country Of O...",
+      "longDesc": "Product Type: Cartier Sunglass Main Material: Glass and Metal UV Protection Glass Gender: Men Color: Gold & Mercury Standard Size 100% Quality Full Country Of Origin: Italy Erywhere wherever you go. It is trendy and fashionable.This sunglasses is highly recommendable to young and officials and all kinds of ages as well. This is a very cute and useful gift. We are committed to providing the best products and services to our customers. This product has become a statement of men’s personality. It would be used in all season. It is environmentally and friendly. This product high quality and standard, Comfort- able and Fashionable and modernized and updated. Conversely the product is in very competitive and constrained price. Golden & Green Ray-Ban Sunglasses for Men This sunglasses provide protection against the sun and its harmful elements. Most importantly the effects of UV A, B, and C rays. Yes, UV Crays! These rays can damage the eye permanently, scar, and lead to future eye health issues. You can also see an improvement in performance for outdoor activities such as fishing, sports, or driving with a proper pair of sunglasses. They cut down glare on the water, protect your eyes, and make the pastimes more enjoyable. To wear sunglasses in the winter is more benefitted. This smart sunglasses which is designed for men. It is very attractive and excellent smart looking.This product is a classic combination of style, quality, and craftsmanship.",
+      "inStock": true,
+      "featured": false,
+      "adult": false,
+      "tags": []
+    },
+    {
+      "id": "mm-47215",
+      "wpId": 47215,
+      "name": "Cartier Sunglass Inspired Design – Black – Wooden frame",
+      "slug": "cartier-sunglass-inspired-design-black-wooden-frame",
+      "category": "sunglass",
+      "price": 850,
+      "compareAt": 900,
+      "image": "https://royalman.com.bd/wp-content/uploads/2026/08/Cartier-Sunglass-Inspired-Design-Black-Wooden-frame-2.webp",
+      "images": [
+        "https://royalman.com.bd/wp-content/uploads/2026/08/Cartier-Sunglass-Inspired-Design-Black-Wooden-frame-2.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/08/Cartier-Sunglass-Inspired-Design-Black-Wooden-frame-3.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/08/Cartier-Sunglass-Inspired-Design-Black-Wooden-frame-1.webp"
+      ],
+      "desc": "Cartier Sunglass Inspired Design &#8211; Black &#8211; Wooden frame Elevate your everyday style with this Cartier Inspired Design Sunglass, featuring a bold and...",
+      "longDesc": "Cartier Sunglass Inspired Design &#8211; Black &#8211; Wooden frame Elevate your everyday style with this Cartier Inspired Design Sunglass, featuring a bold and sophisticated square shape. Designed with a sleek matte black acetate frame and stylish black lenses, this sunglass offers a premium look that complements both casual and formal outfits. The UV Protection Lens helps protect your eyes from harmful sun exposure while providing a comfortable viewing experience. With its standard face coverage and well-balanced dimensions, this sunglass is designed for a stylish and comfortable fit. Product Features Design: Cartier Inspired Lens: UV Protection Lens Frame Color: Matte Black & Wooden Lens Color: Black Shape: Square Frame Material: Acetate Temple Color: Black Face Coverage: Standard Dimensions Frame Width: 140mm Lens Width: 53mm Lens Height: 37mm Bridge Width: 18mm Temple Length: 154mm A stylish and versatile choice for anyone looking to add a bold, premium-inspired touch to their everyday look. &nbsp; &nbsp;",
+      "inStock": true,
+      "featured": false,
+      "adult": false,
+      "tags": []
+    },
+    {
+      "id": "mm-29610",
+      "wpId": 29610,
+      "name": "Double poly sunglass",
+      "slug": "double-poly-polarized-sunglass",
+      "category": "sunglass",
+      "price": 750,
+      "compareAt": 1050,
+      "image": "https://royalman.com.bd/wp-content/uploads/2026/08/Orginal-Double-Polo-Sunglass.webp",
+      "images": [
+        "https://royalman.com.bd/wp-content/uploads/2026/08/Orginal-Double-Polo-Sunglass.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/4DDjA1b58c057e79944bbb018167f17b6e2e5s-ezgif.com-jpg-to-webp-converter.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/0908567_double-poly-sunglasses-for-men.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/0908568_double-poly-sunglasses-for-men.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/0908569_double-poly-sunglasses-for-men.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/5778468ba9e5a1c7f0764d57e731a19d.jpg_960x960q80.jpg_.webp",
+        "https://royalman.com.bd/wp-content/uploads/2026/01/c65b7496e208da910227e9496f150ba7-ezgif.com-jpg-to-webp-converter.webp"
+      ],
+      "desc": "স্টাইল এবং চোখের সুরক্ষায় আধুনিক ট্রেন্ডি “Double Poly Sunglass”! 🛡️ UV400 প্রোটেকশন: ক্ষতিকর অতিবেগুনী রশ্মি থেকে চোখকে ১০০% সুরক্ষিত রাখে। 👓 ডাবল লেয়ার লে...",
+      "longDesc": "রোদের তীব্রতা থেকে চোখ রক্ষা করুন স্টাইলের সাথে – Double Poly Sunglass বাইকিং, ড্রাইভিং কিংবা রোদে বের হলে চোখের সুরক্ষায় একটি ভালো সানগ্লাস অপরিহার্য। আমাদের Double Poly Polarized Sunglass দিচ্ছে আধুনিক ফ্যাশন ও ১০০% আই-প্রোটেকশন। আমাদের এক্সক্লুসিভ SUNGLASS কালেকশনের এই চশমাটি রোদের তীব্র রিফ্লেকশন প্রতিহত করে চোখকে রাখে একদম সুরক্ষিত ও ঠাণ্ডা। 🔯 ডাবল পলি সানগ্লাসটির প্রধান বিশেষত্বসমূহ: ✅ ডাবল লেয়ার লেন্স টেকনোলজি: দুই লেয়ার বিশিষ্ট লেন্স। বাহিরের লেন্সটি সম্পূর্ণ কালো এবং ভেতরের লেন্সটি UV400 প্রটেক্টেড ব্লু-গ্রিন মার্কারি অ্যান্টি-রিফ্লেক্টেড, যা কড়া রোদে চোখকে আরাম দেয়। ✅ TR 90 প্রিমিয়াম ফ্রেম: উন্নত TR90 ম্যাটেরিয়ালে ফ্রেমটি তৈরি, ফলে অতিরিক্ত চাপে বা বাঁকালেও ফ্রেম ভাঙবে না। এছাড়া বডির সাথে উন্নত মানের ডাবল কব্জা দিয়ে হাতলগুলো মজবুতভাবে সংযুক্ত। ✅ UV400 কমপ্লিট প্রটেকশন: সূর্যের ক্ষতিকারক অতিবেগুনী রশ্মি (UVA ও UVB) ১০০% ব্লক করে চোখের কর্নিয়া ও রেটিনা সুরক্ষিত রাখে। ✅ অ্যান্টি-গ্লেয়ার ক্লিয়ার ভিশন: রাস্তা, গাড়ি বা পানির আলোর তীব্র ঝলকানি প্রতিহত করে স্পষ্ট ও প্রাকৃতিক দৃশ্য উপভোগ করতে সাহায্য করে। 📋 সানগ্লাসের পরিমাপ ও সাইজ: 📏 লেন্সের প্রস্থ: ৬২ মিলিমিটার 📏 লেন্সের উচ্চতা: ৪৪ মিলিমিটার 📏 সম্পূর্ণ সানগ্লাসের প্রস্থ: ১৪৩ মিলিমিটার 💡 মাঝারি বা বড় ফেসের যেকোনো মানুষের মুখে এটি খুব সুন্দরভাবে মানিয়ে যাবে। বিশেষ অফার ও ডিসকাউন্টে সংগ্রহ করতে ভিজিট করুন আমাদের Flash Sell অফার । 📦 প্যাকেজিং ও ডেলিভারি সুবিধা: ✨ সানগ্লাসের দুই পাশেই সুরক্ষা আবরণ পলি দেয়া ইনট্যাক্ট পাবেন। 👉 প্রোডাক্ট হাতে পেয়ে চেক করে মূল্য পরিশোধ করুন। ✅ পছন্দ না হলে ডেলিভারি চার্জ দিয়ে রিটার্ন করার সুযোগ। 💰 অর্ডার করুন সম্পূর্ণ নির্ভয়ে—এক টাকাও অগ্রিম দিতে হবে না, ফুল ক্যাশ অন ডেলিভারি। 🛒 অর্ডার ও হটলাইন: অর্ডার করতে এখনই “Buy Now” বা “Order Now” বাটনে ক্লিক করে আপনার নাম, ঠিকানা ও ফোন নম্বর দিন। যেকোনো প্রয়োজনে সরাসরি যোগাযোগ করুন আমাদের হটলাইনে: 📞 01633617136",
+      "inStock": true,
+      "featured": true,
+      "adult": false,
+      "tags": [
+        "double poly sunglass",
+        "eyewear",
+        "fashion sunglasses",
+        "men sunglasses",
+        "sun glasses",
+        "sunglasses"
+      ]
+    },
+    {
+      "id": "mm-29267",
+      "wpId": 29267,
+      "name": "“LOVE FOREVER” Gift Red Box",
+      "slug": "love-forever-gift-box-2",
+      "category": "gift",
+      "price": 590,
+      "compareAt": 1200,
+      "image": "https://metrroma.com/wp-content/uploads/2026/08/images-7.jpg",
+      "images": [
+        "https://metrroma.com/wp-content/uploads/2026/08/images-7.jpg"
+      ],
+      "desc": "গাঢ় লাল ভালোবাসার প্রতীক – “LOVE FOREVER” লাক্সারি রেড গিফট বক্স! 🌹 ১২টি আকর্ষণীয় লাল গোলাপ: প্রিমিয়াম রয়্যাল রেড ফিনিশ ও সুবাসিত রোজ প্রেজেন্টেশন। 💎 জুয়ে...",
+      "longDesc": "ভালোবাসার দিনে প্রিয়জনের মুখে হাসি ফোটান – “LOVE FOREVER” Gift Red Box লাল রঙ মানেই ভালোবাসা, অনুরাগ আর নিখাদ আবেগ। বিশেষ মানুষটির জন্য সাধারণ কোনো উপহার না বেছে নিন “LOVE FOREVER” Red Box । আমাদের প্রিমিয়াম GIFT শপ ও রোমান্টিক Love Forever ক্যাটাগরির এই পণ্যটি আপনার অনুভূতির গভীরতা প্রকাশে সেরা ভূমিকা রাখবে। 🎁 এই গিফট বক্সে যা যা থাকছে: 🌹 ১২টি আকর্ষণীয় লাল গোলাপ (রয়্যাল রেড ডেকোরেশন) 💎 Premium Necklace & Earring Set (প্রিমিয়াম গলার হার ও কানের দুল) 💍 Stylish Finger Ring (ট্রেন্ডি ফিঙ্গার রিং) 🛍️ Free Gift Bag (আকর্ষণীয় গিফট ক্যারিয়ার ব্যাগ) 💌 Greeting Card (ভালোবাসার বার্তা লিখে দেওয়ার জন্য) ✨ কেন এই গিফট বক্সটি বেছে নেবেন? ✔️ এক্সক্লুসিভ রেড ডিজাইন: প্রিমিয়াম টেক্সচার এবং নিখুঁত রয়্যাল ক্রাফটসম্যানশিপ। ✔️ সফট টাচ সিল্ক রোজ: দেখতে একদম তাজা গোলাপের মতো যা সহজে নষ্ট বা ম্লান হয় না। ✔️ সিক্রেট ড্রয়ার স্পেস: জুয়েলারি বা চিরকুট সুন্দরভাবে সাজিয়ে রাখার স্পেশাল কম্পার্টমেন্ট। ✔️ মেমোরিয়াল শো-পিস: ঘরে বা ডেস্কে সাজিয়ে রাখলে প্রতিদিন আপনার আন্তরিক ভালোবাসার কথা মনে করিয়ে দেবে। 🎉 কোন কোন উপলক্ষে গিফট করবেন? 🎂 Birthday: ওয়াইফ বা প্রিয়তমার জন্মদিনের শুভেচ্ছা জানাতে। ❤️ Anniversary: বিবাহবার্ষিকী বা রিলেশনশিপ অ্যানিভার্সারিতে। 💖 Valentine’s Day & Proposal: প্রপোজাল মুহূর্তকে স্মরণীয় করে তুলতে। 🎁 Special Moments: প্রিয় মানুষকে অনাবিল আনন্দ উপহার দিতে। সেরা অফারে পেতে এখনই ঘুরে আসুন আমাদের Flash Sell সেকশন থেকে। 🛍️ অর্ডার ও ডেলিভারি তথ্য: পণ্যটি নিশ্চিত করতে এখনই “Buy Now” বাটনে ক্লিক করে অর্ডার কনফার্ম করুন। কোনো ধরনের অগ্রিম টাকা ছাড়াই সারা বাংলাদেশে ক্যাশ অন হোম ডেলিভারিতে প্রডাক্ট হাতে পেয়ে মূল্য পরিশোধ করুন।",
+      "inStock": true,
+      "featured": true,
+      "adult": false,
+      "tags": [
+        "Anniversary Gift",
+        "Birthday Gift",
+        "Combo Gift Box",
+        "Gift Box",
+        "Gift for Girlfriend",
+        "Gift for Her",
+        "Gift for Wife",
+        "Jewelry Gift Set",
+        "Luxury Gift Set",
+        "Necklace Set",
+        "Red Rose Box",
+        "Romantic Gift",
+        "Valentine Gift"
+      ]
+    },
+    {
+      "id": "mm-29256",
+      "wpId": 29256,
+      "name": "“LOVE FOREVER” Gift Box",
+      "slug": "love-forever-gift-box",
+      "category": "gift",
+      "price": 590,
+      "compareAt": 1200,
+      "image": "https://metrroma.com/wp-content/uploads/2026/08/rBVaWF4Bw1iAZ-CqAAKp4QuGX3I529.webp",
+      "images": [
+        "https://metrroma.com/wp-content/uploads/2026/08/rBVaWF4Bw1iAZ-CqAAKp4QuGX3I529.webp",
+        "https://metrroma.com/wp-content/uploads/2026/08/rBVaVV4Bw1uAZRjhAAUjM1s7lIE036-1.webp",
+        "https://metrroma.com/wp-content/uploads/2026/08/1764077512-gemini_generated_image_o0dxo3o0dxo3o0dx.png",
+        "https://metrroma.com/wp-content/uploads/2026/08/rBVaVV4Bw1uAZRjhAAUjM1s7lIE036.webp",
+        "https://metrroma.com/wp-content/uploads/2026/08/rBVaWF4Bw1iAZ-CqAAKp4QuGX3I529.webp"
+      ],
+      "desc": "প্রিয়জনকে সারপ্রাইজ দেওয়ার জন্য সেরা রোমান্টিক “LOVE FOREVER” গিফট বক্স! 🌹 ১২টি আকর্ষণীয় লাল গোলাপ: দীর্ঘস্থায়ী সুবাসিত ডেকোরেটিভ ফ্লাওয়ার। 💎 প্রিমিয়াম জ...",
+      "longDesc": "ভালোবাসার প্রকাশ হোক সবচেয়ে সুন্দর উপহারে – “LOVE FOREVER” Gift Box যেকোনো স্পেশাল মুহূর্তে মনের অনুভূতি প্রিয় মানুষের কাছে পৌঁছে দিতে একটি ক্লাসি ও রোমান্টিক উপহারের তুলনা নেই। আমাদের “LOVE FOREVER” Gift Box তৈরি করা হয়েছে এমনভাবে, যা প্রথম দেখাতেই যে কারো মন জয় করে নেবে। আমাদের সমগ্র GIFT কালেকশন এবং বিশেষ Love Forever কালেকশনের অন্যতম সেরা ও জনপ্রিয় আইটেম এটি। 🎁 এই গিফট বক্সে যা যা থাকছে: 🌹 ১২টি আকর্ষণীয় লাল গোলাপ (চিরসবুজ ও প্রিমিয়াম ফিনিশিং) 💎 Premium Necklace & Earring Set (আকর্ষণীয় গয়না সেট) 💍 Stylish Finger Ring (রোমান্টিক ফিঙ্গার রিং) 🛍️ Free Luxury Gift Bag (সহজে উপহার দেওয়ার জন্য গিফট ব্যাগ) 💌 Heartfelt Greeting Card (ভালোবাসার বার্তা লেখার কার্ড) ✨ কেন এই গিফট বক্সটি বেছে নেবেন? ✔️ সম্পূর্ণ রেডি-টু-গিফট প্যাকেজ: আলাদা প্যাকিংয়ের কোনো ঝামেলা নেই। ✔️ প্রিমিয়াম ও লাক্সারি লুক: ড্রেসিং টেবিল বা ঘরে সাজিয়ে রাখার মতো নান্দনিক ডিজাইন। ✔️ ভালোবাসা প্রকাশের সেরা মাধ্যম: বিশেষ অনুভূতি স্মরণীয় করে রাখার পারফেক্ট উপহার। ✔️ লং লাস্টিং মেমোরি: সুবাসিত গোলাপ যা কখনোই নষ্ট বা ম্লান হবে না। 🎉 কোন কোন উপলক্ষে উপযোগী? 🎂 Birthday Surprise: প্রিয়তমা বা স্ত্রীর জন্মদিনে। ❤️ Anniversary Gift: বিবাহবার্ষিকী উদযাপনে। 💖 Valentine’s Day & Proposal: ভালোবাসা প্রকাশ বা প্রপোজ করার জন্য। 🎁 Special Moments: যেকোনো বিশেষ মুহূর্তকে চিরস্মরণীয় করে তুলতে। সীমিত সময়ের জন্য এটি আমাদের Flash Sell অফারে বিশেষ মূল্যে পাওয়া যাচ্ছে। 🚚 ডেলিভারি ও অর্ডার প্রসেস: অর্ডার করতে এখনই “Buy Now” বাটনে ক্লিক করে আপনার নাম, সম্পূর্ণ ঠিকানা ও মোবাইল নম্বর দিন। কোনো অগ্রিম টাকা ছাড়াই সারা বাংলাদেশে ক্যাশ অন হোম ডেলিভারিতে পণ্য চেক করে রিসিভ করার সুবিধা রয়েছে।",
+      "inStock": true,
+      "featured": true,
+      "adult": false,
+      "tags": []
+    }
+  ]
+}
