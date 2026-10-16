@@ -2181,39 +2181,167 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   .faq-image-box img { height: 260px; }
 }
 
-/* ── 6. TABAYA FLOATING CART SIDE TRIGGER ── */
+/* ── 6. TABAYA & METROMAA FLOATING SIDE CART (DOCKED RIGHT-MIDDLE) ── */
+.tabaya-side-cart,
 .tabaya-floating-cart {
   position: fixed;
-  right: 20px;
-  bottom: 28px;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
   z-index: 998;
-  background: #1f3147;
-  color: #FAF8F5;
-  border: 1px solid rgba(180, 150, 100, 0.4);
-  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
-  border-radius: 40px;
-  padding: 10px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-top-left-radius: 12px;
+  border-bottom-left-radius: 12px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  box-shadow: -3px 4px 16px rgba(40, 30, 20, 0.12);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  text-decoration: none;
+  outline: none;
+}
+
+.tabaya-side-cart:hover,
+.tabaya-floating-cart:hover {
+  transform: translateY(-50%) translateX(-4px);
+  box-shadow: -5px 6px 22px rgba(40, 30, 20, 0.18);
+}
+
+.tabaya-side-cart:active,
+.tabaya-floating-cart:active {
+  transform: translateY(-50%) translateX(-1px);
+}
+
+.tabaya-side-cart .side-cart-top,
+.tabaya-floating-cart .side-cart-top {
+  background: #e6ddd4;
+  border: 1px solid #c8bcaf;
+  border-right: none;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  padding: 10px 14px 7px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 66px;
+  box-sizing: border-box;
+  transition: background 0.2s ease;
+}
+
+.tabaya-side-cart:hover .side-cart-top,
+.tabaya-floating-cart:hover .side-cart-top {
+  background: #dfd4ca;
+}
+
+.tabaya-side-cart .side-cart-icon,
+.tabaya-floating-cart .side-cart-icon {
+  width: 18px;
+  height: 18px;
+  stroke: #2e231b;
+  display: block;
+}
+
+.tabaya-side-cart .side-cart-count,
+.tabaya-floating-cart .side-cart-count {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2e231b;
+  line-height: 1.1;
+  margin-top: 1px;
+}
+
+.tabaya-side-cart .side-cart-label,
+.tabaya-floating-cart .side-cart-label {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #3e3127;
+  line-height: 1;
+}
+
+.tabaya-side-cart .side-cart-bot,
+.tabaya-floating-cart .side-cart-bot {
+  background: #ffffff;
+  border: 1px solid #c8bcaf;
+  border-top: none;
+  border-right: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 0;
+  padding: 7px 10px 8px 10px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-family: 'Inter', sans-serif;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  transition: transform 0.25s ease, background 0.25s ease;
+  justify-content: center;
+  min-width: 66px;
+  box-sizing: border-box;
+  transition: background 0.2s ease;
 }
-.tabaya-floating-cart:hover {
-  transform: translateY(-3px);
-  background: #b48e4c;
+
+.tabaya-side-cart:hover .side-cart-bot,
+.tabaya-floating-cart:hover .side-cart-bot {
+  background: #faf8f5;
 }
-.tabaya-floating-cart-count {
-  background: #b48e4c;
-  color: #fff;
-  border-radius: 20px;
-  padding: 2px 7px;
-  font-weight: 700;
-  font-size: 11px;
+
+.tabaya-side-cart .side-cart-price,
+.tabaya-floating-cart .side-cart-price {
+  font-family: 'Fraunces', Georgia, serif !important;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2a1f18;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
 }
+
+@media (max-width: 480px) {
+  .tabaya-side-cart,
+  .tabaya-floating-cart {
+    top: 52%;
+  }
+  .tabaya-side-cart .side-cart-top,
+  .tabaya-floating-cart .side-cart-top {
+    min-width: 58px;
+    padding: 8px 10px 5px 10px;
+  }
+  .tabaya-side-cart .side-cart-icon,
+  .tabaya-floating-cart .side-cart-icon {
+    width: 16px;
+    height: 16px;
+  }
+  .tabaya-side-cart .side-cart-count,
+  .tabaya-floating-cart .side-cart-count {
+    font-size: 13px;
+  }
+  .tabaya-side-cart .side-cart-label,
+  .tabaya-floating-cart .side-cart-label {
+    font-size: 8.5px;
+  }
+  .tabaya-side-cart .side-cart-bot,
+  .tabaya-floating-cart .side-cart-bot {
+    min-width: 58px;
+    padding: 6px 8px 7px 8px;
+  }
+  .tabaya-side-cart .side-cart-price,
+  .tabaya-floating-cart .side-cart-price {
+    font-size: 12px;
+  }
+}
+
 
 /* ── 7. EXACT TABAYA CART DRAWER (pc-cart-drawer) ── */
 .pc-cart-overlay {

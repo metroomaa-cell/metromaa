@@ -499,13 +499,18 @@ function CartFab() {
   const route = useRoute();
   if (route.name === 'checkout' || route.name === 'confirm') return null;
   return (
-    <button className="tabaya-floating-cart" onClick={() => setOpen(true)} aria-label="Open your shopping bag">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M6 8h12l-.8 11.6a1 1 0 0 1-1 .9H7.8a1 1 0 0 1-1-.9L6 8z" />
-        <path d="M9 8V7a3 3 0 0 1 6 0v1" />
-      </svg>
-      <span className="tabaya-floating-cart-count">{count}</span>
-      <span style={{ fontWeight: 600 }}>{taka(total)}</span>
+    <button className="tabaya-side-cart" onClick={() => setOpen(true)} aria-label="Open your shopping bag" title="Shopping Bag">
+      <div className="side-cart-top">
+        <svg className="side-cart-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M6 8h12l-.8 11.6a1 1 0 0 1-1 .9H7.8a1 1 0 0 1-1-.9L6 8z" />
+          <path d="M9 8V7a3 3 0 0 1 6 0v1" />
+        </svg>
+        <span className="side-cart-count">{count}</span>
+        <span className="side-cart-label">{count === 1 ? 'ITEMS' : 'ITEMS'}</span>
+      </div>
+      <div className="side-cart-bot">
+        <span className="side-cart-price">{taka(total)}</span>
+      </div>
     </button>
   );
 }
