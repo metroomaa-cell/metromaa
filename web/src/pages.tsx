@@ -733,7 +733,7 @@ export function Home() {
             </div>
 
             <div className="ara-grid">
-              {cats.slice(0, 4).map((c) => (
+              {cats.map((c) => (
                 <div className="ara-card" key={c.slug} onClick={() => go('shop/' + c.slug)}>
                   <div className="ara-card-visual">
                     <img
