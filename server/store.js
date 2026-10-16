@@ -17,6 +17,9 @@ export const DEFAULT_SETTINGS = {
   whatsapp: '',
   phone: '',
   gtmId: '',
+  logo: '',
+  favicon: '',
+  sliders: [],
   fraudDetector: {
     enabled: true,
     cooldownHours: 24,

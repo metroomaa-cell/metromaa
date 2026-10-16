@@ -189,6 +189,9 @@ app.put('/api/settings', adminAuth, requireRole('owner', 'manager'), (req, res) 
     phone: typeof b.phone === 'string' ? b.phone.trim() : cur.phone,
     gtmId: typeof b.gtmId === 'string' ? b.gtmId.trim().slice(0, 20) : cur.gtmId,
     fbPixelId: typeof b.fbPixelId === 'string' ? b.fbPixelId.trim().slice(0, 30) : cur.fbPixelId,
+    logo: typeof b.logo === 'string' ? b.logo.trim() : (cur.logo || ''),
+    favicon: typeof b.favicon === 'string' ? b.favicon.trim() : (cur.favicon || ''),
+    sliders: Array.isArray(b.sliders) ? b.sliders : (cur.sliders || []),
     fraudDetector,
   }));
 });
@@ -1017,10 +1020,12 @@ function normalizeProduct(b) {
 }
 
 app.post('/api/upload', adminAuth, requireRole('owner', 'manager'), (req, res) => {
-  const dataUrl = String(req.body?.dataUrl || '');
-  const m = dataUrl.match(/^data:image\/(png|jpe?g|webp|gif|avif);base64,(.+)$/);
+  const m = dataUrl.match(/^data:(?:image\/(png|jpe?g|webp|gif|avif|svg\+xml|x-icon|vnd\.microsoft\.icon));base64,(.+)$/i);
   if (!m) return res.status(400).json({ error: 'invalid image' });
-  const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
+  let ext = m[1].toLowerCase();
+  if (ext === 'jpeg') ext = 'jpg';
+  else if (ext === 'svg+xml') ext = 'svg';
+  else if (ext.includes('icon')) ext = 'ico';
   const buf = Buffer.from(m[2], 'base64');
   if (buf.length > 6 * 1024 * 1024) return res.status(400).json({ error: 'image too large (max 6MB)' });
 
