@@ -1178,6 +1178,7 @@ function normalizeProduct(b) {
 }
 
 app.post('/api/upload', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  const dataUrl = req.body?.dataUrl || req.body?.image || '';
   const m = dataUrl.match(/^data:(?:image\/(png|jpe?g|webp|gif|avif|svg\+xml|x-icon|vnd\.microsoft\.icon));base64,(.+)$/i);
   if (!m) return res.status(400).json({ error: 'invalid image' });
   let ext = m[1].toLowerCase();
