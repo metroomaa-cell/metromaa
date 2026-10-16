@@ -799,7 +799,7 @@ app.post('/api/admin/users', adminAuth, requireRole('owner'), async (req, res) =
 
   // Send onboarding email to new staff member
   if (email) {
-    const host = req.get('host') || 'dot.metromaa.com';
+    const host = req.get('host') || 'metrroma.com';
     const loginUrl = `${req.protocol}://${host}/wp-admin`;
     sendEmail(
       email,
@@ -1880,7 +1880,7 @@ async function trackPurchase(order) {
           event_time: ts,
           event_id: eventId,
           action_source: 'website',
-          event_source_url: 'https://dot.metromaa.com/',
+          event_source_url: 'https://metrroma.com/',
           user_data: { ph: [ph] },
           custom_data: {
             currency: 'BDT',
