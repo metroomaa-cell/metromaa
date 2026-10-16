@@ -547,10 +547,7 @@ function requireRole(...roles) {
 }
 
 function renderSecurityOtpHtml({ storeName, title, subtitle, otp, userName, userEmail, expiresMin = 10, note }) {
-  const digits = String(otp).split('');
-  const digitBoxes = digits.map((d) => `
-    <td style="width:48px;height:56px;text-align:center;font-size:28px;font-weight:700;font-family:'SF Mono',Consolas,Menlo,monospace;color:#ffffff;background:#131c2e;border:1.5px solid #e7b486;border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,0.4);">${d}</td>
-  `).join('<td style="width:8px;"></td>');
+  const cleanOtp = String(otp || '').trim();
 
   return `
 <!DOCTYPE html>
@@ -586,7 +583,7 @@ function renderSecurityOtpHtml({ storeName, title, subtitle, otp, userName, user
                 </tr>
               </table>
 
-              <div style="text-align:center;padding:28px 0 16px;">
+              <div style="text-align:center;padding:28px 0 14px;">
                 <div style="display:inline-block;width:60px;height:60px;line-height:60px;border-radius:20px;background:rgba(231,180,134,0.14);border:1.5px solid rgba(231,180,134,0.35);text-align:center;font-size:28px;box-shadow:0 8px 24px rgba(231,180,134,0.18);margin-bottom:14px;">
                   🛡️
                 </div>
@@ -598,14 +595,13 @@ function renderSecurityOtpHtml({ storeName, title, subtitle, otp, userName, user
                 </p>
               </div>
 
-              <div style="margin:24px 0 26px;text-align:center;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto;">
-                  <tr>
-                    ${digitBoxes}
-                  </tr>
-                </table>
-                <div style="margin-top:14px;font-size:12px;color:#64748b;letter-spacing:0.02em;">
-                  Single-use authentication passcode · Do not share with anyone
+              <!-- Effortlessly Selectable / Copyable Code Container -->
+              <div style="margin:24px auto 26px;text-align:center;max-width:320px;">
+                <div style="background:linear-gradient(135deg, rgba(231,180,134,0.14) 0%, rgba(56,189,248,0.12) 100%);border:2px solid #e7b486;border-radius:16px;padding:16px 20px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.5);-webkit-user-select:all;-moz-user-select:all;user-select:all;">
+                  <span style="font-size:38px;font-weight:800;letter-spacing:10px;font-family:'SF Mono',Consolas,Menlo,monospace;color:#ffffff;text-shadow:0 0 16px rgba(231,180,134,0.7);display:inline-block;padding-left:10px;-webkit-user-select:all;-moz-user-select:all;user-select:all;">${cleanOtp}</span>
+                </div>
+                <div style="margin-top:10px;font-size:12px;color:#cbd5e1;font-weight:500;">
+                  👆 <strong>Tap & hold</strong> to copy · Single-use passcode
                 </div>
               </div>
 
