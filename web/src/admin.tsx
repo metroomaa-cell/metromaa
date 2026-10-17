@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import qrcode from 'qrcode-generator';
 import { Html5Qrcode } from 'html5-qrcode';
 import './admin.css';
-import { taka, getCategories } from './api';
+import { taka, getCategories, fetchMasterColors, createMasterColor, deleteMasterColor, type MasterColor } from './api';
 import { WhatsAppIcon } from './icons';
 
 const KEY = 'dot_admin';
@@ -841,6 +841,7 @@ export function Admin() {
           {item('customers', I.customers, 'Customers')}
           {item('products', I.products, 'Products')}
           {item('categories', I.categories, 'Categories')}
+          {item('colors', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><circle cx="12" cy="12" r="10"/><path d="M12 2a7 7 0 0 0-7 7c0 3 2 4.5 4 4.5 1 0 2 1 2 2 0 1.5-1 2.5-1 4.5a2 2 0 0 0 2 2 10 10 0 0 0 0-20z"/></svg>, 'Color Palette')}
           {item('landings', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>, 'Landing Pages')}
           {item('media', I.media, 'Media')}
           {item('coupons', I.coupons, 'Coupons')}
@@ -862,6 +863,7 @@ export function Admin() {
         {cur === 'customers' && <CustomersAdmin />}
         {cur === 'products' && <ProductsAdmin />}
         {cur === 'categories' && <CategoriesAdmin />}
+        {cur === 'colors' && <ColorsAdmin />}
         {cur === 'landings' && <LandingsAdmin />}
         {cur === 'media' && <MediaAdmin />}
         {cur === 'coupons' && <CouponsAdmin />}
@@ -4833,6 +4835,9 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
       customDeliveryOutside: '',
       seoTitle: '',
       seoDesc: '',
+      isDigital: false,
+      digitalFileUrl: '',
+      digitalInstructions: '',
       variations: [],
       colors: [],
       ...product,
@@ -4865,6 +4870,23 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
   const [customColorHex, setCustomColorHex] = useState('#111111');
   const [bulkVarPrice, setBulkVarPrice] = useState('');
   const [bulkVarStock, setBulkVarStock] = useState('');
+
+  const [masterColors, setMasterColors] = useState<MasterColor[]>([]);
+  useEffect(() => {
+    fetchMasterColors().then((cols) => {
+      if (cols && cols.length > 0) setMasterColors(cols);
+    });
+  }, []);
+
+  const handleSaveNewMasterColor = async () => {
+    if (!customColorName.trim()) return;
+    const name = customColorName.trim();
+    const hex = customColorHex;
+    addColorOption({ name, hex });
+    const res = await createMasterColor(name, hex);
+    if (res.colors && res.colors.length > 0) setMasterColors(res.colors);
+    setCustomColorName('');
+  };
 
   const COLOR_PRESETS = [
     { name: 'Jet Black', hex: '#111111' },
@@ -5403,6 +5425,86 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
                 </div>
               </div>
 
+              {/* Product Nature & Delivery Type */}
+              <div style={{ background: '#191530', padding: 14, borderRadius: 10, border: '1px solid rgba(139, 92, 246, 0.3)', marginBottom: 8 }}>
+                <label style={{ display: 'block', marginBottom: 8, fontWeight: 700, color: '#c4b5fd', fontSize: 13 }}>
+                  📦 Product Delivery & Fulfillment Type
+                </label>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      cursor: 'pointer',
+                      color: '#fff',
+                      fontSize: 12.5,
+                      background: !f.isDigital ? 'rgba(139,92,246,0.25)' : 'transparent',
+                      padding: '8px 12px',
+                      borderRadius: 8,
+                      border: !f.isDigital ? '1.5px solid #8b5cf6' : '1px solid rgba(255,255,255,0.1)',
+                      fontWeight: !f.isDigital ? 700 : 400,
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="prodType"
+                      checked={!f.isDigital}
+                      onChange={() => setF((s: any) => ({ ...s, isDigital: false }))}
+                    />
+                    <span>📦 Physical Product (Courier Shipping - Cloth, Watches, Sunglasses, Gifts)</span>
+                  </label>
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      cursor: 'pointer',
+                      color: '#fff',
+                      fontSize: 12.5,
+                      background: f.isDigital ? 'rgba(16,185,129,0.25)' : 'transparent',
+                      padding: '8px 12px',
+                      borderRadius: 8,
+                      border: f.isDigital ? '1.5px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                      fontWeight: f.isDigital ? 700 : 400,
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="prodType"
+                      checked={!!f.isDigital}
+                      onChange={() => setF((s: any) => ({ ...s, isDigital: true }))}
+                    />
+                    <span>⚡ Digital Product (Instant Download / Voucher / Key - ৳0 Delivery)</span>
+                  </label>
+                </div>
+
+                {f.isDigital && (
+                  <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10, background: 'rgba(0,0,0,0.35)', padding: 12, borderRadius: 8, border: '1px dashed rgba(16, 185, 129, 0.4)' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: '#34d399', marginBottom: 4, fontWeight: 600 }}>Download URL / Drive Link / Resource Link</label>
+                      <input
+                        placeholder="https://drive.google.com/... or download file link"
+                        value={f.digitalFileUrl || ''}
+                        onChange={(e) => setF((s: any) => ({ ...s, digitalFileUrl: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: '#34d399', marginBottom: 4, fontWeight: 600 }}>Access Guide / License Instructions / Keys</label>
+                      <textarea
+                        rows={2}
+                        placeholder="Instructions, license codes, or WhatsApp access info sent to customer upon order..."
+                        value={f.digitalInstructions || ''}
+                        onChange={(e) => setF((s: any) => ({ ...s, digitalInstructions: e.target.value }))}
+                      />
+                    </div>
+                    <div style={{ color: '#10b981', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>✓</span> <b>Automatic ৳0 Shipping:</b> Courier charges are automatically waived on checkout for digital items.
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Pricing Intelligence Card */}
               <div
                 style={{
@@ -5912,35 +6014,95 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
                   )}
                 </div>
 
-                {/* 1-Click Fashion Color Presets */}
-                <div style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                    ⚡ 1-Click Fashion Color Presets
+                {/* Master Color Library (Permanent Store-Wide Colors) */}
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      ⚡ Master Color Library (Click any color to add/remove from this product)
+                    </div>
+                    <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                      {masterColors.length || COLOR_PRESETS.length} colors saved
+                    </span>
                   </div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {COLOR_PRESETS.map((p) => (
-                      <button
-                        key={p.name}
-                        type="button"
-                        onClick={() => addColorOption(p)}
-                        className="sa-btn ghost sa-mini"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', fontSize: 11.5 }}
-                      >
-                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: p.hex, border: '1px solid rgba(255,255,255,0.2)', display: 'inline-block' }} />
-                        {p.name}
-                      </button>
-                    ))}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 6,
+                      flexWrap: 'wrap',
+                      maxHeight: 150,
+                      overflowY: 'auto',
+                      padding: 6,
+                      background: '#120f21',
+                      borderRadius: 8,
+                      border: '1px solid rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    {(masterColors.length > 0 ? masterColors : COLOR_PRESETS).map((p: any) => {
+                      const isSelected = (f.colors || []).some(
+                        (c: any) => (typeof c === 'string' ? c : c.name).toLowerCase() === p.name.toLowerCase()
+                      );
+                      return (
+                        <button
+                          key={p.name}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              removeColorOption(p.name);
+                            } else {
+                              addColorOption(p);
+                            }
+                          }}
+                          className="sa-btn ghost sa-mini"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '5px 10px',
+                            fontSize: 11.5,
+                            border: isSelected ? '1.5px solid #8b5cf6' : '1px solid rgba(255,255,255,0.15)',
+                            background: isSelected ? 'rgba(139, 92, 246, 0.28)' : 'rgba(255,255,255,0.02)',
+                            color: isSelected ? '#fff' : '#cbd5e1',
+                            fontWeight: isSelected ? 700 : 400,
+                          }}
+                          title={isSelected ? 'Click to remove from this product' : 'Click to add to this product'}
+                        >
+                          <span
+                            style={{
+                              width: 11,
+                              height: 11,
+                              borderRadius: '50%',
+                              background: p.hex,
+                              border: '1px solid rgba(255,255,255,0.3)',
+                              display: 'inline-block',
+                            }}
+                          />
+                          <span>{p.name}</span>
+                          {isSelected && <span style={{ color: '#34d399', fontSize: 11 }}>✓</span>}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
-                {/* Custom Color Adder */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#120f21', padding: '10px 14px', borderRadius: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>Custom Color:</span>
+                {/* Create New Color & Save to Master Library */}
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 8,
+                    alignItems: 'center',
+                    background: '#120f21',
+                    padding: '10px 14px',
+                    borderRadius: 8,
+                    flexWrap: 'wrap',
+                    border: '1px solid rgba(139, 92, 246, 0.25)',
+                  }}
+                >
+                  <span style={{ fontSize: 12, color: '#c4b5fd', fontWeight: 600 }}>Create New Master Color:</span>
                   <input
-                    placeholder="Color Name (e.g. Royal Maroon)"
+                    placeholder="Color Name (e.g. Royal Maroon, Rose Gold)"
                     value={customColorName}
                     onChange={(e) => setCustomColorName(e.target.value)}
-                    style={{ maxWidth: 200, padding: '6px 10px', fontSize: 12 }}
+                    style={{ maxWidth: 220, padding: '6px 10px', fontSize: 12 }}
                   />
                   <input
                     type="color"
@@ -5953,14 +6115,10 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
                   <button
                     type="button"
                     className="sa-btn primary sa-mini"
-                    onClick={() => {
-                      if (customColorName.trim()) {
-                        addColorOption({ name: customColorName.trim(), hex: customColorHex });
-                        setCustomColorName('');
-                      }
-                    }}
+                    onClick={handleSaveNewMasterColor}
+                    style={{ fontWeight: 600 }}
                   >
-                    + Add Color
+                    💾 Save to Library & Add to Product
                   </button>
                 </div>
               </div>
@@ -8421,6 +8579,154 @@ function CouponsAdmin() {
     </>
   );
 }
+function ColorsAdmin() {
+  const [colors, setColors] = useState<MasterColor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [name, setName] = useState('');
+  const [hex, setHex] = useState('#111111');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const [q, setQ] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    const data = await fetchMasterColors();
+    setColors(data);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const add = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true);
+    setErr('');
+    try {
+      const res = await createMasterColor(name.trim(), hex);
+      if (res.colors && res.colors.length > 0) setColors(res.colors);
+      setName('');
+    } catch (e: any) {
+      setErr(e.message || 'Could not add color');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const del = async (id: string, colorName: string) => {
+    if (!confirm(`Delete color "${colorName}" from master library?`)) return;
+    const res = await deleteMasterColor(id);
+    if (res.colors) setColors(res.colors);
+  };
+
+  const filtered = colors.filter(
+    (c) => c.name.toLowerCase().includes(q.toLowerCase()) || c.hex.toLowerCase().includes(q.toLowerCase())
+  );
+
+  return (
+    <>
+      <div className="sa-top">
+        <h1>🎨 Master Color Library</h1>
+      </div>
+      <div className="sa-card" style={{ padding: 18, marginBottom: 16 }}>
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#c4b5fd' }}>+ Create New Master Color</div>
+          <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8' }}>
+            Colors saved here appear permanently across all products so you never have to re-enter them again.
+          </p>
+        </div>
+        {err && <div className="sa-err" style={{ marginBottom: 12 }}>{err}</div>}
+        <form onSubmit={add} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            placeholder="Color Name (e.g. Royal Maroon, Rose Gold, Matte Black)"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            style={{ flex: 1.5, minWidth: 200 }}
+            required
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', padding: '5px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)' }}>
+            <input
+              type="color"
+              value={hex}
+              onChange={(e) => setHex(e.target.value)}
+              style={{ width: 34, height: 28, border: 'none', background: 'none', cursor: 'pointer' }}
+            />
+            <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#cbd5e1' }}>{hex}</span>
+          </div>
+          <button type="submit" className="sa-btn primary" disabled={saving}>
+            {saving ? 'Saving...' : '💾 Save to Master Library'}
+          </button>
+        </form>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div className="dim small">Total Colors: <b style={{ color: '#fff' }}>{colors.length}</b></div>
+        <input
+          placeholder="Filter colors..."
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          style={{ maxWidth: 200, padding: '6px 10px', fontSize: 12 }}
+        />
+      </div>
+
+      <div className="sa-card" style={{ padding: 14 }}>
+        {loading ? (
+          <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}>Loading colors...</div>
+        ) : filtered.length === 0 ? (
+          <div className="sa-empty">No colors found.</div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+            {filtered.map((c) => (
+              <div
+                key={c.id || c.name}
+                style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <span
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: '50%',
+                      background: c.hex,
+                      border: '2px solid rgba(255,255,255,0.25)',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#fff', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                      {c.name}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace' }}>
+                      {c.hex}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => del(c.id, c.name)}
+                  style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: 16, padding: '2px 6px' }}
+                  title="Delete from master library"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 function CategoriesAdmin() {
   const [list, setList] = useState<any[]>([]);
   const [f, setF] = useState<any>({ name: '', blurb: '', image: '', adult: false });

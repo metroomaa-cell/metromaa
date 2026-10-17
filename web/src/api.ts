@@ -29,6 +29,9 @@ export type Product = {
   colors?: (string | ProductColor)[];
   sizes?: string[];
   variations?: ProductVariation[];
+  isDigital?: boolean;
+  digitalFileUrl?: string;
+  digitalInstructions?: string;
 };
 
 export type FraudDetectorSettings = {
@@ -170,4 +173,43 @@ export function isSkincareSite(): boolean {
   if (h.includes('metrroma') || h.includes('metromaa')) return false;
   return true;
 }
+
+export type MasterColor = {
+  id: string;
+  name: string;
+  hex: string;
+};
+
+export async function fetchMasterColors(): Promise<MasterColor[]> {
+  try {
+    const res = await fetch('/api/colors');
+    const data = await res.json();
+    return data.colors || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function createMasterColor(name: string, hex: string): Promise<{ success: boolean; color?: MasterColor; colors: MasterColor[] }> {
+  try {
+    const res = await fetch('/api/colors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, hex }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, colors: [] };
+  }
+}
+
+export async function deleteMasterColor(id: string): Promise<{ success: boolean; colors: MasterColor[] }> {
+  try {
+    const res = await fetch('/api/colors/' + encodeURIComponent(id), { method: 'DELETE' });
+    return await res.json();
+  } catch {
+    return { success: false, colors: [] };
+  }
+}
+
 

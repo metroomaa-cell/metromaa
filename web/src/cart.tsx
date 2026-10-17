@@ -11,6 +11,9 @@ export type CartLine = {
   variantId?: string;
   size?: string;
   color?: string;
+  isDigital?: boolean;
+  digitalFileUrl?: string;
+  digitalInstructions?: string;
 };
 type CartCtx = {
   lines: CartLine[]; count: number; total: number; open: boolean; toast: string;
@@ -49,6 +52,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         variantId: p.variantId,
         size: p.size,
         color: p.color,
+        isDigital: p.isDigital,
+        digitalFileUrl: p.digitalFileUrl,
+        digitalInstructions: p.digitalInstructions,
       }];
     });
     showToast('added to bag');

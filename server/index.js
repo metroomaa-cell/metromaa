@@ -9,7 +9,7 @@ import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns';
 try { dns.setDefaultResultOrder('ipv4first'); } catch {}
-import { getCatalog, getOrders, addOrder, updateOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding } from './store.js';
+import { getCatalog, getOrders, addOrder, updateOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, addColor, deleteColor } from './store.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -86,13 +86,16 @@ function buildDraftOrder(data) {
   let delOutside = settings.deliveryOutside;
   let isFreeDelivery = itemsTotal >= settings.freeShipThreshold;
   if (landingPage) {
-    if (landingPage.freeDelivery) isFreeDelivery = true;
+    if (landingPage.freeDelivery !== false || landingPage.freeDeliveryText) isFreeDelivery = true;
     if (landingPage.customDeliveryInside != null && landingPage.customDeliveryInside !== '') {
       delInside = Number(landingPage.customDeliveryInside);
     }
     if (landingPage.customDeliveryOutside != null && landingPage.customDeliveryOutside !== '') {
       delOutside = Number(landingPage.customDeliveryOutside);
     }
+  }
+  if (c.freeDelivery === true || c.shippingCost === 0 || (data.shipping && data.shipping.cost === 0)) {
+    isFreeDelivery = true;
   }
   const delivery = isFreeDelivery ? 0 : (area === 'outside' ? delOutside : delInside);
   let discount = 0, couponCode = '';
@@ -137,7 +140,10 @@ app.post('/api/checkout/ping', (req, res) => {
       coupon: c.coupon || '',
       source: c.source || (c.landing ? 'l/' + c.landing : 'direct'),
       landing: c.landing || '',
+      freeDelivery: c.freeDelivery === true,
+      shippingCost: c.shippingCost != null ? Number(c.shippingCost) : (b.shipping?.cost != null ? Number(b.shipping.cost) : null),
     },
+    shipping: b.shipping || undefined,
     items: Array.isArray(b.items) ? b.items : [],
   };
   const existing = draftTimers.get(phone);
@@ -157,6 +163,19 @@ app.post('/api/checkout/ping', (req, res) => {
 
 // ---- public catalog ----
 app.get('/api/categories', (_req, res) => res.json(getCatalog().categories));
+
+// ---- master color library ----
+app.get('/api/colors', (_req, res) => res.json({ colors: getColors() }));
+app.post('/api/colors', (req, res) => {
+  const { name, hex } = req.body || {};
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'Color name required' });
+  const item = addColor({ name: String(name).trim(), hex: String(hex || '#111111').trim() });
+  res.json({ success: true, color: item, colors: getColors() });
+});
+app.delete('/api/colors/:id', (req, res) => {
+  const next = deleteColor(req.params.id);
+  res.json({ success: true, colors: next });
+});
 
 app.get('/api/settings', (_req, res) => res.json(getSettings()));
 app.put('/api/settings', adminAuth, requireRole('owner', 'manager'), (req, res) => {

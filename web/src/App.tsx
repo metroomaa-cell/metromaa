@@ -94,15 +94,24 @@ function Effects() {
 
 function AnnouncementBar() {
   const isSkin = isSkincareSite();
-  const defaultAnnounce = isSkin
-    ? '✨ Pure Botanical Skincare · Cash on Delivery Nationwide · Free Shipping Over ৳1,999'
-    : '✨ Cash on Delivery Nationwide | Free Shipping on Orders Over ৳1,999 | 24/7 Customer Helpline';
-  const [announce, setAnnounce] = useState(defaultAnnounce);
+  const [announce, setAnnounce] = useState('');
   useEffect(() => {
     getSettings().then((s) => {
-      if (s.announce) setAnnounce(s.announce);
-    }).catch(() => {});
-  }, []);
+      if (s.announce && s.announce.trim()) {
+        setAnnounce(s.announce.trim());
+      } else {
+        const threshold = s.freeShipThreshold ? taka(s.freeShipThreshold) : '৳2,500';
+        setAnnounce(
+          isSkin
+            ? `✨ Pure Botanical Skincare · Cash on Delivery Nationwide · Free Shipping Over ${threshold}`
+            : `✨ Cash on Delivery Nationwide | Free Shipping on Orders Over ${threshold} | 24/7 Helpline`
+        );
+      }
+    }).catch(() => {
+      setAnnounce('✨ Pure Botanical Skincare · Cash on Delivery Nationwide · 100% Authentic Quality');
+    });
+  }, [isSkin]);
+  if (!announce) return null;
   return (
     <div className="tabaya-announcement">
       <div className="wrap">
@@ -278,6 +287,7 @@ function Footer() {
   const isSkin = isSkincareSite();
   const [name, setName] = useState(isSkin ? 'SECRATE' : 'METROMAA');
   const [logo, setLogo] = useState('');
+  const [cats, setCats] = useState<{ slug: string; name: string; adult?: boolean }[]>([]);
   useEffect(() => {
     getSettings().then((s) => {
       if (s.phone) setPhone(s.phone);
@@ -285,6 +295,9 @@ function Footer() {
       if (s.storeName && s.storeName !== 'dot.') setName(s.storeName);
       else if (s.storeName === 'dot.' && isSkin) setName('SECRATE');
       if (s.logo) setLogo(s.logo);
+    }).catch(() => {});
+    getCategories().then((cs) => {
+      if (Array.isArray(cs)) setCats(cs);
     }).catch(() => {});
   }, [isSkin]);
   return (
@@ -305,7 +318,7 @@ function Footer() {
             </div>
             <p className="tabaya-footer-desc">
               {isSkin
-                ? 'Dermatologically-inspired botanical skincare & everyday self-care rituals. Clean, gentle formulations crafted with active botanicals, delivered across Bangladesh with cash on delivery.'
+                ? 'Dermatologically-inspired botanical skincare, intimate wellness & everyday self-care rituals. Clean, gentle formulations crafted with active botanicals, delivered across Bangladesh with cash on delivery.'
                 : 'Contemporary modest fashion & lifestyle brand. Ethically crafted timeless modest attire, abayas, panjabis & essentials delivered across Bangladesh with cash on delivery.'}
             </p>
             <div className="tabaya-trust-pill">
@@ -315,21 +328,10 @@ function Footer() {
           </div>
           <div>
             <h4>Collections</h4>
-            {isSkin ? (
-              <>
-                <a onClick={() => go('shop')}>All Skincare & Beauty</a>
-                <a onClick={() => go('shop/skincare')}>Facial Cleansers & Serums</a>
-                <a onClick={() => go('shop/body')}>Body Balms & Washes</a>
-                <a onClick={() => go('shop/intimates')}>Intimate & Wellness Care</a>
-              </>
-            ) : (
-              <>
-                <a onClick={() => go('shop')}>All Collections</a>
-                <a onClick={() => go('shop/modest-wear')}>Modest Abayas</a>
-                <a onClick={() => go('shop/panjabi')}>Premium Panjabi</a>
-                <a onClick={() => go('shop/bestsellers')}>Best Sellers</a>
-              </>
-            )}
+            <a onClick={() => go('shop')}>{isSkin ? 'All Skincare & Essentials' : 'All Collections'}</a>
+            {cats.filter((c) => !c.adult).slice(0, 5).map((c) => (
+              <a key={c.slug} onClick={() => go('shop/' + c.slug)}>{c.name}</a>
+            ))}
           </div>
           <div>
             <h4>Customer Care</h4>
@@ -383,7 +385,12 @@ function Footer() {
 
 function CartDrawer() {
   const { lines, total, open, setOpen, setQty, remove } = useCart();
-  const freeThreshold = 2000;
+  const [freeThreshold, setFreeThreshold] = useState(2500);
+  useEffect(() => {
+    getSettings().then((s) => {
+      if (s.freeShipThreshold) setFreeThreshold(s.freeShipThreshold);
+    }).catch(() => {});
+  }, []);
   const progress = Math.min(100, Math.round((total / freeThreshold) * 100));
   const remainingForFree = Math.max(0, freeThreshold - total);
 
@@ -416,7 +423,9 @@ function CartDrawer() {
             <div className="pc-drawer-empty">
               <div style={{ fontSize: 40, marginBottom: 12 }}>🛍️</div>
               <h4 style={{ fontFamily: 'Playfair Display, Georgia, serif', fontSize: 20, margin: '0 0 6px', color: '#1f3147' }}>Your Bag is Empty</h4>
-              <p style={{ fontSize: 13, color: '#6b645c', margin: '0 0 18px', maxWidth: 240, lineHeight: 1.5 }}>Discover our latest modest attire and add your favorite pieces.</p>
+              <p style={{ fontSize: 13, color: '#6b645c', margin: '0 0 18px', maxWidth: 260, lineHeight: 1.5 }}>
+                Discover our botanical skincare & self-care essentials to find your daily favorites.
+              </p>
               <button className="pc-checkout-btn" style={{ maxWidth: 220 }} onClick={() => { setOpen(false); go('shop'); }}>
                 EXPLORE SHOP
               </button>
@@ -430,7 +439,7 @@ function CartDrawer() {
                   <div className="pc-cart-item-variant">
                     {(l.size || l.color)
                       ? [l.color ? `Color: ${l.color}` : null, l.size ? `Size: ${l.size}` : null].filter(Boolean).join(' · ')
-                      : (l.variantId ? 'Selected Fit' : 'Standard Fit')}
+                      : (l.variantId ? 'Selected Option' : '')}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div className="pc-cart-item-qty">
@@ -489,9 +498,18 @@ function MobileTabs() {
 
 function WhatsAppFloat() {
   const [num, setNum] = useState('');
-  useEffect(() => { fetch('/api/settings').then((r) => r.json()).then((s) => setNum(s.whatsapp || '')).catch(() => {}); }, []);
+  const isSkin = isSkincareSite();
+  const [brand, setBrand] = useState(isSkin ? 'SECRATE' : 'METROMAA');
+  useEffect(() => {
+    getSettings().then((s) => {
+      const wa = s.whatsapp || s.phone || '';
+      setNum(wa);
+      if (s.storeName && s.storeName !== 'dot.') setBrand(s.storeName);
+    }).catch(() => {});
+  }, [isSkin]);
   if (!num) return null;
-  const href = `https://wa.me/${num}?text=${encodeURIComponent('Hello! I have an inquiry about METROMAA.')}`;
+  const clean = num.replace(/[^0-9]/g, '');
+  const href = `https://wa.me/${clean}?text=${encodeURIComponent(`Hello! I have an inquiry about ${brand}.`)}`;
   return (
     <a className="wafloat" href={href} target="_blank" rel="noopener noreferrer" aria-label="Chat with us on WhatsApp" title="WhatsApp Chat">
       <WhatsAppIcon size={32} variant="official" />

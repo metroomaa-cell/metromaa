@@ -6,6 +6,34 @@ const __dir = dirname(fileURLToPath(import.meta.url));
 const CATALOG = join(__dir, 'data', 'catalog.json');
 const ORDERS = join(__dir, 'data', 'orders.json');
 const SETTINGS = join(__dir, 'data', 'settings.json');
+const COLORS = join(__dir, 'data', 'colors.json');
+
+export const DEFAULT_COLORS = [
+  { id: 'jet-black', name: 'Jet Black', hex: '#111111' },
+  { id: 'pure-white', name: 'Pure White', hex: '#FFFFFF' },
+  { id: 'pearl-white', name: 'Pearl / Off-White', hex: '#F8F9FA' },
+  { id: 'charcoal-grey', name: 'Charcoal Grey', hex: '#495057' },
+  { id: 'silver', name: 'Silver / Metallic', hex: '#C0C0C0' },
+  { id: 'gold', name: 'Luxury Gold', hex: '#D4AF37' },
+  { id: 'rose-gold', name: 'Rose Gold', hex: '#B76E79' },
+  { id: 'gunmetal', name: 'Gunmetal / Matte Grey', hex: '#2C3539' },
+  { id: 'navy-blue', name: 'Navy Blue', hex: '#1A2B4C' },
+  { id: 'royal-blue', name: 'Royal Blue', hex: '#2563EB' },
+  { id: 'sky-blue', name: 'Sky Blue', hex: '#87CEEB' },
+  { id: 'deep-maroon', name: 'Deep Maroon', hex: '#58111A' },
+  { id: 'burgundy', name: 'Burgundy / Wine', hex: '#800020' },
+  { id: 'dusty-rose', name: 'Dusty Rose', hex: '#DCAE96' },
+  { id: 'emerald-green', name: 'Emerald Green', hex: '#1B4D3E' },
+  { id: 'olive-green', name: 'Olive Green', hex: '#556B2F' },
+  { id: 'mint-green', name: 'Mint Green', hex: '#98FF98' },
+  { id: 'mocha-brown', name: 'Mocha Brown', hex: '#4A2E1B' },
+  { id: 'tan-camel', name: 'Tan / Camel', hex: '#C19A6B' },
+  { id: 'desert-beige', name: 'Desert Beige', hex: '#D9CBB7' },
+  { id: 'chocolate', name: 'Dark Chocolate', hex: '#3D2314' },
+  { id: 'tortoise', name: 'Tortoise Shell / Amber', hex: '#8B4513' },
+  { id: 'lavender', name: 'Lavender', hex: '#E6E6FA' },
+  { id: 'coral', name: 'Peach / Coral', hex: '#F88379' },
+];
 
 export const DEFAULT_SETTINGS = {
   storeName: 'dot.',
@@ -217,7 +245,7 @@ export function saveUsers(u) { writeFileSync(USERS, JSON.stringify(u, null, 2));
 
 const INTEGRATIONS = join(__dir, 'data', 'integrations.json');
 export const DEFAULT_INTEGRATIONS = {
-  email: { enabled: false, provider: 'resend', resendApiKey: process.env.RESEND_API_KEY || '', adminEmail: 'metroomaa@gmail.com', host: '', port: 587, secure: false, user: '', pass: '', fromName: 'dot.', fromEmail: 'admin@dot.com' },
+  email: { enabled: true, provider: 'resend', resendApiKey: process.env.RESEND_API_KEY || '', adminEmail: 'metroomaa@gmail.com', host: '', port: 587, secure: false, user: '', pass: '', fromName: 'dot.', fromEmail: 'admin@dot.com' },
   sms: { enabled: false, url: '', method: 'GET', senderId: '', apiKey: '', templatePlaced: 'dot.: order {id} received. total {total}. we will call to confirm. track: {track}', templateStatus: 'dot.: order {id} is now {status}. {courier}' },
   couriers: [], // [{ id, provider, label, enabled, apiBase, apiKey, apiSecret, extra }]
   tracking: { fbEnabled: false, fbPixelId: '', fbToken: '', fbTestCode: '', ttkEnabled: false, ttkPixelId: '', ttkToken: '' },
@@ -367,3 +395,43 @@ export function deleteLanding(id) {
   saveLandings(next);
   return true;
 }
+
+export function getColors() {
+  if (!existsSync(COLORS)) {
+    try { writeFileSync(COLORS, JSON.stringify(DEFAULT_COLORS, null, 2)); } catch (_) {}
+    return DEFAULT_COLORS;
+  }
+  try { return JSON.parse(readFileSync(COLORS, 'utf8')); }
+  catch { return DEFAULT_COLORS; }
+}
+
+export function saveColors(colors) {
+  writeFileSync(COLORS, JSON.stringify(colors, null, 2));
+  return colors;
+}
+
+export function addColor({ name, hex }) {
+  if (!name || !name.trim()) return null;
+  const list = getColors();
+  const cleanName = name.trim();
+  const cleanHex = (hex && hex.trim()) || '#111111';
+  const existing = list.find((c) => c.name.toLowerCase() === cleanName.toLowerCase());
+  if (existing) {
+    existing.hex = cleanHex;
+    saveColors(list);
+    return existing;
+  }
+  const id = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || ('color-' + Date.now());
+  const item = { id, name: cleanName, hex: cleanHex };
+  list.push(item);
+  saveColors(list);
+  return item;
+}
+
+export function deleteColor(idOrName) {
+  const list = getColors();
+  const next = list.filter((c) => c.id !== idOrName && c.name.toLowerCase() !== idOrName.toLowerCase());
+  saveColors(next);
+  return next;
+}
+

@@ -185,6 +185,22 @@ export function getProductSizes(p: Product): string[] {
   return [];
 }
 
+export function isVolumeSize(s: string): boolean {
+  return /\b\d+\s*(ml|g|gm|oz|kg|l|ltr|pcs|pack|vials)\b/i.test(s) || /^\d+\s*(ml|g)$/i.test(s.trim());
+}
+
+export function isUndergarmentOrApparel(p: Product): boolean {
+  const cat = (p.category || '').toLowerCase();
+  const slug = (p.slug || '').toLowerCase();
+  const name = (p.name || '').toLowerCase();
+  if (cat.includes('wellness') || cat.includes('intim') || cat.includes('garment') || cat.includes('wear') || cat.includes('bra') || cat.includes('panty') || cat.includes('lingerie') || cat.includes('under') || cat.includes('panjabi') || cat.includes('abaya')) return true;
+  if (slug.includes('bra') || slug.includes('panty') || slug.includes('pant') || slug.includes('lingerie') || slug.includes('boxer') || slug.includes('garment') || slug.includes('undergarment') || slug.includes('shaper')) return true;
+  if (name.includes('bra') || name.includes('panty') || name.includes('lingerie') || name.includes('boxer') || name.includes('undergarment') || name.includes('shaper')) return true;
+  const sizes = getProductSizes(p);
+  if (sizes.some((s) => /^(s|m|l|xl|xxl|2xl|3xl|free size|28|30|32|34|36|38|40|42|44|[2-4][0-9][a-e])$/i.test(s.trim()))) return true;
+  return false;
+}
+
 export function ProductCard({ p }: { p: Product }) {
   const { add } = useCart();
   const [added, setAdded] = useState(false);
@@ -382,7 +398,7 @@ const INFO: Record<string, { title: string; body: string[] }> = {
   shipping: { title: 'shipping & delivery', body: ['We deliver nationwide across Bangladesh through trusted express couriers. Inside Dhaka usually arrives in 24–48 hours, outside Dhaka in 2–3 business days.', 'You pay cash on delivery when your order reaches your doorstep. You can inspect the parcel before acceptance.'] },
   returns: { title: 'returns & exchanges', body: ['We offer a 7-day hassle-free exchange policy. If the size, color, or fit is not ideal, message our support team with your order ID.', 'We will immediately arrange a replacement sent to your doorstep.'] },
   contact: { title: 'contact customer support', body: ['Questions about an order or a product? Our customer care team is here to assist you 7 days a week, 10:00 AM – 10:00 PM.', 'Call our helpline or message us directly on WhatsApp using the button below.'] },
-  about: { title: 'about METROMAA', body: ['METROMAA is a contemporary modest fashion & luxury lifestyle brand in Bangladesh.', 'From ethically crafted premium Dubai cherry abayas and royal cotton panjabis to curated designer sunglasses and luxury gift sets — we bring timeless elegance directly to your doorstep.'] },
+  about: { title: 'about SECRATE', body: ['SECRATE is a premium botanical skincare and personal wellness brand dedicated to pure, clinical-grade formulations.', 'From gentle hydrating cleansers and concentrated antioxidant serums to intimate wellness care and daily self-care essentials — we deliver authentic, dermatologically tested care across Bangladesh with doorstep cash on delivery.'] },
   privacy: { title: 'privacy policy', body: ['Your details are used strictly to process and deliver your order. We never sell or share your personal information with third parties.'] },
   terms: { title: 'terms of service', body: ['By placing an order you confirm that your shipping details and contact number are accurate.', 'All prices are in BDT and payable via Cash on Delivery upon receiving your package.'] },
   journal: { title: 'the journal', body: ['Style guides, fabric care notes & lifestyle stories — coming soon.'] },
@@ -697,6 +713,7 @@ export function Home() {
   const [loaded, setLoaded] = useState(false);
   const [cats, setCats] = useState<Category[]>([]);
   const [sliders, setSliders] = useState<any[]>([]);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [subEmail, setSubEmail] = useState('');
   const [subbed, setSubbed] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
@@ -705,6 +722,7 @@ export function Home() {
     getProducts().then((d) => { setProducts(d); setLoaded(true); }).catch(() => setLoaded(true));
     getCategories().then(setCats).catch(() => {});
     getSettings().then((s) => {
+      setSettings(s);
       if (Array.isArray(s.sliders)) setSliders(s.sliders);
     }).catch(() => {});
   }, []);
@@ -717,8 +735,8 @@ export function Home() {
       return [...products]
         .filter((p) => !p.adult)
         .sort((a, b) => {
-          const aSkin = (a.category === 'skincare' || a.category === 'body') ? 1 : 0;
-          const bSkin = (b.category === 'skincare' || b.category === 'body') ? 1 : 0;
+          const aSkin = (a.category === 'beauty-care' || a.category === 'hair-care' || a.category === 'skincare') ? 1 : 0;
+          const bSkin = (b.category === 'beauty-care' || b.category === 'hair-care' || b.category === 'skincare') ? 1 : 0;
           if (bSkin !== aSkin) return bSkin - aSkin;
           return (b.tag === 'bestseller' ? 1 : 0) - (a.tag === 'bestseller' ? 1 : 0);
         });
@@ -739,7 +757,7 @@ export function Home() {
         },
         {
           q: 'What are the delivery charges and delivery times?',
-          a: 'Delivery inside Dhaka is typically 24–48 hours (৳80). Delivery outside Dhaka takes 2–4 business days (৳130). Orders above ৳1,999 qualify for 100% Free Nationwide Delivery.',
+          a: `Delivery inside Dhaka is typically 24–48 hours (${settings ? taka(settings.deliveryInside) : '৳80'}). Delivery outside Dhaka takes 2–4 business days (${settings ? taka(settings.deliveryOutside) : '৳130'}). Orders above ${settings ? taka(settings.freeShipThreshold) : '৳2,500'} qualify for 100% Free Nationwide Delivery.`,
         },
         {
           q: 'Are these products safe for sensitive and acne-prone skin?',
@@ -1123,13 +1141,17 @@ export function ProductPage({ slug }: { slug: string }) {
   const [activeAcc, setActiveAcc] = useState<string>('desc');
   const [pdpTab, setPdpTab] = useState<'desc' | 'specs' | 'size' | 'delivery' | 'care'>('desc');
   const [waNum, setWaNum] = useState('');
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [revData, setRevData] = useState<{ count: number; avg: number; reviews: Review[] }>({ count: 0, avg: 0, reviews: [] });
   const detailsSectionRef = useRef<HTMLDivElement>(null);
   const pimgRef = useRef<HTMLImageElement>(null);
   const isSkin = isSkincareSite();
 
   useEffect(() => {
-    getSettings().then((s) => { if (s.whatsapp) setWaNum(s.whatsapp); }).catch(() => {});
+    getSettings().then((s) => {
+      setSettings(s);
+      if (s.whatsapp || s.phone) setWaNum(s.whatsapp || s.phone);
+    }).catch(() => {});
   }, []);
 
   const scrollToTab = (tab: 'desc' | 'specs' | 'size' | 'delivery' | 'care') => {
@@ -1139,6 +1161,7 @@ export function ProductPage({ slug }: { slug: string }) {
     }
   };
 
+  const isApparel = useMemo(() => (p ? isUndergarmentOrApparel(p) : false), [p]);
   const productColors = useMemo(() => (p ? getProductColors(p) : []), [p]);
   const productSizes = useMemo(() => (p ? getProductSizes(p) : []), [p]);
   const gallery = useMemo(() => {
@@ -1314,7 +1337,7 @@ export function ProductPage({ slug }: { slug: string }) {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span className="pc-eyebrow">
-                {p.category || 'CONTEMPORARY MODEST WEAR'}
+                {p.category ? p.category.replace(/-/g, ' ').toUpperCase() : 'BOTANICAL CARE & ESSENTIALS'}
               </span>
               {p.sku && <span style={{ fontSize: 11, color: '#9a7030', letterSpacing: '1px' }}>SKU: {p.sku}</span>}
             </div>
@@ -1346,6 +1369,15 @@ export function ProductPage({ slug }: { slug: string }) {
                 {p.soldOut ? 'Sold Out' : 'In Stock'}
               </span>
             </div>
+
+            {p.isDigital && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 6, marginBottom: 14 }}>
+                <span style={{ fontSize: 16 }}>⚡</span>
+                <div style={{ fontSize: 12.5, color: '#065f46', fontWeight: 600 }}>
+                  Instant Digital Product · 100% Free Instant Delivery (৳0 Courier Fee)
+                </div>
+              </div>
+            )}
 
             {/* Price block */}
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, padding: '16px 20px', background: '#f3f0ec', border: '1px solid rgba(180, 150, 100, 0.25)', marginBottom: 22 }}>
@@ -1453,31 +1485,33 @@ export function ProductPage({ slug }: { slug: string }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                     <label style={{ fontSize: 12, fontWeight: 600, color: '#1f3147', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                      Select Size & Fit:
+                      {isApparel ? 'Select Size & Fit:' : 'Select Volume / Net Wt:'}
                     </label>
                     <span style={{ fontSize: 13, fontWeight: 700, color: '#1f3147' }}>
                       {selectedSize || productSizes[0]}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => scrollToTab('size')}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      padding: 0,
-                      fontSize: 11.5,
-                      color: '#9a7030',
-                      cursor: 'pointer',
-                      fontWeight: 600,
-                      letterSpacing: '0.08em',
-                      textTransform: 'uppercase',
-                      textDecoration: 'underline',
-                      textUnderlineOffset: 3
-                    }}
-                  >
-                    📏 Size Chart & Fit Guide
-                  </button>
+                  {isApparel && (
+                    <button
+                      type="button"
+                      onClick={() => scrollToTab('size')}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        fontSize: 11.5,
+                        color: '#9a7030',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        textDecoration: 'underline',
+                        textUnderlineOffset: 3
+                      }}
+                    >
+                      📏 Size Chart & Fit Guide
+                    </button>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {productSizes.map((sz) => {
@@ -1488,7 +1522,7 @@ export function ProductPage({ slug }: { slug: string }) {
                         type="button"
                         onClick={() => setSelectedSize(sz)}
                         style={{
-                          padding: '10px 20px',
+                          padding: isVolumeSize(sz) ? '8px 16px' : '10px 20px',
                           minWidth: 54,
                           textAlign: 'center',
                           border: isSelected ? '1px solid #1f3147' : '1px solid rgba(180, 150, 100, 0.45)',
@@ -1496,7 +1530,7 @@ export function ProductPage({ slug }: { slug: string }) {
                           color: isSelected ? '#FAF8F5' : '#1f3147',
                           fontWeight: 600,
                           fontSize: 12,
-                          letterSpacing: '0.1em',
+                          letterSpacing: '0.06em',
                           cursor: 'pointer',
                           transition: 'all 0.25s',
                         }}
@@ -1654,8 +1688,8 @@ export function ProductPage({ slug }: { slug: string }) {
                 </div>
                 {activeAcc === 'del' && (
                   <div style={{ paddingBottom: 16, fontSize: 13.5, color: '#4b5563', lineHeight: 1.6 }}>
-                    <p><b>Inside Dhaka:</b> Delivered in 1–2 business days. Delivery fee ৳70.</p>
-                    <p style={{ marginTop: 4 }}><b>Outside Dhaka:</b> Delivered in 2–3 business days. Delivery fee ৳130.</p>
+                    <p><b>Inside Dhaka:</b> Delivered in 1–2 business days. Delivery fee {settings ? taka(settings.deliveryInside) : '৳80'}.</p>
+                    <p style={{ marginTop: 4 }}><b>Outside Dhaka:</b> Delivered in 2–3 business days. Delivery fee {settings ? taka(settings.deliveryOutside) : '৳130'}.</p>
                     <p style={{ marginTop: 6 }}>Inspect your parcel in the presence of the delivery rider before payment. Instant return or exchange if damaged in transit or unsatisfactory.</p>
                   </div>
                 )}
@@ -1706,7 +1740,7 @@ export function ProductPage({ slug }: { slug: string }) {
             >
               Specifications
             </button>
-            {productSizes.length > 0 && (
+            {isApparel && productSizes.length > 0 && (
               <button
                 type="button"
                 className={'tabaya-tab-btn' + (pdpTab === 'size' ? ' active' : '')}
@@ -1727,7 +1761,7 @@ export function ProductPage({ slug }: { slug: string }) {
               className={'tabaya-tab-btn' + (pdpTab === 'care' ? ' active' : '')}
               onClick={() => setPdpTab('care')}
             >
-              {isSkin ? 'How to Use & Store' : 'Care Instructions'}
+              {isApparel ? 'Care & Washing' : 'How to Use & Store'}
             </button>
           </div>
 
@@ -1748,7 +1782,38 @@ export function ProductPage({ slug }: { slug: string }) {
 
                   {/* 4 Feature Highlights Grid */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, marginTop: 24 }}>
-                    {isSkin ? (
+                    {isApparel ? (
+                      <>
+                        <div className="tabaya-feature-card">
+                          <span className="icon">💎</span>
+                          <div>
+                            <h4>Breathable Luxury Comfort</h4>
+                            <p>Engineered with soft, ultra-breathable stretch fibers for all-day comfort and seamless support.</p>
+                          </div>
+                        </div>
+                        <div className="tabaya-feature-card">
+                          <span className="icon">🛡️</span>
+                          <div>
+                            <h4>Discreet & Hygienic Packaging</h4>
+                            <p>Every order is shipped in 100% opaque, unmarked, tamper-evident protective outer packaging.</p>
+                          </div>
+                        </div>
+                        <div className="tabaya-feature-card">
+                          <span className="icon">✨</span>
+                          <div>
+                            <h4>Durable Shape Retention</h4>
+                            <p>High-elasticity weave maintains flexibility and supportive hold through repeated washes.</p>
+                          </div>
+                        </div>
+                        <div className="tabaya-feature-card">
+                          <span className="icon">🚚</span>
+                          <div>
+                            <h4>Doorstep Cash on Delivery</h4>
+                            <p>Pay cash when your parcel arrives with full right of inspection in front of the courier rider.</p>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
                       <>
                         <div className="tabaya-feature-card">
                           <span className="icon">🌿</span>
@@ -1779,37 +1844,6 @@ export function ProductPage({ slug }: { slug: string }) {
                           </div>
                         </div>
                       </>
-                    ) : (
-                      <>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">💎</span>
-                          <div>
-                            <h4>Authentic Premium Quality</h4>
-                            <p>Specially selected luxury weave with superior breathability, elegant drapery, and a soft-touch finish.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">✂️</span>
-                          <div>
-                            <h4>Tailored Refined Proportions</h4>
-                            <p>Engineered for relaxed, comfortable fit without compromising sharp, refined silhouettes.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">🎨</span>
-                          <div>
-                            <h4>Color Fastness & Longevity</h4>
-                            <p>High-grade reactive dyes resist fading, shrinkage, and wear across seasons and washings.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">🛡️</span>
-                          <div>
-                            <h4>Quality Assured Dispatch</h4>
-                            <p>Each item undergoes strict inspection for seams, buttons, and finish prior to packaging.</p>
-                          </div>
-                        </div>
-                      </>
                     )}
                   </div>
                 </div>
@@ -1832,42 +1866,10 @@ export function ProductPage({ slug }: { slug: string }) {
                       </tr>
                       <tr>
                         <th>Collection / Category</th>
-                        <td style={{ textTransform: 'capitalize' }}>{p.category ? p.category.replace('-', ' ') : (isSkin ? 'Botanical Skincare' : 'Curated Collection')}</td>
+                        <td style={{ textTransform: 'capitalize' }}>{p.category ? p.category.replace(/-/g, ' ') : (isApparel ? 'Intimate Care' : 'Botanical Skincare')}</td>
                       </tr>
-                      {isSkin ? (
+                      {isApparel ? (
                         <>
-                          {(p.size || productSizes.length > 0) && (
-                            <tr>
-                              <th>Net Volume / Size</th>
-                              <td>{p.size || productSizes.join(', ')}</td>
-                            </tr>
-                          )}
-                          <tr>
-                            <th>Skin Type Compatibility</th>
-                            <td>Suitable for All Skin Types, including Sensitive Skin</td>
-                          </tr>
-                          <tr>
-                            <th>Formulation Standard</th>
-                            <td>Dermatologist Tested, Paraben-Free, Zero Harmful Toxins</td>
-                          </tr>
-                          <tr>
-                            <th>Package Includes</th>
-                            <td>1x Authentically Sealed Product + Protective Outer Box</td>
-                          </tr>
-                        </>
-                      ) : (
-                        <>
-                          {p.category && (p.category.includes('abaya') || p.category.includes('panjabi') || p.category.includes('wear') || p.category.includes('modest')) && (
-                            <tr>
-                              <th>Primary Fabric</th>
-                              <td>
-                                {p.desc.toLowerCase().includes('silk') ? 'Authentic Dubai Soft Silk' :
-                                 p.desc.toLowerCase().includes('cherry') || p.desc.toLowerCase().includes('georgette') ? 'Original Dubai Cherry Georgette' :
-                                 p.desc.toLowerCase().includes('cotton') ? '100% Fine Combed Breathable Cotton' :
-                                 'Premium Handpicked Modest Blend'}
-                              </td>
-                            </tr>
-                          )}
                           {productSizes.length > 0 && (
                             <tr>
                               <th>Available Sizes</th>
@@ -1881,12 +1883,37 @@ export function ProductPage({ slug }: { slug: string }) {
                             </tr>
                           )}
                           <tr>
+                            <th>Material / Fabric</th>
+                            <td>Premium Breathable Stretch Cotton / Seamless Spandex Blend</td>
+                          </tr>
+                          <tr>
+                            <th>Fit Type</th>
+                            <td>Ergonomic Comfort & Supportive Drape</td>
+                          </tr>
+                          <tr>
                             <th>Package Includes</th>
-                            <td>
-                              {p.category === 'modest-wear' || p.slug.includes('abaya')
-                                ? '1x Designer Abaya + 1x Matching Premium Silk Hijab + Protective Packaging'
-                                : '1x Designer Item + Branded Protective Packaging'}
-                            </td>
+                            <td>1x Discreetly Sealed Item in Protective Hygienic Packaging</td>
+                          </tr>
+                        </>
+                      ) : (
+                        <>
+                          {(p.size || productSizes.length > 0) && (
+                            <tr>
+                              <th>Net Volume / Weight</th>
+                              <td>{p.size || productSizes.join(', ')}</td>
+                            </tr>
+                          )}
+                          <tr>
+                            <th>Skin Type Compatibility</th>
+                            <td>Suitable for All Skin Types, including Sensitive & Acne-Prone</td>
+                          </tr>
+                          <tr>
+                            <th>Formulation Standard</th>
+                            <td>Dermatologist Tested, Non-Comedogenic, Paraben-Free</td>
+                          </tr>
+                          <tr>
+                            <th>Package Includes</th>
+                            <td>1x Authentically Sealed Product + Protective Outer Packaging</td>
                           </tr>
                         </>
                       )}
@@ -1900,111 +1927,75 @@ export function ProductPage({ slug }: { slug: string }) {
               </div>
             )}
 
-            {/* TAB 3: SIZE & FIT CHART - ONLY IF PRODUCT HAS SIZES */}
-            {productSizes.length > 0 && pdpTab === 'size' && (
+            {/* TAB 3: SIZE & FIT CHART - ONLY IF APPAREL / UNDERGARMENTS */}
+            {isApparel && productSizes.length > 0 && pdpTab === 'size' && (
               <div style={{ maxWidth: 840, margin: '0 auto' }}>
                 <div style={{ marginBottom: 18, textAlign: 'center' }}>
                   <h4 className="serif" style={{ fontSize: 20, color: '#1f3147', margin: '0 0 6px' }}>
-                    {p.category === 'panjabi' || p.slug.includes('panjabi') ? 'Panjabi & Kabli Size Guide' : 'Abaya & Modest Wear Size Guide'}
+                    Intimate Wear & Undergarment Size Guide
                   </h4>
                   <p style={{ fontSize: 13, color: '#6b645c', margin: 0 }}>
-                    All dimensions are provided in inches. For the best modest drape, please select according to your height and chest measurements.
+                    All dimensions are provided in inches. Please select based on your body measurements for the most supportive and comfortable fit.
                   </p>
                 </div>
 
                 <div className="tabaya-table-wrap">
-                  {p.category === 'panjabi' || p.slug.includes('panjabi') ? (
-                    <table className="tabaya-size-table">
-                      <thead>
-                        <tr>
-                          <th>Size</th>
-                          <th>Chest (Round)</th>
-                          <th>Length</th>
-                          <th>Shoulder</th>
-                          <th>Sleeve Length</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td><b>40 (S/M)</b></td>
-                          <td>40"</td>
-                          <td>40"</td>
-                          <td>17.5"</td>
-                          <td>24.5"</td>
-                        </tr>
-                        <tr>
-                          <td><b>42 (L)</b></td>
-                          <td>42"</td>
-                          <td>42"</td>
-                          <td>18.0"</td>
-                          <td>25.0"</td>
-                        </tr>
-                        <tr>
-                          <td><b>44 (XL)</b></td>
-                          <td>44"</td>
-                          <td>44"</td>
-                          <td>18.5"</td>
-                          <td>25.5"</td>
-                        </tr>
-                        <tr>
-                          <td><b>46 (XXL)</b></td>
-                          <td>46"</td>
-                          <td>45"</td>
-                          <td>19.0"</td>
-                          <td>26.0"</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  ) : (
-                    <table className="tabaya-size-table">
-                      <thead>
-                        <tr>
-                          <th>Abaya Size</th>
-                          <th>Garment Length</th>
-                          <th>Bust / Chest</th>
-                          <th>Sleeve (From Neck)</th>
-                          <th>Recommended Height</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td><b>Size 52</b></td>
-                          <td>52"</td>
-                          <td>44"</td>
-                          <td>27"</td>
-                          <td>5'1" – 5'3" (155 – 160 cm)</td>
-                        </tr>
-                        <tr>
-                          <td><b>Size 54</b></td>
-                          <td>54"</td>
-                          <td>46"</td>
-                          <td>28"</td>
-                          <td>5'3" – 5'5" (160 – 165 cm)</td>
-                        </tr>
-                        <tr>
-                          <td><b>Size 56</b></td>
-                          <td>56"</td>
-                          <td>48"</td>
-                          <td>29"</td>
-                          <td>5'5" – 5'7" (165 – 170 cm)</td>
-                        </tr>
-                        <tr>
-                          <td><b>Size 58</b></td>
-                          <td>58"</td>
-                          <td>50"</td>
-                          <td>30"</td>
-                          <td>5'7" – 5'9" (170 – 175 cm)</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  )}
+                  <table className="tabaya-size-table">
+                    <thead>
+                      <tr>
+                        <th>Size Tag</th>
+                        <th>Band / Underbust</th>
+                        <th>Bust / Chest</th>
+                        <th>Waist (Inches)</th>
+                        <th>Recommended Fit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><b>S (Small)</b></td>
+                        <td>28" – 30"</td>
+                        <td>30" – 32"</td>
+                        <td>24" – 26"</td>
+                        <td>Standard Comfort Fit</td>
+                      </tr>
+                      <tr>
+                        <td><b>M (Medium)</b></td>
+                        <td>30" – 32"</td>
+                        <td>32" – 34"</td>
+                        <td>26" – 29"</td>
+                        <td>Standard Comfort Fit</td>
+                      </tr>
+                      <tr>
+                        <td><b>L (Large)</b></td>
+                        <td>32" – 34"</td>
+                        <td>34" – 36"</td>
+                        <td>29" – 32"</td>
+                        <td>Comfort & Support</td>
+                      </tr>
+                      <tr>
+                        <td><b>XL (Extra Large)</b></td>
+                        <td>34" – 36"</td>
+                        <td>36" – 38"</td>
+                        <td>32" – 35"</td>
+                        <td>Full Support Fit</td>
+                      </tr>
+                      <tr>
+                        <td><b>XXL / Free Size</b></td>
+                        <td>36" – 38"</td>
+                        <td>38" – 42"</td>
+                        <td>35" – 39"</td>
+                        <td>Relaxed Stretch Fit</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
 
                 <div style={{ marginTop: 24, padding: 18, background: '#f8f6f2', border: '1px solid rgba(180, 150, 100, 0.25)', fontSize: 13, color: '#4b5563', lineHeight: 1.6 }}>
-                  <b style={{ color: '#1f3147', display: 'block', marginBottom: 4 }}>💡 How to Measure Accurately:</b>
-                  <div>• <b>Length:</b> Measure vertically from the top of your shoulder seam down to your ankle bones.</div>
-                  <div>• <b>Chest / Bust:</b> Measure around the fullest part of your chest with a relaxed tape measure.</div>
-                  <div>• <b>Fit Tip:</b> Modest garments feature a loose, flowing drape. If you prefer extra comfort or wear high heels, choose one size longer.</div>
+                  <b style={{ color: '#1f3147', display: 'block', marginBottom: 4 }}>💡 Measurement & Fit Guidance:</b>
+                  <div>• <b>Underbust:</b> Measure directly under your bust with a snug, level tape.</div>
+                  <div>• <b>Bust:</b> Measure around the fullest point of your chest while breathing naturally.</div>
+                  <div>• <b>Waist:</b> Measure around the narrowest part of your natural waistline.</div>
+                  <div>• <b>Discreet Delivery:</b> All intimate orders are shipped in unmarked, opaque packaging for 100% privacy.</div>
                 </div>
               </div>
             )}
@@ -2016,22 +2007,22 @@ export function ProductPage({ slug }: { slug: string }) {
                   <span className="icon">🚚</span>
                   <div>
                     <h4>Fast Nationwide Delivery</h4>
-                    <p><b>Inside Dhaka:</b> Delivered within 24 to 48 business hours (৳70 delivery charge).<br />
-                    <b>Outside Dhaka:</b> Delivered within 48 to 72 business hours across all 64 districts (৳130 delivery charge).</p>
+                    <p><b>Inside Dhaka:</b> Delivered within 24 to 48 business hours ({settings ? taka(settings.deliveryInside) : '৳80'} delivery charge).<br />
+                    <b>Outside Dhaka:</b> Delivered within 48 to 72 business hours across all 64 districts ({settings ? taka(settings.deliveryOutside) : '৳130'} delivery charge).</p>
                   </div>
                 </div>
                 <div className="tabaya-feature-card">
                   <span className="icon">💵</span>
                   <div>
                     <h4>Cash on Delivery at Your Doorstep</h4>
-                    <p>Pay cash directly to the delivery courier when your parcel arrives. You have the right to inspect the parcel and quality in front of the courier rider before accepting.</p>
+                    <p>Pay cash directly to the delivery courier when your parcel arrives. You have the right to inspect the parcel outer packaging before payment.</p>
                   </div>
                 </div>
                 <div className="tabaya-feature-card">
                   <span className="icon">🔄</span>
                   <div>
-                    <h4>7-Day Hassle-Free Exchange Policy</h4>
-                    <p>If you need an alternative product or if there is any issue, simply contact our helpline or WhatsApp within 7 days for a quick resolution.</p>
+                    <h4>Easy Replacement Policy</h4>
+                    <p>If you received a damaged item or incorrect size, contact our customer support team or WhatsApp within 7 days for an immediate exchange.</p>
                   </div>
                 </div>
               </div>
@@ -2041,7 +2032,38 @@ export function ProductPage({ slug }: { slug: string }) {
             {pdpTab === 'care' && (
               <div style={{ maxWidth: 840, margin: '0 auto' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-                  {isSkin ? (
+                  {isApparel ? (
+                    <>
+                      <div className="tabaya-feature-card">
+                        <span className="icon">💧</span>
+                        <div>
+                          <h4>Gentle Hand Wash</h4>
+                          <p>Wash in cold water with mild detergent to preserve fabric elasticity and soft texture.</p>
+                        </div>
+                      </div>
+                      <div className="tabaya-feature-card">
+                        <span className="icon">🚫</span>
+                        <div>
+                          <h4>No Bleach or Harsh Chemicals</h4>
+                          <p>Never use chlorine bleach or strong optical brighteners to prevent fiber damage and discoloration.</p>
+                        </div>
+                      </div>
+                      <div className="tabaya-feature-card">
+                        <span className="icon">🌤️</span>
+                        <div>
+                          <h4>Air Dry in Shade</h4>
+                          <p>Lay flat or line dry away from direct heat and strong sunlight to maintain elastic recovery.</p>
+                        </div>
+                      </div>
+                      <div className="tabaya-feature-card">
+                        <span className="icon">🔒</span>
+                        <div>
+                          <h4>Hygienic Storage</h4>
+                          <p>Store in a clean, ventilated drawer or wardrobe organizer to keep items pristine and fresh.</p>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
                     <>
                       <div className="tabaya-feature-card">
                         <span className="icon">💧</span>
@@ -2072,37 +2094,6 @@ export function ProductPage({ slug }: { slug: string }) {
                         </div>
                       </div>
                     </>
-                  ) : (
-                    <>
-                      <div className="tabaya-feature-card">
-                        <span className="icon">💧</span>
-                        <div>
-                          <h4>Gentle Cold Wash</h4>
-                          <p>Hand wash in cold or lukewarm water using mild detergent. If using a washing machine, select the delicate cycle.</p>
-                        </div>
-                      </div>
-                      <div className="tabaya-feature-card">
-                        <span className="icon">🚫</span>
-                        <div>
-                          <h4>No Bleach or Harsh Chemicals</h4>
-                          <p>Never use chlorine bleach or strong optical brighteners to avoid weakening fine fibers and dulling luster.</p>
-                        </div>
-                      </div>
-                      <div className="tabaya-feature-card">
-                        <span className="icon">🌤️</span>
-                        <div>
-                          <h4>Line Dry in Shade</h4>
-                          <p>Always hang garments to air dry in shaded breeze. Direct hot sun exposure can cause fabric brittleness and color fading.</p>
-                        </div>
-                      </div>
-                      <div className="tabaya-feature-card">
-                        <span className="icon">👔</span>
-                        <div>
-                          <h4>Steam / Low Heat Iron</h4>
-                          <p>Steam garments while hanging, or iron inside out on low-to-medium heat setting to preserve silky drape.</p>
-                        </div>
-                      </div>
-                    </>
                   )}
                 </div>
               </div>
@@ -2123,17 +2114,58 @@ export function ProductPage({ slug }: { slug: string }) {
 
       {/* Sticky Bottom Bar on Mobile */}
       {!p.soldOut && (
-        <div className={'pdpbar' + (showBar ? ' show' : '')} style={{ background: '#ffffff', borderTop: '1px solid #ede8e3', boxShadow: '0 -4px 16px rgba(0,0,0,0.06)' }}>
-          <div className="pb-info">
-            <b style={{ color: '#111827', fontSize: 18 }}>{taka(currentPrice)}</b>
-            <span style={{ color: '#6b7280', fontSize: 12 }}>{p.name}</span>
+        <div
+          className={'pdpbar' + (showBar ? ' show' : '')}
+          style={{
+            background: '#ffffff',
+            borderTop: '1px solid #EAE5DC',
+            boxShadow: '0 -6px 20px rgba(0,0,0,0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '10px 16px',
+            zIndex: 60
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+            <img
+              src={p.image}
+              alt=""
+              style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4, border: '1px solid #EAE5DC', flexShrink: 0 }}
+            />
+            <div className="pb-info" style={{ minWidth: 0, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                <b style={{ color: '#1f3147', fontSize: 17, fontWeight: 700 }}>{taka(currentPrice)}</b>
+                {onSale && currentCompareAt && (
+                  <s style={{ color: '#8c7d6b', fontSize: 12 }}>{taka(currentCompareAt)}</s>
+                )}
+              </div>
+              <span style={{ color: '#4b5563', fontSize: 11.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
+                {p.name}
+              </span>
+            </div>
           </div>
           <button
             className="btn"
             onClick={handleDirectBuy}
-            style={{ background: '#111827', color: '#fff', borderRadius: 6, padding: '10px 20px', fontWeight: 700 }}
+            style={{
+              background: '#8B1E1E',
+              color: '#ffffff',
+              borderRadius: 4,
+              padding: '12px 18px',
+              fontWeight: 700,
+              fontSize: 12,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              whiteSpace: 'nowrap',
+              border: 'none',
+              cursor: 'pointer',
+              flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(139,30,30,0.25)'
+            }}
           >
-            Order Now →
+            ORDER NOW →
           </button>
         </div>
       )}
@@ -2144,7 +2176,7 @@ export function Checkout() {
   const { lines, total: subtotal, clear } = useCart();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [area, setArea] = useState<'inside' | 'outside'>('inside');
-  const [f, setF] = useState({ name: '', phone: '', address: '', note: '' });
+  const [f, setF] = useState({ name: '', phone: '', address: '', note: '', email: '' });
   const [district, setDistrict] = useState('');
   const [thana, setThana] = useState('');
   const [coupon, setCoupon] = useState('');
@@ -2174,12 +2206,13 @@ export function Checkout() {
   }, [f, area, applied, lines, district, thana]);
 
   const set = (k: keyof typeof f) => (e: any) => setF((s) => ({ ...s, [k]: e.target.value }));
+  const isAllDigital = lines.length > 0 && lines.every((l) => (l as any).isDigital);
   const districts = Object.keys(BD_GEO).sort();
   const thanas = district ? (BD_GEO[district] || []) : [];
   const pickDistrict = (d: string) => { setDistrict(d); setThana(''); if (d) setArea(d === 'Dhaka' ? 'inside' : 'outside'); };
   const fullAddress = [f.address.trim(), thana, district].filter(Boolean).join(', ');
-  const freeShip = settings ? subtotal >= settings.freeShipThreshold : false;
-  const delivery = !settings || freeShip ? 0 : area === 'outside' ? settings.deliveryOutside : settings.deliveryInside;
+  const freeShip = isAllDigital || (settings ? subtotal >= settings.freeShipThreshold : false);
+  const delivery = isAllDigital || !settings || freeShip ? 0 : area === 'outside' ? settings.deliveryOutside : settings.deliveryInside;
   const discount = applied ? Math.min(applied.discount, subtotal) : 0;
   const grand = Math.max(0, subtotal + delivery - discount);
 
@@ -2192,8 +2225,10 @@ export function Checkout() {
   const submit = async () => {
     setErr('');
     if (!/^01[3-9]\d{8}$/.test(f.phone)) { setErr('Please enter a valid 11-digit Bangladeshi mobile number (01XXXXXXXXX)'); return; }
-    if (!district || !thana) { setErr('Please select your District and Thana'); return; }
-    if (!f.address.trim()) { setErr('Please enter your street address / delivery location'); return; }
+    if (!isAllDigital) {
+      if (!district || !thana) { setErr('Please select your District and Thana'); return; }
+      if (!f.address.trim()) { setErr('Please enter your street address / delivery location'); return; }
+    }
     setBusy(true);
     try {
       const res = await placeOrder({
@@ -2206,8 +2241,17 @@ export function Checkout() {
           name: l.name,
           price: l.price,
           image: l.image,
+          isDigital: (l as any).isDigital,
         })),
-        customer: { ...f, address: fullAddress, area, district, thana, coupon: applied?.code, source: getSource() }
+        customer: {
+          ...f,
+          address: isAllDigital ? (f.email ? `Digital Access / Email: ${f.email}` : 'Instant Digital Access via WhatsApp') : fullAddress,
+          area: isAllDigital ? 'inside' : area,
+          district: isAllDigital ? 'Digital' : district,
+          thana: isAllDigital ? 'Instant' : thana,
+          coupon: applied?.code,
+          source: getSource(),
+        }
       });
       ecPurchase(res.id, res.total ?? grand, lines.map((l) => ({ id: l.id, name: l.name, price: l.price, qty: l.qty })), getSource());
       clear();
@@ -2299,64 +2343,88 @@ export function Checkout() {
               </div>
             </div>
 
-            {/* Box 2: Delivery Address */}
+            {/* Box 2: Delivery Address / Digital Delivery */}
             <div className="cobox">
               <div className="pc-corner-tr" />
               <div className="pc-corner-bl" />
               <div className="cobox-h">
                 <span className="cobox-n">2</span>
-                <span>Shipping & Doorstep Delivery Address</span>
+                <span>{isAllDigital ? 'Instant Digital Fulfillment' : 'Shipping & Doorstep Delivery Address'}</span>
               </div>
-              <div className="cobox-b">
-                <div className="corow">
-                  <div>
-                    <label>District (Zilla) *</label>
-                    <SearchSelect value={district} onChange={pickDistrict} options={districts} placeholder="Search district…" />
-                  </div>
-                  <div>
-                    <label>Thana / Upazila *</label>
-                    <SearchSelect value={thana} onChange={setThana} options={thanas} placeholder={district ? 'Search thana…' : 'Select district first'} disabled={!district} />
-                  </div>
-                </div>
-
-                <div>
-                  <label>Detailed Street Address *</label>
-                  <textarea className="field" value={f.address} onChange={set('address')} placeholder="House / Flat / Road, Village, Landmark or Area description" />
-                </div>
-
-                <div>
-                  <label>Delivery Zone</label>
-                  <div className="area">
-                    <button type="button" className={'areaopt' + (area === 'inside' ? ' on' : '')} onClick={() => setArea('inside')}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                        <b style={{ fontSize: 13, color: area === 'inside' ? '#FAF8F5' : '#1f3147' }}>Inside Dhaka</b>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: area === 'inside' ? '#d4af37' : '#1f3147' }}>
-                          {settings ? (freeShip ? 'FREE' : taka(settings.deliveryInside)) : '৳70'}
-                        </span>
-                      </div>
-                      <span style={{ fontSize: 11.5, color: area === 'inside' ? 'rgba(250,248,245,0.75)' : '#8c7d6b' }}>
-                        Delivered in 24–48 Hours
+              {isAllDigital ? (
+                <div className="cobox-b">
+                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '14px 16px', marginBottom: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#166534', fontWeight: 700, fontSize: 13.5 }}>
+                      <span>⚡ Instant Digital Access</span>
+                      <span style={{ fontSize: 10.5, background: '#16a34a', color: '#fff', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
+                        FREE ৳0 DELIVERY
                       </span>
-                    </button>
-                    <button type="button" className={'areaopt' + (area === 'outside' ? ' on' : '')} onClick={() => setArea('outside')}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                        <b style={{ fontSize: 13, color: area === 'outside' ? '#FAF8F5' : '#1f3147' }}>Outside Dhaka</b>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: area === 'outside' ? '#d4af37' : '#1f3147' }}>
-                          {settings ? (freeShip ? 'FREE' : taka(settings.deliveryOutside)) : '৳130'}
-                        </span>
-                      </div>
-                      <span style={{ fontSize: 11.5, color: area === 'outside' ? 'rgba(250,248,245,0.75)' : '#8c7d6b' }}>
-                        Delivered across 64 Districts
-                      </span>
-                    </button>
+                    </div>
+                    <p style={{ margin: '6px 0 0', fontSize: 12.5, color: '#4b5563', lineHeight: 1.5 }}>
+                      No physical courier delivery needed. Your digital download link and activation instructions will be provided instantly upon order confirmation.
+                    </p>
+                  </div>
+                  <div>
+                    <label>Email Address (for download delivery & invoice) *</label>
+                    <input className="field" type="email" value={f.email || ''} onChange={set('email')} placeholder="yourname@gmail.com" />
+                  </div>
+                  <div style={{ marginTop: 12 }}>
+                    <label>Order Note (Optional)</label>
+                    <input className="field" value={f.note} onChange={set('note')} placeholder="WhatsApp instructions or special notes" />
                   </div>
                 </div>
+              ) : (
+                <div className="cobox-b">
+                  <div className="corow">
+                    <div>
+                      <label>District (Zilla) *</label>
+                      <SearchSelect value={district} onChange={pickDistrict} options={districts} placeholder="Search district…" />
+                    </div>
+                    <div>
+                      <label>Thana / Upazila *</label>
+                      <SearchSelect value={thana} onChange={setThana} options={thanas} placeholder={district ? 'Search thana…' : 'Select district first'} disabled={!district} />
+                    </div>
+                  </div>
 
-                <div>
-                  <label>Order Note (Optional)</label>
-                  <input className="field" value={f.note} onChange={set('note')} placeholder="Special delivery instructions, timing or landmarks" />
+                  <div>
+                    <label>Detailed Street Address *</label>
+                    <textarea className="field" value={f.address} onChange={set('address')} placeholder="House / Flat / Road, Village, Landmark or Area description" />
+                  </div>
+
+                  <div>
+                    <label>Delivery Zone</label>
+                    <div className="area">
+                      <button type="button" className={'areaopt' + (area === 'inside' ? ' on' : '')} onClick={() => setArea('inside')}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                          <b style={{ fontSize: 13, color: area === 'inside' ? '#FAF8F5' : '#1f3147' }}>Inside Dhaka</b>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: area === 'inside' ? '#d4af37' : '#1f3147' }}>
+                            {settings ? (freeShip ? 'FREE' : taka(settings.deliveryInside)) : '৳80'}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: 11.5, color: area === 'inside' ? 'rgba(250,248,245,0.75)' : '#8c7d6b' }}>
+                          Delivered in 24–48 Hours
+                        </span>
+                      </button>
+                      <button type="button" className={'areaopt' + (area === 'outside' ? ' on' : '')} onClick={() => setArea('outside')}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                          <b style={{ fontSize: 13, color: area === 'outside' ? '#FAF8F5' : '#1f3147' }}>Outside Dhaka</b>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: area === 'outside' ? '#d4af37' : '#1f3147' }}>
+                            {settings ? (freeShip ? 'FREE' : taka(settings.deliveryOutside)) : '৳130'}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: 11.5, color: area === 'outside' ? 'rgba(250,248,245,0.75)' : '#8c7d6b' }}>
+                          Delivered across 64 Districts
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label>Order Note (Optional)</label>
+                    <input className="field" value={f.note} onChange={set('note')} placeholder="Special delivery instructions, timing or landmarks" />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
@@ -2405,7 +2473,7 @@ export function Checkout() {
               <span>{taka(subtotal)}</span>
             </div>
             <div className="sl">
-              <span>Delivery Charge {freeShip ? '(Free)' : `(${area === 'inside' ? 'Inside Dhaka' : 'Outside Dhaka'})`}</span>
+              <span>Delivery Charge {isAllDigital ? '(Instant Digital Delivery)' : freeShip ? '(Free)' : `(${area === 'inside' ? 'Inside Dhaka' : 'Outside Dhaka'})`}</span>
               <span>{delivery === 0 ? 'FREE' : taka(delivery)}</span>
             </div>
             {discount > 0 && (
@@ -2750,7 +2818,7 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
           <button className="sclose" onClick={onClose}>esc</button>
         </div>
         <div className="sresults">
-          {q.trim() === '' && <div className="shint">try &ldquo;abaya&rdquo;, &ldquo;silk&rdquo;, &ldquo;panjabi&rdquo;, &ldquo;cherry&rdquo;, &ldquo;black&rdquo;…</div>}
+          {q.trim() === '' && <div className="shint">try &ldquo;serum&rdquo;, &ldquo;cleanser&rdquo;, &ldquo;sunscreen&rdquo;, &ldquo;moisturizer&rdquo;, &ldquo;niacinamide&rdquo;…</div>}
           {q.trim() !== '' && results.length === 0 && <div className="shint">no matches for &ldquo;{q}&rdquo;.</div>}
           {results.map((p) => (
             <a className="sresult" key={p.id} onClick={() => open2(p.slug)}>
