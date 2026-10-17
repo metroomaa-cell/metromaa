@@ -1,5 +1,4 @@
 node_modules/
-dist/
 .DS_Store
 Thumbs.db
 *.log
@@ -15,3 +14,4 @@ server/data/persistent_uploads/
 server/data/backups/
 server/data/*.bak
 server/data/*.local.json
+check_live.cjs
