@@ -148,19 +148,6 @@ export function ecPurchase(id: string, value: number, items: { id: string; name:
       },
     });
 
-    dl({
-      event: 'Purchase',
-      event_id: String(id),
-      eventID: String(id),
-      value: numValue,
-      currency: CUR,
-      order_id: String(id),
-      ecommerce: {
-        value: numValue,
-        currency: CUR,
-      },
-    });
-
     fbTrack(
       'Purchase',
       {
