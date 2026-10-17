@@ -1,0 +1,119 @@
+{
+  "exportFormatVersion": 2,
+  "exportTime": "2026-10-12 00:00:00",
+  "containerVersion": {
+    "path": "accounts/1/containers/1/versions/0",
+    "accountId": "1",
+    "containerId": "1",
+    "container": {
+      "name": "METRROMA Server Container (metrroma.com)",
+      "publicId": "GTM-M653T9RR",
+      "usageContext": [
+        "SERVER"
+      ]
+    },
+    "variable": [
+      {
+        "accountId": "1",
+        "containerId": "1",
+        "variableId": "1",
+        "name": "Constant - GA4 Measurement ID",
+        "type": "c",
+        "parameter": [
+          {
+            "type": "TEMPLATE",
+            "key": "value",
+            "value": "G-0HH47P2387"
+          }
+        ]
+      },
+      {
+        "accountId": "1",
+        "containerId": "1",
+        "variableId": "2",
+        "name": "Constant - Meta Pixel 1 ID",
+        "type": "c",
+        "parameter": [
+          {
+            "type": "TEMPLATE",
+            "key": "value",
+            "value": "1122829254194671"
+          }
+        ]
+      },
+      {
+        "accountId": "1",
+        "containerId": "1",
+        "variableId": "3",
+        "name": "Constant - Meta Pixel 2 ID",
+        "type": "c",
+        "parameter": [
+          {
+            "type": "TEMPLATE",
+            "key": "value",
+            "value": "1122829254194671"
+          }
+        ]
+      },
+      {
+        "accountId": "1",
+        "containerId": "1",
+        "variableId": "4",
+        "name": "Constant - Meta CAPI Access Token",
+        "type": "c",
+        "parameter": [
+          {
+            "type": "TEMPLATE",
+            "key": "value",
+            "value": "YOUR_META_CONVERSIONS_API_TOKEN"
+          }
+        ]
+      }
+    ],
+    "trigger": [
+      {
+        "accountId": "1",
+        "containerId": "1",
+        "triggerId": "1",
+        "name": "All Events",
+        "type": "CUSTOM_EVENT",
+        "customEventFilter": [
+          {
+            "type": "MATCH_REGEX",
+            "parameter": [
+              {
+                "type": "TEMPLATE",
+                "key": "arg0",
+                "value": "{{_event}}"
+              },
+              {
+                "type": "TEMPLATE",
+                "key": "arg1",
+                "value": ".*"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "tag": [
+      {
+        "accountId": "1",
+        "containerId": "1",
+        "tagId": "1",
+        "name": "Google Analytics - GA4 Server",
+        "type": "sgtmgaaw",
+        "parameter": [
+          {
+            "type": "TEMPLATE",
+            "key": "measurementId",
+            "value": "{{Constant - GA4 Measurement ID}}"
+          }
+        ],
+        "firingTriggerId": [
+          "1"
+        ]
+      }
+    ]
+  }
+}
