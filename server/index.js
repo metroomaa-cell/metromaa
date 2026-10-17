@@ -9,9 +9,11 @@ import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns';
 try { dns.setDefaultResultOrder('ipv4first'); } catch {}
-import { getCatalog, getOrders, addOrder, updateOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, saveCustomer } from './store.js';
+import { getCatalog, getOrders, addOrder, updateOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, saveCustomer, initStorageProtection } from './store.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+initStorageProtection();
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -27,8 +29,14 @@ app.use((err, req, res, next) => {
 });
 
 const UPLOADS = join(__dir, 'uploads');
+const PERSISTENT_UPLOADS = join(__dir, 'data', 'persistent_uploads');
+const ROOT_UPLOADS = join(__dir, '..', 'uploads');
 if (!existsSync(UPLOADS)) mkdirSync(UPLOADS, { recursive: true });
+if (!existsSync(PERSISTENT_UPLOADS)) mkdirSync(PERSISTENT_UPLOADS, { recursive: true });
+if (!existsSync(ROOT_UPLOADS)) mkdirSync(ROOT_UPLOADS, { recursive: true });
 app.use('/uploads', express.static(UPLOADS, { maxAge: '30d' }));
+app.use('/uploads', express.static(PERSISTENT_UPLOADS, { maxAge: '30d' }));
+app.use('/uploads', express.static(ROOT_UPLOADS, { maxAge: '30d' }));
 
 const withFlags = (p) => ({ ...p, soldOut: !!p.soldOut || (p.stock != null && p.stock <= 0) });
 
@@ -1252,6 +1260,8 @@ app.post('/api/upload', adminAuth, requireRole('owner', 'manager'), (req, res) =
 
   const nm = 'img_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + '.' + ext;
   writeFileSync(join(UPLOADS, nm), buf);
+  try { writeFileSync(join(PERSISTENT_UPLOADS, nm), buf); } catch (_) {}
+  try { writeFileSync(join(ROOT_UPLOADS, nm), buf); } catch (_) {}
   res.json({ url: '/uploads/' + nm });
 });
 

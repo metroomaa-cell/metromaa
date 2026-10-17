@@ -1,0 +1,55 @@
+{
+  "storeName": "METRROMA",
+  "announce": "✨ FREE SHIPPING ON ORDERS OVER ৳2500 · 100% AUTHENTIC LIFESTYLE & GIFTS · CASH ON DELIVERY NATIONWIDE",
+  "deliveryInside": 80,
+  "deliveryOutside": 130,
+  "freeShipThreshold": 2500,
+  "lowStockAt": 5,
+  "whatsapp": "8801878374762",
+  "phone": "8801878374762",
+  "gtmId": "GTM-WM964FQV",
+  "logo": "",
+  "favicon": "",
+  "sliders": [
+    {
+      "id": "metrroma-hero-1",
+      "active": true,
+      "image": "https://metromaa.com/wp-content/uploads/2026/09/banner_lifestyle_desktop.webp",
+      "mobileImage": "https://metromaa.com/wp-content/uploads/2026/09/banner_lifestyle_mobile.webp",
+      "badge": "✨ PREMIUM CURATED COLLECTION · LIFESTYLE & GIFTS",
+      "title": "Elevate Your Everyday Style",
+      "subtitle": "Fashion, Luxury Watches, Sunglasses & Curated Combos",
+      "description": "Discover exceptional lifestyle essentials, designer accessories, and heartwarming gifts with cash on delivery across Bangladesh.",
+      "btnText": "EXPLORE COLLECTION →",
+      "btnLink": "shop"
+    },
+    {
+      "id": "metrroma-hero-2",
+      "active": true,
+      "image": "https://metromaa.com/wp-content/uploads/2026/09/banner_gifts_desktop.webp",
+      "mobileImage": "https://metromaa.com/wp-content/uploads/2026/09/banner_gifts_mobile.webp",
+      "badge": "🎁 LUXURY GIFT BOXES · SPECIAL OCCASIONS",
+      "title": "Thoughtful Gifts For Someone Special",
+      "subtitle": "Curated Watch Combos, Rose Boxes & Executive Hampers",
+      "description": "Make every anniversary, birthday, and celebration unforgettable with bespoke packaging and complimentary gift message cards.",
+      "btnText": "VIEW GIFT SETS →",
+      "btnLink": "shop/gift"
+    }
+  ],
+  "fraudDetector": {
+    "enabled": true,
+    "cooldownHours": 24,
+    "maxOrdersPerDay": 5,
+    "minSecondsBetweenOrders": 30,
+    "blockByPhone": true,
+    "sameProductNotice": "You have already placed an order for this item recently. Please wait before ordering again, or contact our support team.",
+    "maxOrdersNotice": "You have reached the maximum daily order limit from this device. Please contact customer support for urgent orders.",
+    "rapidOrderNotice": "Please wait a moment before submitting another order."
+  },
+  "fbPixelId": "1122829254194671",
+  "ownerPassword": {
+    "salt": "dc4eec36025b6745",
+    "hash": "dfed4e2a8d195bca01508e2b2a0c0e3244391c3e67390dcd7930e1c1e6b3b421",
+    "updatedAt": "2026-10-13T14:17:11.249Z"
+  }
+}

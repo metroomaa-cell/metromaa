@@ -8,7 +8,8 @@
   "whatsapp": "8801878374762",
   "phone": "8801878374762",
   "gtmId": "GTM-WM964FQV",
-  "fbPixelId": "1122829254194671",
+  "logo": "",
+  "favicon": "",
   "sliders": [
     {
       "id": "metrroma-hero-1",
@@ -45,6 +46,7 @@
     "maxOrdersNotice": "You have reached the maximum daily order limit from this device. Please contact customer support for urgent orders.",
     "rapidOrderNotice": "Please wait a moment before submitting another order."
   },
+  "fbPixelId": "1122829254194671",
   "ownerPassword": {
     "salt": "dc4eec36025b6745",
     "hash": "dfed4e2a8d195bca01508e2b2a0c0e3244391c3e67390dcd7930e1c1e6b3b421",

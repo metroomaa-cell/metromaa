@@ -1,13 +1,48 @@
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
-const CATALOG = join(__dir, 'data', 'catalog.json');
-const ORDERS = join(__dir, 'data', 'orders.json');
-const SETTINGS = join(__dir, 'data', 'settings.json');
-const COLORS = join(__dir, 'data', 'colors.json');
-const CUSTOMERS = join(__dir, 'data', 'customers.json');
+const DATA_DIR = join(__dir, 'data');
+const PERSISTENT_DIR = join(DATA_DIR, 'persistent');
+const BACKUPS_DIR = join(DATA_DIR, 'backups');
+
+if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+if (!existsSync(PERSISTENT_DIR)) mkdirSync(PERSISTENT_DIR, { recursive: true });
+if (!existsSync(BACKUPS_DIR)) mkdirSync(BACKUPS_DIR, { recursive: true });
+
+// Primary file paths
+const CATALOG = join(DATA_DIR, 'catalog.json');
+const PERSISTENT_CATALOG = join(PERSISTENT_DIR, 'catalog.json');
+const BACKUP_CATALOG = join(DATA_DIR, 'catalog.metrroma.backup.json');
+
+const ORDERS = join(DATA_DIR, 'orders.json');
+const PERSISTENT_ORDERS = join(PERSISTENT_DIR, 'orders.json');
+
+const SETTINGS = join(DATA_DIR, 'settings.json');
+const PERSISTENT_SETTINGS = join(PERSISTENT_DIR, 'settings.json');
+const BACKUP_SETTINGS = join(DATA_DIR, 'settings.metrroma.backup.json');
+
+const COLORS = join(DATA_DIR, 'colors.json');
+const PERSISTENT_COLORS = join(PERSISTENT_DIR, 'colors.json');
+
+const CUSTOMERS = join(DATA_DIR, 'customers.json');
+const PERSISTENT_CUSTOMERS = join(PERSISTENT_DIR, 'customers.json');
+
+const COUPONS = join(DATA_DIR, 'coupons.json');
+const PERSISTENT_COUPONS = join(PERSISTENT_DIR, 'coupons.json');
+
+const REVIEWS = join(DATA_DIR, 'reviews.json');
+const PERSISTENT_REVIEWS = join(PERSISTENT_DIR, 'reviews.json');
+
+const USERS = join(DATA_DIR, 'users.json');
+const PERSISTENT_USERS = join(PERSISTENT_DIR, 'users.json');
+
+const INTEGRATIONS = join(DATA_DIR, 'integrations.json');
+const PERSISTENT_INTEGRATIONS = join(PERSISTENT_DIR, 'integrations.json');
+
+const LANDINGS = join(DATA_DIR, 'landings.json');
+const PERSISTENT_LANDINGS = join(PERSISTENT_DIR, 'landings.json');
 
 export const DEFAULT_COLORS = [
   { id: 'jet-black', name: 'Jet Black', hex: '#111111' },
@@ -37,15 +72,16 @@ export const DEFAULT_COLORS = [
 ];
 
 export const DEFAULT_SETTINGS = {
-  storeName: 'dot.',
-  announce: 'free discreet shipping over ৳2500 · cash on delivery nationwide',
-  deliveryInside: 60,
-  deliveryOutside: 120,
+  storeName: 'METRROMA',
+  announce: '✨ FREE SHIPPING ON ORDERS OVER ৳2500 · 100% AUTHENTIC LIFESTYLE & GIFTS · CASH ON DELIVERY NATIONWIDE',
+  deliveryInside: 80,
+  deliveryOutside: 130,
   freeShipThreshold: 2500,
   lowStockAt: 5,
-  whatsapp: '',
-  phone: '',
-  gtmId: '',
+  whatsapp: '8801878374762',
+  phone: '8801878374762',
+  gtmId: 'GTM-WM964FQV',
+  fbPixelId: '1122829254194671',
   logo: '',
   favicon: '',
   sliders: [],
@@ -61,29 +97,176 @@ export const DEFAULT_SETTINGS = {
   },
 };
 
+// Safe generic reader that checks persistent copy first, then standard path, then backup/default
+function readSafe(persistentPath, stdPath, defaultVal, backupPath = null) {
+  try {
+    if (existsSync(persistentPath)) {
+      const parsed = JSON.parse(readFileSync(persistentPath, 'utf8'));
+      if (parsed != null) return parsed;
+    }
+  } catch (_) {}
+  try {
+    if (existsSync(stdPath)) {
+      const parsed = JSON.parse(readFileSync(stdPath, 'utf8'));
+      if (parsed != null) {
+        try { writeFileSync(persistentPath, JSON.stringify(parsed, null, 2)); } catch (_) {}
+        return parsed;
+      }
+    }
+  } catch (_) {}
+  if (backupPath) {
+    try {
+      if (existsSync(backupPath)) {
+        const parsed = JSON.parse(readFileSync(backupPath, 'utf8'));
+        if (parsed != null) {
+          try {
+            writeFileSync(persistentPath, JSON.stringify(parsed, null, 2));
+            writeFileSync(stdPath, JSON.stringify(parsed, null, 2));
+          } catch (_) {}
+          return parsed;
+        }
+      }
+    } catch (_) {}
+  }
+  return defaultVal;
+}
+
+// Safe writer that writes to persistent storage (untracked by git) and standard storage
+function writeSafe(persistentPath, stdPath, val, backupPrefix = null) {
+  const jsonStr = JSON.stringify(val, null, 2);
+  try { writeFileSync(persistentPath, jsonStr); } catch (e) { console.error('[Store] Persistent write error:', e.message); }
+  try { writeFileSync(stdPath, jsonStr); } catch (e) { console.error('[Store] Standard write error:', e.message); }
+  if (backupPrefix) {
+    try {
+      const day = new Date().toISOString().slice(0, 10);
+      writeFileSync(join(BACKUPS_DIR, `${backupPrefix}-${day}.json`), jsonStr);
+    } catch (_) {}
+  }
+}
+
 export function getSettings() {
-  if (!existsSync(SETTINGS)) return { ...DEFAULT_SETTINGS };
-  try { return { ...DEFAULT_SETTINGS, ...JSON.parse(readFileSync(SETTINGS, 'utf8')) }; }
-  catch { return { ...DEFAULT_SETTINGS }; }
+  const base = { ...DEFAULT_SETTINGS };
+  const saved = readSafe(PERSISTENT_SETTINGS, SETTINGS, {}, BACKUP_SETTINGS);
+  return { ...base, ...saved };
 }
 
 export function saveSettings(patch) {
   const next = { ...getSettings(), ...patch };
-  writeFileSync(SETTINGS, JSON.stringify(next, null, 2));
+  writeSafe(PERSISTENT_SETTINGS, SETTINGS, next, 'settings');
   return next;
 }
 
 export function getCatalog() {
-  return JSON.parse(readFileSync(CATALOG, 'utf8'));
+  // First, verify persistent catalog
+  try {
+    if (existsSync(PERSISTENT_CATALOG)) {
+      const cat = JSON.parse(readFileSync(PERSISTENT_CATALOG, 'utf8'));
+      if (cat && Array.isArray(cat.products) && cat.products.length > 0) {
+        // If standard CATALOG is missing or was wiped by git, restore it immediately
+        try {
+          if (!existsSync(CATALOG) || (JSON.parse(readFileSync(CATALOG, 'utf8')).products || []).length === 0) {
+            writeFileSync(CATALOG, JSON.stringify(cat, null, 2));
+          }
+        } catch (_) {
+          try { writeFileSync(CATALOG, JSON.stringify(cat, null, 2)); } catch (_) {}
+        }
+        return cat;
+      }
+    }
+  } catch (_) {}
+
+  // Fallback to standard catalog
+  try {
+    if (existsSync(CATALOG)) {
+      const cat = JSON.parse(readFileSync(CATALOG, 'utf8'));
+      if (cat && Array.isArray(cat.products) && cat.products.length > 0) {
+        try { writeFileSync(PERSISTENT_CATALOG, JSON.stringify(cat, null, 2)); } catch (_) {}
+        return cat;
+      }
+    }
+  } catch (_) {}
+
+  // Emergency fallback to Metrroma immutable snapshot
+  try {
+    if (existsSync(BACKUP_CATALOG)) {
+      const cat = JSON.parse(readFileSync(BACKUP_CATALOG, 'utf8'));
+      if (cat && Array.isArray(cat.products) && cat.products.length > 0) {
+        try {
+          writeFileSync(PERSISTENT_CATALOG, JSON.stringify(cat, null, 2));
+          writeFileSync(CATALOG, JSON.stringify(cat, null, 2));
+        } catch (_) {}
+        return cat;
+      }
+    }
+  } catch (_) {}
+
+  return { products: [], categories: [] };
+}
+
+export function saveCatalog(cat) {
+  if (!cat || !Array.isArray(cat.products)) return;
+  writeSafe(PERSISTENT_CATALOG, CATALOG, cat, 'catalog');
+}
+
+export function addProduct(p) {
+  const cat = getCatalog();
+  cat.products.push(p);
+  saveCatalog(cat);
+  return p;
+}
+
+export function updateProduct(id, patch) {
+  const cat = getCatalog();
+  const i = cat.products.findIndex((x) => x.id === id);
+  if (i < 0) return null;
+  cat.products[i] = { ...cat.products[i], ...patch, id };
+  saveCatalog(cat);
+  return cat.products[i];
+}
+
+export function deleteProduct(id) {
+  const cat = getCatalog();
+  const before = cat.products.length;
+  cat.products = cat.products.filter((x) => x.id !== id);
+  if (cat.products.length === before) return false;
+  saveCatalog(cat);
+  return true;
+}
+
+export function addCategory(c) {
+  const cat = getCatalog();
+  if (!c.slug || cat.categories.find((x) => x.slug === c.slug)) return null;
+  cat.categories.push(c);
+  saveCatalog(cat);
+  return c;
+}
+
+export function updateCategory(slug, patch) {
+  const cat = getCatalog();
+  const i = cat.categories.findIndex((x) => x.slug === slug);
+  if (i < 0) return null;
+  cat.categories[i] = { ...cat.categories[i], ...patch, slug };
+  saveCatalog(cat);
+  return cat.categories[i];
+}
+
+export function deleteCategory(slug) {
+  const cat = getCatalog();
+  const n = cat.categories.length;
+  cat.categories = cat.categories.filter((x) => x.slug !== slug);
+  if (cat.categories.length === n) return false;
+  saveCatalog(cat);
+  return true;
 }
 
 export function getOrders() {
-  if (!existsSync(ORDERS)) return [];
-  return JSON.parse(readFileSync(ORDERS, 'utf8'));
+  const list = readSafe(PERSISTENT_ORDERS, ORDERS, []);
+  return Array.isArray(list) ? list : [];
 }
 
 export function saveOrders(orders) {
-  writeFileSync(ORDERS, JSON.stringify(orders, null, 2));
+  if (!Array.isArray(orders)) return;
+  writeSafe(PERSISTENT_ORDERS, ORDERS, orders, 'orders');
 }
 
 export function addOrder(order) {
@@ -170,104 +353,52 @@ export function updateOrder(id, patch) {
   return o;
 }
 
-export function saveCatalog(cat) {
-  writeFileSync(CATALOG, JSON.stringify(cat, null, 2));
-}
-
-export function addProduct(p) {
-  const cat = getCatalog();
-  cat.products.push(p);
-  saveCatalog(cat);
-  return p;
-}
-
-export function updateProduct(id, patch) {
-  const cat = getCatalog();
-  const i = cat.products.findIndex((x) => x.id === id);
-  if (i < 0) return null;
-  cat.products[i] = { ...cat.products[i], ...patch, id };
-  saveCatalog(cat);
-  return cat.products[i];
-}
-
-export function deleteProduct(id) {
-  const cat = getCatalog();
-  const before = cat.products.length;
-  cat.products = cat.products.filter((x) => x.id !== id);
-  if (cat.products.length === before) return false;
-  saveCatalog(cat);
-  return true;
-}
-
-export function addCategory(c) {
-  const cat = getCatalog();
-  if (!c.slug || cat.categories.find((x) => x.slug === c.slug)) return null;
-  cat.categories.push(c);
-  saveCatalog(cat);
-  return c;
-}
-export function updateCategory(slug, patch) {
-  const cat = getCatalog();
-  const i = cat.categories.findIndex((x) => x.slug === slug);
-  if (i < 0) return null;
-  cat.categories[i] = { ...cat.categories[i], ...patch, slug };
-  saveCatalog(cat);
-  return cat.categories[i];
-}
-export function deleteCategory(slug) {
-  const cat = getCatalog();
-  const n = cat.categories.length;
-  cat.categories = cat.categories.filter((x) => x.slug !== slug);
-  if (cat.categories.length === n) return false;
-  saveCatalog(cat);
-  return true;
-}
-
-const COUPONS = join(__dir, 'data', 'coupons.json');
 export function getCoupons() {
-  if (!existsSync(COUPONS)) return [];
-  try { return JSON.parse(readFileSync(COUPONS, 'utf8')); } catch { return []; }
+  const list = readSafe(PERSISTENT_COUPONS, COUPONS, []);
+  return Array.isArray(list) ? list : [];
 }
-export function saveCoupons(c) { writeFileSync(COUPONS, JSON.stringify(c, null, 2)); }
+export function saveCoupons(c) {
+  writeSafe(PERSISTENT_COUPONS, COUPONS, Array.isArray(c) ? c : []);
+}
 
-const REVIEWS = join(__dir, 'data', 'reviews.json');
 export function getReviews() {
-  if (!existsSync(REVIEWS)) return {};
-  try { return JSON.parse(readFileSync(REVIEWS, 'utf8')); } catch { return {}; }
+  const r = readSafe(PERSISTENT_REVIEWS, REVIEWS, {});
+  return typeof r === 'object' && r !== null ? r : {};
 }
-export function saveReviews(r) { writeFileSync(REVIEWS, JSON.stringify(r, null, 2)); }
+export function saveReviews(r) {
+  writeSafe(PERSISTENT_REVIEWS, REVIEWS, typeof r === 'object' && r !== null ? r : {});
+}
 
-const USERS = join(__dir, 'data', 'users.json');
 export function getUsers() {
-  if (!existsSync(USERS)) return [];
-  try { return JSON.parse(readFileSync(USERS, 'utf8')); } catch { return []; }
+  const u = readSafe(PERSISTENT_USERS, USERS, []);
+  return Array.isArray(u) ? u : [];
 }
-export function saveUsers(u) { writeFileSync(USERS, JSON.stringify(u, null, 2)); }
+export function saveUsers(u) {
+  writeSafe(PERSISTENT_USERS, USERS, Array.isArray(u) ? u : []);
+}
 
-const INTEGRATIONS = join(__dir, 'data', 'integrations.json');
 export const DEFAULT_INTEGRATIONS = {
-  email: { enabled: true, provider: 'resend', resendApiKey: process.env.RESEND_API_KEY || '', adminEmail: 'metroomaa@gmail.com', host: '', port: 587, secure: false, user: '', pass: '', fromName: 'dot.', fromEmail: 'admin@dot.com' },
-  sms: { enabled: false, url: '', method: 'GET', senderId: '', apiKey: '', templatePlaced: 'dot.: order {id} received. total {total}. we will call to confirm. track: {track}', templateStatus: 'dot.: order {id} is now {status}. {courier}' },
-  couriers: [], // [{ id, provider, label, enabled, apiBase, apiKey, apiSecret, extra }]
-  tracking: { fbEnabled: false, fbPixelId: '', fbToken: '', fbTestCode: '', ttkEnabled: false, ttkPixelId: '', ttkToken: '' },
+  email: { enabled: true, provider: 'resend', resendApiKey: process.env.RESEND_API_KEY || '', adminEmail: 'metroomaa@gmail.com', host: '', port: 587, secure: false, user: '', pass: '', fromName: 'METRROMA', fromEmail: 'admin@metrroma.com' },
+  sms: { enabled: false, url: '', method: 'GET', senderId: '', apiKey: '', templatePlaced: 'METRROMA: order {id} received. total {total}. we will call to confirm. track: {track}', templateStatus: 'METRROMA: order {id} is now {status}. {courier}' },
+  couriers: [],
+  tracking: { fbEnabled: false, fbPixelId: '1122829254194671', fbToken: '', fbTestCode: '', ttkEnabled: false, ttkPixelId: '', ttkToken: '' },
   fraud: { enabled: false, url: '', method: 'GET', headers: '', totalPath: '', successPath: '', cancelPath: '' },
 };
-export function getIntegrations() {
-  if (!existsSync(INTEGRATIONS)) return JSON.parse(JSON.stringify(DEFAULT_INTEGRATIONS));
-  try {
-    const saved = JSON.parse(readFileSync(INTEGRATIONS, 'utf8'));
-    return {
-      email: { ...DEFAULT_INTEGRATIONS.email, ...(saved.email || {}) },
-      sms: { ...DEFAULT_INTEGRATIONS.sms, ...(saved.sms || {}) },
-      couriers: Array.isArray(saved.couriers) ? saved.couriers : [],
-      tracking: { ...DEFAULT_INTEGRATIONS.tracking, ...(saved.tracking || {}) },
-      fraud: { ...DEFAULT_INTEGRATIONS.fraud, ...(saved.fraud || {}) },
-    };
-  } catch { return JSON.parse(JSON.stringify(DEFAULT_INTEGRATIONS)); }
-}
-export function saveIntegrations(next) { writeFileSync(INTEGRATIONS, JSON.stringify(next, null, 2)); return next; }
 
-const LANDINGS = join(__dir, 'data', 'landings.json');
+export function getIntegrations() {
+  const saved = readSafe(PERSISTENT_INTEGRATIONS, INTEGRATIONS, {});
+  return {
+    email: { ...DEFAULT_INTEGRATIONS.email, ...(saved.email || {}) },
+    sms: { ...DEFAULT_INTEGRATIONS.sms, ...(saved.sms || {}) },
+    couriers: Array.isArray(saved.couriers) ? saved.couriers : [],
+    tracking: { ...DEFAULT_INTEGRATIONS.tracking, ...(saved.tracking || {}) },
+    fraud: { ...DEFAULT_INTEGRATIONS.fraud, ...(saved.fraud || {}) },
+  };
+}
+export function saveIntegrations(next) {
+  writeSafe(PERSISTENT_INTEGRATIONS, INTEGRATIONS, next);
+  return next;
+}
 
 export const DEFAULT_LOVELOCK_LANDING = {
   id: 'landing_lovelock',
@@ -339,24 +470,16 @@ export const DEFAULT_LOVELOCK_LANDING = {
 };
 
 export function getLandings() {
-  if (!existsSync(LANDINGS)) {
+  const list = readSafe(PERSISTENT_LANDINGS, LANDINGS, null);
+  if (!Array.isArray(list) || list.length === 0) {
     saveLandings([DEFAULT_LOVELOCK_LANDING]);
     return [DEFAULT_LOVELOCK_LANDING];
   }
-  try {
-    const list = JSON.parse(readFileSync(LANDINGS, 'utf8'));
-    if (!Array.isArray(list) || list.length === 0) {
-      saveLandings([DEFAULT_LOVELOCK_LANDING]);
-      return [DEFAULT_LOVELOCK_LANDING];
-    }
-    return list;
-  } catch {
-    return [DEFAULT_LOVELOCK_LANDING];
-  }
+  return list;
 }
 
 export function saveLandings(list) {
-  writeFileSync(LANDINGS, JSON.stringify(list, null, 2));
+  writeSafe(PERSISTENT_LANDINGS, LANDINGS, list);
 }
 
 export function getLandingBySlug(slug) {
@@ -398,16 +521,16 @@ export function deleteLanding(id) {
 }
 
 export function getColors() {
-  if (!existsSync(COLORS)) {
-    try { writeFileSync(COLORS, JSON.stringify(DEFAULT_COLORS, null, 2)); } catch (_) {}
+  const list = readSafe(PERSISTENT_COLORS, COLORS, null);
+  if (!Array.isArray(list) || list.length === 0) {
+    saveColors(DEFAULT_COLORS);
     return DEFAULT_COLORS;
   }
-  try { return JSON.parse(readFileSync(COLORS, 'utf8')); }
-  catch { return DEFAULT_COLORS; }
+  return list;
 }
 
 export function saveColors(colors) {
-  writeFileSync(COLORS, JSON.stringify(colors, null, 2));
+  writeSafe(PERSISTENT_COLORS, COLORS, colors);
   return colors;
 }
 
@@ -437,13 +560,12 @@ export function deleteColor(idOrName) {
 }
 
 export function getCustomers() {
-  if (!existsSync(CUSTOMERS)) return [];
-  try { return JSON.parse(readFileSync(CUSTOMERS, 'utf8')); }
-  catch { return []; }
+  const list = readSafe(PERSISTENT_CUSTOMERS, CUSTOMERS, []);
+  return Array.isArray(list) ? list : [];
 }
 
 export function saveCustomers(list) {
-  writeFileSync(CUSTOMERS, JSON.stringify(list, null, 2));
+  writeSafe(PERSISTENT_CUSTOMERS, CUSTOMERS, list);
   return list;
 }
 
@@ -470,4 +592,43 @@ export function saveCustomer(cust) {
   }
 }
 
+// Persistent Storage Protection Initializer (Called on server startup)
+export function initStorageProtection() {
+  try {
+    const cat = getCatalog();
+    const orders = getOrders();
+    const settings = getSettings();
+    const customers = getCustomers();
+    console.log(`[StorageProtection] Live data secured. Products: ${(cat.products || []).length}, Categories: ${(cat.categories || []).length}, Orders: ${orders.length}, Customers: ${customers.length}, Store: ${settings.storeName}`);
+    
+    // Create an automatic startup snapshot
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const snapshotPath = join(BACKUPS_DIR, `startup_snapshot_${ts}.json`);
+    writeFileSync(snapshotPath, JSON.stringify({
+      timestamp: new Date().toISOString(),
+      productsCount: (cat.products || []).length,
+      categoriesCount: (cat.categories || []).length,
+      ordersCount: orders.length,
+      customersCount: customers.length,
+      storeName: settings.storeName
+    }, null, 2));
 
+    // Prune snapshots older than 30 days
+    const now = Date.now();
+    const maxAge = 30 * 24 * 60 * 60 * 1000;
+    const files = readdirSync(BACKUPS_DIR);
+    for (const f of files) {
+      if (f.startsWith('startup_snapshot_') && f.endsWith('.json')) {
+        const full = join(BACKUPS_DIR, f);
+        try {
+          const stats = statSync(full);
+          if (now - stats.mtimeMs > maxAge) {
+            unlinkSync(full);
+          }
+        } catch (_) {}
+      }
+    }
+  } catch (err) {
+    console.error('[StorageProtection] Startup check error:', err.message);
+  }
+}
