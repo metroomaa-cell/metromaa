@@ -792,6 +792,7 @@ export function Admin() {
   const [orderTotal, setOrderTotal] = useState<number | null>(null);
   const [lastSeen, setLastSeen] = useState<number | null>(null);
   const [navq, setNavq] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const prevTotal = useRef<number | null>(null);
   useEffect(() => {
     const onLogout = () => { setAuthed(false); setMe(null); };
@@ -826,12 +827,75 @@ export function Admin() {
   const cur = allowed.includes(nav) ? nav : 'dashboard';
   const newOrders = cur === 'orders' || lastSeen == null || orderTotal == null ? 0 : Math.max(0, orderTotal - lastSeen);
   const item = (id: string, icon: any, label: string, badge?: number) => allowed.includes(id) && (!navq || label.toLowerCase().includes(navq.toLowerCase()))
-    ? <button className={cur === id ? 'on' : ''} onClick={() => setNav(id)}>{icon}<span>{label}</span>{badge ? <i className="sa-ntf">{badge}</i> : null}</button>
+    ? <button className={cur === id ? 'on' : ''} onClick={() => { setNav(id); setMobileMenuOpen(false); }}>{icon}<span>{label}</span>{badge ? <i className="sa-ntf">{badge}</i> : null}</button>
     : null;
   return (
     <div className="sa">
-      <aside className="sa-side">
-        <div className="sa-brand">{store}<em>admin</em></div>
+      {/* Top Mobile Bar */}
+      <header className="sa-mobile-header">
+        <button
+          type="button"
+          className="sa-mobile-menu-btn"
+          aria-label="Toggle navigation menu"
+          onClick={() => setMobileMenuOpen((o) => !o)}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            {mobileMenuOpen ? (
+              <>
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </>
+            ) : (
+              <>
+                <line x1="4" y1="7" x2="20" y2="7" />
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <line x1="4" y1="17" x2="20" y2="17" />
+              </>
+            )}
+          </svg>
+        </button>
+
+        <div className="sa-mobile-brand">
+          <span className="sa-mobile-brand-name">{store}</span>
+          <span className="sa-mobile-badge">ADMIN</span>
+        </div>
+
+        <div className="sa-mobile-actions">
+          <a href="/" target="_blank" rel="noopener noreferrer" className="sa-mobile-view-store" title="View Store">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              <polyline points="15 3 21 3 21 9" />
+              <line x1="10" y1="14" x2="21" y2="3" />
+            </svg>
+          </a>
+          {newOrders > 0 && (
+            <button
+              type="button"
+              className="sa-mobile-ntf-pill"
+              onClick={() => { setNav('orders'); setMobileMenuOpen(false); }}
+              title={`${newOrders} new orders`}
+            >
+              <span className="sa-pulse-dot" />
+              {newOrders} new
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* Drawer Overlay Backdrop */}
+      {mobileMenuOpen && (
+        <div className="sa-drawer-backdrop" onClick={() => setMobileMenuOpen(false)} />
+      )}
+
+      {/* Navigation Sidebar / Drawer */}
+      <aside className={`sa-side ${mobileMenuOpen ? 'open' : ''}`}>
+        <div className="sa-side-header-mob">
+          <div className="sa-brand">{store}<em>admin</em></div>
+          <button className="sa-side-close" onClick={() => setMobileMenuOpen(false)} aria-label="Close menu">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div className="sa-brand sa-brand-desktop">{store}<em>admin</em></div>
         <div className="sa-search-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.4-3.4" /></svg><input placeholder="Search" value={navq} onChange={(e) => setNavq(e.target.value)} /></div>
         <div className="sa-menu-label">Menu</div>
         <nav className="sa-nav">
@@ -872,6 +936,77 @@ export function Admin() {
         {cur === 'integrations' && <IntegrationsAdmin />}
         {cur === 'settings' && <SettingsAdmin />}
       </main>
+
+      {/* Fixed Bottom App Navigation Bar */}
+      <nav className="sa-bottom-nav" aria-label="Quick mobile navigation">
+        <button
+          type="button"
+          className={`sa-bnav-btn ${cur === 'dashboard' && !mobileMenuOpen ? 'active' : ''}`}
+          onClick={() => { setNav('dashboard'); setMobileMenuOpen(false); }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          <span>Home</span>
+        </button>
+
+        <button
+          type="button"
+          className={`sa-bnav-btn ${cur === 'orders' && !mobileMenuOpen ? 'active' : ''}`}
+          onClick={() => { setNav('orders'); setMobileMenuOpen(false); }}
+        >
+          <div className="sa-bnav-icon-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="9" cy="21" r="1"/>
+              <circle cx="20" cy="21" r="1"/>
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+            </svg>
+            {newOrders > 0 && <span className="sa-bnav-badge">{newOrders}</span>}
+          </div>
+          <span>Orders</span>
+        </button>
+
+        <button
+          type="button"
+          className={`sa-bnav-btn ${cur === 'scanner' && !mobileMenuOpen ? 'active' : ''}`}
+          onClick={() => { setNav('scanner'); setMobileMenuOpen(false); }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/>
+            <rect x="7" y="7" width="10" height="10" rx="1.5"/>
+            <line x1="7" y1="12" x2="17" y2="12"/>
+          </svg>
+          <span>Scan</span>
+        </button>
+
+        <button
+          type="button"
+          className={`sa-bnav-btn ${cur === 'customers' && !mobileMenuOpen ? 'active' : ''}`}
+          onClick={() => { setNav('customers'); setMobileMenuOpen(false); }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          <span>Customers</span>
+        </button>
+
+        <button
+          type="button"
+          className={`sa-bnav-btn ${mobileMenuOpen ? 'active' : ''}`}
+          onClick={() => setMobileMenuOpen((o) => !o)}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="1.5"/>
+            <circle cx="19" cy="12" r="1.5"/>
+            <circle cx="5" cy="12" r="1.5"/>
+          </svg>
+          <span>Menu</span>
+        </button>
+      </nav>
     </div>
   );
 }
@@ -2841,12 +2976,12 @@ function OrdersAdmin() {
           return (
             <div className="ogrid-row" key={o.id} onClick={() => setSel(o)}>
               {/* 1. Checkbox */}
-              <span onClick={(e) => e.stopPropagation()}>
+              <span className="og-cell-check" onClick={(e) => e.stopPropagation()}>
                 <input type="checkbox" checked={!!picked[o.id]} onChange={(e) => setPicked((p) => ({ ...p, [o.id]: e.target.checked }))} />
               </span>
 
               {/* 2. Order & Date */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <div className="og-cell-order" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: '#c4b5fd' }}>
                     #{o.id.replace('DOT-', '')}
@@ -2869,7 +3004,7 @@ function OrdersAdmin() {
               </div>
 
               {/* 3. Customer */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <div className="og-cell-cust" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: 700, fontSize: 13.5, color: '#f1f5f9' }}>
                     {o.customer?.name || 'Customer'}
@@ -2882,10 +3017,20 @@ function OrdersAdmin() {
                 </div>
 
                 {phone && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 1 }}>
                     <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#94a3b8' }}>
                       {phone}
                     </span>
+                    <a
+                      href={`tel:${cleanPhone}`}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ display: 'inline-flex', alignItems: 'center', color: '#94a3b8' }}
+                      title="Call customer"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                      </svg>
+                    </a>
                     <a
                       href={`https://wa.me/88${cleanPhone}`}
                       target="_blank"
@@ -2901,13 +3046,13 @@ function OrdersAdmin() {
 
                 {district && (
                   <div style={{ fontSize: 11, color: '#64748b', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: 175 }} title={o.customer?.address}>
-                    📍 {district}
+                    {district}
                   </div>
                 )}
               </div>
 
               {/* 4. Items & Variant */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div className="og-cell-items" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 {img ? (
                   <img src={img} alt="" style={{ width: 40, height: 48, borderRadius: 8, objectFit: 'cover', border: '1px solid rgba(255,255,255,0.12)', flexShrink: 0 }} />
                 ) : (
@@ -2938,7 +3083,7 @@ function OrdersAdmin() {
               </div>
 
               {/* 5. Total */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'right' }}>
+              <div className="og-cell-total" style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'right' }}>
                 <span style={{ fontSize: 14.5, fontWeight: 800, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
                   {taka(o.total)}
                 </span>
@@ -2948,7 +3093,7 @@ function OrdersAdmin() {
               </div>
 
               {/* 6. Status Dropdown */}
-              <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
+              <div className="og-cell-status" onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
                 <select
                   className="rowsel"
                   value={o.status}
@@ -2969,7 +3114,7 @@ function OrdersAdmin() {
               </div>
 
               {/* 7. Courier */}
-              <div onClick={(e) => e.stopPropagation()} style={{ minWidth: 0 }}>
+              <div className="og-cell-courier" onClick={(e) => e.stopPropagation()} style={{ minWidth: 0 }}>
                 {o.courier && o.courier.name ? (
                   <div className="courier-booked-wrap">
                     <div className="courier-booked-top">
@@ -3022,7 +3167,13 @@ function OrdersAdmin() {
                       {bookingId === o.id ? (
                         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" className="spin" style={{ width: 12, height: 12 }}><path d="M13.5 7a5.5 5.5 0 0 0-9.4-3L2 6" /><path d="M2.5 9a5.5 5.5 0 0 0 9.4 3L14 10" /><path d="M2 2.5V6h3.5M14 13.5V10h-3.5" /></svg>
                       ) : (
-                        <span>Send 🚀</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12 }}>
+                            <line x1="22" y1="2" x2="11" y2="13" />
+                            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                          </svg>
+                          Send
+                        </span>
                       )}
                     </button>
                   </div>
@@ -3030,14 +3181,14 @@ function OrdersAdmin() {
               </div>
 
               {/* 8. Trust Score */}
-              <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div className="og-cell-score" style={{ display: 'flex', justifyContent: 'center' }}>
                 <span className={'ratio-chip ' + (ratio == null ? 'neutral' : ratio >= 80 ? 'good' : ratio >= 50 ? 'mid' : 'bad')} style={{ fontSize: 11, padding: '3px 8px' }}>
                   {ratio == null ? 'New Buyer' : `${ratio}% (${ratio >= 80 ? 'Safe' : 'Risk'})`}
                 </span>
               </div>
 
               {/* 9. Actions */}
-              <div className="rowacts" onClick={(e) => e.stopPropagation()}>
+              <div className="og-cell-acts rowacts" onClick={(e) => e.stopPropagation()}>
                 <button className="eye-btn" title="View order details" onClick={() => setSel(o)}>
                   <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M1 9s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z" /><circle cx="9" cy="9" r="2.4" /></svg>
                 </button>
