@@ -2604,12 +2604,15 @@ export function Track() {
     return () => clearInterval(t);
   }, [res?.id, id, phone]);
   return (
-    <div className="page"><div className="wrap">
-      <div className="phead"><h1>track your order</h1><p>enter your order id and the mobile number you ordered with.</p></div>
+    <div className="page" style={{ minHeight: '75vh', paddingBottom: 60 }}><div className="wrap">
+      <div className="phead" style={{ padding: '36px 0 16px' }}>
+        <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 600, fontSize: 'clamp(28px, 4vw, 38px)', color: '#1f3147', textTransform: 'capitalize', letterSpacing: '-0.01em' }}>Track Your Order</h1>
+        <p style={{ color: '#6b645c', marginTop: 8, fontSize: 14.5 }}>Enter your order ID and the mobile number you ordered with.</p>
+      </div>
       <div className="track-form">
-        <input className="field" placeholder="order id (e.g. DOT-XXXXXXXX)" value={id} onChange={(e) => setId(e.target.value)} />
-        <input className="field" placeholder="01XXXXXXXXX" value={phone} onChange={(e) => setPhone(e.target.value)} />
-        <button className="btn" disabled={busy} onClick={submit}>{busy ? 'checking…' : 'track order'}</button>
+        <input className="field" placeholder="Order ID (e.g. SEC-XXXXXXXX)" value={id} onChange={(e) => setId(e.target.value)} />
+        <input className="field" placeholder="Mobile Number (01XXXXXXXXX)" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        <button className="btn" disabled={busy} onClick={submit}>{busy ? 'Checking…' : 'Track Order'}</button>
       </div>
       {err && <div className="err" style={{ marginTop: 18 }}>{err}</div>}
       {res && <TrackResult o={res} />}
