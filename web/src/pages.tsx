@@ -193,6 +193,7 @@ export function isUndergarmentOrApparel(p: Product): boolean {
   const cat = (p.category || '').toLowerCase();
   const slug = (p.slug || '').toLowerCase();
   const name = (p.name || '').toLowerCase();
+  if (cat === 'cloth' || cat.includes('cloth') || cat.includes('apparel') || cat.includes('fashion')) return true;
   if (cat.includes('wellness') || cat.includes('intim') || cat.includes('garment') || cat.includes('wear') || cat.includes('bra') || cat.includes('panty') || cat.includes('lingerie') || cat.includes('under') || cat.includes('panjabi') || cat.includes('abaya')) return true;
   if (slug.includes('bra') || slug.includes('panty') || slug.includes('pant') || slug.includes('lingerie') || slug.includes('boxer') || slug.includes('garment') || slug.includes('undergarment') || slug.includes('shaper')) return true;
   if (name.includes('bra') || name.includes('panty') || name.includes('lingerie') || name.includes('boxer') || name.includes('undergarment') || name.includes('shaper')) return true;
@@ -226,6 +227,14 @@ export function ProductCard({ p }: { p: Product }) {
   const activePrice = selectedVar ? selectedVar.price : p.price;
   const activeCompareAt = selectedVar?.compareAt || p.compareAt;
 
+  const currentCardImage = useMemo(() => {
+    if (selColor && colors.length > 0) {
+      const col = colors.find((c) => c.name.toLowerCase() === selColor.toLowerCase());
+      if (col && (col as any).image) return (col as any).image;
+    }
+    return selectedVar?.image || p.image;
+  }, [selColor, colors, selectedVar, p.image]);
+
   const handleAddToCart = (e: any) => {
     e.stopPropagation();
     const variantDesc = [selColor ? `Color: ${selColor}` : '', selSize ? `Size: ${selSize}` : ''].filter(Boolean).join(' · ');
@@ -256,19 +265,65 @@ export function ProductCard({ p }: { p: Product }) {
         ) : onSale ? (
           <span className="pc-badge-save">-{salePercent}% OFF</span>
         ) : null}
-        {p.tag && <span className="pc-badge-tag">{p.tag}</span>}
+        {p.isDigital ? (
+          <span className="pc-badge-tag" style={{ background: '#10b981', color: '#fff', fontWeight: 700 }}>⚡ DIGITAL · ৳0 DELIVERY</span>
+        ) : p.category === 'sunglass' ? (
+          <span className="pc-badge-tag" style={{ background: '#1f2937', color: '#f9fafb' }}>🕶️ UV400 POLARIZED</span>
+        ) : p.category === 'watch' ? (
+          <span className="pc-badge-tag" style={{ background: '#b48e4c', color: '#fff' }}>⌚ TIMEPIECE</span>
+        ) : p.category === 'gift' ? (
+          <span className="pc-badge-tag" style={{ background: '#8B1E1E', color: '#fff' }}>🎁 GIFT SET</span>
+        ) : p.category === 'cloth' ? (
+          <span className="pc-badge-tag" style={{ background: '#2563eb', color: '#fff' }}>👔 APPAREL</span>
+        ) : p.category === 'accessories' ? (
+          <span className="pc-badge-tag" style={{ background: '#4b5563', color: '#fff' }}>👜 ACCESSORIES</span>
+        ) : p.tag ? (
+          <span className="pc-badge-tag">{p.tag}</span>
+        ) : null}
       </div>
 
       {/* Image */}
       <div className="pc-image-wrap">
-        <img ref={imgRef} className="pc-image" src={p.image} alt={p.name} loading="lazy" style={p.soldOut ? { opacity: 0.55 } : undefined} />
+        <img ref={imgRef} className="pc-image" src={currentCardImage} alt={p.name} loading="lazy" style={p.soldOut ? { opacity: 0.55 } : undefined} />
       </div>
 
       {/* Card Content */}
       <div className="pc-content">
         <div className="pc-divider" />
-        <div className="pc-eyebrow">{p.category || 'EXCLUSIVE COLLECTION'}</div>
+        <div className="pc-eyebrow">{p.category ? p.category.replace(/-/g, ' ') : 'EXCLUSIVE COLLECTION'}</div>
         <a className="pc-title">{p.name}</a>
+
+        {/* Colors Preview Chips */}
+        {colors.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, marginBottom: 2, flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
+            {colors.slice(0, 5).map((c) => {
+              const hex = (c as any).hex || '#111';
+              const isSel = (selColor || colors[0]?.name).toLowerCase() === c.name.toLowerCase();
+              return (
+                <span
+                  key={c.name}
+                  onClick={() => setSelColor(c.name)}
+                  title={c.name}
+                  style={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: '50%',
+                    background: hex,
+                    border: isSel ? '2px solid #b48e4c' : '1px solid rgba(0,0,0,0.25)',
+                    cursor: 'pointer',
+                    boxShadow: isSel ? '0 0 0 1px #fff' : 'none',
+                    display: 'inline-block',
+                    transition: 'all 0.15s ease',
+                    transform: isSel ? 'scale(1.2)' : 'scale(1)',
+                  }}
+                />
+              );
+            })}
+            {colors.length > 5 && (
+              <span style={{ fontSize: 10, color: '#8c7d6b', fontWeight: 600 }}>+{colors.length - 5}</span>
+            )}
+          </div>
+        )}
 
         <div className="pc-price-row">
           <span className="pc-price">
@@ -745,6 +800,17 @@ export function Home() {
       .sort((a, b) => (b.tag === 'bestseller' ? 1 : 0) - (a.tag === 'bestseller' ? 1 : 0));
   }, [products, isSkin]);
 
+  const [activeTabCat, setActiveTabCat] = useState('all');
+
+  const filteredBest = useMemo(() => {
+    if (activeTabCat === 'all') return best;
+    return best.filter((p) => {
+      const cat = (p.category || '').toLowerCase();
+      if (activeTabCat === 'digital') return p.isDigital || cat === 'digital';
+      return cat === activeTabCat;
+    });
+  }, [best, activeTabCat]);
+
   const faqs = isSkin
     ? [
         {
@@ -795,6 +861,53 @@ export function Home() {
     <div className="tabaya-home">
       {/* 1. HERO BANNER / SLIDER */}
       <HomeHeroSlider slides={sliders} />
+
+      {/* 1.5 QUICK CATEGORY PILLS BAR (Mobile-First / Curated Lifestyle Navigation) */}
+      {!isSkin && (
+        <section style={{ background: '#FAF7F2', borderBottom: '1px solid #ECE7DE', padding: '12px 0' }}>
+          <div className="wrap" style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+            {[
+              { id: 'all', label: 'All Collections', icon: '✨' },
+              { id: 'cloth', label: 'Fashion & Apparel', icon: '👔' },
+              { id: 'watch', label: 'Timepieces & Watches', icon: '⌚' },
+              { id: 'sunglass', label: 'Designer Sunglasses', icon: '🕶️' },
+              { id: 'gift', label: 'Curated Gift Sets', icon: '🎁' },
+              { id: 'digital', label: 'Digital Products', icon: '⚡' },
+              { id: 'accessories', label: 'Leather & Accessories', icon: '👜' },
+            ].map((catItem) => {
+              const isActive = activeTabCat === catItem.id;
+              return (
+                <button
+                  key={catItem.id}
+                  type="button"
+                  onClick={() => setActiveTabCat(catItem.id)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '8px 16px',
+                    borderRadius: 30,
+                    fontSize: 13,
+                    fontWeight: isActive ? 600 : 500,
+                    letterSpacing: '0.02em',
+                    whiteSpace: 'nowrap',
+                    cursor: 'pointer',
+                    border: isActive ? '1px solid #1f3147' : '1px solid #d9d4cc',
+                    background: isActive ? '#1f3147' : '#ffffff',
+                    color: isActive ? '#ffffff' : '#3d4a57',
+                    boxShadow: isActive ? '0 2px 6px rgba(31,49,71,0.18)' : '0 1px 3px rgba(0,0,0,0.03)',
+                    transition: 'all 0.2s ease',
+                    flexShrink: 0,
+                  }}
+                >
+                  <span>{catItem.icon}</span>
+                  <span>{catItem.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* 2. SHOP BY COLLECTION / CATEGORY (ara-section) */}
       {cats.length > 0 && (
@@ -854,32 +967,83 @@ export function Home() {
         <div className="wrap">
           <div className="pc-section-header">
             <p className="pc-section-kicker">
-              {isSkin ? 'CLINICAL BOTANICAL FORMULATIONS' : 'HANDCRAFTED PERFECTION'}
+              {isSkin ? 'CLINICAL BOTANICAL FORMULATIONS' : 'CURATED LIFESTYLE & GIFTS'}
             </p>
             <h2 className="pc-section-title">
-              {isSkin ? 'Signature Skincare Essentials' : 'Signature Pieces'}
+              {isSkin ? 'Signature Skincare Essentials' : 'Trending & Best Sellers'}
             </h2>
             <p className="pc-section-subtitle">
               {isSkin
                 ? 'Explore our most coveted cleansers, serums, and restorative moisture balms delivered with cash on delivery across Bangladesh.'
-                : 'Explore our most coveted designs, tailored with precision and delivered with utmost care across Bangladesh.'}
+                : 'Explore premium watches, apparel, curated gift boxes, and lifestyle essentials with nationwide doorstep delivery.'}
             </p>
+
+            {!isSkin && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', marginTop: 18 }}>
+                {[
+                  { id: 'all', label: 'All Products' },
+                  { id: 'cloth', label: '👔 Apparel' },
+                  { id: 'watch', label: '⌚ Watches' },
+                  { id: 'sunglass', label: '🕶️ Sunglasses' },
+                  { id: 'gift', label: '🎁 Gift Sets' },
+                  { id: 'digital', label: '⚡ Digital' },
+                  { id: 'accessories', label: '👜 Accessories' },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setActiveTabCat(f.id)}
+                    style={{
+                      padding: '7px 16px',
+                      borderRadius: 20,
+                      fontSize: 12,
+                      fontWeight: activeTabCat === f.id ? 700 : 500,
+                      border: activeTabCat === f.id ? '1px solid #1f3147' : '1px solid #dcd7ce',
+                      background: activeTabCat === f.id ? '#1f3147' : '#ffffff',
+                      color: activeTabCat === f.id ? '#ffffff' : '#4b5563',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      boxShadow: activeTabCat === f.id ? '0 2px 6px rgba(0,0,0,0.1)' : 'none',
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="pc-grid">
             {!loaded
               ? [0, 1, 2, 3, 4, 5, 6, 7].map((i) => <SkeletonCard key={i} />)
-              : best.length > 0
-                ? best.slice(0, 24).map((p) => <ProductCard key={p.id} p={p} />)
+              : filteredBest.length > 0
+                ? filteredBest.slice(0, 24).map((p) => <ProductCard key={p.id} p={p} />)
                 : (
                   <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px 20px', color: '#6b645c' }}>
                     <div style={{ fontSize: 40, marginBottom: 12 }}>📦</div>
                     <h3 style={{ fontSize: 20, color: '#1f3147', fontFamily: "'Playfair Display', Georgia, serif" }}>
-                      No Products Found
+                      No Products Found in this Category
                     </h3>
                     <p style={{ fontSize: 14, marginTop: 6, color: '#8c7d6b' }}>
-                      Add products in the Admin Dashboard to feature them here.
+                      We are adding exciting new arrivals to this section shortly!
                     </p>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTabCat('all')}
+                      style={{
+                        marginTop: 14,
+                        padding: '8px 20px',
+                        borderRadius: 20,
+                        background: '#1f3147',
+                        color: '#fff',
+                        border: 'none',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                    >
+                      VIEW ALL PRODUCTS
+                    </button>
                   </div>
                 )}
           </div>
@@ -1162,6 +1326,11 @@ export function ProductPage({ slug }: { slug: string }) {
   };
 
   const isApparel = useMemo(() => (p ? isUndergarmentOrApparel(p) : false), [p]);
+  const isIntimate = useMemo(() => {
+    if (!p) return false;
+    const str = `${p.category || ''} ${p.slug || ''} ${p.name || ''}`.toLowerCase();
+    return /intim|bra|panty|lingerie|undergarment|shaper|wellness|boxer/i.test(str);
+  }, [p]);
   const productColors = useMemo(() => (p ? getProductColors(p) : []), [p]);
   const productSizes = useMemo(() => (p ? getProductSizes(p) : []), [p]);
   const gallery = useMemo(() => {
@@ -1761,7 +1930,7 @@ export function ProductPage({ slug }: { slug: string }) {
               className={'tabaya-tab-btn' + (pdpTab === 'care' ? ' active' : '')}
               onClick={() => setPdpTab('care')}
             >
-              {isApparel ? 'Care & Washing' : 'How to Use & Store'}
+              {p.isDigital ? 'Access & License' : p.category === 'watch' ? 'Watch Maintenance' : p.category === 'sunglass' ? 'Care & Handling' : isApparel ? 'Care & Washing' : 'How to Use & Store'}
             </button>
           </div>
 
@@ -1868,7 +2037,120 @@ export function ProductPage({ slug }: { slug: string }) {
                         <th>Collection / Category</th>
                         <td style={{ textTransform: 'capitalize' }}>{p.category ? p.category.replace(/-/g, ' ') : (isApparel ? 'Intimate Care' : 'Botanical Skincare')}</td>
                       </tr>
-                      {isApparel ? (
+                      {p.isDigital ? (
+                        <>
+                          <tr>
+                            <th>Fulfillment Method</th>
+                            <td>Instant Digital Access / Download via Email & WhatsApp (৳0 Delivery)</td>
+                          </tr>
+                          <tr>
+                            <th>License & Access</th>
+                            <td>Lifetime Access with Free Ongoing Updates</td>
+                          </tr>
+                          <tr>
+                            <th>Compatibility</th>
+                            <td>Multi-Device Compatible (Android, iOS, Windows, Mac)</td>
+                          </tr>
+                          <tr>
+                            <th>Support & Setup</th>
+                            <td>Dedicated WhatsApp Support with Setup Guide Included</td>
+                          </tr>
+                        </>
+                      ) : p.category === 'watch' ? (
+                        <>
+                          {productColors.length > 0 && (
+                            <tr>
+                              <th>Finishes & Bands</th>
+                              <td>{productColors.map((c) => c.name).join(' • ')}</td>
+                            </tr>
+                          )}
+                          <tr>
+                            <th>Movement Type</th>
+                            <td>High-Precision Japanese Quartz / Chronograph Movement</td>
+                          </tr>
+                          <tr>
+                            <th>Dial & Crystal</th>
+                            <td>Scratch-Resistant Hardened Mineral Crystal Glass</td>
+                          </tr>
+                          <tr>
+                            <th>Band & Clasp</th>
+                            <td>Genuine Leather / Stainless Steel with Secure Deployant Clasp</td>
+                          </tr>
+                          <tr>
+                            <th>Water Resistance</th>
+                            <td>Daily Splash Resistant (3 ATM / Rain & Hand Wash Proof)</td>
+                          </tr>
+                          <tr>
+                            <th>Package Includes</th>
+                            <td>1x Luxury Watch + Premium Cushion Presentation Box + Warranty Card</td>
+                          </tr>
+                        </>
+                      ) : p.category === 'sunglass' ? (
+                        <>
+                          {productColors.length > 0 && (
+                            <tr>
+                              <th>Frame & Lens Finishes</th>
+                              <td>{productColors.map((c) => c.name).join(' • ')}</td>
+                            </tr>
+                          )}
+                          <tr>
+                            <th>UV Optical Protection</th>
+                            <td>UV400 Certified (Blocks 100% Harmful UVA & UVB Rays)</td>
+                          </tr>
+                          <tr>
+                            <th>Lens Technology</th>
+                            <td>Polarized Anti-Glare High-Definition Glass / Resin Lens</td>
+                          </tr>
+                          <tr>
+                            <th>Frame Construction</th>
+                            <td>Lightweight Reinforced Alloy / Acetate with Flexible Hinges</td>
+                          </tr>
+                          <tr>
+                            <th>Package Includes</th>
+                            <td>1x Sunglasses + 1x Protective Hard Case + 1x Microfiber Cleaning Cloth</td>
+                          </tr>
+                        </>
+                      ) : p.category === 'gift' ? (
+                        <>
+                          <tr>
+                            <th>Gift Set Nature</th>
+                            <td>Curated Luxury Presentation Combo & Keepsake Box</td>
+                          </tr>
+                          <tr>
+                            <th>Complimentary Note</th>
+                            <td>Free Custom Greeting Card (Hand-written or Premium Printed)</td>
+                          </tr>
+                          <tr>
+                            <th>Presentation Standard</th>
+                            <td>Rigid Keepsake Gift Box with Satin Ribbon + Safe Courier Outer Carton</td>
+                          </tr>
+                          <tr>
+                            <th>Suitable Occasions</th>
+                            <td>Birthdays, Anniversaries, Corporate Gifting, Eid & Surprise Celebrations</td>
+                          </tr>
+                        </>
+                      ) : p.category === 'accessories' ? (
+                        <>
+                          {productColors.length > 0 && (
+                            <tr>
+                              <th>Available Finishes</th>
+                              <td>{productColors.map((c) => c.name).join(' • ')}</td>
+                            </tr>
+                          )}
+                          <tr>
+                            <th>Material</th>
+                            <td>100% Genuine Top-Grain Leather / High-Density Alloy Hardware</td>
+                          </tr>
+                          <tr>
+                            <th>Interior Features</th>
+                            <td>Multiple Card Slots, Currency Compartments & RFID Blocking Shield</td>
+                          </tr>
+                          <tr>
+                            <th>Package Includes</th>
+                            <td>1x Signature Accessory + Protective Dust Pouch & Gift Box</td>
+                          </tr>
+                        </>
+                      ) : isApparel || p.category === 'cloth' ? (
                         <>
                           {productSizes.length > 0 && (
                             <tr>
@@ -1883,16 +2165,16 @@ export function ProductPage({ slug }: { slug: string }) {
                             </tr>
                           )}
                           <tr>
-                            <th>Material / Fabric</th>
-                            <td>Premium Breathable Stretch Cotton / Seamless Spandex Blend</td>
+                            <th>Fabric & Weave</th>
+                            <td>Premium Breathable Cotton / Luxury Modal Stretch Blend</td>
                           </tr>
                           <tr>
-                            <th>Fit Type</th>
-                            <td>Ergonomic Comfort & Supportive Drape</td>
+                            <th>Fit Standard</th>
+                            <td>Comfort Tailored Fit with Reinforced Seam Stitching</td>
                           </tr>
                           <tr>
                             <th>Package Includes</th>
-                            <td>1x Discreetly Sealed Item in Protective Hygienic Packaging</td>
+                            <td>1x Authentically Packaged Garment in Protective Bag</td>
                           </tr>
                         </>
                       ) : (
@@ -1904,8 +2186,8 @@ export function ProductPage({ slug }: { slug: string }) {
                             </tr>
                           )}
                           <tr>
-                            <th>Skin Type Compatibility</th>
-                            <td>Suitable for All Skin Types, including Sensitive & Acne-Prone</td>
+                            <th>Skin Compatibility</th>
+                            <td>Formulated for All Skin Types, including Sensitive & Acne-Prone</td>
                           </tr>
                           <tr>
                             <th>Formulation Standard</th>
@@ -1932,70 +2214,135 @@ export function ProductPage({ slug }: { slug: string }) {
               <div style={{ maxWidth: 840, margin: '0 auto' }}>
                 <div style={{ marginBottom: 18, textAlign: 'center' }}>
                   <h4 className="serif" style={{ fontSize: 20, color: '#1f3147', margin: '0 0 6px' }}>
-                    Intimate Wear & Undergarment Size Guide
+                    {isIntimate ? 'Intimate Wear & Undergarment Size Guide' : 'Apparel & Lifestyle Clothing Size Guide'}
                   </h4>
                   <p style={{ fontSize: 13, color: '#6b645c', margin: 0 }}>
-                    All dimensions are provided in inches. Please select based on your body measurements for the most supportive and comfortable fit.
+                    {isIntimate
+                      ? 'All dimensions are provided in inches. Please select based on your body measurements for the most supportive and comfortable fit.'
+                      : 'All dimensions are in inches. Regular tailored fit designed for effortless style and everyday movement.'}
                   </p>
                 </div>
 
                 <div className="tabaya-table-wrap">
                   <table className="tabaya-size-table">
                     <thead>
-                      <tr>
-                        <th>Size Tag</th>
-                        <th>Band / Underbust</th>
-                        <th>Bust / Chest</th>
-                        <th>Waist (Inches)</th>
-                        <th>Recommended Fit</th>
-                      </tr>
+                      {isIntimate ? (
+                        <tr>
+                          <th>Size Tag</th>
+                          <th>Band / Underbust</th>
+                          <th>Bust / Chest</th>
+                          <th>Waist (Inches)</th>
+                          <th>Recommended Fit</th>
+                        </tr>
+                      ) : (
+                        <tr>
+                          <th>Size Tag</th>
+                          <th>Chest (Inches)</th>
+                          <th>Length (Inches)</th>
+                          <th>Shoulder (Inches)</th>
+                          <th>Recommended Fit</th>
+                        </tr>
+                      )}
                     </thead>
                     <tbody>
-                      <tr>
-                        <td><b>S (Small)</b></td>
-                        <td>28" – 30"</td>
-                        <td>30" – 32"</td>
-                        <td>24" – 26"</td>
-                        <td>Standard Comfort Fit</td>
-                      </tr>
-                      <tr>
-                        <td><b>M (Medium)</b></td>
-                        <td>30" – 32"</td>
-                        <td>32" – 34"</td>
-                        <td>26" – 29"</td>
-                        <td>Standard Comfort Fit</td>
-                      </tr>
-                      <tr>
-                        <td><b>L (Large)</b></td>
-                        <td>32" – 34"</td>
-                        <td>34" – 36"</td>
-                        <td>29" – 32"</td>
-                        <td>Comfort & Support</td>
-                      </tr>
-                      <tr>
-                        <td><b>XL (Extra Large)</b></td>
-                        <td>34" – 36"</td>
-                        <td>36" – 38"</td>
-                        <td>32" – 35"</td>
-                        <td>Full Support Fit</td>
-                      </tr>
-                      <tr>
-                        <td><b>XXL / Free Size</b></td>
-                        <td>36" – 38"</td>
-                        <td>38" – 42"</td>
-                        <td>35" – 39"</td>
-                        <td>Relaxed Stretch Fit</td>
-                      </tr>
+                      {isIntimate ? (
+                        <>
+                          <tr>
+                            <td><b>S (Small)</b></td>
+                            <td>28" – 30"</td>
+                            <td>30" – 32"</td>
+                            <td>24" – 26"</td>
+                            <td>Standard Comfort Fit</td>
+                          </tr>
+                          <tr>
+                            <td><b>M (Medium)</b></td>
+                            <td>30" – 32"</td>
+                            <td>32" – 34"</td>
+                            <td>26" – 29"</td>
+                            <td>Standard Comfort Fit</td>
+                          </tr>
+                          <tr>
+                            <td><b>L (Large)</b></td>
+                            <td>32" – 34"</td>
+                            <td>34" – 36"</td>
+                            <td>29" – 32"</td>
+                            <td>Comfort & Support</td>
+                          </tr>
+                          <tr>
+                            <td><b>XL (Extra Large)</b></td>
+                            <td>34" – 36"</td>
+                            <td>36" – 38"</td>
+                            <td>32" – 35"</td>
+                            <td>Full Support Fit</td>
+                          </tr>
+                          <tr>
+                            <td><b>XXL / Free Size</b></td>
+                            <td>36" – 38"</td>
+                            <td>38" – 42"</td>
+                            <td>35" – 39"</td>
+                            <td>Relaxed Stretch Fit</td>
+                          </tr>
+                        </>
+                      ) : (
+                        <>
+                          <tr>
+                            <td><b>S (Small)</b></td>
+                            <td>38"</td>
+                            <td>27"</td>
+                            <td>16.5"</td>
+                            <td>Slim / Standard Fit</td>
+                          </tr>
+                          <tr>
+                            <td><b>M (Medium)</b></td>
+                            <td>40"</td>
+                            <td>28"</td>
+                            <td>17.5"</td>
+                            <td>Regular Comfort Fit</td>
+                          </tr>
+                          <tr>
+                            <td><b>L (Large)</b></td>
+                            <td>42"</td>
+                            <td>29"</td>
+                            <td>18.5"</td>
+                            <td>Standard Relaxed Fit</td>
+                          </tr>
+                          <tr>
+                            <td><b>XL (Extra Large)</b></td>
+                            <td>44"</td>
+                            <td>30"</td>
+                            <td>19.5"</td>
+                            <td>Relaxed Fit</td>
+                          </tr>
+                          <tr>
+                            <td><b>XXL (2X-Large)</b></td>
+                            <td>46"</td>
+                            <td>31"</td>
+                            <td>20.5"</td>
+                            <td>Roomy Comfort Fit</td>
+                          </tr>
+                        </>
+                      )}
                     </tbody>
                   </table>
                 </div>
 
                 <div style={{ marginTop: 24, padding: 18, background: '#f8f6f2', border: '1px solid rgba(180, 150, 100, 0.25)', fontSize: 13, color: '#4b5563', lineHeight: 1.6 }}>
                   <b style={{ color: '#1f3147', display: 'block', marginBottom: 4 }}>💡 Measurement & Fit Guidance:</b>
-                  <div>• <b>Underbust:</b> Measure directly under your bust with a snug, level tape.</div>
-                  <div>• <b>Bust:</b> Measure around the fullest point of your chest while breathing naturally.</div>
-                  <div>• <b>Waist:</b> Measure around the narrowest part of your natural waistline.</div>
-                  <div>• <b>Discreet Delivery:</b> All intimate orders are shipped in unmarked, opaque packaging for 100% privacy.</div>
+                  {isIntimate ? (
+                    <>
+                      <div>• <b>Underbust:</b> Measure directly under your bust with a snug, level tape.</div>
+                      <div>• <b>Bust:</b> Measure around the fullest point of your chest while breathing naturally.</div>
+                      <div>• <b>Waist:</b> Measure around the narrowest part of your natural waistline.</div>
+                      <div>• <b>Discreet Delivery:</b> All intimate orders are shipped in unmarked, opaque packaging for 100% privacy.</div>
+                    </>
+                  ) : (
+                    <>
+                      <div>• <b>Chest:</b> Measure around the fullest part of your chest, keeping the tape level under the arms.</div>
+                      <div>• <b>Length:</b> Measure from highest shoulder point down to desired hemline.</div>
+                      <div>• <b>Shoulder:</b> Measure across the back from the tip of one shoulder to the other.</div>
+                      <div>• <b>Hassle-Free Exchange:</b> If the size doesn't fit you perfectly, we offer a 7-day doorstep size exchange.</div>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -2032,13 +2379,106 @@ export function ProductPage({ slug }: { slug: string }) {
             {pdpTab === 'care' && (
               <div style={{ maxWidth: 840, margin: '0 auto' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-                  {isApparel ? (
+                  {p.isDigital ? (
+                    <>
+                      <div className="tabaya-feature-card">
+                        <span className="icon">⚡</span>
+                        <div>
+                          <h4>Instant Delivery & Access</h4>
+                          <p>Download link and access credentials appear instantly on your order confirmation screen and are sent via WhatsApp/Email.</p>
+                        </div>
+                      </div>
+                      <div className="tabaya-feature-card">
+                        <span className="icon">📱</span>
+                        <div>
+                          <h4>Multi-Device Compatible</h4>
+                          <p>Compatible across Windows, Mac, iOS, Android, and tablets. Access files wherever and whenever you need them.</p>
+                        </div>
+                      </div>
+                      <div className="tabaya-feature-card">
+                        <span className="icon">🔑</span>
+                        <div>
+                          <h4>Lifetime License & Updates</h4>
+                          <p>Enjoy perpetual access with all future updates and patches included free of additional charge.</p>
+                        </div>
+                      </div>
+                      <div className="tabaya-feature-card">
+                        <span className="icon">💬</span>
+                        <div>
+                          <h4>Dedicated Tech Support</h4>
+                          <p>Need setup guidance? Our technical support team is available 7 days a week via WhatsApp to assist you.</p>
+                        </div>
+                      </div>
+                    </>
+                  ) : p.category === 'watch' ? (
+                    <>
+                      <div className="tabaya-feature-card">
+                        <span className="icon">💧</span>
+                        <div>
+                          <h4>Water Resistance Precautions</h4>
+                          <p>Avoid exposing to hot water, saunas, and steam showers as temperature shifts can compromise seal gaskets.</p>
+                        </div>
+                      </div>
+                      <div className="tabaya-feature-card">
+                        <span className="icon">🧲</span>
+                        <div>
+                          <h4>Magnetic Field Shielding</h4>
+                          <p>Keep your timepiece away from powerful magnetic fields such as large speakers, magnetic clasps, and laptops.</p>
+                        </div>
+                      </div>
+                      <div className="tabaya-feature-card">
+                        <span className="icon">✨</span>
+                        <div>
+                          <h4>Microfiber Polish</h4>
+                          <p>Wipe case and mineral crystal with the included lint-free microfiber cloth to remove oils, dust, and fingerprints.</p>
+                        </div>
+                      </div>
+                      <div className="tabaya-feature-card">
+                        <span className="icon">📦</span>
+                        <div>
+                          <h4>Padded Box Storage</h4>
+                          <p>When not on your wrist, store your watch securely inside its plush presentation box to prevent accidental scratches.</p>
+                        </div>
+                      </div>
+                    </>
+                  ) : p.category === 'sunglass' ? (
+                    <>
+                      <div className="tabaya-feature-card">
+                        <span className="icon">👓</span>
+                        <div>
+                          <h4>Optical Lens Cleaning</h4>
+                          <p>Rinse lenses with lukewarm water before wiping with microfiber cloth to prevent micro-scratches from dust particles.</p>
+                        </div>
+                      </div>
+                      <div className="tabaya-feature-card">
+                        <span className="icon">🚫</span>
+                        <div>
+                          <h4>Avoid Coarse Fabrics</h4>
+                          <p>Never use t-shirt hems, rough paper napkins, or coarse clothing to wipe lenses as they degrade the UV filter coating.</p>
+                        </div>
+                      </div>
+                      <div className="tabaya-feature-card">
+                        <span className="icon">☀️</span>
+                        <div>
+                          <h4>Avoid Car Dashboard Heat</h4>
+                          <p>Do not leave sunglasses exposed to direct sun on vehicle dashboards, as excessive heat can deform frames.</p>
+                        </div>
+                      </div>
+                      <div className="tabaya-feature-card">
+                        <span className="icon">🔒</span>
+                        <div>
+                          <h4>Hard Protective Case</h4>
+                          <p>Always rest glasses in their provided hard shell case when traveling or not in active wear.</p>
+                        </div>
+                      </div>
+                    </>
+                  ) : isApparel ? (
                     <>
                       <div className="tabaya-feature-card">
                         <span className="icon">💧</span>
                         <div>
                           <h4>Gentle Hand Wash</h4>
-                          <p>Wash in cold water with mild detergent to preserve fabric elasticity and soft texture.</p>
+                          <p>Wash in cold water with mild detergent to preserve fabric elasticity, color vitality, and soft texture.</p>
                         </div>
                       </div>
                       <div className="tabaya-feature-card">
@@ -2059,7 +2499,7 @@ export function ProductPage({ slug }: { slug: string }) {
                         <span className="icon">🔒</span>
                         <div>
                           <h4>Hygienic Storage</h4>
-                          <p>Store in a clean, ventilated drawer or wardrobe organizer to keep items pristine and fresh.</p>
+                          <p>Store in a clean, ventilated wardrobe organizer or drawer to keep garments pristine and fresh.</p>
                         </div>
                       </div>
                     </>
