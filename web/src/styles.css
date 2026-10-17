@@ -731,6 +731,79 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   transform: scaleX(1);
 }
 
+/* Navigation Dropdown (Categories Dropdown) */
+.tabaya-nav-dropdown {
+  position: relative;
+}
+.tabaya-nav-dropdown-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  padding: 8px 0;
+  font-family: 'Inter', sans-serif;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: #1f3147;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.tabaya-nav-dropdown-btn:hover,
+.tabaya-nav-dropdown.active .tabaya-nav-dropdown-btn {
+  color: #8B1E1E;
+}
+.tabaya-nav-dropdown-btn svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.2s ease;
+}
+.tabaya-nav-dropdown:hover .tabaya-nav-dropdown-btn svg,
+.tabaya-nav-dropdown.open .tabaya-nav-dropdown-btn svg {
+  transform: rotate(180deg);
+}
+.tabaya-nav-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  min-width: 220px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.12);
+  padding: 8px 0;
+  margin: 0;
+  list-style: none;
+  z-index: 150;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.tabaya-nav-dropdown:hover .tabaya-nav-dropdown-menu,
+.tabaya-nav-dropdown.open .tabaya-nav-dropdown-menu {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(2px);
+}
+.tabaya-nav-dropdown-item {
+  display: block;
+  padding: 10px 18px;
+  font-size: 13.5px;
+  color: #334155;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.tabaya-nav-dropdown-item:hover,
+.tabaya-nav-dropdown-item.active {
+  background: rgba(139, 30, 30, 0.06);
+  color: #8B1E1E;
+  font-weight: 500;
+}
+
 /* Right Column: Search Icon & Cart Bag */
 .tabaya-header-right {
   display: flex;

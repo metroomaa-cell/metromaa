@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { CartProvider, useCart, useRoute, go } from './cart';
 import { taka, getSettings, isSkincareSite, getCategories } from './api';
 import { initGTM, initFB, dl, trackEngagement, initInteractionTracking } from './analytics';
@@ -144,6 +144,22 @@ function Header({ onSearch }: { onSearch: () => void }) {
     }).catch(() => {});
   }, [isSkin]);
 
+  const [catDropdownOpen, setCatDropdownOpen] = useState(false);
+  const catDropdownRef = useRef<HTMLLIElement>(null);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (catDropdownRef.current && !catDropdownRef.current.contains(e.target as Node)) {
+        setCatDropdownOpen(false);
+      }
+    };
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
+  }, []);
+
+  const visibleCats = cats.slice(0, 2);
+  const dropdownCats = cats.slice(2);
+
   const navLinks = [
     { label: 'Home', path: 'home' },
     { label: isSkin ? 'All Skincare' : 'All Collections', path: 'shop' },
@@ -175,31 +191,86 @@ function Header({ onSearch }: { onSearch: () => void }) {
                   alt={storeName}
                   style={{ maxHeight: 40, width: 'auto', objectFit: 'contain', display: 'block' }}
                 />
-              ) : (
-                <span>{storeName}</span>
-              )}
+              ) : null}
             </div>
           </div>
 
           {/* Center Column: Navigation Menu (Tabaya Style) */}
           <nav className="tabaya-header-center" aria-label="Main Navigation">
             <ul className="tabaya-nav-menu">
-              {navLinks.map((item) => {
-                const isActive = (item.path === 'home' && route.name === 'home') ||
-                  (item.path === 'shop' && route.name === 'shop' && !route.param) ||
-                  (route.name === 'shop' && route.param && item.path.endsWith('/' + route.param)) ||
-                  (item.path === 'track' && route.name === 'track');
+              <li>
+                <a
+                  className={'tabaya-nav-item' + (route.name === 'home' ? ' active' : '')}
+                  onClick={() => nav('home')}
+                >
+                  Home
+                </a>
+              </li>
+              <li>
+                <a
+                  className={'tabaya-nav-item' + (route.name === 'shop' && !route.param ? ' active' : '')}
+                  onClick={() => nav('shop')}
+                >
+                  {isSkin ? 'All Skincare' : 'All Collections'}
+                </a>
+              </li>
+              {visibleCats.map((c) => {
+                const isActive = route.name === 'shop' && route.param === c.slug;
                 return (
-                  <li key={item.path}>
+                  <li key={c.slug}>
                     <a
                       className={'tabaya-nav-item' + (isActive ? ' active' : '')}
-                      onClick={() => nav(item.path)}
+                      onClick={() => nav('shop/' + c.slug)}
                     >
-                      {item.label}
+                      {c.name}
                     </a>
                   </li>
                 );
               })}
+
+              {dropdownCats.length > 0 && (
+                <li
+                  ref={catDropdownRef}
+                  className={`tabaya-nav-dropdown ${catDropdownOpen ? 'open' : ''} ${route.name === 'shop' && dropdownCats.some((c) => route.param === c.slug) ? 'active' : ''}`}
+                  onMouseEnter={() => setCatDropdownOpen(true)}
+                  onMouseLeave={() => setCatDropdownOpen(false)}
+                >
+                  <button
+                    type="button"
+                    className="tabaya-nav-dropdown-btn"
+                    onClick={() => setCatDropdownOpen((o) => !o)}
+                  >
+                    <span>More Categories</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+                  <ul className="tabaya-nav-dropdown-menu">
+                    {dropdownCats.map((c) => (
+                      <li key={c.slug}>
+                        <a
+                          className={`tabaya-nav-dropdown-item ${route.name === 'shop' && route.param === c.slug ? 'active' : ''}`}
+                          onClick={() => {
+                            nav('shop/' + c.slug);
+                            setCatDropdownOpen(false);
+                          }}
+                        >
+                          {c.name}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              )}
+
+              <li>
+                <a
+                  className={'tabaya-nav-item' + (route.name === 'track' ? ' active' : '')}
+                  onClick={() => nav('track')}
+                >
+                  Track Order
+                </a>
+              </li>
             </ul>
           </nav>
 
@@ -246,9 +317,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
                 alt={storeName}
                 style={{ maxHeight: 34, width: 'auto', objectFit: 'contain', display: 'block' }}
               />
-            ) : (
-              <span>{storeName}</span>
-            )}
+            ) : null}
           </span>
           <button
             className="tabaya-mmenu-close"

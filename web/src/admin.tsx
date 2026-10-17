@@ -5801,7 +5801,7 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
                   setIsDragging(false);
                   if (e.dataTransfer.files) uploadFiles(e.dataTransfer.files);
                 }}
-                onClick={() => document.getElementById('photo-studio-file-input')?.click()}
+                onClick={() => setPickerTarget({ type: 'gallery', idOrName: 'gallery', title: 'Product Gallery', currentImg: '' })}
               >
                 <input
                   id="photo-studio-file-input"
@@ -5814,16 +5814,16 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
                     e.target.value = '';
                   }}
                 />
-                <span style={{ fontSize: 32 }}>☁️</span>
+                <span style={{ fontSize: 32 }}>🖼️</span>
                 <div style={{ fontSize: 15, fontWeight: 600, color: '#fff' }}>
                   {uploading
                     ? uploadProgress
                       ? `Uploading photos (${uploadProgress.current}/${uploadProgress.total})…`
                       : 'Uploading Photos…'
-                    : 'Click to Upload Multiple Photos or Drag & Drop Here'}
+                    : 'Click to Choose from Website Gallery (or Drag & Drop Photos Here)'}
                 </div>
                 <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                  Select multiple photos at once (Shift or Ctrl+Click). Supports WebP, JPG, PNG up to 6MB.
+                  Opens gallery first so you can pick existing photos without re-uploading. You can also upload new ones anytime.
                 </div>
               </div>
 
@@ -6972,6 +6972,7 @@ function SettingsAdmin() {
   });
   const [uploadingSlideImg, setUploadingSlideImg] = useState(false);
   const [editingSlideIdx, setEditingSlideIdx] = useState<number | null>(null);
+  const [pickerTarget, setPickerTarget] = useState<{ title: string; currentImg: string; onSelect: (url: string) => void } | null>(null);
 
   useEffect(() => {
     fetch('/api/settings').then((r) => r.json()).then((s) => {
@@ -7196,9 +7197,17 @@ function SettingsAdmin() {
             </div>
 
             {/* Upload Buttons & Input */}
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <label className="sa-btn" style={{ cursor: 'pointer', flexShrink: 0 }}>
-                {uploadingLogo ? 'Uploading…' : '📁 Upload Logo File'}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="sa-btn"
+                style={{ cursor: 'pointer', flexShrink: 0, background: '#7c3aed', borderColor: '#7c3aed', color: '#fff', fontWeight: 600 }}
+                onClick={() => setPickerTarget({ title: 'Store Logo', currentImg: f.logo || '', onSelect: (url) => setF((s: any) => ({ ...s, logo: url })) })}
+              >
+                🖼️ Choose from Gallery
+              </button>
+              <label className="sa-btn ghost" style={{ cursor: 'pointer', flexShrink: 0 }}>
+                {uploadingLogo ? 'Uploading…' : '📁 Upload New File'}
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp,image/svg+xml"
@@ -7208,7 +7217,7 @@ function SettingsAdmin() {
                 />
               </label>
               <input
-                style={{ flex: 1, height: 38, padding: '0 12px', background: '#1c1830', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                style={{ flex: 1, minWidth: 200, height: 38, padding: '0 12px', background: '#1c1830', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', fontSize: 13 }}
                 value={f.logo || ''}
                 onChange={set('logo')}
                 placeholder="Or paste image URL (https://... or /uploads/...)"
@@ -7282,9 +7291,17 @@ function SettingsAdmin() {
             </div>
 
             {/* Upload Buttons & Input */}
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="sa-btn"
+                style={{ cursor: 'pointer', flexShrink: 0, background: '#7c3aed', borderColor: '#7c3aed', color: '#fff', fontWeight: 600 }}
+                onClick={() => setPickerTarget({ title: 'Site Favicon', currentImg: f.favicon || '', onSelect: (url) => setF((s: any) => ({ ...s, favicon: url })) })}
+              >
+                🖼️ Choose from Gallery
+              </button>
               <label className="sa-btn ghost" style={{ cursor: 'pointer', flexShrink: 0 }}>
-                {uploadingFavicon ? 'Uploading…' : '📁 Upload Favicon'}
+                {uploadingFavicon ? 'Uploading…' : '📁 Upload New File'}
                 <input
                   type="file"
                   accept="image/x-icon,image/png,image/svg+xml,image/webp,image/jpeg"
@@ -7294,7 +7311,7 @@ function SettingsAdmin() {
                 />
               </label>
               <input
-                style={{ flex: 1, height: 38, padding: '0 12px', background: '#1c1830', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                style={{ flex: 1, minWidth: 200, height: 38, padding: '0 12px', background: '#1c1830', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', fontSize: 13 }}
                 value={f.favicon || ''}
                 onChange={set('favicon')}
                 placeholder="Or paste icon URL (.png, .ico, .svg)"
@@ -7535,9 +7552,20 @@ function SettingsAdmin() {
                 <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
                   Desktop Banner Image (ডেস্কটপ ব্যানার ছবি) *
                 </label>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <label className="sa-btn" style={{ cursor: 'pointer', flexShrink: 0 }}>
-                    {uploadingSlideImg ? 'Uploading…' : '📁 Upload Banner'}
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="sa-btn small"
+                    onClick={() => setPickerTarget({
+                      title: 'Desktop Banner Image',
+                      currentImg: slideForm.image || '',
+                      onSelect: (url) => setSlideForm((sf: any) => ({ ...sf, image: url }))
+                    })}
+                  >
+                    🖼️ Choose from Gallery
+                  </button>
+                  <label className="sa-btn ghost small" style={{ cursor: 'pointer', flexShrink: 0 }}>
+                    {uploadingSlideImg ? 'Uploading…' : '📁 Upload New File'}
                     <input
                       type="file"
                       accept="image/*"
@@ -7547,7 +7575,7 @@ function SettingsAdmin() {
                     />
                   </label>
                   <input
-                    style={{ flex: 1, height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                    style={{ flex: 1, minWidth: 200, height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
                     value={slideForm.image || ''}
                     onChange={(e) => setSlideForm((sf: any) => ({ ...sf, image: e.target.value }))}
                     placeholder="Image URL (https://... or /uploads/...)"
@@ -7568,9 +7596,20 @@ function SettingsAdmin() {
                 <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
                   Mobile Banner Image (মোবাইল ভার্সন ছবি - ঐচ্ছিক)
                 </label>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <label className="sa-btn ghost" style={{ cursor: 'pointer', flexShrink: 0 }}>
-                    {uploadingSlideImg ? 'Uploading…' : '📁 Upload Mobile Image'}
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="sa-btn small"
+                    onClick={() => setPickerTarget({
+                      title: 'Mobile Banner Image',
+                      currentImg: slideForm.mobileImage || '',
+                      onSelect: (url) => setSlideForm((sf: any) => ({ ...sf, mobileImage: url }))
+                    })}
+                  >
+                    🖼️ Choose from Gallery
+                  </button>
+                  <label className="sa-btn ghost small" style={{ cursor: 'pointer', flexShrink: 0 }}>
+                    {uploadingSlideImg ? 'Uploading…' : '📁 Upload New File'}
                     <input
                       type="file"
                       accept="image/*"
@@ -7580,7 +7619,7 @@ function SettingsAdmin() {
                     />
                   </label>
                   <input
-                    style={{ flex: 1, height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                    style={{ flex: 1, minWidth: 200, height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
                     value={slideForm.mobileImage || ''}
                     onChange={(e) => setSlideForm((sf: any) => ({ ...sf, mobileImage: e.target.value }))}
                     placeholder="Optional mobile image URL (e.g. 800x1000px)"
@@ -7679,6 +7718,18 @@ function SettingsAdmin() {
             </div>
           </div>
         </div>
+      )}
+
+      {pickerTarget && (
+        <MediaPickerModal
+          title={pickerTarget.title}
+          currentUrl={pickerTarget.currentImg}
+          onSelect={(url) => {
+            pickerTarget.onSelect(url);
+            setPickerTarget(null);
+          }}
+          onClose={() => setPickerTarget(null)}
+        />
       )}
     </>
   );
