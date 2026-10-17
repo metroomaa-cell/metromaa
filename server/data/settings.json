@@ -7,7 +7,8 @@
   "lowStockAt": 5,
   "whatsapp": "8801878374762",
   "phone": "8801878374762",
-  "gtmId": "GTM-KFFN69B8",
+  "gtmId": "",
+  "fbPixelId": "",
   "sliders": [
     {
       "id": "metrroma-hero-1",
