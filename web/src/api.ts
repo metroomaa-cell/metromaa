@@ -151,8 +151,12 @@ export async function placeOrder(p: OrderPayload) {
 
 export const taka = (n: number) => 'Tk ' + (Number(n) || 0).toLocaleString('en-US');
 
-export async function validateCoupon(code: string, subtotal: number) {
-  const r = await fetch('/api/coupon/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, subtotal }) });
+export async function validateCoupon(code: string, subtotal: number, phone?: string) {
+  const r = await fetch('/api/coupon/validate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, subtotal, phone })
+  });
   const d = await r.json();
   if (!r.ok) throw new Error(d.error || 'invalid code');
   return d as { code: string; discount: number };
@@ -211,5 +215,147 @@ export async function deleteMasterColor(id: string): Promise<{ success: boolean;
     return { success: false, colors: [] };
   }
 }
+
+// ---- CUSTOMER VIP ACCOUNT SYSTEM ----
+export type CustomerOrder = {
+  id: string;
+  createdAt: string;
+  status: string;
+  total: number;
+  subtotal: number;
+  shippingCost: number;
+  discount: number;
+  coupon?: string;
+  items: any[];
+  courier?: any;
+  address?: string;
+  district?: string;
+  thana?: string;
+};
+
+export type Customer = {
+  id: string;
+  phone: string;
+  name: string;
+  email?: string;
+  ordersCount: number;
+  totalSpent: number;
+  tier: string;
+  savedAddress?: {
+    address: string;
+    district: string;
+    thana: string;
+    area: 'inside' | 'outside';
+  };
+  wishlist: string[];
+  firstOrderDiscountAvailable: boolean;
+  welcomeCoupon: string;
+  createdAt: string;
+  orders?: CustomerOrder[];
+};
+
+export function getCustomerToken(): string {
+  try { return localStorage.getItem('metrroma_customer_token') || ''; }
+  catch { return ''; }
+}
+
+export function setCustomerToken(token: string) {
+  try { localStorage.setItem('metrroma_customer_token', token); }
+  catch {}
+}
+
+export function clearCustomerToken() {
+  try { localStorage.removeItem('metrroma_customer_token'); }
+  catch {}
+}
+
+export async function sendCustomerOtp(phone: string, name?: string): Promise<{ ok: boolean; message: string; demoCode?: string }> {
+  const r = await fetch('/api/customer/send-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, name })
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || 'Could not send verification code');
+  return d;
+}
+
+export async function verifyCustomerOtp(phone: string, code: string, name?: string): Promise<{ ok: boolean; token: string; customer: Customer }> {
+  const r = await fetch('/api/customer/verify-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, code, name })
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || 'Invalid verification code');
+  if (d.token) setCustomerToken(d.token);
+  return d;
+}
+
+export async function getCustomerMe(): Promise<Customer | null> {
+  const token = getCustomerToken();
+  if (!token) return null;
+  const r = await fetch('/api/customer/me', {
+    headers: { 'x-customer-token': token }
+  });
+  if (!r.ok) {
+    if (r.status === 401) clearCustomerToken();
+    return null;
+  }
+  const d = await r.json();
+  return d.customer;
+}
+
+export async function updateCustomerProfile(data: { name?: string; email?: string; savedAddress?: any }): Promise<Customer> {
+  const token = getCustomerToken();
+  const r = await fetch('/api/customer/profile', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-customer-token': token
+    },
+    body: JSON.stringify(data)
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || 'Could not update profile');
+  return d.customer;
+}
+
+export async function toggleCustomerWishlist(productId: string): Promise<string[]> {
+  const token = getCustomerToken();
+  if (!token) throw new Error('Sign in required');
+  const r = await fetch('/api/customer/wishlist', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-customer-token': token
+    },
+    body: JSON.stringify({ productId })
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || 'Could not update wishlist');
+  return d.wishlist;
+}
+
+export async function logoutCustomer(): Promise<void> {
+  const token = getCustomerToken();
+  clearCustomerToken();
+  if (token) {
+    fetch('/api/customer/logout', {
+      method: 'POST',
+      headers: { 'x-customer-token': token }
+    }).catch(() => {});
+  }
+}
+
+export async function getAdminCustomers(): Promise<any[]> {
+  const token = localStorage.getItem('dot_admin_token') || 'dot_master_admin_token_2026';
+  const r = await fetch('/api/admin/customers', {
+    headers: { 'x-admin-token': token }
+  });
+  const d = await r.json();
+  return d.customers || [];
+}
+
 
 

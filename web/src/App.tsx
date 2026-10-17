@@ -3,6 +3,7 @@ import { CartProvider, useCart, useRoute, go } from './cart';
 import { taka, getSettings, isSkincareSite, getCategories } from './api';
 import { initGTM, initFB, dl, trackEngagement, initInteractionTracking } from './analytics';
 import { Home, Shop, ProductPage, Checkout, Confirm, Track, SearchOverlay, InfoPage } from './pages';
+import { CustomerProvider, useCustomer, CustomerHeaderIcon, CustomerAccountPage } from './CustomerAccount';
 import { WhatsAppIcon } from './icons';
 const Admin = lazy(() => import('./admin').then((m) => ({ default: m.Admin })));
 const LoveLockLanding = lazy(() => import('./LoveLockLanding').then((m) => ({ default: m.LoveLockLanding })));
@@ -123,6 +124,7 @@ function AnnouncementBar() {
 
 function Header({ onSearch }: { onSearch: () => void }) {
   const { count, setOpen } = useCart();
+  const { customer, openAuth } = useCustomer();
   const [menu, setMenu] = useState(false);
   const isSkin = isSkincareSite();
   const [storeName, setStoreName] = useState(isSkin ? 'SECRATE' : 'METROMAA');
@@ -201,7 +203,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
             </ul>
           </nav>
 
-          {/* Right Column: Search Icon & Cart Bag */}
+          {/* Right Column: Search Icon, User Icon & Cart Bag */}
           <div className="tabaya-header-right">
             <button
               className="tabaya-h-btn"
@@ -214,6 +216,8 @@ function Header({ onSearch }: { onSearch: () => void }) {
                 <path d="m13 13 4 4" />
               </svg>
             </button>
+
+            <CustomerHeaderIcon onNavigate={nav} />
 
             <button
               className="tabaya-h-btn tabaya-h-cart-btn"
@@ -255,6 +259,21 @@ function Header({ onSearch }: { onSearch: () => void }) {
           </button>
         </div>
         <div className="tabaya-mmenu-links">
+          <a
+            onClick={() => {
+              if (customer) nav('account');
+              else openAuth();
+              setMenu(false);
+            }}
+            className="tabaya-mmenu-link"
+            style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #e2e8f0', paddingBottom: 12, marginBottom: 8 }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            <span>{customer ? `Account (${customer.name || customer.phone})` : 'VIP Sign In / Register (5% OFF)'}</span>
+          </a>
           {navLinks.map((item) => (
             <a
               key={item.path}
@@ -492,6 +511,9 @@ function MobileTabs() {
       <a className={'tab' + (route.name === 'track' ? ' on' : '')} onClick={() => go('track')}>
         <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-6.5-5-6.5-10.5A6.5 6.5 0 0 1 18.5 10.5C18.5 16 12 21 12 21z" /><circle cx="12" cy="10.5" r="2.3" /></svg><span>Track</span>
       </a>
+      <a className={'tab' + (route.name === 'account' ? ' on' : '')} onClick={() => go('account')}>
+        <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg><span>Account</span>
+      </a>
     </nav>
   );
 }
@@ -578,6 +600,7 @@ function Shell() {
   else if (route.name === 'product') page = <ProductPage slug={route.param} />;
   else if (route.name === 'checkout') page = <Checkout />;
   else if (route.name === 'track') page = <Track />;
+  else if (route.name === 'account') page = <CustomerAccountPage onNavigate={go} />;
   else if (route.name === 'info') page = <InfoPage slug={route.param} />;
   else if (route.name === 'confirm') page = <Confirm id={route.param} />;
   else page = <Home />;
@@ -600,8 +623,11 @@ function Shell() {
 
 export default function App() {
   return (
-    <CartProvider>
-      <Shell />
-    </CartProvider>
+    <CustomerProvider>
+      <CartProvider>
+        <Shell />
+      </CartProvider>
+    </CustomerProvider>
   );
 }
+

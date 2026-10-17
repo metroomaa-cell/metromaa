@@ -1,5 +1,13 @@
 [
   {
+    "code": "WELCOME5",
+    "type": "percent",
+    "value": 5,
+    "minSubtotal": 0,
+    "active": true,
+    "isWelcome": true
+  },
+  {
     "code": "R10",
     "type": "flat",
     "value": 50,

@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { getProducts, getCategories, getProduct, placeOrder, getSettings, validateCoupon, fetchReviews, postReview, getSource, taka, getDeviceId, isSkincareSite, type Product, type Category, type Settings, type Review } from './api';
 import { useCart, go, useAge } from './cart';
+import { useCustomer } from './CustomerAccount';
 import { BD_GEO } from './bd-geo';
-import { ecView, ecBeginCheckout, ecPurchase } from './analytics';
+import { ecView, ecBeginCheckout, ecPurchase, dl } from './analytics';
 import { WhatsAppIcon } from './icons';
 
 function SearchSelect({ value, onChange, options, placeholder, disabled }: { value: string; onChange: (v: string) => void; options: string[]; placeholder: string; disabled?: boolean }) {
@@ -764,6 +765,7 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
 }
 
 export function Home() {
+  const { openAuth } = useCustomer();
   const [products, setProducts] = useState<Product[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [cats, setCats] = useState<Category[]>([]);
@@ -1166,16 +1168,23 @@ export function Home() {
                 className="tabaya-news-form"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(subEmail)) {
-                    try { localStorage.setItem('tabaya_sub', subEmail); } catch {}
+                  const val = subEmail.trim();
+                  const cleanPhone = val.replace(/\D/g, '').slice(-11);
+                  if (/^01[3-9]\d{8}$/.test(cleanPhone)) {
+                    openAuth();
+                    return;
+                  }
+                  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(val)) {
+                    try { localStorage.setItem('tabaya_sub', val); } catch {}
+                    try { dl({ event: 'generate_lead', lead_type: 'newsletter' }); } catch {}
                     setSubbed(true);
                   }
                 }}
               >
                 <input
-                  type="email"
+                  type="text"
                   required
-                  placeholder="Enter your email or phone number"
+                  placeholder="Enter your mobile number or email"
                   value={subEmail}
                   onChange={(e) => setSubEmail(e.target.value)}
                 />
@@ -2614,6 +2623,7 @@ export function ProductPage({ slug }: { slug: string }) {
 }
 export function Checkout() {
   const { lines, total: subtotal, clear } = useCart();
+  const { customer, openAuth } = useCustomer();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [area, setArea] = useState<'inside' | 'outside'>('inside');
   const [f, setF] = useState({ name: '', phone: '', address: '', note: '', email: '' });
@@ -2628,6 +2638,26 @@ export function Checkout() {
 
   useEffect(() => { getSettings().then(setSettings).catch(() => {}); }, []);
   useEffect(() => { if (lines.length) ecBeginCheckout(subtotal, lines.map((l) => ({ id: l.id, name: l.name, price: l.price, qty: l.qty }))); }, []); // eslint-disable-line
+
+  // Auto-fill customer details if logged in
+  useEffect(() => {
+    if (customer) {
+      setF((s) => ({
+        ...s,
+        name: s.name || customer.name || '',
+        phone: s.phone || customer.phone || '',
+        email: s.email || customer.email || '',
+        address: s.address || customer.savedAddress?.address || '',
+      }));
+      if (customer.savedAddress?.district) {
+        setDistrict(customer.savedAddress.district);
+        setArea(customer.savedAddress.district === 'Dhaka' ? 'inside' : 'outside');
+      }
+      if (customer.savedAddress?.thana) {
+        setThana(customer.savedAddress.thana);
+      }
+    }
+  }, [customer]);
 
   // ping server for incomplete order capture
   useEffect(() => {
@@ -2656,10 +2686,17 @@ export function Checkout() {
   const discount = applied ? Math.min(applied.discount, subtotal) : 0;
   const grand = Math.max(0, subtotal + delivery - discount);
 
-  const apply = async () => {
+  const apply = async (codeOverride?: string) => {
+    const codeToTest = (codeOverride || coupon).trim();
     setCerr('');
-    try { const r = await validateCoupon(coupon.trim(), subtotal); setApplied(r); }
-    catch (e: any) { setApplied(null); setCerr(e.message || 'invalid code'); }
+    try {
+      const r = await validateCoupon(codeToTest, subtotal, f.phone);
+      setApplied(r);
+      setCoupon(codeToTest);
+    } catch (e: any) {
+      setApplied(null);
+      setCerr(e.message || 'invalid code');
+    }
   };
 
   const submit = async () => {
@@ -2753,6 +2790,42 @@ export function Checkout() {
         <div className="co">
           {/* Left: Input Form */}
           <div className="form">
+            {!customer && (
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: 6,
+                  padding: '12px 18px',
+                  marginBottom: 16,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+              >
+                <div style={{ fontSize: 13, color: '#334155' }}>
+                  Have a VIP account or want 5% off your first order?
+                </div>
+                <button
+                  type="button"
+                  onClick={openAuth}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#0f172a',
+                    fontWeight: 600,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    padding: 0,
+                  }}
+                >
+                  Sign In / Register
+                </button>
+              </div>
+            )}
+
             {/* Box 1: Contact Details */}
             <div className="cobox">
               <div className="pc-corner-tr" />
@@ -2895,6 +2968,42 @@ export function Checkout() {
             </div>
 
             {/* Promo Code Input */}
+            {customer?.firstOrderDiscountAvailable && !applied && (
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px dashed #cbd5e1',
+                  borderRadius: 6,
+                  padding: '10px 14px',
+                  marginBottom: 12,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 10,
+                }}
+              >
+                <div style={{ fontSize: 12.5, color: '#1e293b' }}>
+                  <strong>5% VIP First Order Discount:</strong> Code <span style={{ fontWeight: 700, color: '#0f172a' }}>WELCOME5</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => apply('WELCOME5')}
+                  style={{
+                    background: '#0f172a',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: 4,
+                    padding: '5px 12px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Apply
+                </button>
+              </div>
+            )}
+
             <div className="couponbox">
               <input
                 className="field"
@@ -2902,7 +3011,7 @@ export function Checkout() {
                 value={coupon}
                 onChange={(e) => setCoupon(e.target.value)}
               />
-              <button type="button" className="btn" onClick={apply}>
+              <button type="button" className="btn" onClick={() => apply()}>
                 APPLY
               </button>
             </div>

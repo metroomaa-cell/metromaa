@@ -7,6 +7,7 @@ const CATALOG = join(__dir, 'data', 'catalog.json');
 const ORDERS = join(__dir, 'data', 'orders.json');
 const SETTINGS = join(__dir, 'data', 'settings.json');
 const COLORS = join(__dir, 'data', 'colors.json');
+const CUSTOMERS = join(__dir, 'data', 'customers.json');
 
 export const DEFAULT_COLORS = [
   { id: 'jet-black', name: 'Jet Black', hex: '#111111' },
@@ -434,4 +435,39 @@ export function deleteColor(idOrName) {
   saveColors(next);
   return next;
 }
+
+export function getCustomers() {
+  if (!existsSync(CUSTOMERS)) return [];
+  try { return JSON.parse(readFileSync(CUSTOMERS, 'utf8')); }
+  catch { return []; }
+}
+
+export function saveCustomers(list) {
+  writeFileSync(CUSTOMERS, JSON.stringify(list, null, 2));
+  return list;
+}
+
+export function getCustomerByPhone(phone) {
+  if (!phone) return null;
+  const clean = String(phone).replace(/\D/g, '').slice(-11);
+  return getCustomers().find((c) => String(c.phone).replace(/\D/g, '').slice(-11) === clean) || null;
+}
+
+export function saveCustomer(cust) {
+  if (!cust || !cust.phone) return null;
+  const list = getCustomers();
+  const clean = String(cust.phone).replace(/\D/g, '').slice(-11);
+  const idx = list.findIndex((c) => String(c.phone).replace(/\D/g, '').slice(-11) === clean);
+  if (idx >= 0) {
+    list[idx] = { ...list[idx], ...cust, updatedAt: new Date().toISOString() };
+    saveCustomers(list);
+    return list[idx];
+  } else {
+    const item = { ...cust, createdAt: cust.createdAt || new Date().toISOString() };
+    list.unshift(item);
+    saveCustomers(list);
+    return item;
+  }
+}
+
 

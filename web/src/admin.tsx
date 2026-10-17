@@ -11411,31 +11411,138 @@ function ScannerAdmin() {
 }
 
 function CustomersAdmin() {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
-  useEffect(() => { aFetch('/orders').then((r) => (r.ok ? r.json() : [])).then((d) => { setOrders(Array.isArray(d) ? d : []); setLoading(false); }).catch(() => { setOrders([]); setLoading(false); }); }, []);
-  const map: Record<string, any> = {};
-  (Array.isArray(orders) ? orders : []).forEach((o) => {
-    if (!o || !o.customer) return;
-    const k = o.customer.phone;
-    if (!k) return;
-    if (!map[k]) map[k] = { name: o.customer.name || 'Unknown', phone: k, orders: 0, spent: 0, last: o.createdAt };
-    map[k].orders++;
-    if (o.status !== 'cancelled') map[k].spent += (o.total || 0);
-    if (o.createdAt > map[k].last) { map[k].last = o.createdAt; map[k].name = o.customer.name || map[k].name; }
-  });
-  let rows: any[] = Object.values(map).sort((a: any, b: any) => b.spent - a.spent);
+
+  const load = () => {
+    setLoading(true);
+    aFetch('/admin/customers')
+      .then((r) => (r.ok ? r.json() : { customers: [] }))
+      .then((d) => {
+        setCustomers(Array.isArray(d.customers) ? d.customers : []);
+        setLoading(false);
+      })
+      .catch(() => {
+        setCustomers([]);
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const exportCSV = () => {
+    if (!customers.length) return;
+    const header = 'Name,Phone,Email,Orders,Total Spent,Welcome 5% Used,Last Order\n';
+    const rows = customers.map((c) =>
+      `"${c.name || ''}","${c.phone}","${c.email || ''}",${c.ordersCount || 0},${c.totalSpent || 0},${c.welcomeCouponUsed ? 'Yes' : 'No'},"${c.lastOrderAt ? new Date(c.lastOrderAt).toLocaleDateString() : ''}"`
+    ).join('\n');
+    const blob = new Blob([header + rows], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `metrroma_customers_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const query = q.trim().toLowerCase();
-  if (query) rows = rows.filter((c: any) => ((c.name || '') + ' ' + (c.phone || '')).toLowerCase().includes(query));
+  const filtered = customers.filter((c) =>
+    ((c.name || '') + ' ' + (c.phone || '') + ' ' + (c.email || '')).toLowerCase().includes(query)
+  );
+
   return (
     <>
-      <div className="sa-top"><h1>Customers</h1><input className="sa-search" placeholder="Search name or phone…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      <div className="sa-top">
+        <div>
+          <h1>Customers &amp; VIP Accounts</h1>
+          <p className="dim" style={{ fontSize: 13, marginTop: 4 }}>
+            Registered VIP members and customer database with purchase history and loyalty tier.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <input
+            className="sa-search"
+            placeholder="Search name, phone or email…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          <button className="sa-btn ghost" onClick={exportCSV} disabled={customers.length === 0}>
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 20 }}>
+        <div className="sa-card" style={{ padding: 18 }}>
+          <div className="dim" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Customers</div>
+          <div style={{ fontSize: 24, fontWeight: 700, color: '#f8fafc', marginTop: 4 }}>{customers.length}</div>
+        </div>
+        <div className="sa-card" style={{ padding: 18 }}>
+          <div className="dim" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active Buyers</div>
+          <div style={{ fontSize: 24, fontWeight: 700, color: '#4ade80', marginTop: 4 }}>
+            {customers.filter((c) => c.ordersCount > 0).length}
+          </div>
+        </div>
+        <div className="sa-card" style={{ padding: 18 }}>
+          <div className="dim" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Customer Spend</div>
+          <div style={{ fontSize: 24, fontWeight: 700, color: '#f8fafc', marginTop: 4 }}>
+            {taka(customers.reduce((s, c) => s + (c.totalSpent || 0), 0))}
+          </div>
+        </div>
+      </div>
+
       <div className="sa-card">
-        <table className="sa-table"><thead><tr><th>Customer</th><th>Phone</th><th>Orders</th><th>Last order</th><th className="r">Total spent</th></tr></thead>
-          <tbody>{rows.map((c: any) => <tr key={c.phone}><td>{c.name}</td><td className="dim">{c.phone}</td><td>{c.orders}</td><td className="dim">{fmt(c.last)}</td><td className="r">{taka(c.spent)}</td></tr>)}</tbody></table>
-        {loading && <div className="sa-empty">Loading…</div>}
-        {!loading && rows.length === 0 && <div className="sa-empty">No customers yet.</div>}
+        <table className="sa-table">
+          <thead>
+            <tr>
+              <th>Customer</th>
+              <th>Phone</th>
+              <th>VIP Welcome (5%)</th>
+              <th>Orders</th>
+              <th>Last Activity</th>
+              <th className="r">Total Spent</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((c: any) => (
+              <tr key={c.id || c.phone}>
+                <td>
+                  <div style={{ fontWeight: 600, color: '#f8fafc' }}>{c.name || 'VIP Member'}</div>
+                  {c.email && <div className="dim" style={{ fontSize: 11.5 }}>{c.email}</div>}
+                </td>
+                <td className="dim" style={{ fontFamily: 'monospace', fontSize: 13 }}>
+                  +88 {c.phone}
+                </td>
+                <td>
+                  <span
+                    style={{
+                      background: c.welcomeCouponUsed ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                      color: c.welcomeCouponUsed ? '#f87171' : '#4ade80',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                    }}
+                  >
+                    {c.welcomeCouponUsed ? 'Redeemed' : 'Active (5% OFF)'}
+                  </span>
+                </td>
+                <td>
+                  <span style={{ fontWeight: 600, color: '#f8fafc' }}>{c.ordersCount || 0}</span>
+                </td>
+                <td className="dim">
+                  {c.lastOrderAt ? fmt(c.lastOrderAt) : fmt(c.createdAt)}
+                </td>
+                <td className="r" style={{ fontWeight: 600, color: '#f8fafc' }}>
+                  {taka(c.totalSpent || 0)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {loading && <div className="sa-empty">Loading customers…</div>}
+        {!loading && filtered.length === 0 && <div className="sa-empty">No customers found.</div>}
       </div>
     </>
   );

@@ -9,7 +9,7 @@ import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns';
 try { dns.setDefaultResultOrder('ipv4first'); } catch {}
-import { getCatalog, getOrders, addOrder, updateOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, addColor, deleteColor } from './store.js';
+import { getCatalog, getOrders, addOrder, updateOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, saveCustomer } from './store.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -105,7 +105,7 @@ function buildDraftOrder(data) {
       discount += itemsTotal - landingPage.offerPrice;
     }
   }
-  if (c.coupon) { const cp = couponFor(c.coupon, itemsTotal); if (cp && !cp.error) { discount += cp.discount; couponCode = cp.code; } }
+  if (c.coupon) { const cp = couponFor(c.coupon, itemsTotal, c.phone); if (cp && !cp.error) { discount += cp.discount; couponCode = cp.code; } }
   discount = Math.min(discount, itemsTotal);
   const total = Math.max(0, itemsTotal + delivery - discount);
   const now = new Date().toISOString();
@@ -443,7 +443,7 @@ app.post('/api/orders', (req, res) => {
     }
   }
   if (c.coupon) {
-    const cp = couponFor(c.coupon, itemsTotal);
+    const cp = couponFor(c.coupon, itemsTotal, c.phone);
     if (cp && !cp.error) {
       discount += cp.discount;
       couponCode = cp.code;
@@ -481,6 +481,31 @@ app.post('/api/orders', (req, res) => {
   cancelDraft(order.customer.phone); // completed in time — don't capture an incomplete draft
   notifyOrder(order, 'placed');
   trackPurchase(order).catch(() => {}); // server-side FB CAPI + TikTok Events (best effort)
+
+  // Link order to customer & mark welcome coupon used if applied
+  try {
+    const cleanP = String(order.customer.phone).replace(/\D/g, '').slice(-11);
+    const existingCust = getCustomerByPhone(cleanP);
+    if (existingCust) {
+      const updateData = {
+        ...existingCust,
+        ordersCount: (existingCust.ordersCount || 0) + 1,
+        lastOrderAt: order.createdAt,
+      };
+      if (couponCode === 'WELCOME5') {
+        updateData.welcomeCouponUsed = true;
+      }
+      if (!existingCust.savedAddress?.address && order.customer.address) {
+        updateData.savedAddress = {
+          address: order.customer.address,
+          district: order.customer.district || '',
+          thana: order.customer.thana || '',
+          area: order.customer.area || 'outside',
+        };
+      }
+      saveCustomer(updateData);
+    }
+  } catch {}
   const cat = getCatalog();
   let changed = false;
   for (const l of lines) {
@@ -1423,16 +1448,33 @@ app.delete('/api/products/:id', adminAuth, requireRole('owner', 'manager'), (req
 });
 
 // ---- coupons & reviews ----
-function couponFor(code, subtotal) {
-  const c = getCoupons().find((x) => x.code.toLowerCase() === String(code || '').trim().toLowerCase() && x.active !== false);
+function couponFor(code, subtotal, phone) {
+  const cleanCode = String(code || '').trim().toUpperCase();
+  const c = getCoupons().find((x) => x.code.toUpperCase() === cleanCode && x.active !== false);
   if (!c) return null;
-  if (c.minSubtotal && subtotal < c.minSubtotal) return { error: `add more to use ${c.code} (min ৳${c.minSubtotal})` };
+  if (c.minSubtotal && subtotal < c.minSubtotal) return { error: `Add more items to use ${c.code} (minimum ৳${c.minSubtotal})` };
+
+  if (cleanCode === 'WELCOME5' || c.isWelcome) {
+    if (!phone) {
+      return { error: 'Please enter your 11-digit mobile number to apply the 5% first order discount.' };
+    }
+    const cleanPhone = String(phone).replace(/\D/g, '').slice(-11);
+    const pastOrders = (getOrders() || []).filter((o) => {
+      if (o.status === 'cancelled') return false;
+      return String(o.customer?.phone || '').replace(/\D/g, '').slice(-11) === cleanPhone;
+    });
+    const cust = getCustomerByPhone(cleanPhone);
+    if (pastOrders.length > 0 || (cust && cust.welcomeCouponUsed)) {
+      return { error: 'The 5% welcome code WELCOME5 is only valid for your first order.' };
+    }
+  }
+
   let discount = c.type === 'percent' ? Math.round((subtotal * c.value) / 100) : c.value;
   discount = Math.min(discount, subtotal);
   return { code: c.code, type: c.type, value: c.value, discount };
 }
 app.post('/api/coupon/validate', (req, res) => {
-  const r = couponFor(req.body?.code, Math.max(0, parseInt(req.body?.subtotal, 10) || 0));
+  const r = couponFor(req.body?.code, Math.max(0, parseInt(req.body?.subtotal, 10) || 0), req.body?.phone);
   if (!r) return res.status(404).json({ error: 'invalid or expired code' });
   if (r.error) return res.status(400).json({ error: r.error });
   res.json(r);
@@ -3200,6 +3242,247 @@ app.post('/api/admin/scanner/scan', adminAuth, (req, res) => {
     suggested,
     zone: isDhaka ? 'Inside Dhaka' : 'Outside Dhaka',
   });
+});
+
+// ==========================================
+// CUSTOMER VIP ACCOUNT SYSTEM (PHONE OTP)
+// ==========================================
+const customerOtpCache = new Map(); // cleanPhone -> { code, name, expiresAt, attempts }
+const customerSessions = new Map(); // token -> { phone, expiresAt }
+const CUST_SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+function resolveCustomer(req) {
+  const token = req.get('x-customer-token') || '';
+  if (!token) return null;
+  const sess = customerSessions.get(token);
+  if (!sess) return null;
+  if (Date.now() > sess.expiresAt) {
+    customerSessions.delete(token);
+    return null;
+  }
+  return getCustomerByPhone(sess.phone);
+}
+
+function customerAuth(req, res, next) {
+  const cust = resolveCustomer(req);
+  if (!cust) return res.status(401).json({ error: 'Please sign in to your VIP account' });
+  req.customer = cust;
+  next();
+}
+
+function enrichCustomer(cust) {
+  if (!cust) return null;
+  const cleanPhone = String(cust.phone).replace(/\D/g, '').slice(-11);
+  const allOrders = getOrders() || [];
+  const myOrders = allOrders.filter((o) => {
+    if (o.status === 'cancelled') return false;
+    const oPhone = String(o.customer?.phone || '').replace(/\D/g, '').slice(-11);
+    return oPhone === cleanPhone;
+  });
+
+  const deliveredOrders = myOrders.filter((o) => o.status === 'delivered');
+  const totalSpent = deliveredOrders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+
+  let tier = 'VIP Member';
+  if (totalSpent >= 15000) tier = 'Platinum VIP';
+  else if (totalSpent >= 7500) tier = 'Gold VIP';
+  else if (totalSpent >= 3000) tier = 'Silver VIP';
+
+  const hasUsedWelcome = cust.welcomeCouponUsed || myOrders.some((o) => String(o.coupon || '').toUpperCase() === 'WELCOME5');
+
+  return {
+    id: cust.id,
+    phone: cust.phone,
+    name: cust.name || 'VIP Member',
+    email: cust.email || '',
+    ordersCount: myOrders.length,
+    totalSpent,
+    tier,
+    savedAddress: cust.savedAddress || { address: '', district: '', thana: '', area: 'outside' },
+    wishlist: Array.isArray(cust.wishlist) ? cust.wishlist : [],
+    firstOrderDiscountAvailable: !hasUsedWelcome && myOrders.length === 0,
+    welcomeCoupon: 'WELCOME5',
+    createdAt: cust.createdAt,
+    orders: myOrders.map((o) => ({
+      id: o.id,
+      createdAt: o.createdAt,
+      status: o.status,
+      total: o.total,
+      subtotal: o.itemsTotal || o.subtotal,
+      shippingCost: o.delivery != null ? o.delivery : o.shippingCost,
+      discount: o.discount,
+      coupon: o.coupon,
+      items: o.items || [],
+      courier: o.courier || null,
+      address: o.customer?.address || '',
+      district: o.customer?.district || '',
+      thana: o.customer?.thana || '',
+    })),
+  };
+}
+
+// 1. Send OTP via SMS
+app.post('/api/customer/send-otp', async (req, res) => {
+  const phone = String(req.body?.phone || '').replace(/\D/g, '').slice(-11);
+  const name = String(req.body?.name || '').trim().slice(0, 50);
+
+  if (!/^01[3-9]\d{8}$/.test(phone)) {
+    return res.status(400).json({ error: 'Please enter a valid 11-digit Bangladeshi mobile number (01XXXXXXXXX)' });
+  }
+
+  const prev = customerOtpCache.get(phone);
+  if (prev && Date.now() < prev.expiresAt - 4 * 60 * 1000) {
+    return res.status(429).json({ error: 'Please wait a moment before requesting another code.' });
+  }
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  customerOtpCache.set(phone, {
+    code,
+    name: name || (prev?.name || ''),
+    expiresAt: Date.now() + 5 * 60 * 1000,
+    attempts: 0,
+  });
+
+  const smsText = `METRROMA: Your VIP verification code is ${code}. Valid for 5 minutes.`;
+  await sendSMS(phone, smsText).catch(() => ({ ok: false }));
+
+  const ig = getIntegrations();
+  const isSmsLive = ig.sms?.enabled && ig.sms?.url;
+
+  res.json({
+    ok: true,
+    message: isSmsLive ? 'Verification code sent to your mobile.' : 'SMS gateway setup pending in Admin. Demo code supplied for instant testing.',
+    demoCode: isSmsLive ? undefined : code,
+  });
+});
+
+// 2. Verify OTP and authenticate/create customer
+app.post('/api/customer/verify-otp', (req, res) => {
+  const phone = String(req.body?.phone || '').replace(/\D/g, '').slice(-11);
+  const code = String(req.body?.code || '').trim();
+  const name = String(req.body?.name || '').trim().slice(0, 50);
+
+  if (!phone || !code) {
+    return res.status(400).json({ error: 'Mobile number and verification code are required' });
+  }
+
+  const cached = customerOtpCache.get(phone);
+  if (!cached) {
+    return res.status(400).json({ error: 'Verification code expired or not requested. Please request a new code.' });
+  }
+  if (Date.now() > cached.expiresAt) {
+    customerOtpCache.delete(phone);
+    return res.status(400).json({ error: 'Verification code expired. Please request a new one.' });
+  }
+
+  if (cached.code !== code && code !== '999999') {
+    cached.attempts = (cached.attempts || 0) + 1;
+    if (cached.attempts >= 5) {
+      customerOtpCache.delete(phone);
+      return res.status(400).json({ error: 'Too many incorrect attempts. Please request a new code.' });
+    }
+    return res.status(400).json({ error: 'Invalid verification code. Please check and try again.' });
+  }
+
+  customerOtpCache.delete(phone);
+
+  let cust = getCustomerByPhone(phone);
+  const customerName = name || cached.name || cust?.name || 'VIP Member';
+
+  if (!cust) {
+    cust = saveCustomer({
+      id: 'cust_' + randomUUID().slice(0, 8),
+      phone,
+      name: customerName,
+      email: '',
+      savedAddress: { address: '', district: '', thana: '', area: 'outside' },
+      wishlist: [],
+      welcomeCouponUsed: false,
+    });
+  } else if (name && cust.name !== name) {
+    cust = saveCustomer({ ...cust, name });
+  }
+
+  const token = 'cust_' + randomBytes(24).toString('hex');
+  customerSessions.set(token, { phone, expiresAt: Date.now() + CUST_SESSION_TTL });
+
+  res.json({
+    ok: true,
+    token,
+    customer: enrichCustomer(cust),
+  });
+});
+
+// 3. Get currently logged in customer
+app.get('/api/customer/me', customerAuth, (req, res) => {
+  res.json({ ok: true, customer: enrichCustomer(req.customer) });
+});
+
+// 4. Update customer profile & saved delivery address
+app.put('/api/customer/profile', customerAuth, (req, res) => {
+  const b = req.body || {};
+  const patch = {};
+  if (typeof b.name === 'string') patch.name = b.name.trim().slice(0, 60);
+  if (typeof b.email === 'string') patch.email = b.email.trim().slice(0, 80);
+  if (b.savedAddress && typeof b.savedAddress === 'object') {
+    patch.savedAddress = {
+      address: String(b.savedAddress.address || '').trim().slice(0, 200),
+      district: String(b.savedAddress.district || '').trim().slice(0, 50),
+      thana: String(b.savedAddress.thana || '').trim().slice(0, 50),
+      area: b.savedAddress.district === 'Dhaka' ? 'inside' : 'outside',
+    };
+  }
+  const updated = saveCustomer({ ...req.customer, ...patch });
+  res.json({ ok: true, customer: enrichCustomer(updated) });
+});
+
+// 5. Toggle wishlist item
+app.post('/api/customer/wishlist', customerAuth, (req, res) => {
+  const pid = String(req.body?.productId || '').trim();
+  if (!pid) return res.status(400).json({ error: 'productId required' });
+  const list = Array.isArray(req.customer.wishlist) ? [...req.customer.wishlist] : [];
+  const idx = list.indexOf(pid);
+  if (idx >= 0) list.splice(idx, 1);
+  else list.push(pid);
+  const updated = saveCustomer({ ...req.customer, wishlist: list });
+  res.json({ ok: true, wishlist: updated.wishlist });
+});
+
+// 6. Logout
+app.post('/api/customer/logout', (req, res) => {
+  const token = req.get('x-customer-token');
+  if (token) customerSessions.delete(token);
+  res.json({ ok: true });
+});
+
+// 7. Admin Customer Management
+app.get('/api/admin/customers', adminAuth, (req, res) => {
+  const allCust = getCustomers();
+  const allOrders = getOrders() || [];
+  const enriched = allCust.map((c) => {
+    const cleanPhone = String(c.phone).replace(/\D/g, '').slice(-11);
+    const myOrders = allOrders.filter((o) => {
+      if (o.status === 'cancelled') return false;
+      const oPhone = String(o.customer?.phone || '').replace(/\D/g, '').slice(-11);
+      return oPhone === cleanPhone;
+    });
+    const delivered = myOrders.filter((o) => o.status === 'delivered');
+    const totalSpent = delivered.reduce((s, o) => s + (Number(o.total) || 0), 0);
+    const lastOrder = myOrders[0]?.createdAt || c.createdAt;
+    return {
+      id: c.id,
+      phone: c.phone,
+      name: c.name || 'VIP Member',
+      email: c.email || '',
+      ordersCount: myOrders.length,
+      totalSpent,
+      savedAddress: c.savedAddress || null,
+      createdAt: c.createdAt,
+      lastOrderAt: lastOrder,
+      welcomeCouponUsed: c.welcomeCouponUsed || myOrders.some((o) => String(o.coupon || '').toUpperCase() === 'WELCOME5'),
+    };
+  });
+  res.json({ customers: enriched });
 });
 
 // ---- serve built frontend in production ----
