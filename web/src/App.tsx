@@ -157,18 +157,15 @@ function Header({ onSearch }: { onSearch: () => void }) {
                 <path d="M1 10.5H13" />
               </svg>
             </button>
-            <div className="tabaya-header-logo" onClick={() => nav('home')} style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            <div className="tabaya-header-logo" onClick={() => nav('home')} style={{ display: 'inline-flex', alignItems: 'center' }}>
               {logo ? (
-                <>
-                  <img
-                    src={logo}
-                    alt={storeName}
-                    style={{ maxHeight: 38, width: 'auto', objectFit: 'contain', display: 'block' }}
-                  />
-                  <span>{storeName}</span>
-                </>
+                <img
+                  src={logo}
+                  alt={storeName}
+                  style={{ maxHeight: 40, width: 'auto', objectFit: 'contain', display: 'block' }}
+                />
               ) : (
-                storeName
+                <span>{storeName}</span>
               )}
             </div>
           </div>
@@ -229,15 +226,16 @@ function Header({ onSearch }: { onSearch: () => void }) {
       {menu && <div className="tabaya-mmenu-overlay" onClick={() => setMenu(false)} />}
       <div className={'tabaya-mmenu' + (menu ? ' open' : '')}>
         <div className="tabaya-mmenu-head">
-          <span className="tabaya-header-logo" style={{ fontSize: 20, display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-            {logo && (
+          <span className="tabaya-header-logo" style={{ fontSize: 20, display: 'inline-flex', alignItems: 'center' }}>
+            {logo ? (
               <img
                 src={logo}
                 alt={storeName}
-                style={{ maxHeight: 30, width: 'auto', objectFit: 'contain', display: 'block' }}
+                style={{ maxHeight: 34, width: 'auto', objectFit: 'contain', display: 'block' }}
               />
+            ) : (
+              <span>{storeName}</span>
             )}
-            <span>{storeName}</span>
           </span>
           <button
             className="tabaya-mmenu-close"
@@ -294,18 +292,15 @@ function Footer() {
       <div className="wrap">
         <div className="tabaya-footer-grid">
           <div>
-            <div className="tabaya-footer-logo serif" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div className="tabaya-footer-logo serif" style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 12 }}>
               {logo ? (
-                <>
-                  <img
-                    src={logo}
-                    alt={name}
-                    style={{ maxHeight: 42, width: 'auto', objectFit: 'contain', display: 'block' }}
-                  />
-                  <span>{name}</span>
-                </>
+                <img
+                  src={logo}
+                  alt={name}
+                  style={{ maxHeight: 42, width: 'auto', objectFit: 'contain', display: 'block' }}
+                />
               ) : (
-                name
+                <span>{name}</span>
               )}
             </div>
             <p className="tabaya-footer-desc">
