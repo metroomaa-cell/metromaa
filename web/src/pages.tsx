@@ -6,6 +6,32 @@ import { BD_GEO } from './bd-geo';
 import { ecView, ecBeginCheckout, ecPurchase, dl } from './analytics';
 import { WhatsAppIcon } from './icons';
 
+export function formatProductDescription(raw?: string): string {
+  if (!raw || typeof raw !== 'string') return '';
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+
+  const hasBlockHtml = /<\/?(p|div|ul|ol|li|h[1-6]|table|blockquote)\b/i.test(trimmed);
+  if (!hasBlockHtml) {
+    const paras = trimmed.split(/\n{2,}/);
+    return paras
+      .map((para) => {
+        const clean = para.trim();
+        if (!clean) return '';
+        const lines = clean
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0)
+          .join('<br />');
+        return `<p style="margin: 0 0 16px 0; line-height: 1.85;">${lines}</p>`;
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  return trimmed.replace(/([^>])\n([^<])/g, '$1<br />$2');
+}
+
 function SearchSelect({ value, onChange, options, placeholder, disabled }: { value: string; onChange: (v: string) => void; options: string[]; placeholder: string; disabled?: boolean }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
@@ -1572,9 +1598,11 @@ export function ProductPage({ slug }: { slug: string }) {
 
             {/* Product Overview Summary & Jump to Full Description */}
             <div style={{ marginBottom: 22, padding: '14px 18px', background: '#f8f6f2', borderLeft: '3px solid #b48e4c', borderRight: '1px solid rgba(180, 150, 100, 0.25)', borderTop: '1px solid rgba(180, 150, 100, 0.25)', borderBottom: '1px solid rgba(180, 150, 100, 0.25)', borderRadius: 6 }}>
-              <p style={{ fontSize: 13.5, color: '#4b5563', lineHeight: 1.6, margin: '0 0 10px' }}>
-                {p.shortDesc || p.desc}
-              </p>
+              <div
+                className="product-rich-desc"
+                style={{ fontSize: 13.5, color: '#4b5563', lineHeight: 1.65, margin: '0 0 10px' }}
+                dangerouslySetInnerHTML={{ __html: formatProductDescription(p.shortDesc || p.desc) }}
+              />
               <button
                 type="button"
                 onClick={() => scrollToTab('desc')}
@@ -1809,24 +1837,30 @@ export function ProductPage({ slug }: { slug: string }) {
                   onClick={() => setActiveAcc(activeAcc === 'desc' ? '' : 'desc')}
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: '#111827' }}
                 >
-                  <span>{isSkin ? '📋 Skincare Details & Formulation' : '📋 Product Details & Fabric'}</span>
+                  <span>{isSkin ? '📋 Skincare Details & Formulation' : (isApparel ? '📋 Product Details & Fabric' : '📋 Product Details & Specifications')}</span>
                   <span>{activeAcc === 'desc' ? '−' : '+'}</span>
                 </div>
                 {activeAcc === 'desc' && (
-                  <div style={{ paddingBottom: 16, fontSize: 14, color: '#4b5563', lineHeight: 1.6 }} className="product-rich-desc">
-                    <div dangerouslySetInnerHTML={{ __html: p.longDesc || `<p>${p.desc}</p>` }} />
-                    <ul style={{ paddingLeft: 20, marginTop: 12 }}>
+                  <div style={{ paddingBottom: 16, fontSize: 14, color: '#4b5563', lineHeight: 1.75 }} className="product-rich-desc">
+                    <div dangerouslySetInnerHTML={{ __html: formatProductDescription(p.longDesc || p.desc) }} />
+                    <ul style={{ paddingLeft: 20, marginTop: 14 }}>
                       {isSkin ? (
                         <>
                           <li>Pure botanical extracts gentle on sensitive skin</li>
                           <li>Fast-absorbing lightweight texture, zero greasy residue</li>
                           <li>Dermatologist tested, paraben-free & cruelty-free</li>
                         </>
-                      ) : (
+                      ) : isApparel ? (
                         <>
                           <li>Premium breathable, luxuriously soft fabric</li>
                           <li>Resistant to color fading and wrinkling</li>
                           <li>Perfect for both everyday elegance and special occasions</li>
+                        </>
+                      ) : (
+                        <>
+                          <li>100% Authentic & Premium Quality Guaranteed</li>
+                          <li>Fast nationwide home delivery with cash on delivery</li>
+                          <li>Check parcel upon delivery before making payment</li>
                         </>
                       )}
                     </ul>
@@ -1954,8 +1988,8 @@ export function ProductPage({ slug }: { slug: string }) {
                   </h3>
                   <div
                     className="product-rich-desc"
-                    style={{ fontSize: 15, color: '#374151', lineHeight: 1.8, marginBottom: 28 }}
-                    dangerouslySetInnerHTML={{ __html: p.longDesc || `<p>${p.desc}</p>` }}
+                    style={{ fontSize: 15, color: '#374151', lineHeight: 1.85, marginBottom: 28 }}
+                    dangerouslySetInnerHTML={{ __html: formatProductDescription(p.longDesc || p.desc) }}
                   />
 
                   {/* 4 Feature Highlights Grid */}
@@ -1991,7 +2025,7 @@ export function ProductPage({ slug }: { slug: string }) {
                           </div>
                         </div>
                       </>
-                    ) : (
+                    ) : isSkin ? (
                       <>
                         <div className="tabaya-feature-card">
                           <span className="icon">🌿</span>
@@ -2012,6 +2046,99 @@ export function ProductPage({ slug }: { slug: string }) {
                           <div>
                             <h4>Factory Sealed & Fresh</h4>
                             <p>Every product is hygienically sealed directly at the lab to ensure maximum active potency upon arrival.</p>
+                          </div>
+                        </div>
+                        <div className="tabaya-feature-card">
+                          <span className="icon">🚚</span>
+                          <div>
+                            <h4>Doorstep Cash on Delivery</h4>
+                            <p>Pay cash when your parcel arrives with full right of inspection in front of the courier rider.</p>
+                          </div>
+                        </div>
+                      </>
+                    ) : p.category === 'sunglass' ? (
+                      <>
+                        <div className="tabaya-feature-card">
+                          <span className="icon">🕶️</span>
+                          <div>
+                            <h4>UV400 Polarized Eye Protection</h4>
+                            <p>100% protection against harmful UVA & UVB rays with superior anti-glare high-definition optics.</p>
+                          </div>
+                        </div>
+                        <div className="tabaya-feature-card">
+                          <span className="icon">💎</span>
+                          <div>
+                            <h4>First-Grade Durable Frame</h4>
+                            <p>Crafted with reinforced lightweight alloy and ergonomic acetate temples for all-day comfort.</p>
+                          </div>
+                        </div>
+                        <div className="tabaya-feature-card">
+                          <span className="icon">🛡️</span>
+                          <div>
+                            <h4>Protective Hard Case & Cloth</h4>
+                            <p>Every sunglass includes a protective hard case and microfiber cleaning cloth.</p>
+                          </div>
+                        </div>
+                        <div className="tabaya-feature-card">
+                          <span className="icon">🚚</span>
+                          <div>
+                            <h4>Doorstep Cash on Delivery</h4>
+                            <p>Pay cash when your parcel arrives with full right of inspection in front of the courier rider.</p>
+                          </div>
+                        </div>
+                      </>
+                    ) : p.category === 'gift' ? (
+                      <>
+                        <div className="tabaya-feature-card">
+                          <span className="icon">🎁</span>
+                          <div>
+                            <h4>Luxury Keepsake Presentation</h4>
+                            <p>Bespoke packaging, satin ribbon finish, and complimentary gift carrier bag for unforgettable surprises.</p>
+                          </div>
+                        </div>
+                        <div className="tabaya-feature-card">
+                          <span className="icon">🌹</span>
+                          <div>
+                            <h4>Long-Lasting Silk Flora</h4>
+                            <p>Artisanal scented decorative roses that remain vibrant and never fade over time.</p>
+                          </div>
+                        </div>
+                        <div className="tabaya-feature-card">
+                          <span className="icon">💌</span>
+                          <div>
+                            <h4>Complimentary Greeting Card</h4>
+                            <p>Express your heartfelt feelings with our customized greeting card included in every box.</p>
+                          </div>
+                        </div>
+                        <div className="tabaya-feature-card">
+                          <span className="icon">🚚</span>
+                          <div>
+                            <h4>Doorstep Cash on Delivery</h4>
+                            <p>Pay cash when your parcel arrives with full right of inspection in front of the courier rider.</p>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="tabaya-feature-card">
+                          <span className="icon">💎</span>
+                          <div>
+                            <h4>100% Authentic Quality Guaranteed</h4>
+                            <p>Carefully curated and strictly quality-inspected to ensure premium customer satisfaction.</p>
+                          </div>
+                        </div>
+                        <div className="tabaya-feature-card">
+                          <span className="icon">🛡️</span>
+                          <div>
+                            <h4>Secure Protective Packaging</h4>
+                            <p>Every parcel is packed with heavy-duty protection for zero damage during courier transit.</p>
+                          </div>
+                        </div>
+                        <div className="tabaya-feature-card">
+                          <span className="icon">🔄</span>
+                          <div>
+                            <h4>Easy 7-Day Exchange Policy</h4>
+                            <p>Dedicated customer support to assist with easy exchanges and hassle-free assistance.</p>
                           </div>
                         </div>
                         <div className="tabaya-feature-card">
