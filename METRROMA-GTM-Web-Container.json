@@ -6,8 +6,8 @@
     "accountId": "1",
     "containerId": "1",
     "container": {
-      "name": "METRROMA Web Container (metrroma.com)",
-      "publicId": "GTM-METRROMA",
+      "name": "www.metrroma.com",
+      "publicId": "GTM-WM964FQV",
       "usageContext": [
         "WEB"
       ]
@@ -51,7 +51,7 @@
           {
             "type": "TEMPLATE",
             "key": "value",
-            "value": ""
+            "value": "1122829254194671"
           }
         ]
       },
@@ -65,7 +65,7 @@
           {
             "type": "TEMPLATE",
             "key": "value",
-            "value": ""
+            "value": "https://sgtm.metromaa.com"
           }
         ]
       },
@@ -79,7 +79,7 @@
           {
             "type": "TEMPLATE",
             "key": "value",
-            "value": ""
+            "value": "D85DI5JC77U9GTJU2HOG"
           }
         ]
       },
@@ -93,7 +93,7 @@
           {
             "type": "TEMPLATE",
             "key": "value",
-            "value": ""
+            "value": "yr9expcr2i"
           }
         ]
       },
@@ -436,6 +436,21 @@
             "type": "LIST",
             "key": "configSettingsTable",
             "list": [
+              {
+                "type": "MAP",
+                "map": [
+                  {
+                    "type": "TEMPLATE",
+                    "key": "parameter",
+                    "value": "server_container_url"
+                  },
+                  {
+                    "type": "TEMPLATE",
+                    "key": "parameterValue",
+                    "value": "{{Constant - Server Container URL}}"
+                  }
+                ]
+              },
               {
                 "type": "MAP",
                 "map": [
