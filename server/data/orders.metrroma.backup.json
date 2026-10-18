@@ -1,0 +1,108 @@
+[
+  {
+    "id": "DOT-E6E76A4A",
+    "createdAt": "2026-10-18T13:58:00.000Z",
+    "status": "approved",
+    "payment": "cash_on_delivery",
+    "source": "facebook",
+    "landing": "love-forever",
+    "customer": {
+      "name": "Md Faisal Rabby",
+      "phone": "01827260950",
+      "address": "Dhaka",
+      "area": "inside",
+      "district": "Dhaka",
+      "thana": "",
+      "note": ""
+    },
+    "items": [
+      {
+        "id": "mm-29267",
+        "name": "“LOVE FOREVER” Gift  Box",
+        "price": 590,
+        "qty": 1,
+        "subtotal": 590,
+        "image": "/uploads/img_mvcvyjixc2dpi.webp"
+      }
+    ],
+    "itemsTotal": 590,
+    "delivery": 80,
+    "discount": 0,
+    "coupon": "",
+    "total": 670,
+    "courier": {
+      "name": "CarryBee 1",
+      "accountId": "cmv71q2ir",
+      "consignment": "",
+      "phone": "",
+      "url": "",
+      "liveStatus": "",
+      "lastSync": ""
+    },
+    "history": [
+      {
+        "status": "pending",
+        "at": "2026-10-18T13:58:00.000Z",
+        "note": "Order placed via Facebook"
+      },
+      {
+        "status": "approved",
+        "at": "2026-10-18T14:05:00.000Z",
+        "note": "Order approved"
+      }
+    ]
+  },
+  {
+    "id": "DOT-BB8E1814",
+    "createdAt": "2026-10-18T06:46:00.000Z",
+    "status": "approved",
+    "payment": "cash_on_delivery",
+    "source": "facebook",
+    "landing": "love-forever",
+    "customer": {
+      "name": "Rb sabbir",
+      "phone": "01854576468",
+      "address": "Dhaka",
+      "area": "inside",
+      "district": "Dhaka",
+      "thana": "",
+      "note": ""
+    },
+    "items": [
+      {
+        "id": "mm-29267",
+        "name": "“LOVE FOREVER” Gift  Box",
+        "price": 590,
+        "qty": 1,
+        "subtotal": 590,
+        "image": "/uploads/img_mvcvyjixc2dpi.webp"
+      }
+    ],
+    "itemsTotal": 590,
+    "delivery": 80,
+    "discount": 0,
+    "coupon": "",
+    "total": 670,
+    "courier": {
+      "name": "Steadfast Kalu",
+      "accountId": "cmv6y6i4x",
+      "consignment": "",
+      "phone": "",
+      "url": "",
+      "liveStatus": "",
+      "lastSync": ""
+    },
+    "history": [
+      {
+        "status": "pending",
+        "at": "2026-10-18T06:46:00.000Z",
+        "note": "Order placed via Facebook"
+      },
+      {
+        "status": "approved",
+        "at": "2026-10-18T07:00:00.000Z",
+        "note": "Order approved"
+      }
+    ]
+  }
+]

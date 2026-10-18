@@ -18,6 +18,7 @@ const BACKUP_CATALOG = join(DATA_DIR, 'catalog.metrroma.backup.json');
 
 const ORDERS = join(DATA_DIR, 'orders.json');
 const PERSISTENT_ORDERS = join(PERSISTENT_DIR, 'orders.json');
+const BACKUP_ORDERS = join(DATA_DIR, 'orders.metrroma.backup.json');
 
 const SETTINGS = join(DATA_DIR, 'settings.json');
 const PERSISTENT_SETTINGS = join(PERSISTENT_DIR, 'settings.json');
@@ -294,6 +295,22 @@ export function getOrders() {
             } catch (_) {}
             return b;
           }
+        }
+      }
+    } catch (_) {}
+  }
+
+  // Emergency fallback to Metrroma immutable backup if still empty
+  if (list.length === 0) {
+    try {
+      if (existsSync(BACKUP_ORDERS)) {
+        const b = JSON.parse(readFileSync(BACKUP_ORDERS, 'utf8'));
+        if (Array.isArray(b) && b.length > 0) {
+          try {
+            writeFileSync(PERSISTENT_ORDERS, JSON.stringify(b, null, 2));
+            writeFileSync(ORDERS, JSON.stringify(b, null, 2));
+          } catch (_) {}
+          return b;
         }
       }
     } catch (_) {}
