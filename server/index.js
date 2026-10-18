@@ -1722,16 +1722,17 @@ async function bookCourier(acc, o) {
   const prov = String(acc.provider || '').toLowerCase();
 
   // 1. PATHAO
-  if (prov === 'pathao' || acc.clientId && acc.username) {
+  if (prov === 'pathao' || (acc.clientId && acc.username)) {
     try {
       const token = await getPathaoToken(acc);
       const storeId = parseInt(acc.storeId || acc.apiSecret, 10);
       if (!storeId) {
         return { ok: false, error: 'Pathao Store ID is missing. Please enter your Store ID in Integrations.' };
       }
+      const cleanOrderId = String(o.id || Date.now()).replace(/^#/, '').trim();
       const body = {
         store_id: storeId,
-        merchant_order_id: o.id,
+        merchant_order_id: cleanOrderId,
         recipient_name: o.customer?.name || 'Customer',
         recipient_phone: cleanBDPhone(o.customer?.phone),
         recipient_address: o.customer?.address || 'N/A',
@@ -1776,11 +1777,16 @@ async function bookCourier(acc, o) {
     if (url.includes('portal.steadfast.com.bd')) {
       url = url.replace('portal.steadfast.com.bd', 'portal.packzy.com');
     }
+    const cleanInvoice = String(o.id || Date.now()).replace(/^#/, '').trim();
+    const rawAddr = String(o.customer?.address || '').trim();
+    const fullAddr = rawAddr.length < 10 
+      ? [rawAddr, o.customer?.district || 'Dhaka City'].filter(Boolean).join(', ') 
+      : rawAddr;
     const body = {
-      invoice: o.id,
+      invoice: cleanInvoice,
       recipient_name: o.customer?.name || 'Customer',
       recipient_phone: cleanBDPhone(o.customer?.phone),
-      recipient_address: o.customer?.address || 'N/A',
+      recipient_address: fullAddr || 'Dhaka City, Dhaka',
       cod_amount: Number(o.total || 0),
       note: o.customer?.note || 'Deliver discreetly',
     };
@@ -1815,6 +1821,9 @@ async function bookCourier(acc, o) {
       }
       const text = await r.text();
       let data; try { data = JSON.parse(text); } catch { data = {}; }
+      if (text.includes('Account is not active') || data?.message === 'Account is not active!') {
+        return { ok: false, error: 'Steadfast account is not active! Please activate your merchant account in the Steadfast courier portal.' };
+      }
       const consignment = String(data?.consignment?.consignment_id || data?.consignment?.tracking_code || data?.tracking_code || data?.consignment_id || '').trim();
       if (!r.ok || !consignment || data.status === 400 || data.status === 401) {
         return { ok: false, error: data.message || (data.errors ? JSON.stringify(data.errors) : text.slice(0, 300)) };
@@ -1835,21 +1844,90 @@ async function bookCourier(acc, o) {
     }
     const baseUrl = acc.baseUrl || (acc.environment === 'sandbox' ? 'https://sandbox.carrybee.com' : 'https://developers.carrybee.com');
     const storeId = parseInt(acc.storeId || '1', 10);
+    const cleanOrderId = String(o.id || Date.now()).replace(/^#/, '').trim();
+
+    // 3a. Resolve city_id and zone_id dynamically via CarryBee address resolution API
+    let cityId = parseInt(acc.cityId, 10) || 0;
+    let zoneId = parseInt(acc.zoneId, 10) || 0;
+
+    const rawAddr = String(o.customer?.address || '').trim();
+    const district = String(o.customer?.district || '').trim();
+    const city = String(o.customer?.city || '').trim();
+    const queryAddress = [rawAddr, district, city].filter(Boolean).join(', ') || 'Dhaka';
+
+    if (!cityId || !zoneId) {
+      try {
+        const addrRes = await fetch(`${baseUrl}/api/v2/address-details`, {
+          method: 'POST',
+          headers: {
+            'Client-ID': clientId,
+            'Client-Secret': clientSecret,
+            'Client-Context': clientContext,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({ query: queryAddress.length < 7 || queryAddress.toLowerCase() === 'dhaka' ? `${queryAddress}, Dhaka City` : queryAddress }),
+        });
+        const addrData = await addrRes.json();
+        if (addrData && !addrData.error && addrData.data?.city_id && addrData.data?.zone_id) {
+          cityId = parseInt(addrData.data.city_id, 10);
+          zoneId = parseInt(addrData.data.zone_id, 10);
+        } else if (addrRes.status === 422) {
+          const retryRes = await fetch(`${baseUrl}/api/v2/address-details`, {
+            method: 'POST',
+            headers: {
+              'Client-ID': clientId,
+              'Client-Secret': clientSecret,
+              'Client-Context': clientContext,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify({ query: `${queryAddress}, Dhaka City` }),
+          });
+          const retryData = await retryRes.json();
+          if (retryData && !retryData.error && retryData.data?.city_id && retryData.data?.zone_id) {
+            cityId = parseInt(retryData.data.city_id, 10);
+            zoneId = parseInt(retryData.data.zone_id, 10);
+          }
+        }
+      } catch (err) {
+        console.warn('[CarryBee] Address lookup warning:', err.message);
+      }
+    }
+
+    // Fallback if still unassigned: Dhaka City (city_id: 14, zone_id: 5)
+    if (!cityId || !zoneId) {
+      const lowerAll = (queryAddress + ' ' + district).toLowerCase();
+      if (lowerAll.includes('chittagong') || lowerAll.includes('chattogram')) {
+        cityId = 10; zoneId = 521;
+      } else if (lowerAll.includes('sylhet')) {
+        cityId = 62; zoneId = 542;
+      } else {
+        cityId = 14; zoneId = 5;
+      }
+    }
+
+    // Weight in grams (integer, minimum 100g, default 500g)
+    const rawWeight = Number(o.weight || 0.5);
+    const weightInGrams = rawWeight > 10 ? Math.round(rawWeight) : Math.round(rawWeight * 1000);
+    const itemWeight = Math.max(100, weightInGrams || 500);
+
     const body = {
       store_id: storeId,
-      merchant_order_id: o.id,
+      merchant_order_id: cleanOrderId,
       delivery_type: 1,
       product_type: 1,
       recipient_phone: cleanBDPhone(o.customer?.phone),
       recipient_name: o.customer?.name || 'Customer',
-      recipient_address: o.customer?.address || 'N/A',
-      city_id: parseInt(acc.cityId || '1', 10),
-      zone_id: parseInt(acc.zoneId || '1', 10),
-      item_weight: 0.5,
+      recipient_address: queryAddress.length < 10 ? `${queryAddress}, Dhaka City` : queryAddress,
+      city_id: cityId,
+      zone_id: zoneId,
+      item_weight: itemWeight,
       item_quantity: 1,
       collectable_amount: Number(o.total || 0),
       product_description: o.items?.map((i) => `${i.name} x${i.qty}`).join(', ') || 'Order Parcel',
     };
+
     try {
       const r = await fetch(`${baseUrl}/api/v2/orders`, {
         method: 'POST',
@@ -1866,7 +1944,7 @@ async function bookCourier(acc, o) {
       let data; try { data = JSON.parse(text); } catch { data = {}; }
       const consignment = String(data?.data?.order?.consignment_id || data?.data?.consignment_id || data?.consignment_id || data?.order_id || '').trim();
       if (!r.ok || !consignment || data.error) {
-        return { ok: false, error: data.message || JSON.stringify(data.errors || data) };
+        return { ok: false, error: data.message || (data.errors ? JSON.stringify(data.errors) : text.slice(0, 300)) };
       }
       return { ok: true, status: 200, consignment, trackUrl: getCourierTrackUrl(acc, consignment), body: text.slice(0, 400) };
     } catch (err) {
@@ -1883,11 +1961,12 @@ async function bookCourier(acc, o) {
     const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
     const baseUrl = acc.environment === 'sandbox' ? 'https://sandbox.redx.com.bd' : 'https://openapi.redx.com.bd';
     const url = acc.bookUrl || `${baseUrl}/v1.0.0-beta/parcel`;
+    const cleanInvoice = String(o.id || Date.now()).replace(/^#/, '').trim();
     const body = {
       customer_name: o.customer?.name || 'Customer',
       customer_phone: cleanBDPhone(o.customer?.phone),
       customer_address: o.customer?.address || 'N/A',
-      merchant_invoice_id: o.id,
+      merchant_invoice_id: cleanInvoice,
       cash_collection_amount: Number(o.total || 0),
       parcel_weight: 500,
       instruction: o.customer?.note || 'Deliver discreetly',

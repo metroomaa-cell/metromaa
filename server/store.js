@@ -260,12 +260,61 @@ export function deleteCategory(slug) {
 }
 
 export function getOrders() {
-  const list = readSafe(PERSISTENT_ORDERS, ORDERS, []);
-  return Array.isArray(list) ? list : [];
+  let list = [];
+  try {
+    if (existsSync(PERSISTENT_ORDERS)) {
+      const p = JSON.parse(readFileSync(PERSISTENT_ORDERS, 'utf8'));
+      if (Array.isArray(p) && p.length > 0) return p;
+      if (Array.isArray(p)) list = p;
+    }
+  } catch (_) {}
+
+  // Fallback to standard orders.json if persistent was empty
+  try {
+    if (existsSync(ORDERS)) {
+      const s = JSON.parse(readFileSync(ORDERS, 'utf8'));
+      if (Array.isArray(s) && s.length > list.length) {
+        try { writeFileSync(PERSISTENT_ORDERS, JSON.stringify(s, null, 2)); } catch (_) {}
+        return s;
+      }
+    }
+  } catch (_) {}
+
+  // Check backups directory for the most recent orders backup if both are empty
+  if (list.length === 0) {
+    try {
+      if (existsSync(BACKUPS_DIR)) {
+        const files = readdirSync(BACKUPS_DIR).filter((f) => f.startsWith('orders-') && f.endsWith('.json')).sort().reverse();
+        for (const f of files) {
+          const b = JSON.parse(readFileSync(join(BACKUPS_DIR, f), 'utf8'));
+          if (Array.isArray(b) && b.length > 0) {
+            try {
+              writeFileSync(PERSISTENT_ORDERS, JSON.stringify(b, null, 2));
+              writeFileSync(ORDERS, JSON.stringify(b, null, 2));
+            } catch (_) {}
+            return b;
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  return list;
 }
 
 export function saveOrders(orders) {
   if (!Array.isArray(orders)) return;
+  // Safety guard: if attempting to save empty array while existing orders existed, keep an emergency snapshot
+  if (orders.length === 0) {
+    try {
+      if (existsSync(PERSISTENT_ORDERS)) {
+        const prev = JSON.parse(readFileSync(PERSISTENT_ORDERS, 'utf8'));
+        if (Array.isArray(prev) && prev.length > 0) {
+          writeFileSync(join(BACKUPS_DIR, `pre_wipe_orders_${Date.now()}.json`), JSON.stringify(prev, null, 2));
+        }
+      }
+    } catch (_) {}
+  }
   writeSafe(PERSISTENT_ORDERS, ORDERS, orders, 'orders');
 }
 
