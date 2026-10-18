@@ -3115,15 +3115,13 @@ function OrdersAdmin() {
 
               {/* 7. Courier */}
               <div className="og-cell-courier" onClick={(e) => e.stopPropagation()} style={{ minWidth: 0 }}>
-                {o.courier && o.courier.name ? (
+                {o.courier && o.courier.name && o.courier.consignment ? (
                   <div className="courier-booked-wrap">
                     <div className="courier-booked-top">
                       <span className="courier-name">{o.courier.name}</span>
-                      {o.courier.consignment && (
-                        <span className="courier-cons mono" title="Consignment tracking code">
-                          #{o.courier.consignment}
-                        </span>
-                      )}
+                      <span className="courier-cons mono" title="Consignment tracking code">
+                        #{o.courier.consignment}
+                      </span>
                       <button
                         className="courier-sync-btn"
                         title="Sync live status from courier"

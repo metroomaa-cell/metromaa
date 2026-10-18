@@ -2,7 +2,7 @@
   {
     "id": "DOT-E6E76A4A",
     "createdAt": "2026-10-18T13:58:00.000Z",
-    "status": "approved",
+    "status": "shipped",
     "payment": "cash_on_delivery",
     "source": "facebook",
     "landing": "love-forever",
@@ -33,11 +33,12 @@
     "courier": {
       "name": "CarryBee 1",
       "accountId": "cmv71q2ir",
-      "consignment": "",
-      "phone": "",
-      "url": "",
-      "liveStatus": "",
-      "lastSync": ""
+      "consignment": "F10186FQ3DF",
+      "phone": "16773",
+      "url": "https://carrybee.com/tracking?consignment_id=F10186FQ3DF",
+      "liveStatus": "Pickup requested",
+      "riderNote": "",
+      "lastSync": "2026-10-18T18:36:13.825Z"
     },
     "history": [
       {
@@ -49,6 +50,11 @@
         "status": "approved",
         "at": "2026-10-18T14:05:00.000Z",
         "note": "Order approved"
+      },
+      {
+        "status": "shipped",
+        "at": "2026-10-18T18:36:13.825Z",
+        "note": "Booked via CarryBee #F10186FQ3DF"
       }
     ]
   },

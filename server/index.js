@@ -2079,8 +2079,9 @@ async function courierStatus(acc, consignment) {
         },
       });
       const data = await r.json();
-      const raw = data?.data?.order?.order_status || data?.data?.order_status || data?.order_status || '';
-      const riderNote = data?.data?.order?.status_reason || data?.data?.status_reason || '';
+      const d = data?.data || {};
+      const raw = String(d.transfer_status || d.order?.order_status || d.order_status || d.status || '').trim();
+      const riderNote = String(d.note || d.reason || d.status_reason || d.order?.status_reason || d.comment || '').trim();
       return { ok: r.ok, raw, mapped: mapCourierStatus(raw), riderNote };
     } catch (err) {
       return { ok: false, error: String(err.message || err) };
