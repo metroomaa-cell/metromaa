@@ -306,7 +306,9 @@ export function getOrders() {
             const newHist = (o.history || []).length;
             const prevItems = (prev.items || []).length;
             const newItems = (o.items || []).length;
-            if (newHist > prevHist || newItems > prevItems || (o.status !== 'incomplete' && prev.status === 'incomplete')) {
+            if (prev.status === 'approved' && o.status === 'shipped') {
+              // keep approved
+            } else if (newHist > prevHist || newItems > prevItems || (o.status !== 'incomplete' && prev.status === 'incomplete')) {
               map.set(o.id, { ...prev, ...o });
             }
           }

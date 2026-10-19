@@ -1,8 +1,90 @@
 [
   {
+    "id": "DOT-INC-7841",
+    "createdAt": "2026-10-19T15:15:20.000Z",
+    "status": "incomplete",
+    "draftType": "abandoned_checkout",
+    "recovered": false,
+    "payment": "cash_on_delivery",
+    "source": "landing_loveforever",
+    "landing": "love-forever",
+    "customer": {
+      "name": "তৌহিদুর রহমান",
+      "phone": "01712894562",
+      "address": "মিরপুর ১০, ঢাকা",
+      "area": "inside",
+      "district": "Dhaka",
+      "thana": "Mirpur",
+      "note": "চেকআউট ফর্ম পূরণ করেছিলেন কিন্তু কনফার্ম করেননি"
+    },
+    "items": [
+      {
+        "id": "mm-29267",
+        "name": "LOVE FOREVER Gift Box",
+        "price": 590,
+        "qty": 1,
+        "subtotal": 590,
+        "image": "/uploads/img_mvcvyjixc2dpi.webp"
+      }
+    ],
+    "itemsTotal": 590,
+    "delivery": 80,
+    "discount": 0,
+    "coupon": "",
+    "total": 670,
+    "history": [
+      {
+        "status": "incomplete",
+        "at": "2026-10-19T15:15:20.000Z",
+        "note": "Abandoned checkout lead captured"
+      }
+    ]
+  },
+  {
+    "id": "DOT-INC-9214",
+    "createdAt": "2026-10-19T14:40:10.000Z",
+    "status": "incomplete",
+    "draftType": "abandoned_checkout",
+    "recovered": false,
+    "payment": "cash_on_delivery",
+    "source": "facebook",
+    "landing": "love-forever",
+    "customer": {
+      "name": "নাঈম আহমেদ",
+      "phone": "01845920147",
+      "address": "চকবাজার, চট্টগ্রাম",
+      "area": "outside",
+      "district": "Chattogram",
+      "thana": "Chawkbazar",
+      "note": "অর্ডার সাবমিট বাটনে ক্লিক করেননি"
+    },
+    "items": [
+      {
+        "id": "mm-29267",
+        "name": "LOVE FOREVER Gift Box",
+        "price": 590,
+        "qty": 1,
+        "subtotal": 590,
+        "image": "/uploads/img_mvcvyjixc2dpi.webp"
+      }
+    ],
+    "itemsTotal": 590,
+    "delivery": 130,
+    "discount": 0,
+    "coupon": "",
+    "total": 720,
+    "history": [
+      {
+        "status": "incomplete",
+        "at": "2026-10-19T14:40:10.000Z",
+        "note": "Abandoned checkout lead captured"
+      }
+    ]
+  },
+  {
     "id": "DOT-1BB78F8F",
     "createdAt": "2026-10-19T15:32:51.383Z",
-    "status": "shipped",
+    "status": "approved",
     "payment": "cash_on_delivery",
     "source": "direct",
     "landing": "",
@@ -42,10 +124,6 @@
       {
         "status": "approved",
         "at": "2026-10-19T15:34:41.882Z"
-      },
-      {
-        "status": "shipped",
-        "at": "2026-10-19T15:37:15.688Z"
       }
     ]
   },
