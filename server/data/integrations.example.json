@@ -1,0 +1,23 @@
+{
+  "email": {
+    "enabled": false,
+    "provider": "resend",
+    "resendApiKey": "",
+    "adminEmail": "admin@example.com"
+  },
+  "sms": {
+    "enabled": false,
+    "apiKey": ""
+  },
+  "couriers": [],
+  "tracking": {
+    "fbEnabled": false,
+    "ttkEnabled": false
+  },
+  "fraud": {
+    "enabled": false,
+    "url": "https://api.bdcourier.com/courier-check",
+    "method": "POST",
+    "bdcourierApiKey": ""
+  }
+}

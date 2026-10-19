@@ -291,7 +291,7 @@
   {
     "id": "DOT-BB8E1814",
     "createdAt": "2026-10-18T06:46:00.000Z",
-    "status": "shipped",
+    "status": "approved",
     "payment": "cash_on_delivery",
     "source": "facebook",
     "landing": "love-forever",
@@ -338,10 +338,6 @@
         "status": "approved",
         "at": "2026-10-18T07:00:00.000Z",
         "note": "Order approved"
-      },
-      {
-        "status": "shipped",
-        "at": "2026-10-19T15:37:17.818Z"
       }
     ]
   }
