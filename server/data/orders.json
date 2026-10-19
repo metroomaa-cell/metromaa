@@ -2,7 +2,7 @@
   {
     "id": "DOT-1BB78F8F",
     "createdAt": "2026-10-19T15:32:51.383Z",
-    "status": "approved",
+    "status": "shipped",
     "payment": "cash_on_delivery",
     "source": "direct",
     "landing": "",
@@ -42,13 +42,17 @@
       {
         "status": "approved",
         "at": "2026-10-19T15:34:41.882Z"
+      },
+      {
+        "status": "shipped",
+        "at": "2026-10-19T15:37:15.688Z"
       }
     ]
   },
   {
     "id": "DOT-C8D4654F",
     "createdAt": "2026-10-19T15:32:51.241Z",
-    "status": "approved",
+    "status": "shipped",
     "payment": "cash_on_delivery",
     "source": "direct",
     "landing": "",
@@ -88,6 +92,10 @@
       {
         "status": "approved",
         "at": "2026-10-19T15:34:41.970Z"
+      },
+      {
+        "status": "shipped",
+        "at": "2026-10-19T15:37:13.840Z"
       }
     ],
     "adminNote": "Manual order entry (phone_call) by Owner"
@@ -95,7 +103,7 @@
   {
     "id": "DOT-6F1E7F61",
     "createdAt": "2026-10-19T15:32:51.049Z",
-    "status": "approved",
+    "status": "shipped",
     "payment": "cash_on_delivery",
     "source": "direct",
     "landing": "",
@@ -135,6 +143,10 @@
       {
         "status": "approved",
         "at": "2026-10-19T15:34:42.024Z"
+      },
+      {
+        "status": "shipped",
+        "at": "2026-10-19T15:37:11.448Z"
       }
     ],
     "adminNote": "01811908040  ( Ca"
@@ -201,7 +213,7 @@
   {
     "id": "DOT-BB8E1814",
     "createdAt": "2026-10-18T06:46:00.000Z",
-    "status": "approved",
+    "status": "shipped",
     "payment": "cash_on_delivery",
     "source": "facebook",
     "landing": "love-forever",
@@ -248,6 +260,10 @@
         "status": "approved",
         "at": "2026-10-18T07:00:00.000Z",
         "note": "Order approved"
+      },
+      {
+        "status": "shipped",
+        "at": "2026-10-19T15:37:17.818Z"
       }
     ]
   }
