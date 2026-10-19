@@ -1,12 +1,3 @@
-import makeWASocket, {
-  DisconnectReason,
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion,
-  Browsers,
-  delay
-} from '@whiskeysockets/baileys';
-import pino from 'pino';
-import QRCode from 'qrcode';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
@@ -23,7 +14,9 @@ if (!AUTH_DIR) {
     AUTH_DIR = join(__dir, 'data', 'wa_auth_info');
   }
 }
-if (!existsSync(AUTH_DIR)) mkdirSync(AUTH_DIR, { recursive: true });
+if (!existsSync(AUTH_DIR)) {
+  try { mkdirSync(AUTH_DIR, { recursive: true }); } catch (_) {}
+}
 
 let sock = null;
 let currentQrDataUrl = null;
@@ -34,10 +27,50 @@ let isConnecting = false;
 let connectedPhone = '';
 let connectionError = null;
 
+let makeWASocket = null;
+let DisconnectReason = null;
+let useMultiFileAuthState = null;
+let fetchLatestBaileysVersion = null;
+let Browsers = null;
+let pino = null;
+let QRCode = null;
+let baileysLoaded = false;
+
+async function loadBaileysModules() {
+  if (baileysLoaded && makeWASocket) return true;
+  try {
+    const baileys = await import('@whiskeysockets/baileys');
+    makeWASocket = baileys.default || baileys.makeWASocket;
+    DisconnectReason = baileys.DisconnectReason;
+    useMultiFileAuthState = baileys.useMultiFileAuthState;
+    fetchLatestBaileysVersion = baileys.fetchLatestBaileysVersion;
+    Browsers = baileys.Browsers;
+
+    const pinoPkg = await import('pino');
+    pino = pinoPkg.default || pinoPkg;
+
+    const qrPkg = await import('qrcode');
+    QRCode = qrPkg.default || qrPkg;
+
+    baileysLoaded = true;
+    return true;
+  } catch (err) {
+    connectionError = 'Baileys not installed: ' + err.message;
+    console.warn('[Baileys load warning]:', err.message);
+    return false;
+  }
+}
+
 export async function startWhatsAppSocket(forceNew = false) {
   if (sock && isConnected && !forceNew) {
     return { connected: true, phone: connectedPhone };
   }
+
+  const ok = await loadBaileysModules();
+  if (!ok) {
+    return { ok: false, error: connectionError || 'Baileys dependencies not available' };
+  }
+
   if (forceNew) {
     try {
       if (sock) {
@@ -66,7 +99,7 @@ export async function startWhatsAppSocket(forceNew = false) {
       version,
       logger: pino({ level: 'silent' }),
       auth: state,
-      browser: Browsers.ubuntu('Chrome'),
+      browser: Browsers ? Browsers.ubuntu('Chrome') : ['Ubuntu', 'Chrome', '22.04.4'],
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
       keepAliveIntervalMs: 15000,
@@ -77,7 +110,7 @@ export async function startWhatsAppSocket(forceNew = false) {
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
-      if (qr) {
+      if (qr && QRCode) {
         currentRawQr = qr;
         qrGeneratedAt = Date.now();
         try {
@@ -97,14 +130,13 @@ export async function startWhatsAppSocket(forceNew = false) {
         currentQrDataUrl = null;
         currentRawQr = null;
 
-        const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+        const isLoggedOut = DisconnectReason && statusCode === DisconnectReason.loggedOut;
         if (isLoggedOut) {
           saveWhatsAppSettings({ connected: false, phone: '', device: 'Disconnected' });
           if (existsSync(AUTH_DIR)) {
             try { rmSync(AUTH_DIR, { recursive: true, force: true }); } catch (_) {}
           }
         } else {
-          // Reconnect automatically if network blip
           setTimeout(() => {
             if (!isConnected) startWhatsAppSocket(false);
           }, 5000);
@@ -157,6 +189,7 @@ export function getWhatsAppLiveStatus() {
 
 export async function requestPairingCode(phone) {
   if (!sock) await startWhatsAppSocket(false);
+  if (!sock || !sock.requestPairingCode) throw new Error('WhatsApp socket not ready');
   const cleanPhone = String(phone).replace(/\D/g, '');
   if (!cleanPhone || cleanPhone.length < 10) throw new Error('Invalid phone number');
 
@@ -192,12 +225,8 @@ export async function sendBaileysMessage(phone, text, orderId = null, eventType 
   return { sent: true, log: logEntry };
 }
 
-// Wire real dispatcher to notification engine
 registerBaileysSender(sendBaileysMessage);
 
-// If already paired before, resume connection in background
 if (existsSync(join(AUTH_DIR, 'creds.json'))) {
-  console.log('[Baileys] Found existing credentials, auto-resuming WhatsApp session...');
   startWhatsAppSocket(false).catch((e) => console.warn('[Baileys auto-resume note]:', e?.message));
 }
-
