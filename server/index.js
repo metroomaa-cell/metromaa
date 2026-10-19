@@ -15,6 +15,17 @@ const __dir = dirname(fileURLToPath(import.meta.url));
 initStorageProtection();
 
 const app = express();
+app.disable('x-powered-by');
+
+// Security Headers Middleware
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use((err, req, res, next) => {
@@ -34,9 +45,16 @@ const ROOT_UPLOADS = join(__dir, '..', 'uploads');
 if (!existsSync(UPLOADS)) mkdirSync(UPLOADS, { recursive: true });
 if (!existsSync(PERSISTENT_UPLOADS)) mkdirSync(PERSISTENT_UPLOADS, { recursive: true });
 if (!existsSync(ROOT_UPLOADS)) mkdirSync(ROOT_UPLOADS, { recursive: true });
-app.use('/uploads', express.static(UPLOADS, { maxAge: '30d' }));
-app.use('/uploads', express.static(PERSISTENT_UPLOADS, { maxAge: '30d' }));
-app.use('/uploads', express.static(ROOT_UPLOADS, { maxAge: '30d' }));
+
+const staticUploadOptions = {
+  maxAge: '30d',
+  setHeaders: (res) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  }
+};
+app.use('/uploads', express.static(UPLOADS, staticUploadOptions));
+app.use('/uploads', express.static(PERSISTENT_UPLOADS, staticUploadOptions));
+app.use('/uploads', express.static(ROOT_UPLOADS, staticUploadOptions));
 
 const withFlags = (p) => ({ ...p, soldOut: !!p.soldOut || (p.stock != null && p.stock <= 0) });
 
@@ -797,7 +815,7 @@ function resolveAuth(req) {
   const session = sessions.get(token);
   if (!session) {
     const masterToken = process.env.ADMIN_TOKEN || 'dot_master_admin_token_2026';
-    if (token === masterToken || token === 'dot_master_admin_token_2026' || token === '074fe3a7777e1d0eb5a5fb18' || token === 'admin123') {
+    if (token === masterToken || token === 'dot_master_admin_token_2026' || token === '074fe3a7777e1d0eb5a5fb18') {
       return { role: 'owner', name: 'Owner', username: 'owner', email: getOwnerEmail(), expiresAt: Date.now() + SESSION_TTL_MS };
     }
     return null;
@@ -918,9 +936,51 @@ function renderSecurityOtpHtml({ storeName, title, subtitle, otp, userName, user
   `;
 }
 
+function getClientIp(req) {
+  const fwd = req.headers['x-forwarded-for'];
+  if (fwd) {
+    const list = String(fwd).split(',');
+    if (list.length > 0 && list[0].trim()) return list[0].trim();
+  }
+  return req.headers['x-real-ip'] || req.socket?.remoteAddress || req.ip || 'unknown';
+}
+
+// Rate limiting for admin login: max 5 failed attempts per IP within 15 minutes
+const loginRateLimit = new Map(); // ip -> { failedCount, lockedUntil }
+function checkLoginRateLimit(ip) {
+  const record = loginRateLimit.get(ip);
+  if (!record) return { allowed: true };
+  if (record.lockedUntil && Date.now() < record.lockedUntil) {
+    const minutesLeft = Math.ceil((record.lockedUntil - Date.now()) / 60000);
+    return { allowed: false, error: `Too many failed login attempts. Temporarily locked for ${minutesLeft} minute(s).` };
+  }
+  if (record.lockedUntil && Date.now() >= record.lockedUntil) {
+    loginRateLimit.delete(ip);
+    return { allowed: true };
+  }
+  return { allowed: true };
+}
+function recordLoginFailure(ip) {
+  const record = loginRateLimit.get(ip) || { failedCount: 0 };
+  record.failedCount += 1;
+  if (record.failedCount >= 5) {
+    record.lockedUntil = Date.now() + 15 * 60 * 1000; // 15 min lockout
+  }
+  loginRateLimit.set(ip, record);
+}
+function recordLoginSuccess(ip) {
+  loginRateLimit.delete(ip);
+}
+
 // 1. Login Endpoint (validates password, triggers 6-digit OTP email)
 app.post('/api/admin/login', async (req, res) => {
   if (!hasAdminAccess()) return res.status(503).json({ error: 'admin disabled: set ADMIN_TOKEN' });
+  const clientIp = getClientIp(req);
+  const rateStatus = checkLoginRateLimit(clientIp);
+  if (!rateStatus.allowed) {
+    return res.status(429).json({ error: rateStatus.error });
+  }
+
   const u = String(req.body?.username || '').trim().toLowerCase();
   const p = String(req.body?.password || '');
   
@@ -930,8 +990,13 @@ app.post('/api/admin/login', async (req, res) => {
     user = { role: 'owner', name: 'Owner', username: 'owner', email: getOwnerEmail(), allowedProducts: [] };
   } else {
     user = getUsers().find((x) => x.username === u);
-    if (!user || !checkPw(p, user)) return res.status(401).json({ error: 'Wrong username or password' });
+    if (!user || !checkPw(p, user)) {
+      recordLoginFailure(clientIp);
+      return res.status(401).json({ error: 'Wrong username or password' });
+    }
   }
+
+  recordLoginSuccess(clientIp);
 
   const ig = getIntegrations();
   const emailActive = !!(ig.email?.enabled && (ig.email?.resendApiKey || ig.email?.host));
@@ -1021,7 +1086,12 @@ app.post('/api/admin/verify-otp', (req, res) => {
     return res.status(400).json({ error: 'OTP expired. Please request a new code.' });
   }
   if (String(pending.otp).trim() !== String(otp).trim()) {
-    return res.status(400).json({ error: 'Invalid OTP code. Please check your email.' });
+    pending.attempts = (pending.attempts || 0) + 1;
+    if (pending.attempts >= 5) {
+      pendingOtps.delete(tempToken);
+      return res.status(429).json({ error: 'Too many incorrect OTP attempts. Security lock triggered. Please sign in again.' });
+    }
+    return res.status(400).json({ error: `Invalid OTP code. Please check your email. (${5 - pending.attempts} attempts remaining)` });
   }
 
   // Valid OTP! Issue 48-hour session
@@ -1468,11 +1538,10 @@ function normalizeProduct(b) {
 
 app.post('/api/upload', adminAuth, requireRole('owner', 'manager'), (req, res) => {
   const dataUrl = req.body?.dataUrl || req.body?.image || '';
-  const m = dataUrl.match(/^data:(?:image\/(png|jpe?g|webp|gif|avif|svg\+xml|x-icon|vnd\.microsoft\.icon));base64,(.+)$/i);
+  const m = dataUrl.match(/^data:(?:image\/(png|jpe?g|webp|gif|avif|x-icon|vnd\.microsoft\.icon));base64,(.+)$/i);
   if (!m) return res.status(400).json({ error: 'invalid image' });
   let ext = m[1].toLowerCase();
   if (ext === 'jpeg') ext = 'jpg';
-  else if (ext === 'svg+xml') ext = 'svg';
   else if (ext.includes('icon')) ext = 'ico';
   const buf = Buffer.from(m[2], 'base64');
   if (buf.length > 6 * 1024 * 1024) return res.status(400).json({ error: 'image too large (max 6MB)' });
@@ -3732,7 +3801,7 @@ app.post('/api/customer/verify-otp', (req, res) => {
     return res.status(400).json({ error: 'Verification code expired. Please request a new one.' });
   }
 
-  if (cached.code !== code && code !== '999999') {
+  if (cached.code !== code) {
     cached.attempts = (cached.attempts || 0) + 1;
     if (cached.attempts >= 5) {
       customerOtpCache.delete(phone);
