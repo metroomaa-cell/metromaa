@@ -1770,25 +1770,8 @@ export function ProductPage({ slug }: { slug: string }) {
                     className="pdp-order-now-btn"
                     onClick={handleDirectBuy}
                   >
-                    <span className="btn-main-text">
-                      ⚡ ORDER NOW — CASH ON DELIVERY ➔
-                    </span>
-                    <span className="btn-sub-text">
-                      👉 অর্ডার করতে এখানে ক্লিক করুন (ক্যাশ অন ডেলিভারি)
-                    </span>
+                    <span>ORDER NOW</span>
                   </button>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, margin: '2px 0 4px' }}>
-                    <div style={{ background: '#ffffff', border: '1px solid #e2dbcf', borderRadius: 4, padding: '7px 4px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#1f3147' }}>
-                      🚚 ক্যাশ অন ডেলিভারি
-                    </div>
-                    <div style={{ background: '#ffffff', border: '1px solid #e2dbcf', borderRadius: 4, padding: '7px 4px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#1f3147' }}>
-                      📦 দেখে নেওয়ার সুযোগ
-                    </div>
-                    <div style={{ background: '#ffffff', border: '1px solid #e2dbcf', borderRadius: 4, padding: '7px 4px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#1f3147' }}>
-                      ⭐ ১০০% অরিজিনাল
-                    </div>
-                  </div>
                   <button
                     className="tabaya-btn outline"
                     onClick={handleAddToCart}
@@ -2742,7 +2725,7 @@ export function ProductPage({ slug }: { slug: string }) {
             className="sticky-buy-btn"
             onClick={handleDirectBuy}
           >
-            <span>👉 ORDER NOW (ক্যাশ অন ডেলিভারি) ➔</span>
+            <span>ORDER NOW</span>
           </button>
         </div>
       )}
@@ -3180,12 +3163,7 @@ export function Checkout() {
               onClick={submit}
               style={{ marginTop: 18 }}
             >
-              <span style={{ fontSize: 13.5, fontWeight: 800, letterSpacing: '0.12em' }}>
-                {busy ? 'PROCESSING ORDER…' : `CONFIRM ORDER — ${taka(grand)} ➔`}
-              </span>
-              <span style={{ fontSize: 11.5, color: '#fef08a', fontWeight: 600, fontFamily: "'Anek Bangla', 'Hind Siliguri', sans-serif" }}>
-                অর্ডার কনফার্ম করতে ক্লিক করুন (ক্যাশ অন ডেলিভারি)
-              </span>
+              <span>{busy ? 'PROCESSING ORDER…' : `PLACE ORDER — ${taka(grand)}`}</span>
             </button>
 
             <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: '#6b645c', textAlign: 'center' }}>
