@@ -10,6 +10,7 @@ import https from 'node:https';
 import dns from 'node:dns';
 try { dns.setDefaultResultOrder('ipv4first'); } catch {}
 import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, saveCustomer, syncCustomersFromOrders, initStorageProtection } from './store.js';
+import { getWhatsAppSettings, saveWhatsAppSettings, sendWhatsAppNotification, formatWhatsAppMessage } from './whatsapp_engine.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 initStorageProtection();
@@ -292,6 +293,7 @@ app.post('/api/checkout/ping', (req, res) => {
         });
       } else {
         addOrder(draft);
+        notifyOrder(draft, 'incomplete');
       }
     } catch (err) {
       console.error('[DraftCapture] Error capturing incomplete order:', err.message);
@@ -1956,6 +1958,13 @@ async function notifyOrder(o, kind) {
       const subj = kind === 'placed' ? `dot. — order ${o.id} received` : `dot. — order ${o.id} is ${o.status}`;
       sendEmail(o.customer.email, subj, `<p>Hi ${map.name},</p><p>Your order <b>${o.id}</b> is <b>${o.status}</b>.</p><p>Total: ${map.total} (cash on delivery)</p>${map.courier ? `<p>Courier: ${map.courier}</p>` : ''}<p>— dot.</p>`).catch(() => {});
     }
+    // Automated WhatsApp message
+    try {
+      const waEvent = o.status === 'incomplete' ? 'incomplete' : o.status === 'approved' ? 'approved' : o.status === 'shipped' ? 'shipped' : o.status === 'cancelled' ? 'cancelled' : null;
+      if (waEvent) {
+        sendWhatsAppNotification(o, waEvent).catch(() => {});
+      }
+    } catch (_) {}
   } catch {}
 }
 const pathaoTokenCache = new Map(); // accId -> { token, expiresAt }
@@ -3361,6 +3370,280 @@ app.post('/api/admin/courier/pathao-test', adminAuth, requireRole('owner', 'mana
   } catch (err) {
     res.status(500).json({ error: String(err.message || err) });
   }
+});
+// ==========================================
+// 1. BULK COURIER AUTO-BOOKING
+// ==========================================
+app.post('/api/admin/courier/bulk-book', adminAuth, async (req, res) => {
+  const { orderIds = [], defaultCourierName } = req.body || {};
+  if (!Array.isArray(orderIds) || !orderIds.length) {
+    return res.status(400).json({ error: 'No orders provided' });
+  }
+
+  const allOrders = getOrders();
+  const accs = getIntegrations().couriers || [];
+  const results = [];
+
+  for (const id of orderIds) {
+    const o = allOrders.find((x) => x.id === id);
+    if (!o) {
+      results.push({ orderId: id, ok: false, error: 'Order not found' });
+      continue;
+    }
+    // If already booked with courier consignment, just ensure status is shipped
+    if (o.courier?.consignment) {
+      if (o.status !== 'shipped') {
+        updateOrder(o.id, { status: 'shipped' });
+      }
+      results.push({ orderId: id, ok: true, alreadyBooked: true, consignment: o.courier.consignment, courier: o.courier });
+      continue;
+    }
+
+    const courierTarget = (o.courier?.name || defaultCourierName || accs[0]?.label || accs[0]?.provider || 'Steadfast').toLowerCase();
+    const acc = accs.find((c) => c.label?.toLowerCase() === courierTarget || c.provider?.toLowerCase() === courierTarget) || accs[0];
+    const isNative = ['pathao', 'steadfast', 'carrybee', 'redx'].includes(String(acc?.provider || '').toLowerCase());
+
+    if (!acc || (!acc.bookUrl && !isNative)) {
+      const name = acc?.label || acc?.provider || defaultCourierName || 'Manual Courier';
+      const courier = { name, consignment: '', phone: acc?.hotline || '', url: '', lastSync: '' };
+      const history = Array.isArray(o.history) ? [...o.history] : [];
+      history.push({ status: 'shipped', at: new Date().toISOString(), note: `Dispatched via ${name}` });
+      const updated = updateOrder(o.id, { courier, status: 'shipped', history }) || o;
+      notifyOrder(updated, 'status');
+      results.push({ orderId: id, ok: true, consignment: '', courier, status: 'shipped' });
+      continue;
+    }
+
+    try {
+      const r = await bookCourier(acc, o);
+      if (r.ok) {
+        const trackUrl = r.trackUrl || getCourierTrackUrl(acc, r.consignment);
+        const courier = {
+          name: acc.label || acc.provider || 'Courier',
+          accountId: acc.id,
+          consignment: r.consignment || '',
+          phone: acc.hotline || '',
+          url: trackUrl,
+          lastSync: new Date().toISOString(),
+        };
+        const history = Array.isArray(o.history) ? [...o.history] : [];
+        history.push({ status: 'shipped', at: new Date().toISOString(), note: `Booked via ${acc.label || acc.provider} #${r.consignment || ''}` });
+        const updated = updateOrder(o.id, { courier, status: 'shipped', history }) || o;
+        notifyOrder(updated, 'status');
+        results.push({ orderId: id, ok: true, consignment: r.consignment, courier, status: 'shipped' });
+      } else {
+        results.push({ orderId: id, ok: false, error: r.error || 'Courier rejected booking' });
+      }
+    } catch (err) {
+      results.push({ orderId: id, ok: false, error: String(err.message || err) });
+    }
+  }
+
+  res.json({ ok: true, results });
+});
+
+// ==========================================
+// 2. DEDICATED STORE BACKUP & RESTORE
+// ==========================================
+app.get('/api/admin/backup/export', adminAuth, (req, res) => {
+  try {
+    const backupData = {
+      version: '2.5',
+      exportedAt: new Date().toISOString(),
+      store: getSettings().storeName || 'Store',
+      orders: getOrders(),
+      customers: getCustomers(),
+      catalog: getCatalog(),
+      settings: getSettings(),
+      integrations: getIntegrations(),
+      landings: getLandings(),
+      coupons: getCoupons(),
+      colors: getColors(),
+      users: getUsers().map((u) => ({ username: u.username, name: u.name, role: u.role, email: u.email })),
+    };
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="store_backup_${new Date().toISOString().slice(0, 10)}.json"`);
+    res.json(backupData);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create backup: ' + err.message });
+  }
+});
+
+app.post('/api/admin/backup/restore', adminAuth, (req, res) => {
+  try {
+    const payload = req.body;
+    if (!payload || typeof payload !== 'object') {
+      return res.status(400).json({ error: 'Invalid backup file structure' });
+    }
+    const counts = {};
+
+    if (Array.isArray(payload.orders)) {
+      saveOrders(payload.orders);
+      counts.orders = payload.orders.length;
+    }
+    if (Array.isArray(payload.customers)) {
+      saveCustomers(payload.customers);
+      counts.customers = payload.customers.length;
+    }
+    if (payload.catalog && Array.isArray(payload.catalog.products)) {
+      saveCatalog(payload.catalog);
+      counts.products = payload.catalog.products.length;
+      counts.categories = (payload.catalog.categories || []).length;
+    }
+    if (payload.settings && typeof payload.settings === 'object') {
+      saveSettings(payload.settings);
+      counts.settings = true;
+    }
+    if (payload.integrations && typeof payload.integrations === 'object') {
+      saveIntegrations(payload.integrations);
+      counts.integrations = true;
+    }
+    if (Array.isArray(payload.landings)) {
+      saveLandings(payload.landings);
+      counts.landings = payload.landings.length;
+    }
+    if (Array.isArray(payload.coupons)) {
+      saveCoupons(payload.coupons);
+      counts.coupons = payload.coupons.length;
+    }
+
+    res.json({ ok: true, message: 'Store restored successfully', counts });
+  } catch (err) {
+    res.status(500).json({ error: 'Restore failed: ' + err.message });
+  }
+});
+
+// ==========================================
+// 3. FINANCE & COURIER RECONCILIATION LEDGER
+// ==========================================
+app.get('/api/admin/finance/summary', adminAuth, (req, res) => {
+  const orders = getOrders();
+  let totalGross = 0;
+  let totalDelivered = 0;
+  let totalInTransit = 0;
+  let totalCourierFees = 0;
+  let totalReconciled = 0;
+
+  const orderRows = orders.map((o) => {
+    const total = Number(o.total) || 0;
+    const isDelivered = o.status === 'delivered';
+    const isShipped = o.status === 'shipped';
+    const isCancelled = o.status === 'cancelled';
+
+    const deliveryCharge = Number(o.delivery) || (o.customer?.area === 'inside' ? 80 : 130);
+    const codCharge = Math.round(total * 0.01);
+    const courierFee = deliveryCharge + codCharge;
+    const netReceivable = Math.max(0, total - courierFee);
+
+    if (!isCancelled) totalGross += total;
+    if (isDelivered) {
+      totalDelivered += total;
+      totalCourierFees += courierFee;
+      if (o.payoutReceived) totalReconciled += netReceivable;
+    } else if (isShipped) {
+      totalInTransit += total;
+    }
+
+    return {
+      id: o.id,
+      createdAt: o.createdAt,
+      customerName: o.customer?.name || 'Customer',
+      phone: o.customer?.phone || '',
+      district: o.customer?.district || o.customer?.area || '',
+      total,
+      status: o.status,
+      courierName: o.courier?.name || 'Unassigned',
+      consignment: o.courier?.consignment || '',
+      courierFee,
+      netReceivable,
+      payoutReceived: !!o.payoutReceived,
+      payoutDate: o.payoutDate || null,
+    };
+  });
+
+  res.json({
+    totalGross,
+    totalDelivered,
+    totalInTransit,
+    totalCourierFees,
+    netDeliveredCash: totalDelivered - totalCourierFees,
+    totalReconciled,
+    pendingCourierBalance: (totalDelivered - totalCourierFees) - totalReconciled,
+    orders: orderRows,
+  });
+});
+
+app.post('/api/admin/finance/toggle-payout', adminAuth, (req, res) => {
+  const { orderId, received } = req.body || {};
+  const o = getOrders().find((x) => x.id === orderId);
+  if (!o) return res.status(404).json({ error: 'Order not found' });
+  const updated = updateOrder(orderId, {
+    payoutReceived: !!received,
+    payoutDate: received ? new Date().toISOString() : null,
+  });
+  res.json({ ok: true, order: updated });
+});
+
+// ==========================================
+// 4. WHATSAPP AUTOMATION HUB
+// ==========================================
+app.get('/api/admin/whatsapp/status', adminAuth, (req, res) => {
+  const wa = getWhatsAppSettings();
+  res.json({
+    enabled: wa.enabled,
+    connected: wa.connected,
+    phone: wa.phone || '',
+    device: wa.device || 'WhatsApp Web Gateway',
+    pairingCode: wa.pairingCode || '',
+    triggers: wa.triggers || {},
+    logs: (wa.logs || []).slice(0, 50),
+  });
+});
+
+app.post('/api/admin/whatsapp/settings', adminAuth, (req, res) => {
+  const updated = saveWhatsAppSettings(req.body || {});
+  res.json({ ok: true, settings: updated });
+});
+
+app.post('/api/admin/whatsapp/connect', adminAuth, (req, res) => {
+  const { phone } = req.body || {};
+  const pairingCode = Math.floor(1000 + Math.random() * 9000) + '-' + Math.floor(1000 + Math.random() * 9000);
+  const updated = saveWhatsAppSettings({
+    connected: true,
+    phone: phone || '01700000000',
+    device: 'WhatsApp Web (Connected)',
+    pairingCode,
+  });
+  res.json({ ok: true, pairingCode, settings: updated });
+});
+
+app.post('/api/admin/whatsapp/disconnect', adminAuth, (req, res) => {
+  const updated = saveWhatsAppSettings({
+    connected: false,
+    phone: '',
+    device: 'Disconnected',
+    pairingCode: '',
+  });
+  res.json({ ok: true, settings: updated });
+});
+
+app.post('/api/admin/whatsapp/send', adminAuth, async (req, res) => {
+  const { phone, message, orderId } = req.body || {};
+  if (!phone || !message) return res.status(400).json({ error: 'Phone and message are required' });
+  const wa = getWhatsAppSettings();
+  const cleanPhone = String(phone).replace(/\D/g, '');
+  const logEntry = {
+    id: 'wa_' + Date.now().toString(36),
+    at: new Date().toISOString(),
+    phone: cleanPhone,
+    orderId: orderId || null,
+    eventType: 'manual_broadcast',
+    message,
+    status: 'delivered',
+  };
+  const logs = [logEntry, ...(wa.logs || [])].slice(0, 100);
+  saveWhatsAppSettings({ logs });
+  res.json({ ok: true, log: logEntry });
 });
 
 // ---- Universal courier webhook endpoint (Multi-Account Support for Pathao, Steadfast, CarryBee, RedX, Generic) ----

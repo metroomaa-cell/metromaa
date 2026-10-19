@@ -902,6 +902,9 @@ export function Admin() {
           {item('dashboard', I.home, 'Home')}
           {item('orders', I.orders, 'Orders', newOrders)}
           {item('scanner', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1.5"/><line x1="7" y1="12" x2="17" y2="12"/></svg>, 'QR Scanner')}
+          {item('finance', <FinanceIcon />, 'Finance & Ledger')}
+          {item('whatsapp', <WhatsAppIcon size={18} variant="official" className="ci" />, 'WhatsApp Automation')}
+          {item('backup', <BackupIcon />, 'Backup & Restore')}
           {item('customers', I.customers, 'Customers')}
           {item('products', I.products, 'Products')}
           {item('categories', I.categories, 'Categories')}
@@ -924,6 +927,9 @@ export function Admin() {
         {cur === 'dashboard' && <Dashboard onNav={setNav} />}
         {cur === 'orders' && <OrdersAdmin />}
         {cur === 'scanner' && <ScannerAdmin />}
+        {cur === 'finance' && <FinanceAdmin />}
+        {cur === 'whatsapp' && <WhatsAppAdmin />}
+        {cur === 'backup' && <BackupAdmin />}
         {cur === 'customers' && <CustomersAdmin />}
         {cur === 'products' && <ProductsAdmin />}
         {cur === 'categories' && <CategoriesAdmin />}
@@ -1549,6 +1555,18 @@ function Login({ onDone }: { onDone: () => void }) {
     </div>
   );
 }
+
+const FinanceIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci">
+    <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+  </svg>
+);
+const BackupIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+  </svg>
+);
+
 function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
   const [orders, setOrders] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -2849,7 +2867,50 @@ function OrdersAdmin() {
   const pickedIds = Object.keys(picked).filter((k) => picked[k]);
   const allChecked = paged.length > 0 && paged.every((o) => picked[o.id]);
   const toggleAll = () => { const n = { ...picked }; if (allChecked) paged.forEach((o) => delete n[o.id]); else paged.forEach((o) => (n[o.id] = true)); setPicked(n); };
-  const bulk = async (status: string) => { if (!pickedIds.length) return; await Promise.all(pickedIds.map((id) => aFetch('/orders/' + id, { method: 'PATCH', body: JSON.stringify({ status }) }))); setPicked({}); load(); };
+  const bulkBookCouriers = async () => {
+    if (!pickedIds.length) return;
+    setSyncingAll(true);
+    try {
+      const res = await aFetch('/admin/courier/bulk-book', {
+        method: 'POST',
+        body: JSON.stringify({ orderIds: pickedIds }),
+      }).then((r) => r.json());
+      if (res.ok) {
+        const successes = (res.results || []).filter((x: any) => x.ok).length;
+        setToast(`${successes} order(s) booked & shipped with courier!`);
+        setTimeout(() => setToast(''), 4000);
+        setPicked({});
+        load();
+      } else {
+        alert('Bulk booking error: ' + (res.error || 'Failed'));
+      }
+    } catch (e: any) {
+      alert('Error: ' + e.message);
+    } finally {
+      setSyncingAll(false);
+    }
+  };
+
+  const bulkDeleteOrders = async () => {
+    if (!pickedIds.length) return;
+    if (!confirm(`Are you sure you want to delete ${pickedIds.length} selected order(s)? This cannot be undone.`)) return;
+    await Promise.all(pickedIds.map((id) => aFetch('/orders/' + id, { method: 'DELETE' })));
+    setPicked({});
+    setToast(`${pickedIds.length} order(s) deleted`);
+    setTimeout(() => setToast(''), 3000);
+    load();
+  };
+
+  const bulk = async (status: string) => {
+    if (!pickedIds.length) return;
+    if (status === 'shipped') {
+      await bulkBookCouriers();
+      return;
+    }
+    await Promise.all(pickedIds.map((id) => aFetch('/orders/' + id, { method: 'PATCH', body: JSON.stringify({ status }) })));
+    setPicked({});
+    load();
+  };
   const bulkCourier = async (name: string) => {
     if (!pickedIds.length || !name) return;
     await Promise.all(pickedIds.map((id) => { const o = (Array.isArray(orders) ? orders : []).find((x) => x.id === id); const courier = { ...(o?.courier || {}), name }; return aFetch('/orders/' + id, { method: 'PATCH', body: JSON.stringify({ courier }) }); }));
@@ -2919,6 +2980,14 @@ function OrdersAdmin() {
       {pickedIds.length > 0 && (
         <div className="sa-bulk">
           <span>{pickedIds.length} selected</span>
+          <button
+            type="button"
+            onClick={bulkBookCouriers}
+            disabled={syncingAll}
+            style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#fff', fontWeight: 700, border: 'none', padding: '6px 14px', borderRadius: 8, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            🚚 Bulk Ship &amp; Book Courier
+          </button>
           <select className="bulksel" value="" onChange={(e) => { if (e.target.value) bulk(e.target.value); }}>
             <option value="">Change status…</option>
             {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -3188,16 +3257,35 @@ function OrdersAdmin() {
               {/* 9. Actions */}
               <div className="og-cell-acts rowacts" onClick={(e) => e.stopPropagation()}>
                 {o.status === 'incomplete' && (
-                  <button
-                    className="eye-btn"
-                    title="1-Click Confirm (Convert to Confirmed Order)"
-                    style={{ color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.12)' }}
-                    onClick={() => quickStatus(o.id, 'confirmed')}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 14, height: 14 }}>
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  </button>
+                  <>
+                    <button
+                      className="eye-btn"
+                      title="1-Click Confirm (Convert to Confirmed Order)"
+                      style={{ color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.12)' }}
+                      onClick={() => quickStatus(o.id, 'confirmed')}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 14, height: 14 }}>
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </button>
+                    <button
+                      className="eye-btn"
+                      title="Delete Incomplete Lead"
+                      style={{ color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.4)', background: 'rgba(239, 68, 68, 0.12)' }}
+                      onClick={async () => {
+                        if (confirm(`Delete incomplete lead for "${o.customer?.name || o.customer?.phone || o.id}"?`)) {
+                          await aFetch('/orders/' + o.id, { method: 'DELETE' });
+                          setToast('Incomplete lead deleted');
+                          setTimeout(() => setToast(''), 3000);
+                          load(true);
+                        }
+                      }}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 14, height: 14 }}>
+                        <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
+                  </>
                 )}
                 <button className="eye-btn" title="View order details" onClick={() => setSel(o)}>
                   <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M1 9s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z" /><circle cx="9" cy="9" r="2.4" /></svg>
@@ -7994,6 +8082,14 @@ function IntegrationsAdmin() {
   const [fraudSaved, setFraudSaved] = useState(false);
   const [bdTestLoading, setBdTestLoading] = useState(false);
   const [bdTestResult, setBdTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [openSec, setOpenSec] = useState<Record<string, boolean>>({
+    couriers: true,
+    tracking: false,
+    fraud: false,
+    email: false,
+    sms: false,
+  });
+  const toggleSec = (k: string) => setOpenSec((p) => ({ ...p, [k]: !p[k] }));
 
   useEffect(() => { aFetch('/admin/integrations').then((r) => r.json()).then(setIg).catch(() => {}); }, []);
 
@@ -8243,9 +8339,26 @@ function IntegrationsAdmin() {
       <div className="sa-top"><h1>Integrations</h1><button className="sa-btn" disabled={busy} onClick={save}>{busy ? 'Saving…' : saved ? 'Saved ✓' : 'Save all'}</button></div>
       {msg && <div className="sa-card" style={{ padding: '10px 16px', marginBottom: 14 }}>{msg}</div>}
 
-      <div className="sa-card" style={{ padding: 22, marginBottom: 16 }}>
+      <div className="sa-card" style={{ marginBottom: 16, overflow: 'hidden' }}>
+        <div onClick={() => toggleSec('email')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', cursor: 'pointer', userSelect: 'none', background: openSec.email ? 'rgba(255,255,255,0.03)' : 'transparent', borderBottom: openSec.email ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>✉️</span>
+            <div>
+              <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: '#f8fafc' }}>Email Integration &amp; 2FA Security (Resend / SMTP)</h2>
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>Admin 2FA OTPs, password reset &amp; customer order receipts</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 11, background: ig.email.enabled ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)', color: ig.email.enabled ? '#4ade80' : '#94a3b8', padding: '2px 8px', borderRadius: 999, fontWeight: 600 }}>
+              {ig.email.enabled ? 'Enabled' : 'Disabled'}
+            </span>
+            <span style={{ transform: openSec.email ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform .2s', color: '#94a3b8' }}>▼</span>
+          </div>
+        </div>
+        {openSec.email && (
+        <div style={{ padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600 }}>Email Integration &amp; 2FA (Resend / SMTP)</h2>
+          <b style={{ fontSize: 14 }}>Email Notification Status</b>
           <label className="sa-chk"><input type="checkbox" checked={!!ig.email.enabled} onChange={(e) => setEmail('enabled', e.target.checked)} /> Enabled</label>
         </div>
         <p className="dim" style={{ fontSize: 13, marginBottom: 14 }}>Used for <b>2FA Login OTPs</b>, <b>Password Resets</b>, <b>Staff Onboarding Credentials</b>, and Customer Order Notifications.</p>
@@ -8271,10 +8384,29 @@ function IntegrationsAdmin() {
           )}
         </div>
         <button className="sa-btn ghost sa-mini" style={{ marginTop: 12 }} onClick={testEmail}>Send test email</button>
+        </div>
+        )}
       </div>
-      <div className="sa-card" style={{ padding: 22, marginBottom: 16 }}>
+      <div className="sa-card" style={{ marginBottom: 16, overflow: 'hidden' }}>
+        <div onClick={() => toggleSec('sms')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', cursor: 'pointer', userSelect: 'none', background: openSec.sms ? 'rgba(255,255,255,0.03)' : 'transparent', borderBottom: openSec.sms ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>📱</span>
+            <div>
+              <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: '#f8fafc' }}>Bulk SMS Gateways (HTTP API)</h2>
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>Order placed and status update SMS (BulkSMSBD, Alpha, Mimsms)</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 11, background: ig.sms.enabled ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)', color: ig.sms.enabled ? '#4ade80' : '#94a3b8', padding: '2px 8px', borderRadius: 999, fontWeight: 600 }}>
+              {ig.sms.enabled ? 'Enabled' : 'Disabled'}
+            </span>
+            <span style={{ transform: openSec.sms ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform .2s', color: '#94a3b8' }}>▼</span>
+          </div>
+        </div>
+        {openSec.sms && (
+        <div style={{ padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600 }}>Bulk SMS (generic HTTP)</h2>
+          <b style={{ fontSize: 14 }}>SMS Gateway Status</b>
           <label className="sa-chk"><input type="checkbox" checked={!!ig.sms.enabled} onChange={(e) => setSms('enabled', e.target.checked)} /> Enabled</label>
         </div>
         <p className="dim" style={{ fontSize: 13, marginBottom: 12 }}>Paste your provider's send URL. Use <b>{'{phone}'}</b>, <b>{'{msg}'}</b>, <b>{'{apiKey}'}</b>, <b>{'{senderId}'}</b> as placeholders — works with any BD provider (BulkSMSBD, Alpha, Mimsms…).</p>
@@ -8288,10 +8420,29 @@ function IntegrationsAdmin() {
         </div>
         <p className="dim" style={{ fontSize: 12, margin: '8px 0 0' }}>Message placeholders: {'{id} {total} {status} {name} {courier} {track}'}</p>
         <button className="sa-btn ghost sa-mini" style={{ marginTop: 12 }} onClick={testSms}>Send test SMS</button>
+        </div>
+        )}
       </div>
 
-      <div className="sa-card" style={{ padding: 22, marginBottom: 16 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Server-side tracking (Conversions API)</h2>
+      <div className="sa-card" style={{ marginBottom: 16, overflow: 'hidden' }}>
+        <div onClick={() => toggleSec('tracking')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', cursor: 'pointer', userSelect: 'none', background: openSec.tracking ? 'rgba(255,255,255,0.03)' : 'transparent', borderBottom: openSec.tracking ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>🎯</span>
+            <div>
+              <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: '#f8fafc' }}>Marketing &amp; Pixels (Meta CAPI &amp; TikTok Events)</h2>
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>Server-side purchase tracking &amp; Event ID browser deduplication</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 11, background: tr.fbEnabled ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)', color: tr.fbEnabled ? '#4ade80' : '#94a3b8', padding: '2px 8px', borderRadius: 999, fontWeight: 600 }}>
+              {tr.fbEnabled ? 'Active' : 'Not Active'}
+            </span>
+            <span style={{ transform: openSec.tracking ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform .2s', color: '#94a3b8' }}>▼</span>
+          </div>
+        </div>
+        {openSec.tracking && (
+        <div style={{ padding: 20 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Server-side tracking (Conversions API)</h2>
         <p className="dim" style={{ fontSize: 13, marginBottom: 14 }}>Fires a server-side <b>Purchase</b> straight to Meta &amp; TikTok on every order (browser can't block it). Shares the order id as <b>event_id</b> so it de-duplicates with the browser pixel in GTM.</p>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <b style={{ fontSize: 14 }}>Facebook (Meta) CAPI</b>
@@ -8311,9 +8462,28 @@ function IntegrationsAdmin() {
           <label>Access token<input type="password" value={tr.ttkToken || ''} onChange={(e) => setTrack('ttkToken', e.target.value)} placeholder={tr.hasTtkToken ? 'saved — leave to keep' : ''} /></label>
         </div>
         <button className="sa-btn ghost sa-mini" style={{ marginTop: 14 }} onClick={testTracking}>Send test conversion</button>
+        </div>
+        )}
       </div>
 
-      <div className="sa-card" style={{ padding: 22, marginBottom: 16 }}>
+      <div className="sa-card" style={{ marginBottom: 16, overflow: 'hidden' }}>
+        <div onClick={() => toggleSec('fraud')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', cursor: 'pointer', userSelect: 'none', background: openSec.fraud ? 'rgba(255,255,255,0.03)' : 'transparent', borderBottom: openSec.fraud ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>🛡️</span>
+            <div>
+              <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: '#f8fafc' }}>Multi-Courier Fraud &amp; Delivery History Checker</h2>
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>BD Courier &amp; Steadfast historical delivery success rate detection</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 11, background: fr.enabled ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)', color: fr.enabled ? '#4ade80' : '#94a3b8', padding: '2px 8px', borderRadius: 999, fontWeight: 600 }}>
+              {fr.enabled ? 'Active' : 'Off'}
+            </span>
+            <span style={{ transform: openSec.fraud ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform .2s', color: '#94a3b8' }}>▼</span>
+          </div>
+        </div>
+        {openSec.fraud && (
+        <div style={{ padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 10 }}>
           <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Multi-Courier Fraud &amp; Success Checker</h2>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -8431,11 +8601,30 @@ function IntegrationsAdmin() {
             </div>
           )}
         </div>
+        </div>
+        )}
       </div>
 
-      <div className="sa-card" style={{ padding: 22 }}>
+      <div className="sa-card" style={{ marginBottom: 16, overflow: 'hidden' }}>
+        <div onClick={() => toggleSec('couriers')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', cursor: 'pointer', userSelect: 'none', background: openSec.couriers ? 'rgba(255,255,255,0.03)' : 'transparent', borderBottom: openSec.couriers ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>📦</span>
+            <div>
+              <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: '#f8fafc' }}>Courier Integrations (Steadfast, CarryBee, Pathao, eCourier)</h2>
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>{(ig.couriers || []).length} connected courier accounts with 1-click booking</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 11, background: (ig.couriers || []).some((c: any) => c.enabled) ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)', color: (ig.couriers || []).some((c: any) => c.enabled) ? '#4ade80' : '#94a3b8', padding: '2px 8px', borderRadius: 999, fontWeight: 600 }}>
+              {(ig.couriers || []).some((c: any) => c.enabled) ? 'Active' : 'None'}
+            </span>
+            <span style={{ transform: openSec.couriers ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform .2s', color: '#94a3b8' }}>▼</span>
+          </div>
+        </div>
+        {openSec.couriers && (
+        <div style={{ padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 10 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Couriers</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Connected Couriers</h2>
           <div className="sa-rightctl" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             {['Pathao', 'Steadfast', 'CarryBee', 'RedX', 'Custom'].map((p) => <button key={p} className="sa-btn ghost sa-mini" onClick={() => addCourier(p)}>+ {p}</button>)}
             <button className="sa-btn primary sa-mini" disabled={busy} onClick={save} style={{ background: '#10b981', borderColor: '#059669', color: '#fff' }}>
@@ -8861,6 +9050,777 @@ function IntegrationsAdmin() {
         ))}
 
         <p className="dim" style={{ fontSize: 12, marginTop: 10 }}>Booking placeholders: {'{name} {phone} {address} {amount} {invoice} {items} {note} {apiKey} {apiSecret}'}. One-click booking lives on each order (Courier → Book).</p>
+        </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+
+// ==========================================
+// 1. FINANCE & COURIER RECONCILIATION LEDGER
+// ==========================================
+function FinanceAdmin() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [courierFilter, setCourierFilter] = useState('all');
+  const [payoutFilter, setPayoutFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [toast, setToast] = useState('');
+
+  const load = () => {
+    setLoading(true);
+    aFetch('/admin/finance/summary')
+      .then((r) => r.json())
+      .then((d) => {
+        setData(d);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const togglePayout = async (orderId: string, currentStatus: boolean) => {
+    try {
+      await aFetch('/admin/finance/toggle-payout', {
+        method: 'POST',
+        body: JSON.stringify({ orderId, received: !currentStatus })
+      });
+      setToast(`Order #${orderId} marked as ${!currentStatus ? 'Paid' : 'Pending'}`);
+      setTimeout(() => setToast(''), 3000);
+      load();
+    } catch {}
+  };
+
+  const filteredOrders = useMemo(() => {
+    if (!data?.orders) return [];
+    return data.orders.filter((o: any) => {
+      if (courierFilter !== 'all' && (o.courierName || '').toLowerCase() !== courierFilter.toLowerCase()) return false;
+      if (payoutFilter === 'received' && !o.payoutReceived) return false;
+      if (payoutFilter === 'pending' && o.payoutReceived) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        return (
+          o.id.toLowerCase().includes(q) ||
+          (o.customerName || '').toLowerCase().includes(q) ||
+          (o.phone || '').includes(q) ||
+          (o.consignment || '').toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [data, courierFilter, payoutFilter, search]);
+
+  const exportFinanceCSV = () => {
+    if (!filteredOrders.length) return;
+    const header = ['Order ID', 'Date', 'Customer', 'Phone', 'District', 'Status', 'Courier', 'Consignment', 'COD Total', 'Courier Fee', 'Net Receivable', 'Payout Status'];
+    const rows = filteredOrders.map((o: any) => [
+      o.id,
+      new Date(o.createdAt).toLocaleDateString(),
+      `"${(o.customerName || '').replace(/"/g, '""')}"`,
+      o.phone,
+      `"${(o.district || '').replace(/"/g, '""')}"`,
+      o.status,
+      o.courierName,
+      o.consignment,
+      o.total,
+      o.courierFee,
+      o.netReceivable,
+      o.payoutReceived ? 'Paid' : 'Pending'
+    ]);
+    const csv = [header.join(','), ...rows.map((r: any) => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `courier_finance_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (loading && !data) {
+    return <div className="sa-card" style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Loading Finance &amp; Ledger Data…</div>;
+  }
+
+  const s = data || {};
+
+  return (
+    <>
+      <div className="sa-top">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h1>Finance &amp; Courier Ledger</h1>
+          {toast && (
+            <span style={{ fontSize: 12, background: '#10b981', color: '#fff', padding: '4px 10px', borderRadius: 6, fontWeight: 600 }}>
+              ✓ {toast}
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="sa-btn ghost" onClick={load}>🔄 Refresh Ledger</button>
+          <button className="sa-btn" onClick={exportFinanceCSV}>📥 Export Statement (CSV)</button>
+        </div>
+      </div>
+
+      {/* KPI Cards Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, marginBottom: 20 }}>
+        <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #38bdf8' }}>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>মোট ডেলিভারি COD</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc', marginTop: 4 }}>৳{(s.totalDelivered || 0).toLocaleString()}</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>কাস্টমার থেকে কুরিয়ারের কাছে জমা</div>
+        </div>
+
+        <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #f43f5e' }}>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>কুরিয়ার চার্জ ও COD ফি</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#f43f5e', marginTop: 4 }}>-৳{(s.totalCourierFees || 0).toLocaleString()}</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>ডেলিভারি ফি + ১% COD চার্জ</div>
+        </div>
+
+        <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #10b981' }}>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>প্রাপ্য নিট টাকা (Net Receivable)</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#10b981', marginTop: 4 }}>৳{(s.netDeliveredCash || 0).toLocaleString()}</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>চার্জ বাদে আপনার প্রাপ্য</div>
+        </div>
+
+        <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #eab308' }}>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>কুরিয়ারে বকেয়া (Pending Cash)</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#eab308', marginTop: 4 }}>৳{(s.pendingCourierBalance || 0).toLocaleString()}</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>যা এখনও কুরিয়ার দেয়নি</div>
+        </div>
+
+        <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #a855f7' }}>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>রিসিভড পেমেন্ট (Reconciled)</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#a855f7', marginTop: 4 }}>৳{(s.totalReconciled || 0).toLocaleString()}</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>ব্যাংক/বিকাশে জমা পাওয়া গেছে</div>
+        </div>
+      </div>
+
+      {/* Filters Bar */}
+      <div className="sa-card" style={{ padding: '14px 18px', marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          className="sa-search"
+          style={{ maxWidth: 280 }}
+          placeholder="Search ID, customer, consignment…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select className="sa-mini" value={courierFilter} onChange={(e) => setCourierFilter(e.target.value)}>
+          <option value="all">All Couriers</option>
+          <option value="steadfast">Steadfast</option>
+          <option value="carrybee">CarryBee</option>
+          <option value="pathao">Pathao</option>
+          <option value="ecourier">eCourier</option>
+        </select>
+        <select className="sa-mini" value={payoutFilter} onChange={(e) => setPayoutFilter(e.target.value)}>
+          <option value="all">All Payout Statuses</option>
+          <option value="pending">⏳ Pending Payout Only</option>
+          <option value="received">✓ Paid Out / Received Only</option>
+        </select>
+        <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 'auto' }}>
+          Showing <b>{filteredOrders.length}</b> parcel(s)
+        </span>
+      </div>
+
+      {/* Ledger Table */}
+      <div className="sa-card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.08)', color: '#94a3b8', fontSize: 12 }}>
+                <th style={{ padding: '12px 16px' }}>Order &amp; Date</th>
+                <th style={{ padding: '12px 16px' }}>Customer</th>
+                <th style={{ padding: '12px 16px' }}>Courier &amp; Tracking</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right' }}>COD Bill</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right' }}>Est. Fee</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right' }}>Net Receivable</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center' }}>Payout Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>
+                    No matching shipment records found in ledger.
+                  </td>
+                </tr>
+              ) : (
+                filteredOrders.map((o: any) => (
+                  <tr key={o.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ fontWeight: 700, color: '#f8fafc' }}>{o.id}</div>
+                      <div style={{ fontSize: 11, color: '#64748b' }}>{new Date(o.createdAt).toLocaleDateString()}</div>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ fontWeight: 600, color: '#e2e8f0' }}>{o.customerName}</div>
+                      <div style={{ fontSize: 11, color: '#94a3b8' }}>{o.phone} · {o.district}</div>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <span style={{ fontSize: 11, background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: 4, color: '#cbd5e1', fontWeight: 600 }}>
+                        {o.courierName}
+                      </span>
+                      {o.consignment && (
+                        <div style={{ fontSize: 11, color: '#38bdf8', marginTop: 2, fontFamily: 'monospace' }}>
+                          #{o.consignment}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#f8fafc' }}>
+                      ৳{o.total}
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', color: '#f43f5e', fontSize: 12 }}>
+                      -৳{o.courierFee}
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#10b981' }}>
+                      ৳{o.netReceivable}
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => togglePayout(o.id, o.payoutReceived)}
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '5px 12px',
+                          borderRadius: 20,
+                          cursor: 'pointer',
+                          border: o.payoutReceived ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(234, 179, 8, 0.4)',
+                          background: o.payoutReceived ? 'rgba(16, 185, 129, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+                          color: o.payoutReceived ? '#34d399' : '#facc15',
+                        }}
+                      >
+                        {o.payoutReceived ? '✓ Received' : '⏳ Mark Received'}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ==========================================
+// 2. WHATSAPP AUTOMATION HUB
+// ==========================================
+function WhatsAppAdmin() {
+  const [status, setStatus] = useState<any>({
+    enabled: true,
+    connected: false,
+    phone: '',
+    device: 'WhatsApp Web',
+    triggers: {},
+    logs: [],
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState('');
+  const [manualPhone, setManualPhone] = useState('');
+  const [broadcastMsg, setBroadcastMsg] = useState('');
+  const [sendingMsg, setSendingMsg] = useState(false);
+  const [showPairModal, setShowPairModal] = useState(false);
+  const [pairingPhoneInput, setPairingPhoneInput] = useState('');
+
+  const load = () => {
+    setLoading(true);
+    aFetch('/admin/whatsapp/status')
+      .then((r) => r.json())
+      .then((d) => {
+        setStatus(d);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const saveTriggers = async (triggersPatch: any) => {
+    setSaving(true);
+    try {
+      const res = await aFetch('/admin/whatsapp/settings', {
+        method: 'POST',
+        body: JSON.stringify({ triggers: triggersPatch })
+      }).then(r => r.json());
+      if (res.ok) {
+        setStatus((prev: any) => ({ ...prev, triggers: res.settings.triggers }));
+        setToast('WhatsApp message templates saved!');
+        setTimeout(() => setToast(''), 3000);
+      }
+    } catch {}
+    finally { setSaving(false); }
+  };
+
+  const toggleTrigger = (key: string) => {
+    const current = status.triggers?.[key] || {};
+    const updated = {
+      ...status.triggers,
+      [key]: { ...current, enabled: !current.enabled }
+    };
+    saveTriggers(updated);
+  };
+
+  const updateTemplate = (key: string, template: string) => {
+    const current = status.triggers?.[key] || {};
+    setStatus((prev: any) => ({
+      ...prev,
+      triggers: {
+        ...prev.triggers,
+        [key]: { ...current, template }
+      }
+    }));
+  };
+
+  const handleConnect = async () => {
+    if (!pairingPhoneInput.trim()) {
+      alert('অনুগ্রহ করে আপনার ব্যবসার হোয়াটসঅ্যাপ নাম্বারটি লিখুন');
+      return;
+    }
+    const res = await aFetch('/admin/whatsapp/connect', {
+      method: 'POST',
+      body: JSON.stringify({ phone: pairingPhoneInput.trim() })
+    }).then(r => r.json());
+    if (res.ok) {
+      setStatus(res.settings);
+      setShowPairModal(false);
+      setToast('WhatsApp Connected! Automated messaging active.');
+      setTimeout(() => setToast(''), 3000);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!confirm('Are you sure you want to disconnect WhatsApp?')) return;
+    const res = await aFetch('/admin/whatsapp/disconnect', { method: 'POST' }).then(r => r.json());
+    if (res.ok) {
+      setStatus(res.settings);
+      setToast('WhatsApp Disconnected.');
+      setTimeout(() => setToast(''), 3000);
+    }
+  };
+
+  const sendDirectMessage = async () => {
+    if (!manualPhone || !broadcastMsg) {
+      alert('Phone number and message text are required');
+      return;
+    }
+    setSendingMsg(true);
+    try {
+      const res = await aFetch('/admin/whatsapp/send', {
+        method: 'POST',
+        body: JSON.stringify({ phone: manualPhone, message: broadcastMsg })
+      }).then(r => r.json());
+      if (res.ok) {
+        setToast('Message dispatched!');
+        setBroadcastMsg('');
+        setTimeout(() => setToast(''), 3000);
+        load();
+      }
+    } catch {}
+    finally { setSendingMsg(false); }
+  };
+
+  const triggers = status.triggers || {};
+
+  return (
+    <>
+      <div className="sa-top">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h1>WhatsApp Automation Hub</h1>
+          {status.connected ? (
+            <span style={{ fontSize: 11, background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', padding: '3px 8px', borderRadius: 999, border: '1px solid rgba(34, 197, 94, 0.3)', fontWeight: 600 }}>
+              ● Connected: {status.phone}
+            </span>
+          ) : (
+            <span style={{ fontSize: 11, background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', padding: '3px 8px', borderRadius: 999, border: '1px solid rgba(239, 68, 68, 0.3)', fontWeight: 600 }}>
+              ○ Disconnected
+            </span>
+          )}
+          {toast && (
+            <span style={{ fontSize: 12, background: '#10b981', color: '#fff', padding: '4px 10px', borderRadius: 6, fontWeight: 600 }}>
+              ✓ {toast}
+            </span>
+          )}
+        </div>
+        <div>
+          {status.connected ? (
+            <button className="sa-btn ghost danger" onClick={handleDisconnect}>Disconnect WhatsApp</button>
+          ) : (
+            <button className="sa-btn" onClick={() => setShowPairModal(true)}>🔗 Link WhatsApp Device (QR)</button>
+          )}
+        </div>
+      </div>
+
+      {/* Connection Card */}
+      <div className="sa-card" style={{ padding: 20, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+        <div>
+          <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#f8fafc' }}>
+            📱 WhatsApp Web Live Gateway
+          </h2>
+          <p className="dim" style={{ fontSize: 13, margin: '4px 0 0' }}>
+            {status.connected
+              ? `Active session linked to phone: ${status.phone || 'Business Account'} · Auto-sending notifications.`
+              : 'Link your business WhatsApp to automatically send order notifications and recover abandoned leads.'}
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            className="sa-btn ghost sa-mini"
+            onClick={() => {
+              const testPhone = prompt('Enter your phone number to test automated WhatsApp delivery:', status.phone || '017');
+              if (testPhone) {
+                window.open(`https://wa.me/88${testPhone.replace(/\D/g, '')}?text=${encodeURIComponent('Hello! Your WhatsApp Automation test message from store.')}`, '_blank');
+              }
+            }}
+          >
+            💬 Open Test Chat
+          </button>
+        </div>
+      </div>
+
+      {/* 4 Automated Trigger Rules */}
+      <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: '#f8fafc' }}>
+        ⚡ Automated Customer Notifications
+      </h2>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16, marginBottom: 24 }}>
+        {/* 1. Incomplete Order Lead */}
+        <div className="sa-card" style={{ padding: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div>
+              <b style={{ fontSize: 14, color: '#f8fafc' }}>1. Incomplete Order Recovery</b>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>চেকআউট ফর্ম পূরণ করে বের হয়ে গেলে অটো রিকভারি মেসেজ</div>
+            </div>
+            <label className="sa-chk">
+              <input type="checkbox" checked={!!triggers.incomplete?.enabled} onChange={() => toggleTrigger('incomplete')} />
+              <span>{triggers.incomplete?.enabled ? 'Active' : 'Off'}</span>
+            </label>
+          </div>
+          <textarea
+            style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
+            value={triggers.incomplete?.template || ''}
+            onChange={(e) => updateTemplate('incomplete', e.target.value)}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+            <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {store} {items} {total}'}</span>
+            <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
+          </div>
+        </div>
+
+        {/* 2. Order Approved */}
+        <div className="sa-card" style={{ padding: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div>
+              <b style={{ fontSize: 14, color: '#f8fafc' }}>2. Order Approved Confirmation</b>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>অর্ডার কনফার্ম বা অ্যাপ্রুভ করলে সাথে সাথে মেসেজ</div>
+            </div>
+            <label className="sa-chk">
+              <input type="checkbox" checked={!!triggers.approved?.enabled} onChange={() => toggleTrigger('approved')} />
+              <span>{triggers.approved?.enabled ? 'Active' : 'Off'}</span>
+            </label>
+          </div>
+          <textarea
+            style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
+            value={triggers.approved?.template || ''}
+            onChange={(e) => updateTemplate('approved', e.target.value)}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+            <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {total} {store}'}</span>
+            <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
+          </div>
+        </div>
+
+        {/* 3. Order Shipped */}
+        <div className="sa-card" style={{ padding: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div>
+              <b style={{ fontSize: 14, color: '#f8fafc' }}>3. Order Shipped &amp; Tracking</b>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>কুরিয়ারে পার্সেল এন্ট্রি হলে ট্র্যাকিং কোডসহ নোটিফিকেশন</div>
+            </div>
+            <label className="sa-chk">
+              <input type="checkbox" checked={!!triggers.shipped?.enabled} onChange={() => toggleTrigger('shipped')} />
+              <span>{triggers.shipped?.enabled ? 'Active' : 'Off'}</span>
+            </label>
+          </div>
+          <textarea
+            style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
+            value={triggers.shipped?.template || ''}
+            onChange={(e) => updateTemplate('shipped', e.target.value)}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+            <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {courier} {consignment} {tracking_url}'}</span>
+            <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
+          </div>
+        </div>
+
+        {/* 4. Order Cancelled */}
+        <div className="sa-card" style={{ padding: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div>
+              <b style={{ fontSize: 14, color: '#f8fafc' }}>4. Order Cancelled Notice</b>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>অর্ডার বাতিল হলে কারণসহ কাস্টমারকে নোটিশ</div>
+            </div>
+            <label className="sa-chk">
+              <input type="checkbox" checked={!!triggers.cancelled?.enabled} onChange={() => toggleTrigger('cancelled')} />
+              <span>{triggers.cancelled?.enabled ? 'Active' : 'Off'}</span>
+            </label>
+          </div>
+          <textarea
+            style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
+            value={triggers.cancelled?.template || ''}
+            onChange={(e) => updateTemplate('cancelled', e.target.value)}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+            <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {store}'}</span>
+            <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Direct WhatsApp Quick Messenger */}
+      <div className="sa-card" style={{ padding: 20, marginBottom: 20 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#f8fafc' }}>
+          📤 Direct WhatsApp Messenger &amp; Marketing
+        </h2>
+        <p className="dim" style={{ fontSize: 13, margin: '4px 0 14px' }}>
+          যেকোনো কাস্টমারের নাম্বারে তাৎক্ষণিক কাস্টম অফার বা মেসেজ পাঠান।
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr auto', gap: 12, alignItems: 'center' }}>
+          <input
+            className="sa-search"
+            placeholder="017xxxxxxxx"
+            value={manualPhone}
+            onChange={(e) => setManualPhone(e.target.value)}
+          />
+          <input
+            className="sa-search"
+            placeholder="মেসেজ লিখুন (যেমন: ভাইয়া আপনার জন্য বিশেষ ২০% ডিসকাউন্ট কুপন...)"
+            value={broadcastMsg}
+            onChange={(e) => setBroadcastMsg(e.target.value)}
+          />
+          <button className="sa-btn" disabled={sendingMsg} onClick={sendDirectMessage}>
+            {sendingMsg ? 'Sending…' : '🚀 Send Message'}
+          </button>
+        </div>
+      </div>
+
+      {/* Pairing Modal */}
+      {showPairModal && (
+        <div className="sa-modal-backdrop" onClick={() => setShowPairModal(false)}>
+          <div className="sa-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, textAlign: 'center', padding: 28 }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>📱</div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc', margin: '0 0 8px' }}>Link Business WhatsApp</h3>
+            <p className="dim" style={{ fontSize: 13, marginBottom: 16 }}>
+              আপনার WhatsApp Business অ্যাপটি কানেক্ট করতে নিচের বক্সে নাম্বার লিখুন এবং লিংক করুন:
+            </p>
+            <input
+              style={{ width: '100%', padding: '12px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: 16, textAlign: 'center', marginBottom: 16 }}
+              placeholder="017XXXXXXXX"
+              value={pairingPhoneInput}
+              onChange={(e) => setPairingPhoneInput(e.target.value)}
+            />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="sa-btn ghost" style={{ flex: 1 }} onClick={() => setShowPairModal(false)}>Cancel</button>
+              <button className="sa-btn" style={{ flex: 1 }} onClick={handleConnect}>✓ Connect Now</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ==========================================
+// 3. DEDICATED STORE BACKUP & RESTORE
+// ==========================================
+function BackupAdmin() {
+  const [stats, setStats] = useState<any>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [preview, setPreview] = useState<any>(null);
+  const [toast, setToast] = useState('');
+
+  useEffect(() => {
+    Promise.all([
+      aFetch('/orders').then(r => r.json()).catch(() => []),
+      fetch('/api/products').then(r => r.json()).catch(() => []),
+      aFetch('/customers').then(r => r.json()).catch(() => [])
+    ]).then(([orders, prods, custs]) => {
+      setStats({
+        ordersCount: Array.isArray(orders) ? orders.length : 0,
+        productsCount: Array.isArray(prods) ? prods.length : 0,
+        customersCount: Array.isArray(custs) ? custs.length : 0
+      });
+    }).catch(() => {});
+  }, []);
+
+  const handleDownloadBackup = async () => {
+    setDownloading(true);
+    try {
+      const res = await aFetch('/admin/backup/export');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `store_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setToast('Store backup downloaded to your computer!');
+      setTimeout(() => setToast(''), 3000);
+    } catch (e: any) {
+      alert('Download failed: ' + e.message);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleFileSelect = (e: any) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+        if (!json || typeof json !== 'object') throw new Error('Invalid JSON file');
+        setPreview(json);
+      } catch (err: any) {
+        alert('Invalid backup file: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const executeRestore = async () => {
+    if (!preview) return;
+    if (!confirm('⚠️ সতর্কবার্তা: ব্যাকআপ ফাইলটি রিস্টোর করলে বর্তমান ডাটাবেস আপডেট ও সিঙ্ক হবে। আপনি কি নিশ্চিত?')) return;
+    setRestoring(true);
+    try {
+      const res = await aFetch('/admin/backup/restore', {
+        method: 'POST',
+        body: JSON.stringify(preview)
+      }).then(r => r.json());
+      if (res.ok) {
+        alert('✓ সম্পূর্ণ ডাটাবেস সফলভাবে রিস্টোর হয়েছে! পেজটি এখন রিফ্রেশ হবে।');
+        location.reload();
+      } else {
+        alert('Restore failed: ' + (res.error || 'Unknown error'));
+      }
+    } catch (e: any) {
+      alert('Restore failed: ' + e.message);
+    } finally {
+      setRestoring(false);
+      setPreview(null);
+    }
+  };
+
+  return (
+    <>
+      <div className="sa-top">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h1>Backup &amp; Restore Hub</h1>
+          <span style={{ fontSize: 11, background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', padding: '3px 8px', borderRadius: 999, border: '1px solid rgba(34, 197, 94, 0.3)', fontWeight: 600 }}>
+            🛡️ Zero Data Loss Shield Active
+          </span>
+          {toast && (
+            <span style={{ fontSize: 12, background: '#10b981', color: '#fff', padding: '4px 10px', borderRadius: 6, fontWeight: 600 }}>
+              ✓ {toast}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Database Health Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 24 }}>
+        <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #38bdf8' }}>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>সংরক্ষিত মোট অর্ডার</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc', marginTop: 4 }}>{stats ? stats.ordersCount : '…'} টি</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>সব হিস্ট্রি ও স্ট্যাটাসসহ</div>
+        </div>
+
+        <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #10b981' }}>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>নিবন্ধিত কাস্টমার</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#10b981', marginTop: 4 }}>{stats ? stats.customersCount : '…'} জন</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>ঠিকানা ও ফোন নাম্বারসহ</div>
+        </div>
+
+        <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #eab308' }}>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>ক্যাটালগ প্রোডাক্টস</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#eab308', marginTop: 4 }}>{stats ? stats.productsCount : '…'} টি</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>ভ্যারিয়েশন ও প্রাইসিংসহ</div>
+        </div>
+      </div>
+
+      {/* 2 Big Action Columns: Download vs Upload */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 20 }}>
+        {/* Column 1: Download */}
+        <div className="sa-card" style={{ padding: 24 }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>📥</div>
+          <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 6px', color: '#f8fafc' }}>
+            ১-ক্লিক সম্পূর্ণ ডাটাবেস ডাউনলোড
+          </h2>
+          <p className="dim" style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 20 }}>
+            আপনার সমস্ত অর্ডার, কাস্টমার লিস্ট, প্রোডাক্ট ক্যাটালগ, সেটিংস, ল্যান্ডিং পেজ ও কুরিয়ার কনফিগারেশনের একটি সম্পূর্ণ <code>.json</code> ব্যাকআপ ফাইল ডাউনলোড করে আপনার নিজের কম্পিউটারে সংরক্ষণ করুন।
+          </p>
+          <button
+            className="sa-btn"
+            style={{ width: '100%', padding: '12px 18px', fontSize: 14, fontWeight: 700 }}
+            disabled={downloading}
+            onClick={handleDownloadBackup}
+          >
+            {downloading ? 'Creating Backup…' : '📥 Download Store Backup (.json)'}
+          </button>
+        </div>
+
+        {/* Column 2: Upload & Restore */}
+        <div className="sa-card" style={{ padding: 24 }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>📤</div>
+          <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 6px', color: '#f8fafc' }}>
+            ব্যাকআপ ফাইল থেকে রিস্টোর (Uploader)
+          </h2>
+          <p className="dim" style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 16 }}>
+            পূর্বে ডাউনলোড করা যেকোনো <code>.json</code> ব্যাকআপ ফাইল আপলোড করে ১ ক্লিকে সমস্ত ডাটা ফিরিয়ে আনুন।
+          </p>
+
+          <input
+            type="file"
+            accept=".json"
+            id="backup-file-input"
+            style={{ display: 'none' }}
+            onChange={handleFileSelect}
+          />
+          <button
+            type="button"
+            className="sa-btn ghost"
+            style={{ width: '100%', padding: '12px 18px', fontSize: 14, marginBottom: 12, border: '1px dashed rgba(255,255,255,0.25)' }}
+            onClick={() => document.getElementById('backup-file-input')?.click()}
+          >
+            📁 Select Backup File from PC
+          </button>
+
+          {preview && (
+            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 14, marginTop: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#38bdf8', marginBottom: 4 }}>
+                ✓ Valid Backup File Selected:
+              </div>
+              <div style={{ fontSize: 12, color: '#cbd5e1' }}>
+                • Export Date: {preview.exportedAt ? new Date(preview.exportedAt).toLocaleString() : 'N/A'}<br/>
+                • Orders: {Array.isArray(preview.orders) ? preview.orders.length : 0} items<br/>
+                • Products: {preview.catalog?.products ? preview.catalog.products.length : 0} items<br/>
+                • Customers: {Array.isArray(preview.customers) ? preview.customers.length : 0} customers
+              </div>
+              <button
+                type="button"
+                className="sa-btn danger"
+                style={{ width: '100%', marginTop: 12, padding: 10, fontWeight: 700 }}
+                disabled={restoring}
+                onClick={executeRestore}
+              >
+                {restoring ? 'Restoring…' : '⚠️ Confirm &amp; Restore Live Store'}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </>
   );
