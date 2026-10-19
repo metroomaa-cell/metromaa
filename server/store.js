@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -26,24 +26,31 @@ const BACKUP_SETTINGS = join(DATA_DIR, 'settings.metrroma.backup.json');
 
 const COLORS = join(DATA_DIR, 'colors.json');
 const PERSISTENT_COLORS = join(PERSISTENT_DIR, 'colors.json');
+const BACKUP_COLORS = join(DATA_DIR, 'colors.metrroma.backup.json');
 
 const CUSTOMERS = join(DATA_DIR, 'customers.json');
 const PERSISTENT_CUSTOMERS = join(PERSISTENT_DIR, 'customers.json');
+const BACKUP_CUSTOMERS = join(DATA_DIR, 'customers.metrroma.backup.json');
 
 const COUPONS = join(DATA_DIR, 'coupons.json');
 const PERSISTENT_COUPONS = join(PERSISTENT_DIR, 'coupons.json');
+const BACKUP_COUPONS = join(DATA_DIR, 'coupons.metrroma.backup.json');
 
 const REVIEWS = join(DATA_DIR, 'reviews.json');
 const PERSISTENT_REVIEWS = join(PERSISTENT_DIR, 'reviews.json');
+const BACKUP_REVIEWS = join(DATA_DIR, 'reviews.metrroma.backup.json');
 
 const USERS = join(DATA_DIR, 'users.json');
 const PERSISTENT_USERS = join(PERSISTENT_DIR, 'users.json');
+const BACKUP_USERS = join(DATA_DIR, 'users.metrroma.backup.json');
 
 const INTEGRATIONS = join(DATA_DIR, 'integrations.json');
 const PERSISTENT_INTEGRATIONS = join(PERSISTENT_DIR, 'integrations.json');
+const BACKUP_INTEGRATIONS = join(DATA_DIR, 'integrations.metrroma.backup.json');
 
 const LANDINGS = join(DATA_DIR, 'landings.json');
 const PERSISTENT_LANDINGS = join(PERSISTENT_DIR, 'landings.json');
+const BACKUP_LANDINGS = join(DATA_DIR, 'landings.metrroma.backup.json');
 
 export const DEFAULT_COLORS = [
   { id: 'jet-black', name: 'Jet Black', hex: '#111111' },
@@ -132,11 +139,14 @@ function readSafe(persistentPath, stdPath, defaultVal, backupPath = null) {
   return defaultVal;
 }
 
-// Safe writer that writes to persistent storage (untracked by git) and standard storage
-function writeSafe(persistentPath, stdPath, val, backupPrefix = null) {
+// Safe writer that writes to persistent storage (untracked by git), standard storage, and immutable backup
+function writeSafe(persistentPath, stdPath, val, backupPrefix = null, backupPath = null) {
   const jsonStr = JSON.stringify(val, null, 2);
   try { writeFileSync(persistentPath, jsonStr); } catch (e) { console.error('[Store] Persistent write error:', e.message); }
   try { writeFileSync(stdPath, jsonStr); } catch (e) { console.error('[Store] Standard write error:', e.message); }
+  if (backupPath) {
+    try { writeFileSync(backupPath, jsonStr); } catch (_) {}
+  }
   if (backupPrefix) {
     try {
       const day = new Date().toISOString().slice(0, 10);
@@ -153,60 +163,49 @@ export function getSettings() {
 
 export function saveSettings(patch) {
   const next = { ...getSettings(), ...patch };
-  writeSafe(PERSISTENT_SETTINGS, SETTINGS, next, 'settings');
+  writeSafe(PERSISTENT_SETTINGS, SETTINGS, next, 'settings', BACKUP_SETTINGS);
   return next;
 }
 
 export function getCatalog() {
-  // First, verify persistent catalog
-  try {
-    if (existsSync(PERSISTENT_CATALOG)) {
-      const cat = JSON.parse(readFileSync(PERSISTENT_CATALOG, 'utf8'));
-      if (cat && Array.isArray(cat.products) && cat.products.length > 0) {
-        // If standard CATALOG is missing or was wiped by git, restore it immediately
-        try {
-          if (!existsSync(CATALOG) || (JSON.parse(readFileSync(CATALOG, 'utf8')).products || []).length === 0) {
-            writeFileSync(CATALOG, JSON.stringify(cat, null, 2));
-          }
-        } catch (_) {
-          try { writeFileSync(CATALOG, JSON.stringify(cat, null, 2)); } catch (_) {}
-        }
-        return cat;
-      }
-    }
-  } catch (_) {}
+  const prodMap = new Map();
+  const catMap = new Map();
 
-  // Fallback to standard catalog
-  try {
-    if (existsSync(CATALOG)) {
-      const cat = JSON.parse(readFileSync(CATALOG, 'utf8'));
-      if (cat && Array.isArray(cat.products) && cat.products.length > 0) {
-        try { writeFileSync(PERSISTENT_CATALOG, JSON.stringify(cat, null, 2)); } catch (_) {}
-        return cat;
-      }
+  const absorb = (obj) => {
+    if (!obj) return;
+    if (Array.isArray(obj.categories)) {
+      obj.categories.forEach((c) => { if (c && c.slug) catMap.set(c.slug, c); });
     }
-  } catch (_) {}
-
-  // Emergency fallback to Metrroma immutable snapshot
-  try {
-    if (existsSync(BACKUP_CATALOG)) {
-      const cat = JSON.parse(readFileSync(BACKUP_CATALOG, 'utf8'));
-      if (cat && Array.isArray(cat.products) && cat.products.length > 0) {
-        try {
-          writeFileSync(PERSISTENT_CATALOG, JSON.stringify(cat, null, 2));
-          writeFileSync(CATALOG, JSON.stringify(cat, null, 2));
-        } catch (_) {}
-        return cat;
-      }
+    if (Array.isArray(obj.products)) {
+      obj.products.forEach((p) => { if (p && p.id) prodMap.set(p.id, p); });
     }
-  } catch (_) {}
+  };
 
-  return { products: [], categories: [] };
+  // 1. Immutable backup
+  try { if (existsSync(BACKUP_CATALOG)) absorb(JSON.parse(readFileSync(BACKUP_CATALOG, 'utf8'))); } catch (_) {}
+  // 2. Standard catalog
+  try { if (existsSync(CATALOG)) absorb(JSON.parse(readFileSync(CATALOG, 'utf8'))); } catch (_) {}
+  // 3. Persistent catalog (latest runtime edits take priority)
+  try { if (existsSync(PERSISTENT_CATALOG)) absorb(JSON.parse(readFileSync(PERSISTENT_CATALOG, 'utf8'))); } catch (_) {}
+
+  const products = Array.from(prodMap.values());
+  const categories = Array.from(catMap.values());
+  const cat = { products, categories };
+
+  if (products.length > 0) {
+    try {
+      const jsonStr = JSON.stringify(cat, null, 2);
+      writeFileSync(PERSISTENT_CATALOG, jsonStr);
+      writeFileSync(CATALOG, jsonStr);
+      writeFileSync(BACKUP_CATALOG, jsonStr);
+    } catch (_) {}
+  }
+  return cat;
 }
 
 export function saveCatalog(cat) {
   if (!cat || !Array.isArray(cat.products)) return;
-  writeSafe(PERSISTENT_CATALOG, CATALOG, cat, 'catalog');
+  writeSafe(PERSISTENT_CATALOG, CATALOG, cat, 'catalog', BACKUP_CATALOG);
 }
 
 export function addProduct(p) {
@@ -261,61 +260,61 @@ export function deleteCategory(slug) {
 }
 
 export function getOrders() {
-  let list = [];
-  try {
-    if (existsSync(PERSISTENT_ORDERS)) {
-      const p = JSON.parse(readFileSync(PERSISTENT_ORDERS, 'utf8'));
-      if (Array.isArray(p) && p.length > 0) return p;
-      if (Array.isArray(p)) list = p;
-    }
-  } catch (_) {}
+  const map = new Map();
 
-  // Fallback to standard orders.json if persistent was empty
-  try {
-    if (existsSync(ORDERS)) {
-      const s = JSON.parse(readFileSync(ORDERS, 'utf8'));
-      if (Array.isArray(s) && s.length > list.length) {
-        try { writeFileSync(PERSISTENT_ORDERS, JSON.stringify(s, null, 2)); } catch (_) {}
-        return s;
-      }
+  const absorb = (arr) => {
+    if (Array.isArray(arr)) {
+      arr.forEach((o) => {
+        if (o && o.id) {
+          const prev = map.get(o.id);
+          if (!prev) {
+            map.set(o.id, o);
+          } else {
+            // keep the one with newer history, more items, or confirmed status
+            const prevHist = (prev.history || []).length;
+            const newHist = (o.history || []).length;
+            const prevItems = (prev.items || []).length;
+            const newItems = (o.items || []).length;
+            if (newHist > prevHist || newItems > prevItems || (o.status !== 'incomplete' && prev.status === 'incomplete')) {
+              map.set(o.id, { ...prev, ...o });
+            }
+          }
+        }
+      });
     }
-  } catch (_) {}
+  };
 
-  // Check backups directory for the most recent orders backup if both are empty
-  if (list.length === 0) {
+  // 1. Immutable backup
+  try { if (existsSync(BACKUP_ORDERS)) absorb(JSON.parse(readFileSync(BACKUP_ORDERS, 'utf8'))); } catch (_) {}
+  // 2. Standard orders
+  try { if (existsSync(ORDERS)) absorb(JSON.parse(readFileSync(ORDERS, 'utf8'))); } catch (_) {}
+  // 3. Persistent orders (runtime state takes priority)
+  try { if (existsSync(PERSISTENT_ORDERS)) absorb(JSON.parse(readFileSync(PERSISTENT_ORDERS, 'utf8'))); } catch (_) {}
+
+  // 4. Backups directory check if still empty
+  if (map.size === 0) {
     try {
       if (existsSync(BACKUPS_DIR)) {
         const files = readdirSync(BACKUPS_DIR).filter((f) => f.startsWith('orders-') && f.endsWith('.json')).sort().reverse();
         for (const f of files) {
           const b = JSON.parse(readFileSync(join(BACKUPS_DIR, f), 'utf8'));
-          if (Array.isArray(b) && b.length > 0) {
-            try {
-              writeFileSync(PERSISTENT_ORDERS, JSON.stringify(b, null, 2));
-              writeFileSync(ORDERS, JSON.stringify(b, null, 2));
-            } catch (_) {}
-            return b;
-          }
+          absorb(b);
+          if (map.size > 0) break;
         }
       }
     } catch (_) {}
   }
 
-  // Emergency fallback to Metrroma immutable backup if still empty
-  if (list.length === 0) {
+  const list = Array.from(map.values()).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+  if (list.length > 0) {
     try {
-      if (existsSync(BACKUP_ORDERS)) {
-        const b = JSON.parse(readFileSync(BACKUP_ORDERS, 'utf8'));
-        if (Array.isArray(b) && b.length > 0) {
-          try {
-            writeFileSync(PERSISTENT_ORDERS, JSON.stringify(b, null, 2));
-            writeFileSync(ORDERS, JSON.stringify(b, null, 2));
-          } catch (_) {}
-          return b;
-        }
-      }
+      const jsonStr = JSON.stringify(list, null, 2);
+      writeFileSync(PERSISTENT_ORDERS, jsonStr);
+      writeFileSync(ORDERS, jsonStr);
+      writeFileSync(BACKUP_ORDERS, jsonStr);
     } catch (_) {}
   }
-
   return list;
 }
 
@@ -332,7 +331,17 @@ export function saveOrders(orders) {
       }
     } catch (_) {}
   }
-  writeSafe(PERSISTENT_ORDERS, ORDERS, orders, 'orders');
+  writeSafe(PERSISTENT_ORDERS, ORDERS, orders, 'orders', BACKUP_ORDERS);
+}
+
+export function deleteOrder(id) {
+  const orders = getOrders();
+  const next = orders.filter((x) => x.id !== id);
+  if (next.length !== orders.length) {
+    saveOrders(next);
+    return true;
+  }
+  return false;
 }
 
 export function addOrder(order) {
@@ -420,27 +429,27 @@ export function updateOrder(id, patch) {
 }
 
 export function getCoupons() {
-  const list = readSafe(PERSISTENT_COUPONS, COUPONS, []);
+  const list = readSafe(PERSISTENT_COUPONS, COUPONS, [], BACKUP_COUPONS);
   return Array.isArray(list) ? list : [];
 }
 export function saveCoupons(c) {
-  writeSafe(PERSISTENT_COUPONS, COUPONS, Array.isArray(c) ? c : []);
+  writeSafe(PERSISTENT_COUPONS, COUPONS, Array.isArray(c) ? c : [], 'coupons', BACKUP_COUPONS);
 }
 
 export function getReviews() {
-  const r = readSafe(PERSISTENT_REVIEWS, REVIEWS, {});
+  const r = readSafe(PERSISTENT_REVIEWS, REVIEWS, {}, BACKUP_REVIEWS);
   return typeof r === 'object' && r !== null ? r : {};
 }
 export function saveReviews(r) {
-  writeSafe(PERSISTENT_REVIEWS, REVIEWS, typeof r === 'object' && r !== null ? r : {});
+  writeSafe(PERSISTENT_REVIEWS, REVIEWS, typeof r === 'object' && r !== null ? r : {}, 'reviews', BACKUP_REVIEWS);
 }
 
 export function getUsers() {
-  const u = readSafe(PERSISTENT_USERS, USERS, []);
+  const u = readSafe(PERSISTENT_USERS, USERS, [], BACKUP_USERS);
   return Array.isArray(u) ? u : [];
 }
 export function saveUsers(u) {
-  writeSafe(PERSISTENT_USERS, USERS, Array.isArray(u) ? u : []);
+  writeSafe(PERSISTENT_USERS, USERS, Array.isArray(u) ? u : [], 'users', BACKUP_USERS);
 }
 
 export const DEFAULT_INTEGRATIONS = {
@@ -452,7 +461,7 @@ export const DEFAULT_INTEGRATIONS = {
 };
 
 export function getIntegrations() {
-  const saved = readSafe(PERSISTENT_INTEGRATIONS, INTEGRATIONS, {});
+  const saved = readSafe(PERSISTENT_INTEGRATIONS, INTEGRATIONS, {}, BACKUP_INTEGRATIONS);
   return {
     email: { ...DEFAULT_INTEGRATIONS.email, ...(saved.email || {}) },
     sms: { ...DEFAULT_INTEGRATIONS.sms, ...(saved.sms || {}) },
@@ -462,7 +471,7 @@ export function getIntegrations() {
   };
 }
 export function saveIntegrations(next) {
-  writeSafe(PERSISTENT_INTEGRATIONS, INTEGRATIONS, next);
+  writeSafe(PERSISTENT_INTEGRATIONS, INTEGRATIONS, next, 'integrations', BACKUP_INTEGRATIONS);
   return next;
 }
 
@@ -527,16 +536,37 @@ export const DEFAULT_LOVELOCK_LANDING = {
 };
 
 export function getLandings() {
-  const list = readSafe(PERSISTENT_LANDINGS, LANDINGS, null);
-  if (!Array.isArray(list) || list.length === 0) {
+  const map = new Map();
+  const absorb = (arr) => {
+    if (Array.isArray(arr)) {
+      arr.forEach((L) => {
+        if (L && (L.slug || L.id)) {
+          const key = String(L.slug || L.id).toLowerCase();
+          map.set(key, { ...(map.get(key) || {}), ...L });
+        }
+      });
+    }
+  };
+  try { if (existsSync(BACKUP_LANDINGS)) absorb(JSON.parse(readFileSync(BACKUP_LANDINGS, 'utf8'))); } catch (_) {}
+  try { if (existsSync(LANDINGS)) absorb(JSON.parse(readFileSync(LANDINGS, 'utf8'))); } catch (_) {}
+  try { if (existsSync(PERSISTENT_LANDINGS)) absorb(JSON.parse(readFileSync(PERSISTENT_LANDINGS, 'utf8'))); } catch (_) {}
+
+  if (map.size === 0) {
     saveLandings([DEFAULT_LOVELOCK_LANDING]);
     return [DEFAULT_LOVELOCK_LANDING];
   }
+  const list = Array.from(map.values());
+  try {
+    const jsonStr = JSON.stringify(list, null, 2);
+    writeFileSync(PERSISTENT_LANDINGS, jsonStr);
+    writeFileSync(LANDINGS, jsonStr);
+    writeFileSync(BACKUP_LANDINGS, jsonStr);
+  } catch (_) {}
   return list;
 }
 
 export function saveLandings(list) {
-  writeSafe(PERSISTENT_LANDINGS, LANDINGS, list);
+  writeSafe(PERSISTENT_LANDINGS, LANDINGS, list, 'landings', BACKUP_LANDINGS);
 }
 
 export function getLandingBySlug(slug) {
@@ -578,7 +608,7 @@ export function deleteLanding(id) {
 }
 
 export function getColors() {
-  const list = readSafe(PERSISTENT_COLORS, COLORS, null);
+  const list = readSafe(PERSISTENT_COLORS, COLORS, null, BACKUP_COLORS);
   if (!Array.isArray(list) || list.length === 0) {
     saveColors(DEFAULT_COLORS);
     return DEFAULT_COLORS;
@@ -587,7 +617,7 @@ export function getColors() {
 }
 
 export function saveColors(colors) {
-  writeSafe(PERSISTENT_COLORS, COLORS, colors);
+  writeSafe(PERSISTENT_COLORS, COLORS, colors, 'colors', BACKUP_COLORS);
   return colors;
 }
 
@@ -679,21 +709,53 @@ export function syncCustomersFromOrders() {
   }
 
   if (modified) {
-    writeSafe(PERSISTENT_CUSTOMERS, CUSTOMERS, list);
+    writeSafe(PERSISTENT_CUSTOMERS, CUSTOMERS, list, 'customers', BACKUP_CUSTOMERS);
   }
   return list;
 }
 
 export function getCustomers() {
-  const list = readSafe(PERSISTENT_CUSTOMERS, CUSTOMERS, []);
-  if (!Array.isArray(list) || list.length === 0) {
-    return syncCustomersFromOrders();
+  const map = new Map();
+  const getPhoneKey = (c) => {
+    if (!c) return '';
+    const p = String(c.phone || c.id || '').replace(/\D/g, '').slice(-11);
+    return p || c.id || '';
+  };
+  const absorb = (arr) => {
+    if (Array.isArray(arr)) {
+      arr.forEach((c) => {
+        const k = getPhoneKey(c);
+        if (k) {
+          const prev = map.get(k);
+          if (!prev) map.set(k, c);
+          else map.set(k, { ...prev, ...c, ordersCount: Math.max(prev.ordersCount || 0, c.ordersCount || 0), totalSpent: Math.max(prev.totalSpent || 0, c.totalSpent || 0) });
+        }
+      });
+    }
+  };
+  // 1. Immutable backup
+  try { if (existsSync(BACKUP_CUSTOMERS)) absorb(JSON.parse(readFileSync(BACKUP_CUSTOMERS, 'utf8'))); } catch (_) {}
+  // 2. Standard customers
+  try { if (existsSync(CUSTOMERS)) absorb(JSON.parse(readFileSync(CUSTOMERS, 'utf8'))); } catch (_) {}
+  // 3. Persistent customers
+  try { if (existsSync(PERSISTENT_CUSTOMERS)) absorb(JSON.parse(readFileSync(PERSISTENT_CUSTOMERS, 'utf8'))); } catch (_) {}
+
+  let list = Array.from(map.values());
+  if (list.length === 0) {
+    list = syncCustomersFromOrders();
+  } else {
+    try {
+      const jsonStr = JSON.stringify(list, null, 2);
+      writeFileSync(PERSISTENT_CUSTOMERS, jsonStr);
+      writeFileSync(CUSTOMERS, jsonStr);
+      writeFileSync(BACKUP_CUSTOMERS, jsonStr);
+    } catch (_) {}
   }
   return list;
 }
 
 export function saveCustomers(list) {
-  writeSafe(PERSISTENT_CUSTOMERS, CUSTOMERS, list);
+  writeSafe(PERSISTENT_CUSTOMERS, CUSTOMERS, list, 'customers', BACKUP_CUSTOMERS);
   return list;
 }
 

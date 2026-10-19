@@ -1,0 +1,13 @@
+[
+  {
+    "id": "umv6nvm6p",
+    "username": "rocky",
+    "name": "Rocky",
+    "email": "rockybahi9922@gmail.com",
+    "role": "manager",
+    "allowedProducts": [],
+    "salt": "9b22a9e663e8489e",
+    "hash": "211f80d1358698607b3ffc2069da1b6163268e91acf06ca4d0003951d833c72b",
+    "createdAt": "2026-10-13T12:32:45.841Z"
+  }
+]

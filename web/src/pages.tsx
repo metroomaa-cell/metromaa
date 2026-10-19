@@ -2784,7 +2784,8 @@ export function Checkout() {
 
   // ping server for incomplete order capture
   useEffect(() => {
-    if (f.name.trim().length < 2 || !/^01[3-9]\d{8}$/.test(f.phone.trim()) || lines.length === 0) return;
+    const cleanPhone = f.phone.trim().replace(/[-+ ]/g, '');
+    if (!/^01[3-9]\d{8}$/.test(cleanPhone) || lines.length === 0) return;
     const t = setTimeout(() => {
       fetch('/api/checkout/ping', {
         method: 'POST',
@@ -2792,9 +2793,33 @@ export function Checkout() {
           'Content-Type': 'application/json',
           'x-device-id': getDeviceId(),
         },
-        body: JSON.stringify({ items: lines.map((l) => ({ id: l.id, qty: l.qty })), customer: { ...f, address: [f.address.trim(), thana, district].filter(Boolean).join(', '), area, district, thana, coupon: applied?.code, source: getSource() } }),
+        body: JSON.stringify({
+          items: lines.map((l) => ({
+            id: l.id,
+            productId: l.id.includes('-') ? l.id.split('-')[0] + (l.id.startsWith('mm-') ? '-' + l.id.split('-')[1] : '') : l.id,
+            name: l.name,
+            price: l.price,
+            qty: l.qty,
+            image: l.image,
+            color: l.color,
+            size: l.size,
+            variantId: l.variantId,
+            variantTitle: (l as any).variantTitle || (l.color && l.size ? `${l.color} · ${l.size}` : l.color || l.size || ''),
+          })),
+          customer: {
+            ...f,
+            name: f.name.trim() || 'Customer',
+            phone: cleanPhone,
+            address: [f.address.trim(), thana, district].filter(Boolean).join(', '),
+            area,
+            district,
+            thana,
+            coupon: applied?.code,
+            source: getSource(),
+          },
+        }),
       }).catch(() => {});
-    }, 1200);
+    }, 1000);
     return () => clearTimeout(t);
   }, [f, area, applied, lines, district, thana]);
 
@@ -3290,10 +3315,25 @@ export function Confirm({ id }: { id: string }) {
   );
 }
 
-const STEPS = ['pending', 'confirmed', 'shipped', 'delivered'];
+const TRACK_STEPS = [
+  { key: 'placed', label: 'Order Placed', labelBn: 'অর্ডার প্লেসড', icon: '📝' },
+  { key: 'confirmed', label: 'Order Confirmed', labelBn: 'অর্ডার কনফার্মড', icon: '✓' },
+  { key: 'shipped', label: 'In Transit', labelBn: 'কুরিয়ারে শিপমেন্ট', icon: '🚚' },
+  { key: 'delivered', label: 'Delivered', labelBn: 'ডেলিভারি সম্পন্ন', icon: '🎉' },
+];
+
+function getTrackStepIndex(status: string): number {
+  const s = String(status || '').toLowerCase().trim();
+  if (['cancelled', 'canceled', 'return', 'returned', 'failed'].includes(s)) return -1;
+  if (['delivered', 'completed', 'paid'].includes(s)) return 3;
+  if (['shipped', 'in_transit', 'courier_sent', 'out_for_delivery', 'pickup_requested', 'pickup requested'].includes(s)) return 2;
+  if (['approved', 'confirmed', 'processing', 'packaging', 'ready_to_ship'].includes(s)) return 1;
+  return 0; // pending, placed, hold
+}
 
 const COURIERS: Record<string, (c: string) => string> = {
   steadfast: (c) => `https://steadfast.com.bd/t/${encodeURIComponent(c)}`,
+  carrybee: (c) => `https://carrybee.com/tracking?consignment_id=${encodeURIComponent(c)}`,
   pathao: (c) => `https://merchant.pathao.com/tracking?consignment_id=${encodeURIComponent(c)}`,
   redx: (c) => `https://redx.com.bd/track-global-parcel/?trackingId=${encodeURIComponent(c)}`,
   paperfly: (c) => `https://go.paperfly.com.bd/track/?trackingId=${encodeURIComponent(c)}`,
@@ -3302,8 +3342,10 @@ function courierLink(cour: any): string {
   if (!cour) return '';
   if (cour.url) return cour.url;
   const key = String(cour.name || '').toLowerCase().replace(/[^a-z]/g, '');
-  const b = COURIERS[key];
-  return typeof b === 'function' && cour.consignment ? b(cour.consignment) : '';
+  for (const [k, fn] of Object.entries(COURIERS)) {
+    if (key.includes(k) && cour.consignment) return fn(cour.consignment);
+  }
+  return '';
 }
 
 function CopyMini({ text }: { text: string }) {
@@ -3312,107 +3354,543 @@ function CopyMini({ text }: { text: string }) {
     try { await navigator.clipboard.writeText(text); } catch {}
     setDone(true); setTimeout(() => setDone(false), 1500);
   };
-  return <button className="copymini" onClick={copy}>{done ? '✓' : 'copy'}</button>;
+  return (
+    <button
+      className="copymini"
+      onClick={copy}
+      style={{
+        background: done ? '#10b981' : '#ffffff',
+        color: done ? '#ffffff' : '#1f3147',
+        border: done ? '1px solid #10b981' : '1px solid #cbd5e1',
+        borderRadius: 4,
+        padding: '3px 9px',
+        fontSize: 11,
+        fontWeight: 700,
+        cursor: 'pointer',
+        transition: 'all .2s ease',
+      }}
+    >
+      {done ? '✓ Copied' : 'Copy'}
+    </button>
+  );
 }
 
-export function Track() {
-  const [id, setId] = useState('');
+export function Track({ id: initialId }: { id?: string }) {
+  const [id, setId] = useState(initialId || '');
   const [phone, setPhone] = useState('');
   const [res, setRes] = useState<any>(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
-  const lookup = async (quiet?: boolean) => {
+
+  const lookup = async (targetId?: string, targetPhone?: string, quiet?: boolean) => {
+    const searchId = targetId !== undefined ? targetId : id;
+    const searchPhone = targetPhone !== undefined ? targetPhone : phone;
+    if (!searchId.trim() && !searchPhone.trim()) {
+      if (!quiet) setErr('Please enter your Order ID or Phone number');
+      return;
+    }
     try {
-      const r = await fetch(`/api/track?id=${encodeURIComponent(id)}&phone=${encodeURIComponent(phone)}`);
+      const q = new URLSearchParams();
+      if (searchId.trim()) q.set('id', searchId.trim());
+      if (searchPhone.trim()) q.set('phone', searchPhone.trim());
+      const r = await fetch(`/api/track?${q.toString()}`);
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'not found');
+      if (!r.ok) throw new Error(d.error || 'Order not found');
       setRes(d);
-    } catch (e: any) { if (!quiet) setErr(e.message); }
+      setErr('');
+    } catch (e: any) {
+      if (!quiet) {
+        setErr(e.message || 'Order not found');
+        setRes(null);
+      }
+    }
   };
-  const submit = async () => { setErr(''); setRes(null); setBusy(true); await lookup(); setBusy(false); };
-  // once an order is shown, re-check every 20s so courier status updates live
+
+  const submit = async () => {
+    setErr('');
+    setBusy(true);
+    await lookup();
+    setBusy(false);
+  };
+
+  // Auto-fill from URL params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlId = params.get('id') || params.get('order') || initialId || '';
+    const urlPhone = params.get('phone') || '';
+    if (urlId) setId(urlId);
+    if (urlPhone) setPhone(urlPhone);
+    if (urlId || urlPhone) {
+      setBusy(true);
+      lookup(urlId, urlPhone, true).finally(() => setBusy(false));
+    }
+  }, [initialId]);
+
+  // Once an order is shown, re-check every 25s for live courier status
   useEffect(() => {
     if (!res) return;
-    const t = setInterval(() => lookup(true), 20000);
+    const t = setInterval(() => lookup(id, phone, true), 25000);
     return () => clearInterval(t);
   }, [res?.id, id, phone]);
+
   return (
-    <div className="page" style={{ minHeight: '75vh', paddingBottom: 60 }}><div className="wrap">
-      <div className="phead" style={{ padding: '36px 0 16px' }}>
-        <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 600, fontSize: 'clamp(28px, 4vw, 38px)', color: '#1f3147', textTransform: 'capitalize', letterSpacing: '-0.01em' }}>Track Your Order</h1>
-        <p style={{ color: '#6b645c', marginTop: 8, fontSize: 14.5 }}>Enter your order ID and the mobile number you ordered with.</p>
-      </div>
-      <div className="track-form">
-        <input className="field" placeholder="Order ID (e.g. SEC-XXXXXXXX)" value={id} onChange={(e) => setId(e.target.value)} />
-        <input className="field" placeholder="Mobile Number (01XXXXXXXXX)" value={phone} onChange={(e) => setPhone(e.target.value)} />
-        <button className="btn" disabled={busy} onClick={submit}>{busy ? 'Checking…' : 'Track Order'}</button>
-      </div>
-      {err && <div className="err" style={{ marginTop: 18 }}>{err}</div>}
-      {res && <TrackResult o={res} />}
-    </div></div>
-  );
-}
-function TrackResult({ o }: { o: any }) {
-  const cancelled = o.status === 'cancelled';
-  const returned = o.status === 'return';
-  const special = cancelled || returned;
-  const idx = STEPS.indexOf(o.status);
-  const date = new Date(o.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  return (
-    <div className="trk">
-      <div className="trk-head">
-        <div className="eye">order {o.id}</div>
-        <h2>{cancelled ? 'order cancelled' : returned ? 'order returned' : o.status === 'hold' ? 'order on hold' : o.status === 'approved' ? 'order approved' : STEPS[idx] || o.status || 'pending'}</h2>
-        <p>placed {date}, cash on delivery</p>
-      </div>
-      {!special ? (
-        <div className="steps">
-          {STEPS.map((s, i) => (
-            <div className={'step' + (i <= idx ? ' on' : '')} key={s}>
-              <span className="dot" /><span className="lbl">{s}</span>
-            </div>
-          ))}
+    <div className="page" style={{ minHeight: '80vh', paddingBottom: 70, background: '#FAF8F5' }}>
+      <div className="wrap" style={{ maxWidth: 780, margin: '0 auto', padding: '0 20px' }}>
+        <div className="phead" style={{ padding: '40px 0 20px', textAlign: 'center' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#b49664', marginBottom: 8 }}>
+            <span>📦</span> Real-Time Courier Tracking
+          </div>
+          <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontSize: 'clamp(28px, 4vw, 38px)', color: '#1f3147', letterSpacing: '-0.02em', margin: 0 }}>
+            Track Your Order
+          </h1>
+          <p style={{ color: '#6b645c', marginTop: 10, fontSize: 14.5, maxWidth: 460, margin: '10px auto 0' }}>
+            আপনার অর্ডার নম্বর অথবা মোবাইল নম্বর দিয়ে অর্ডারের বর্তমান অবস্থা ও লাইভ কুরিয়ার লোকেশন দেখুন।
+          </p>
         </div>
-      ) : (
-        <p className="empty">{cancelled ? 'this order was cancelled. please contact us if this is a mistake.' : 'this order has been returned. please contact us if you have any questions.'}</p>
-      )}
-      {o.courier && o.courier.name && (
-        <div className="courier">
-          <div className="eye" style={{ marginBottom: 14 }}>courier details</div>
-          <div className="crow"><span>courier</span><b>{o.courier.name}</b></div>
-          {o.courier.liveStatus && <div className="crow"><span>live status</span><b style={{ color: '#60a5fa' }}>{o.courier.liveStatus}</b></div>}
-          {o.courier.consignment && <div className="crow"><span>tracking / consignment no.</span><b className="mono">{o.courier.consignment}<CopyMini text={o.courier.consignment} /></b></div>}
-          {o.courier.phone && <div className="crow"><span>courier hotline</span><b><a href={'tel:' + o.courier.phone}>{o.courier.phone}</a></b></div>}
-          {o.courier.riderNote && (
-            <div className="crow rider-note" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', padding: '10px 14px', borderRadius: 8, marginTop: 12 }}>
-              <span style={{ color: '#fbbf24', fontWeight: 600 }}>🛵 Rider / Delivery Note</span>
-              <b style={{ color: '#fef3c7', fontWeight: 500, textAlign: 'right' }}>{o.courier.riderNote}</b>
+
+        <div
+          style={{
+            background: '#ffffff',
+            borderRadius: 12,
+            padding: 24,
+            border: '1px solid #EAE5DC',
+            boxShadow: '0 4px 20px rgba(31, 49, 71, 0.05)',
+          }}
+        >
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#1f3147', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Order ID (অর্ডার আইডি)
+              </label>
+              <input
+                className="field"
+                placeholder="e.g. DOT-83BE276D"
+                value={id}
+                onChange={(e) => setId(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && submit()}
+                style={{ width: '100%', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#1f3147', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Phone Number (মোবাইল নম্বর)
+              </label>
+              <input
+                className="field"
+                placeholder="e.g. 018XXXXXXXX"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && submit()}
+                style={{ width: '100%', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', width: '100%' }}>
+              <button
+                className="btn"
+                disabled={busy}
+                onClick={submit}
+                style={{
+                  width: '100%',
+                  background: '#1f3147',
+                  color: '#FAF8F5',
+                  padding: '14px',
+                  borderRadius: 6,
+                  fontWeight: 700,
+                  fontSize: 13,
+                  letterSpacing: '1px',
+                  textTransform: 'uppercase',
+                  border: 'none',
+                  cursor: busy ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: 8,
+                  boxShadow: '0 4px 14px rgba(31,49,71,0.2)',
+                }}
+              >
+                <span>{busy ? 'Searching Orders…' : '🔍 Track My Order (অর্ডার ট্র্যাক করুন)'}</span>
+              </button>
+            </div>
+          </div>
+
+          {err && (
+            <div
+              style={{
+                marginTop: 16,
+                padding: '12px 16px',
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: 8,
+                color: '#991b1b',
+                fontSize: 13.5,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <span>⚠️</span>
+              <span>{err}</span>
             </div>
           )}
-          {courierLink(o.courier) && <a className="btn ghost" style={{ marginTop: 16 }} href={courierLink(o.courier)} target="_blank" rel="noopener noreferrer">track on {o.courier.name}</a>}
+        </div>
+
+        {res && <TrackResult o={res} />}
+      </div>
+    </div>
+  );
+}
+
+function TrackResult({ o }: { o: any }) {
+  const cancelled = ['cancelled', 'canceled', 'return', 'returned', 'failed'].includes(String(o.status || '').toLowerCase());
+  const returned = String(o.status || '').toLowerCase() === 'return' || String(o.status || '').toLowerCase() === 'returned';
+  const special = cancelled || returned;
+  const idx = getTrackStepIndex(o.status);
+  const date = new Date(o.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  // Status Badge Configuration
+  const getBadge = () => {
+    const s = String(o.status || '').toLowerCase();
+    if (s === 'delivered') return { label: 'Delivered (ডেলিভারি সম্পন্ন)', bg: '#dcfce7', color: '#15803d', border: '#bbf7d0', icon: '🎉' };
+    if (s === 'shipped') return { label: 'In Transit / Shipped (কুরিয়ারে পাঠানো হয়েছে)', bg: '#dbeafe', color: '#1e40af', border: '#bfdbfe', icon: '🚚' };
+    if (s === 'approved' || s === 'confirmed') return { label: 'Order Approved & Confirmed (অর্ডার অনুমোদিত)', bg: '#d1fae5', color: '#065f46', border: '#a7f3d0', icon: '✓' };
+    if (s === 'hold') return { label: 'Order on Hold (অপেক্ষমান)', bg: '#fef3c7', color: '#92400e', border: '#fde68a', icon: '⏸️' };
+    if (cancelled) return { label: 'Order Cancelled (বাতিলকৃত)', bg: '#fee2e2', color: '#991b1b', border: '#fecaca', icon: '✕' };
+    return { label: 'Order Placed (অর্ডার গৃহীত হয়েছে)', bg: '#fef3c7', color: '#854d0e', border: '#fde68a', icon: '⏳' };
+  };
+  const badge = getBadge();
+
+  return (
+    <div
+      style={{
+        marginTop: 28,
+        border: '1.5px solid rgba(180, 150, 100, 0.45)',
+        borderRadius: 12,
+        padding: '32px 28px',
+        background: '#ffffff',
+        boxShadow: '0 8px 30px rgba(31, 49, 71, 0.08)',
+        color: '#1f3147',
+      }}
+    >
+      {/* Top Order Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14, borderBottom: '1px solid #EAE5DC', paddingBottom: 20 }}>
+        <div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#8c7d6b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Order ID:</span>
+            <code style={{ fontSize: 15, fontWeight: 800, color: '#1f3147', background: '#FAF8F5', padding: '2px 8px', borderRadius: 4, border: '1px solid #EAE5DC' }}>
+              {o.id}
+            </code>
+            <CopyMini text={o.id} />
+          </div>
+          <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontSize: 24, margin: '8px 0 4px', color: '#1f3147' }}>
+            {badge.label}
+          </h2>
+          <p style={{ color: '#6b645c', fontSize: 13.5, margin: 0 }}>
+            অর্ডার গ্রহণের তারিখ: <b>{date}</b> • ক্যাশ অন ডেলিভারি (Cash on Delivery)
+          </p>
+        </div>
+
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: badge.bg, color: badge.color, border: `1.5px solid ${badge.border}`, borderRadius: 100, fontSize: 13, fontWeight: 700 }}>
+          <span>{badge.icon}</span>
+          <span>{o.status ? String(o.status).toUpperCase() : 'PENDING'}</span>
+        </div>
+      </div>
+
+      {/* Visual Stepper */}
+      {!special ? (
+        <div style={{ margin: '36px 0 32px' }}>
+          <div style={{ display: 'flex', position: 'relative' }}>
+            {TRACK_STEPS.map((s, i) => {
+              const isPassed = i <= idx;
+              const isCurrent = i === idx;
+              return (
+                <div key={s.key} style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  {/* Connecting Line */}
+                  {i > 0 && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 14,
+                        left: '-50%',
+                        width: '100%',
+                        height: 3,
+                        background: isPassed ? '#1f3147' : '#EAE5DC',
+                        transition: 'background .3s ease',
+                        zIndex: 1,
+                      }}
+                    />
+                  )}
+
+                  {/* Dot / Icon */}
+                  <div
+                    style={{
+                      width: 30,
+                      height: 30,
+                      borderRadius: '50%',
+                      background: isPassed ? '#1f3147' : '#ffffff',
+                      border: isPassed ? '2px solid #1f3147' : '2px solid #cbd5e1',
+                      color: isPassed ? '#ffffff' : '#94a3b8',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: isPassed ? 13 : 12,
+                      fontWeight: 700,
+                      position: 'relative',
+                      zIndex: 2,
+                      boxShadow: isCurrent ? '0 0 0 4px rgba(31,49,71,0.18)' : 'none',
+                      transition: 'all .25s ease',
+                    }}
+                  >
+                    {isPassed ? (i === idx && i !== 3 ? '✓' : s.icon) : (i + 1)}
+                  </div>
+
+                  {/* Label */}
+                  <div style={{ textAlign: 'center', marginTop: 10 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: isPassed ? 700 : 500, color: isPassed ? '#1f3147' : '#94a3b8' }}>
+                      {s.label}
+                    </div>
+                    <div style={{ fontSize: 11, color: isPassed ? '#64748b' : '#cbd5e1', marginTop: 2 }}>
+                      {s.labelBn}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div style={{ margin: '24px 0', padding: 18, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', textAlign: 'center', fontWeight: 600 }}>
+          {cancelled
+            ? 'এই অর্ডারটি বাতিল করা হয়েছে। যদি এটি কোনো ভুলবশত হয়ে থাকে, অনুগ্রহ করে আমাদের সাপোর্টে যোগাযোগ করুন।'
+            : 'এই পার্সেলটি রিটার্ন প্রক্রিয়ায় রয়েছে। যেকোনো তথ্যের জন্য আমাদের কল করুন।'}
         </div>
       )}
-      {Array.isArray(o.history) && o.history.length > 0 && (
-        <div className="trk-timeline" style={{ marginTop: 24, padding: '16px 18px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: 12, border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-          <div className="eye" style={{ marginBottom: 12 }}>order timeline</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {o.history.map((h: any, i: number) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: 13 }}>
-                <div>
-                  <span style={{ textTransform: 'capitalize', fontWeight: 600, color: '#f1f5f9' }}>{h.status}</span>
-                  {h.note && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{h.note}</div>}
+
+      {/* Courier Details Card */}
+      {o.courier && o.courier.name && (
+        <div
+          style={{
+            marginTop: 24,
+            padding: '22px 24px',
+            background: '#f8fafc',
+            borderRadius: 10,
+            border: '1.5px solid #cbd5e1',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 18 }}>🚚</span>
+              <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#1f3147' }}>
+                Delivery Courier Partner
+              </span>
+            </div>
+            {o.courier.liveStatus && (
+              <span style={{ background: '#dbeafe', color: '#1e40af', border: '1px solid #bfdbfe', padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 700 }}>
+                {o.courier.liveStatus}
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, fontSize: 13.5 }}>
+            <div>
+              <span style={{ color: '#64748b', fontSize: 12 }}>Courier Company:</span>
+              <div style={{ fontWeight: 700, color: '#1f3147', fontSize: 15, marginTop: 2 }}>{o.courier.name}</div>
+            </div>
+
+            {o.courier.consignment && (
+              <div>
+                <span style={{ color: '#64748b', fontSize: 12 }}>Tracking / Consignment ID:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                  <code style={{ fontWeight: 700, color: '#0f172a', background: '#ffffff', padding: '3px 8px', borderRadius: 4, border: '1px solid #cbd5e1', fontSize: 14 }}>
+                    {o.courier.consignment}
+                  </code>
+                  <CopyMini text={o.courier.consignment} />
                 </div>
-                <span style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', marginLeft: 12 }}>
-                  {new Date(h.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} {new Date(h.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                </span>
               </div>
-            ))}
+            )}
+
+            {o.courier.phone && (
+              <div>
+                <span style={{ color: '#64748b', fontSize: 12 }}>Courier Helpline:</span>
+                <div style={{ marginTop: 2 }}>
+                  <a href={'tel:' + o.courier.phone} style={{ color: '#2563eb', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>
+                    📞 {o.courier.phone}
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {o.courier.riderNote && (
+            <div style={{ marginTop: 14, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, fontSize: 13, color: '#92400e' }}>
+              <b>🛵 Rider Note:</b> {o.courier.riderNote}
+            </div>
+          )}
+
+          {courierLink(o.courier) && (
+            <a
+              href={courierLink(o.courier)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                marginTop: 16,
+                padding: '11px 20px',
+                background: '#1f3147',
+                color: '#ffffff',
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 700,
+                textDecoration: 'none',
+                boxShadow: '0 2px 8px rgba(31,49,71,0.2)',
+              }}
+            >
+              <span>Track Live on {o.courier.name} Official Website</span>
+              <span>→</span>
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* Order Activity & Timeline */}
+      {Array.isArray(o.history) && o.history.length > 0 && (
+        <div style={{ marginTop: 24, padding: '20px 22px', background: '#ffffff', borderRadius: 10, border: '1px solid #EAE5DC', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1f3147', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>📜</span> Order Activity &amp; Timeline
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {o.history.map((h: any, i: number) => {
+              const isLatest = i === o.history.length - 1;
+              return (
+                <div key={i} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                  <div
+                    style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: '50%',
+                      background: isLatest ? '#10b981' : '#1f3147',
+                      marginTop: 4,
+                      flexShrink: 0,
+                      boxShadow: isLatest ? '0 0 0 4px rgba(16,185,129,0.2)' : 'none',
+                    }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 6 }}>
+                      <span style={{ textTransform: 'capitalize', fontWeight: 700, color: '#1f3147', fontSize: 13.5 }}>
+                        {h.status === 'approved' ? 'Order Confirmed (অর্ডার অনুমোদিত হয়েছে)' : h.status === 'pending' ? 'Order Placed (নতুন অর্ডার তৈরি)' : h.status === 'shipped' ? 'Handed over to Courier (কুরিয়ারে হস্তান্তর)' : h.status}
+                      </span>
+                      <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 500 }}>
+                        {new Date(h.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} • {new Date(h.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    {h.note && (
+                      <div style={{ fontSize: 12.5, color: '#475569', marginTop: 4, background: '#f8fafc', padding: '6px 12px', borderRadius: 6, border: '1px solid #e2e8f0', display: 'inline-block' }}>
+                        {h.note}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
-      <div className="trk-items">
-        {o.items.map((it: any) => <div className="sl" key={it.id}><span>{it.name} × {it.qty}</span><span>{taka(it.subtotal)}</span></div>)}
-        <div className="tot"><span>total</span><b>{taka(o.total)}</b></div>
+
+      {/* Customer Delivery Details & Support */}
+      {o.customer && (
+        <div style={{ marginTop: 22, padding: '18px 22px', background: '#FAF8F5', borderRadius: 10, border: '1px solid #EAE5DC', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#8c7d6b' }}>
+              Delivery Destination
+            </div>
+            <div style={{ fontWeight: 700, color: '#1f3147', fontSize: 14, marginTop: 4 }}>
+              {o.customer.name} {o.customer.phone && `(${o.customer.phone})`}
+            </div>
+            <div style={{ color: '#475569', fontSize: 13, marginTop: 2 }}>
+              {[o.customer.address, o.customer.district].filter(Boolean).join(', ')}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <a
+              href={`https://wa.me/8801633617136?text=${encodeURIComponent(`Hi METRROMA, I am inquiring about my order ${o.id}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                background: '#25D366',
+                color: '#ffffff',
+                padding: '9px 16px',
+                borderRadius: 6,
+                fontSize: 12.5,
+                fontWeight: 700,
+                textDecoration: 'none',
+                boxShadow: '0 2px 8px rgba(37,211,102,0.25)',
+              }}
+            >
+              <span>💬 WhatsApp Support</span>
+            </a>
+            <a
+              href="tel:01633617136"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                background: '#ffffff',
+                color: '#1f3147',
+                border: '1px solid #cbd5e1',
+                padding: '9px 16px',
+                borderRadius: 6,
+                fontSize: 12.5,
+                fontWeight: 700,
+                textDecoration: 'none',
+              }}
+            >
+              <span>📞 Call Hotline</span>
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* Items Summary & Total */}
+      <div className="trk-items" style={{ marginTop: 24, borderTop: '1px solid #EAE5DC', paddingTop: 20 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#8c7d6b', marginBottom: 12 }}>
+          Order Items Summary
+        </div>
+        {o.items.map((it: any) => (
+          <div className="sl" key={it.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px dashed rgba(180, 150, 100, 0.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {it.image && (
+                <img src={it.image} alt={it.name} style={{ width: 48, height: 48, borderRadius: 6, objectFit: 'cover', border: '1px solid #EAE5DC' }} />
+              )}
+              <div>
+                <span style={{ fontWeight: 700, color: '#1f3147', fontSize: 14 }}>{it.name}</span>
+                <div style={{ color: '#64748b', fontSize: 12, marginTop: 2 }}>Quantity: {it.qty}</div>
+              </div>
+            </div>
+            <span style={{ fontWeight: 700, color: '#1f3147', fontSize: 15 }}>{taka(it.subtotal || it.price * it.qty)}</span>
+          </div>
+        ))}
+
+        {o.delivery != null && (
+          <div className="sl" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: '#64748b', padding: '10px 0' }}>
+            <span>Home Delivery Charge ({o.customer?.area === 'inside' ? 'Inside Dhaka' : 'Outside Dhaka'})</span>
+            <span style={{ fontWeight: 600, color: '#1f3147' }}>{taka(o.delivery)}</span>
+          </div>
+        )}
+
+        <div className="tot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: '2px solid #1f3147', marginTop: 14, paddingTop: 16 }}>
+          <div>
+            <span style={{ fontSize: 16, fontWeight: 800, color: '#1f3147', display: 'block' }}>Total Payable Amount</span>
+            <span style={{ fontSize: 12, color: '#64748b' }}>ক্যাশ অন ডেলিভারিতে প্রডাক্ট বুঝে পেয়ে পরিশোধ করুন</span>
+          </div>
+          <b style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: 26, color: '#1f3147' }}>{taka(o.total)}</b>
+        </div>
       </div>
     </div>
   );

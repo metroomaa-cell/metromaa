@@ -3187,6 +3187,18 @@ function OrdersAdmin() {
 
               {/* 9. Actions */}
               <div className="og-cell-acts rowacts" onClick={(e) => e.stopPropagation()}>
+                {o.status === 'incomplete' && (
+                  <button
+                    className="eye-btn"
+                    title="1-Click Confirm (Convert to Confirmed Order)"
+                    style={{ color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.12)' }}
+                    onClick={() => quickStatus(o.id, 'confirmed')}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 14, height: 14 }}>
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </button>
+                )}
                 <button className="eye-btn" title="View order details" onClick={() => setSel(o)}>
                   <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M1 9s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z" /><circle cx="9" cy="9" r="2.4" /></svg>
                 </button>
@@ -3196,8 +3208,8 @@ function OrdersAdmin() {
                 {phone && (
                   <a
                     className="eye-btn eye-btn-wa"
-                    title="WhatsApp customer"
-                    href={`https://wa.me/88${cleanPhone}`}
+                    title={o.status === 'incomplete' ? "Send WhatsApp Recovery Message" : "WhatsApp customer"}
+                    href={`https://wa.me/88${cleanPhone}${o.status === 'incomplete' ? `?text=${encodeURIComponent(`আসসালামু আলাইকুম ${o.customer?.name || 'গ্রাহক'}! metrroma.com থেকে লক্ষ্য করলাম "${cleanItem.title || 'আমাদের পণ্য'}" এর অর্ডারটি আপনি সম্পন্ন করেননি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳${o.total}।`)}` : ''}`}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -3731,6 +3743,107 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
             </div>
           )}
 
+          {/* Incomplete / Abandoned Order Recovery Bar */}
+          {status === 'incomplete' && (
+            <div style={{
+              marginBottom: 16,
+              padding: '16px 20px',
+              borderRadius: 12,
+              background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.15) 0%, rgba(234, 88, 12, 0.06) 100%)',
+              border: '1px solid rgba(249, 115, 22, 0.35)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+              boxShadow: '0 4px 20px rgba(249, 115, 22, 0.1)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 22 }}>⚡</span>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#fb923c', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span>অসম্পূর্ণ অর্ডার (Abandoned Checkout Lead)</span>
+                      <span style={{ fontSize: 10.5, background: '#ea580c', color: '#fff', padding: '1px 8px', borderRadius: 999, fontWeight: 800 }}>DRAFT</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#fdba74', marginTop: 2 }}>
+                      কাস্টমার চেকআউটে পণ্য ও নম্বর প্রদান করেছিল কিন্তু অর্ডার চূড়ান্ত করেনি। সরাসরি যোগাযোগ করে দ্রুত অর্ডার কনফার্ম করুন।
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleQuickStatus('confirmed')}
+                  style={{
+                    background: '#10b981',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: 8,
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+                  }}
+                >
+                  ✓ অর্ডার কনফার্ম করুন
+                </button>
+              </div>
+
+              {/* Recovery Action Buttons */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, paddingTop: 4 }}>
+                {custPhone && (
+                  <a
+                    href={`https://wa.me/88${custPhone.replace(/\D/g, '')}?text=${encodeURIComponent(
+                      `আসসালামু আলাইকুম ${custName || 'প্রিয় গ্রাহক'}! metrroma.com থেকে লক্ষ্য করলাম আপনি "${items[0]?.name || 'আমাদের পণ্য'}" অর্ডার করার চেষ্টা করেছিলেন কিন্তু অর্ডারটি সম্পন্ন হয়নি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳${grandTotal}।`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      background: 'rgba(37, 211, 102, 0.15)',
+                      border: '1px solid rgba(37, 211, 102, 0.4)',
+                      color: '#25d366',
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      textDecoration: 'none'
+                    }}
+                  >
+                    <WhatsAppIcon size={16} variant="official" />
+                    <span>WhatsApp রিকভারি মেসেজ পাঠান</span>
+                  </a>
+                )}
+                {custPhone && (
+                  <a
+                    href={`tel:${custPhone}`}
+                    style={{
+                      background: 'rgba(56, 189, 248, 0.12)',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      color: '#38bdf8',
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      textDecoration: 'none'
+                    }}
+                  >
+                    <span>📞 সরাসরি গ্রাহককে কল দিন</span>
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Card: FRAUD CONTROLS */}
           <div className="sa-om-card sa-om-fraud">
             <div className="sa-om-card-h">
@@ -4040,6 +4153,13 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                     {it.image ? <img src={it.image} alt="" className="sa-om-item-thumb" /> : <div className="sa-om-item-thumb empty">📦</div>}
                     <div className="sa-om-item-info">
                       <div className="sa-om-item-name">{it.name}</div>
+                      {(it.variantTitle || it.color || it.size) && (
+                        <div style={{ marginTop: 2 }}>
+                          <span style={{ background: '#1c1830', border: '1px solid rgba(139, 92, 246, 0.3)', color: '#c4b5fd', fontSize: 11, padding: '1px 6px', borderRadius: 4, fontWeight: 500 }}>
+                            {it.variantTitle || [it.color ? `Color: ${it.color}` : '', it.size ? `Size: ${it.size}` : ''].filter(Boolean).join(' · ')}
+                          </span>
+                        </div>
+                      )}
                       {isEditing ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
                           <span className="dim small">Unit ৳:</span>

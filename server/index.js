@@ -9,7 +9,7 @@ import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns';
 try { dns.setDefaultResultOrder('ipv4first'); } catch {}
-import { getCatalog, getOrders, addOrder, updateOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, saveCustomer, syncCustomersFromOrders, initStorageProtection } from './store.js';
+import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, saveCustomer, syncCustomersFromOrders, initStorageProtection } from './store.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 initStorageProtection();
@@ -42,15 +42,21 @@ const withFlags = (p) => ({ ...p, soldOut: !!p.soldOut || (p.stock != null && p.
 
 const BD_PHONE = /^01[3-9]\d{8}$/;
 
-// ---- incomplete / abandoned checkout capture (order appears 2 min after a valid checkout is started but not placed) ----
-const INCOMPLETE_DELAY = 2 * 60 * 1000;
+// ---- incomplete / abandoned checkout capture (order appears after a valid checkout is started but not placed) ----
+const INCOMPLETE_DELAY = 90 * 1000; // 90 seconds
 const draftTimers = new Map(); // phone -> { timer, data }
 function cancelDraft(phone) {
-  const d = draftTimers.get(phone);
-  if (d) { clearTimeout(d.timer); draftTimers.delete(phone); }
+  if (!phone) return;
+  const clean = String(phone).replace(/\D/g, '').slice(-11);
+  const d = draftTimers.get(clean) || draftTimers.get(phone);
+  if (d) {
+    clearTimeout(d.timer);
+    draftTimers.delete(clean);
+    draftTimers.delete(phone);
+  }
 }
 function buildDraftOrder(data) {
-  const catalog = getCatalog().products;
+  const catalog = getCatalog().products || [];
   const c = data.customer || {};
   let landingPage = null;
   if (c.landing) {
@@ -59,6 +65,7 @@ function buildDraftOrder(data) {
   }
   const lines = [];
   for (const it of (data.items || [])) {
+    // 1. Variant offer match from landing page
     if (landingPage && Array.isArray(landingPage.variants) && landingPage.variants.length > 0) {
       const variant = landingPage.variants.find((v) =>
         v.id === it.variantId ||
@@ -71,22 +78,84 @@ function buildDraftOrder(data) {
         const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
         const baseName = (p && p.name) || landingPage.title || 'Package';
         const name = `${baseName} — ${variant.title}${variant.size ? ' (' + variant.size + ')' : ''}`;
-        const image = variant.image || (p && p.image) || landingPage.heroImage || '';
-        lines.push({ id: (p && p.id) || variant.id, variantId: variant.id, variantTitle: variant.title, name, price: variant.price, qty, subtotal: variant.price * qty, image });
+        const image = it.image || variant.image || (p && p.image) || landingPage.heroImage || '';
+        lines.push({
+          id: (p && p.id) || variant.id,
+          variantId: variant.id,
+          variantTitle: variant.title,
+          name,
+          price: variant.price,
+          qty,
+          subtotal: variant.price * qty,
+          image,
+          color: it.color || '',
+          size: it.size || '',
+        });
         continue;
       }
     }
-    const p = catalog.find((x) => x.id === it.id);
-    if (!p) {
-      if (it.name && it.price) {
+
+    // 2. Landing package match (e.g. LoveLock / Love Forever package)
+    if (landingPage && Array.isArray(landingPage.packages) && landingPage.packages.length > 0) {
+      const pkg = landingPage.packages.find((p) => p.id === it.id || p.id === it.productId || (it.name && it.name.includes(p.title)));
+      if (pkg) {
         const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
-        lines.push({ id: it.id || 'item', name: it.name, price: Number(it.price) || 0, qty, subtotal: (Number(it.price) || 0) * qty, image: it.image || '' });
+        const name = it.name || pkg.title || landingPage.title;
+        const image = it.image || pkg.image || landingPage.heroImage || '';
+        lines.push({
+          id: pkg.id,
+          name,
+          price: pkg.price,
+          qty,
+          subtotal: pkg.price * qty,
+          image,
+          color: it.color || '',
+          variantTitle: it.variantTitle || (it.color ? `Color: ${it.color}` : ''),
+        });
+        continue;
       }
-      continue;
     }
+
+    // 3. Catalog product match (by ID, composite ID prefix, or slug)
+    const baseId = it.productId || (it.id ? String(it.id).split('-')[0] + (String(it.id).startsWith('mm-') ? '-' + String(it.id).split('-')[1] : '') : '');
+    const p = catalog.find((x) => x.id === it.id) || catalog.find((x) => x.id === baseId) || catalog.find((x) => x.slug === it.id);
+
     const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
-    lines.push({ id: p.id, name: it.name && it.name.startsWith(p.name) ? it.name : p.name, price: p.price, qty, subtotal: p.price * qty, image: it.image || p.image });
+    const itemPrice = Number(it.price) || (p ? p.price : 0);
+    const itemImage = it.image || (p ? (p.images?.[0] || p.image) : '') || (landingPage ? landingPage.heroImage : '');
+    const itemName = it.name || (p ? p.name : 'Product');
+    const colorStr = it.color || '';
+    const sizeStr = it.size || '';
+    const variantTitle = it.variantTitle || [colorStr, sizeStr].filter(Boolean).join(' · ');
+
+    lines.push({
+      id: (p && p.id) || it.id || 'item',
+      name: itemName,
+      price: itemPrice,
+      qty,
+      subtotal: itemPrice * qty,
+      image: itemImage,
+      color: colorStr,
+      size: sizeStr,
+      variantTitle,
+    });
   }
+
+  // 4. Fallback if lines is empty but landing page exists
+  if (lines.length === 0 && landingPage) {
+    const pkg = (Array.isArray(landingPage.packages) && landingPage.packages[0]) || (Array.isArray(landingPage.variants) && landingPage.variants[0]);
+    if (pkg) {
+      lines.push({
+        id: pkg.id || 'lp-item',
+        name: pkg.title || landingPage.productTitle || landingPage.title,
+        price: Number(pkg.price) || Number(landingPage.offerPrice) || 0,
+        qty: 1,
+        subtotal: Number(pkg.price) || Number(landingPage.offerPrice) || 0,
+        image: pkg.image || landingPage.heroImage || '',
+      });
+    }
+  }
+
   const itemsTotal = lines.reduce((s, l) => s + l.subtotal, 0);
   const settings = getSettings();
   const area = c.area === 'outside' ? 'outside' : 'inside';
@@ -117,29 +186,48 @@ function buildDraftOrder(data) {
   discount = Math.min(discount, itemsTotal);
   const total = Math.max(0, itemsTotal + delivery - discount);
   const now = new Date().toISOString();
+  const draftId = 'DOT-' + randomUUID().slice(0, 8).toUpperCase();
   return {
-    id: 'DOT-' + randomUUID().slice(0, 8).toUpperCase(),
+    id: draftId,
     createdAt: now,
     status: 'incomplete',
+    draftType: 'abandoned_checkout',
+    recovered: false,
     payment: 'cash_on_delivery',
     source: String(c.source || (landingPage ? 'l/' + landingPage.slug : 'direct')).slice(0, 60),
     landing: landingPage ? landingPage.slug : '',
-    customer: { name: String(c.name || '').trim(), phone: String(c.phone || '').trim(), address: String(c.address || '').trim(), area, district: String(c.district || '').trim(), thana: String(c.thana || '').trim(), note: String(c.note || '').trim() },
-    items: lines, itemsTotal, delivery, discount, coupon: couponCode, total,
-    history: [{ status: 'incomplete', at: now }],
+    recoveryUrl: `https://metrroma.com/checkout?recover=${draftId}`,
+    customer: {
+      name: String(c.name || '').trim() || 'Customer',
+      phone: String(c.phone || '').trim(),
+      address: String(c.address || '').trim(),
+      area,
+      district: String(c.district || '').trim(),
+      thana: String(c.thana || '').trim(),
+      note: String(c.note || '').trim()
+    },
+    items: lines,
+    itemsTotal,
+    delivery,
+    discount,
+    coupon: couponCode,
+    total,
+    history: [{ status: 'incomplete', at: now, note: 'Customer entered details at checkout but did not finish placing order' }],
   };
 }
-// customer checkout pings this while filling the form; a draft is captured only if nothing is placed within 2 minutes
+
+// customer checkout pings this while filling the form; a draft is captured only if nothing is placed within 90 seconds
 app.post('/api/checkout/ping', (req, res) => {
   const b = req.body || {};
   const c = b.customer || {};
-  const phone = String(c.phone || '').trim();
+  const phone = String(c.phone || '').trim().replace(/[-+ ]/g, '');
   if (!BD_PHONE.test(phone)) return res.status(204).end();
+  const cleanPhone = phone.replace(/\D/g, '').slice(-11);
   const name = String(c.name || '').trim() || 'Customer';
   const data = {
     customer: {
       name,
-      phone,
+      phone: cleanPhone,
       address: c.address || '',
       area: c.area || 'outside',
       district: c.district || '',
@@ -154,18 +242,45 @@ app.post('/api/checkout/ping', (req, res) => {
     shipping: b.shipping || undefined,
     items: Array.isArray(b.items) ? b.items : [],
   };
-  const existing = draftTimers.get(phone);
-  if (existing) { existing.data = data; return res.json({ ok: true }); } // keep the original clock, just refresh data
+
+  const existing = draftTimers.get(cleanPhone);
+  if (existing) {
+    existing.data = data;
+    return res.json({ ok: true }); // refresh data while timer is running
+  }
+
   const entry = { data };
   entry.timer = setTimeout(() => {
-    draftTimers.delete(phone);
+    draftTimers.delete(cleanPhone);
     try {
-      const dup = getOrders().find((o) => o.customer && o.customer.phone === phone && Date.now() - new Date(o.createdAt).getTime() < INCOMPLETE_DELAY + 120000);
-      if (dup) return; // a real order was placed (or already captured) — don't create a duplicate incomplete
-      addOrder(buildDraftOrder(entry.data));
-    } catch {}
+      // 1. If customer completed an actual order within the last 5 minutes, do not capture as abandoned
+      const realOrder = getOrders().find((o) => o.status !== 'incomplete' && o.customer && String(o.customer.phone).replace(/\D/g, '').slice(-11) === cleanPhone && Date.now() - new Date(o.createdAt).getTime() < INCOMPLETE_DELAY + 240000);
+      if (realOrder) return;
+
+      const draft = buildDraftOrder(entry.data);
+
+      // 2. If an incomplete order already exists for this phone, update it with new items/info
+      const existingDraft = getOrders().find((o) => o.status === 'incomplete' && o.customer && String(o.customer.phone).replace(/\D/g, '').slice(-11) === cleanPhone);
+      if (existingDraft) {
+        updateOrder(existingDraft.id, {
+          customer: draft.customer,
+          items: draft.items,
+          itemsTotal: draft.itemsTotal,
+          delivery: draft.delivery,
+          discount: draft.discount,
+          total: draft.total,
+          source: draft.source,
+          landing: draft.landing,
+        });
+      } else {
+        addOrder(draft);
+      }
+    } catch (err) {
+      console.error('[DraftCapture] Error capturing incomplete order:', err.message);
+    }
   }, INCOMPLETE_DELAY);
-  draftTimers.set(phone, entry);
+
+  draftTimers.set(cleanPhone, entry);
   res.json({ ok: true });
 });
 
@@ -487,6 +602,11 @@ app.post('/api/orders', (req, res) => {
   };
   addOrder(order);
   cancelDraft(order.customer.phone); // completed in time — don't capture an incomplete draft
+  try {
+    const cleanP = String(order.customer.phone).replace(/\D/g, '').slice(-11);
+    const existingDraft = getOrders().find((o) => o.status === 'incomplete' && o.customer && String(o.customer.phone).replace(/\D/g, '').slice(-11) === cleanP);
+    if (existingDraft) deleteOrder(existingDraft.id);
+  } catch (_) {}
   notifyOrder(order, 'placed');
   trackPurchase(order).catch(() => {}); // server-side FB CAPI + TikTok Events (best effort)
 
@@ -547,15 +667,60 @@ app.post('/api/orders', (req, res) => {
   res.status(201).json({ id: order.id, total: order.total, status: order.status });
 });
 
-// ---- track order (public, verified by id + matching phone) ----
+// ---- track order (public: supports Order ID, Phone, or ID+Phone) ----
 app.get('/api/track', async (req, res) => {
-  const id = String(req.query.id || '').trim().toUpperCase();
-  const phone = String(req.query.phone || '').trim();
-  if (!id || !phone) return res.status(400).json({ error: 'enter your order id and phone number' });
-  let order = getOrders().find((o) => o.id === id);
-  if (!order || order.customer.phone !== phone) return res.status(404).json({ error: 'no order found with that id and phone number' });
+  const qId = String(req.query.id || req.query.order || '').trim().toUpperCase();
+  const rawPhone = String(req.query.phone || '').trim();
+  const qPhone = rawPhone.replace(/\D/g, '').slice(-11);
+
+  if (!qId && !qPhone) {
+    return res.status(400).json({ error: 'Please enter your Order ID or Phone number' });
+  }
+
+  const orders = getOrders() || [];
+  let order = null;
+
+  if (qId && qPhone) {
+    order = orders.find((o) => {
+      const p = String(o.customer?.phone || '').replace(/\D/g, '').slice(-11);
+      return (o.id === qId || o.id === 'DOT-' + qId || String(o.id).toUpperCase() === qId) && p === qPhone;
+    });
+  } else if (qId) {
+    order = orders.find((o) => o.id === qId || o.id === 'DOT-' + qId || String(o.id).toUpperCase() === qId);
+  } else if (qPhone) {
+    const matches = orders.filter((o) => {
+      const p = String(o.customer?.phone || '').replace(/\D/g, '').slice(-11);
+      return p === qPhone;
+    });
+    matches.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    order = matches[0];
+  }
+
+  if (!order) {
+    return res.status(404).json({ error: 'No order found with the provided details. Please check your Order ID or phone number.' });
+  }
+
   try { order = await syncOrderCourier(order); } catch {}
-  res.json({ id: order.id, createdAt: order.createdAt, status: order.status, payment: order.payment, items: order.items, total: order.total, courier: order.courier || null, history: order.history || [] });
+  res.json({
+    id: order.id,
+    createdAt: order.createdAt,
+    status: order.status,
+    payment: order.payment,
+    items: order.items,
+    itemsTotal: order.itemsTotal,
+    delivery: order.delivery,
+    discount: order.discount,
+    total: order.total,
+    customer: {
+      name: order.customer?.name || '',
+      phone: order.customer?.phone || '',
+      address: order.customer?.address || '',
+      district: order.customer?.district || '',
+      area: order.customer?.area || '',
+    },
+    courier: order.courier || null,
+    history: order.history || [],
+  });
 });
 
 // ---- admin auth: owner master key + staff accounts with roles ----
@@ -1152,6 +1317,10 @@ app.post('/api/admin/orders', adminAuth, (req, res) => {
 
   addOrder(order);
   cancelDraft(phoneClean);
+  try {
+    const existingDraft = getOrders().find((o) => o.status === 'incomplete' && o.customer && String(o.customer.phone).replace(/\D/g, '').slice(-11) === phoneClean);
+    if (existingDraft) deleteOrder(existingDraft.id);
+  } catch (_) {}
   notifyOrder(order, 'placed');
   res.status(201).json(order);
 });
@@ -1168,6 +1337,18 @@ app.patch('/api/orders/:id', adminAuth, (req, res) => {
   const o = updateOrder(req.params.id, { status, courier, adminNote, customer, items, delivery, discount, itemsTotal, total });
   if (status && before && before.status !== status) notifyOrder(o, 'status');
   res.json(o);
+});
+
+app.delete('/api/orders/:id', adminAuth, (req, res) => {
+  const before = getOrders().find((x) => x.id === req.params.id);
+  if (!before) return res.status(404).json({ error: 'not found' });
+  if (req.admin.role === 'staff' && Array.isArray(req.admin.allowedProducts) && req.admin.allowedProducts.length > 0) {
+    const allowed = req.admin.allowedProducts;
+    const hasAccess = (before.items || []).some((it) => allowed.includes(String(it.id)) || allowed.includes(String(it.slug)));
+    if (!hasAccess) return res.status(403).json({ error: 'You do not have permission for this order' });
+  }
+  const ok = deleteOrder(req.params.id);
+  res.json({ ok });
 });
 
 // ---- admin product management ----

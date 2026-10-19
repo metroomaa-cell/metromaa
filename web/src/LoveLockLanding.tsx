@@ -96,6 +96,7 @@ const DEFAULT_CONFIG = {
 export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
   const [cfg, setCfg] = useState<any>(DEFAULT_CONFIG);
   const [selectedProduct, setSelectedProduct] = useState(DEFAULT_CONFIG.packages[0].id);
+  const [selectedColor, setSelectedColor] = useState('Black');
   const [qty, setQty] = useState<Record<string, number>>({});
 
   const [name, setName] = useState('');
@@ -216,7 +217,7 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
   // 3. Draft Abandonment recovery: Ping incomplete checkout when 11-digit phone entered
   useEffect(() => {
     const cleanPhone = phone.trim().replace(/[-+ ]/g, '');
-    if (name.trim().length < 2 || !/^01[3-9]\d{8}$/.test(cleanPhone)) return;
+    if (!/^01[3-9]\d{8}$/.test(cleanPhone)) return;
     const t = setTimeout(() => {
       fetch('/api/checkout/ping', {
         method: 'POST',
@@ -225,21 +226,29 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
           'x-device-id': getDeviceId(),
         },
         body: JSON.stringify({
-          items: [{ id: currentItem.id, qty: currentQty, name: currentItem.title, price: currentItem.price }],
+          items: [{
+            id: currentItem.id,
+            qty: currentQty,
+            name: currentItem.title,
+            price: currentItem.price,
+            image: currentItem.image || cfg.heroImage,
+            color: selectedColor,
+            variantTitle: selectedColor ? `রং: ${selectedColor}` : currentItem.title,
+          }],
           customer: {
-            name: name.trim(),
+            name: name.trim() || 'Customer',
             phone: cleanPhone,
             address: address.trim(),
-            landing: slug || 'lovelock',
-            source: `landing_${slug || 'lovelock'}`,
+            landing: slug || 'love-forever',
+            source: `landing_${slug || 'love-forever'}`,
             freeDelivery: true,
             shippingCost: 0,
           },
         }),
       }).catch(() => {});
-    }, 1200);
+    }, 1000);
     return () => clearTimeout(t);
-  }, [name, phone, address, currentItem, currentQty, slug]);
+  }, [name, phone, address, currentItem, currentQty, slug, selectedColor, cfg.heroImage]);
 
   const handleOrder = async (e: React.FormEvent) => {
     e.preventDefault();
