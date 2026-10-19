@@ -822,8 +822,8 @@ export function Admin() {
   if (!authed) return <Login onDone={() => setAuthed(true)} />;
   const role = me?.role || 'owner';
   const allowed = role === 'staff' ? ['dashboard', 'orders', 'scanner', 'customers']
-    : role === 'manager' ? ['dashboard', 'orders', 'scanner', 'customers', 'products', 'categories', 'landings', 'media', 'coupons', 'fraud', 'integrations', 'settings']
-      : ['dashboard', 'orders', 'scanner', 'customers', 'products', 'categories', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings'];
+    : role === 'manager' ? ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'customers', 'products', 'categories', 'landings', 'media', 'coupons', 'fraud', 'integrations', 'settings']
+      : ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'backup', 'customers', 'products', 'categories', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings'];
   const cur = allowed.includes(nav) ? nav : 'dashboard';
   const newOrders = cur === 'orders' || lastSeen == null || orderTotal == null ? 0 : Math.max(0, orderTotal - lastSeen);
   const item = (id: string, icon: any, label: string, badge?: number) => allowed.includes(id) && (!navq || label.toLowerCase().includes(navq.toLowerCase()))
