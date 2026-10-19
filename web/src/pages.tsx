@@ -1411,7 +1411,18 @@ export function ProductPage({ slug }: { slug: string }) {
         ) || pr.variations[0];
         setSelVar(found);
       }
-      document.title = `${pr.name} — ${isSkin ? 'SECRATE' : 'METRROMA'}`;
+      const pTitle = `${pr.name} — ${isSkin ? 'SECRATE' : 'METRROMA'}`;
+      document.title = pTitle;
+      const q = new URLSearchParams(location.search);
+      dl({
+        event: 'page_view',
+        page_location: location.href,
+        page_path: location.pathname + location.search,
+        page_title: pTitle,
+        campaign_source: q.get('utm_source') || (q.get('fbclid') ? 'facebook' : undefined),
+        campaign_medium: q.get('utm_medium') || (q.get('fbclid') ? 'paid' : undefined),
+        campaign_name: q.get('utm_campaign') || undefined,
+      });
       ecView({ id: pr.id, name: pr.name, price: pr.price });
     }).catch(() => setErr(true));
   }, [slug]);

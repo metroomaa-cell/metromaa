@@ -129,7 +129,18 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
 
   // General settings fallback
   useEffect(() => {
-    document.title = `${cfg.headline || cfg.title} - ১০০% অরিজিনাল প্রিমিয়াম কোয়ালিটি`;
+    const lTitle = `${cfg.headline || cfg.title} — METRROMA`;
+    document.title = lTitle;
+    const q = new URLSearchParams(location.search);
+    dl({
+      event: 'page_view',
+      page_location: location.href,
+      page_path: location.pathname + location.search,
+      page_title: lTitle,
+      campaign_source: q.get('utm_source') || (q.get('fbclid') ? 'facebook' : undefined),
+      campaign_medium: q.get('utm_medium') || (q.get('fbclid') ? 'paid' : undefined),
+      campaign_name: q.get('utm_campaign') || undefined,
+    });
     getSettings().then((s) => {
       if (!cfg.phone && s.phone) setPhoneNum(s.phone);
       if (!cfg.whatsapp && s.whatsapp) setWaNum(s.whatsapp.replace(/[^0-9]/g, ''));

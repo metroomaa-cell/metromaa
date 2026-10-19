@@ -72,9 +72,13 @@ function Effects() {
             info: brand,
             admin: `Admin Dashboard — ${brand}`,
           };
-      document.title = t[route.name] || brand;
+      if (route.name !== 'product') {
+        document.title = t[route.name] || brand;
+      }
     }).catch(() => {
-      document.title = isSkin ? 'SECRATE | Botanical Skincare' : 'METRROMA | Modern Lifestyle, Watches & Gifts';
+      if (route.name !== 'product') {
+        document.title = isSkin ? 'SECRATE | Botanical Skincare' : 'METRROMA | Modern Lifestyle, Watches & Gifts';
+      }
     });
 
     let md = document.querySelector('meta[name="description"]') as HTMLMetaElement | null;
