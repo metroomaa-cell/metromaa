@@ -2,8 +2,20 @@
 let gtmLoaded = false;
 let fbLoaded = false;
 
+export function isAdminContext(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const p = (window.location.pathname || '').toLowerCase();
+    const h = (window.location.hash || '').toLowerCase();
+    return p.includes('/admin') || p.includes('/wp-admin') || h.includes('admin');
+  } catch {
+    return false;
+  }
+}
+
 export function dl(data: Record<string, any>) {
   try {
+    if (isAdminContext()) return;
     const w = window as any;
     w.dataLayer = w.dataLayer || [];
     w.dataLayer.push(data);
@@ -12,6 +24,7 @@ export function dl(data: Record<string, any>) {
 
 export function fbTrack(name: string, data?: Record<string, any>, isCustom = true, eventId?: string) {
   try {
+    if (isAdminContext()) return;
     const w = window as any;
     if (typeof w.fbq === 'function') {
       const options = eventId ? { eventID: String(eventId) } : undefined;
@@ -28,6 +41,7 @@ export function fbTrack(name: string, data?: Record<string, any>, isCustom = tru
 
 export function initFB(id: string) {
   try {
+    if (isAdminContext()) return;
     if (fbLoaded || !id || !/^\d+$/.test(id.trim())) return;
     fbLoaded = true;
     const pid = id.trim();
@@ -56,6 +70,7 @@ export function initFB(id: string) {
 
 export function initGTM(id: string) {
   try {
+    if (isAdminContext()) return;
     const w = window as any;
     if (gtmLoaded || !id || !/^GTM-[A-Z0-9]+$/i.test(id.trim())) return;
     const gid = id.trim();
@@ -166,6 +181,7 @@ export function ecPurchase(id: string, value: number, items: { id: string; name:
 // Scroll-depth + time-on-page engagement tracking (per page view).
 export function trackEngagement(path: string) {
   try {
+    if (isAdminContext()) return () => {};
     const start = Date.now();
     const marks: Record<number, boolean> = {};
     const thresholds = [25, 50, 75, 90];
@@ -222,7 +238,7 @@ export function trackEngagement(path: string) {
 // Global click & video tracking (called once on app mount)
 let listenersInit = false;
 export function initInteractionTracking() {
-  if (listenersInit || typeof window === 'undefined') return;
+  if (listenersInit || typeof window === 'undefined' || isAdminContext()) return;
   listenersInit = true;
 
   try {

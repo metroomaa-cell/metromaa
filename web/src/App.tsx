@@ -10,11 +10,17 @@ const LoveLockLanding = lazy(() => import('./LoveLockLanding').then((m) => ({ de
 
 function Effects() {
   const route = useRoute();
+  const isAdmin = route.name === 'admin' || (typeof window !== 'undefined' && (/(\/|^)(admin|wp-admin)(\/|$)/i.test(window.location.pathname) || window.location.hash.includes('admin')));
+
   useEffect(() => {
-    initInteractionTracking();
+    if (!isAdmin) {
+      initInteractionTracking();
+    }
     getSettings().then((s) => {
-      if (s.gtmId) initGTM(s.gtmId);
-      if (s.fbPixelId) initFB(s.fbPixelId);
+      if (!isAdmin) {
+        if (s.gtmId) initGTM(s.gtmId);
+        if (s.fbPixelId) initFB(s.fbPixelId);
+      }
       if (s.favicon) {
         let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
         if (!link) {
@@ -25,8 +31,9 @@ function Effects() {
         link.href = s.favicon;
       }
     }).catch(() => {});
-  }, []);
+  }, [isAdmin]);
   useEffect(() => {
+    if (isAdmin) return;
     const p = '/' + (route.name === 'home' ? '' : route.name) + (route.param ? '/' + route.param : '');
     const q = new URLSearchParams(location.search);
     dl({
@@ -38,11 +45,12 @@ function Effects() {
       campaign_medium: q.get('utm_medium') || (q.get('fbclid') ? 'paid' : undefined),
       campaign_name: q.get('utm_campaign') || undefined,
     });
-  }, [route.name, route.param]);
+  }, [route.name, route.param, isAdmin]);
   useEffect(() => {
+    if (isAdmin) return;
     const p = '/' + (route.name === 'home' ? '' : route.name) + (route.param ? '/' + route.param : '');
     trackEngagement(p || '/');
-  }, [route.name, route.param]);
+  }, [route.name, route.param, isAdmin]);
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     document.documentElement.scrollTop = 0;
