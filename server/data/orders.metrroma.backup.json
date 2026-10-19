@@ -2,7 +2,7 @@
   {
     "id": "DOT-1BB78F8F",
     "createdAt": "2026-10-19T15:32:51.383Z",
-    "status": "pending",
+    "status": "approved",
     "payment": "cash_on_delivery",
     "source": "direct",
     "landing": "",
@@ -38,13 +38,17 @@
       {
         "status": "pending",
         "at": "2026-10-19T15:32:51.383Z"
+      },
+      {
+        "status": "approved",
+        "at": "2026-10-19T15:34:41.882Z"
       }
     ]
   },
   {
     "id": "DOT-C8D4654F",
     "createdAt": "2026-10-19T15:32:51.241Z",
-    "status": "pending",
+    "status": "approved",
     "payment": "cash_on_delivery",
     "source": "direct",
     "landing": "",
@@ -80,13 +84,18 @@
       {
         "status": "pending",
         "at": "2026-10-19T15:32:51.241Z"
+      },
+      {
+        "status": "approved",
+        "at": "2026-10-19T15:34:41.970Z"
       }
-    ]
+    ],
+    "adminNote": "Manual order entry (phone_call) by Owner"
   },
   {
     "id": "DOT-6F1E7F61",
     "createdAt": "2026-10-19T15:32:51.049Z",
-    "status": "pending",
+    "status": "approved",
     "payment": "cash_on_delivery",
     "source": "direct",
     "landing": "",
@@ -122,8 +131,13 @@
       {
         "status": "pending",
         "at": "2026-10-19T15:32:51.049Z"
+      },
+      {
+        "status": "approved",
+        "at": "2026-10-19T15:34:42.024Z"
       }
-    ]
+    ],
+    "adminNote": "01811908040  ( Ca"
   },
   {
     "id": "DOT-E6E76A4A",
