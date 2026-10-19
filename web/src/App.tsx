@@ -28,7 +28,16 @@ function Effects() {
   }, []);
   useEffect(() => {
     const p = '/' + (route.name === 'home' ? '' : route.name) + (route.param ? '/' + route.param : '');
-    dl({ event: 'page_view', page_location: location.href, page_path: p || '/' });
+    const q = new URLSearchParams(location.search);
+    dl({
+      event: 'page_view',
+      page_location: location.href,
+      page_path: p || '/',
+      page_title: document.title,
+      campaign_source: q.get('utm_source') || (q.get('fbclid') ? 'facebook' : undefined),
+      campaign_medium: q.get('utm_medium') || (q.get('fbclid') ? 'paid' : undefined),
+      campaign_name: q.get('utm_campaign') || undefined,
+    });
   }, [route.name, route.param]);
   useEffect(() => {
     const p = '/' + (route.name === 'home' ? '' : route.name) + (route.param ? '/' + route.param : '');

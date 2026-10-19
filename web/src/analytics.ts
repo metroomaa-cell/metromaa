@@ -56,22 +56,21 @@ export function initFB(id: string) {
 
 export function initGTM(id: string) {
   try {
-    if (gtmLoaded || !id || !/^GTM-[A-Z0-9]+$/i.test(id.trim())) return;
-    gtmLoaded = true;
-    const gid = id.trim();
     const w = window as any;
+    if (gtmLoaded || !id || !/^GTM-[A-Z0-9]+$/i.test(id.trim())) return;
+    const gid = id.trim();
+    // If GTM is already present in HTML, do not reinject
+    if (document.querySelector(`script[src*="${gid}"]`) || (w.google_tag_manager && w.google_tag_manager[gid])) {
+      gtmLoaded = true;
+      return;
+    }
+    gtmLoaded = true;
     w.dataLayer = w.dataLayer || [];
     w.dataLayer.push({ 'gtm.start': Date.now(), event: 'gtm.js' });
     const s = document.createElement('script');
     s.async = true;
     s.src = 'https://www.googletagmanager.com/gtm.js?id=' + gid;
     document.head.appendChild(s);
-    const ns = document.createElement('noscript');
-    const ifr = document.createElement('iframe');
-    ifr.src = 'https://www.googletagmanager.com/ns.html?id=' + gid;
-    ifr.height = '0'; ifr.width = '0'; ifr.style.display = 'none'; ifr.style.visibility = 'hidden';
-    ns.appendChild(ifr);
-    document.body.insertBefore(ns, document.body.firstChild);
   } catch {}
 }
 
