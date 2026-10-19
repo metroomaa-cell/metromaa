@@ -3559,6 +3559,36 @@ app.post('/api/admin/scanner/scan', adminAuth, (req, res) => {
     return res.json({ ok: true, action: 'return_received', order: updated, restocked: o.items });
   }
 
+  if (mode === 'return_lost' || mode === 'lost' || mode === 'damaged') {
+    const history = Array.isArray(o.history) ? [...o.history] : [];
+    const isDamaged = mode === 'damaged';
+    const noteText = isDamaged 
+      ? `Parcel Returned DAMAGED / BROKEN. Courier compensation claim needed for Tk ${o.total || 0}.`
+      : `Parcel LOST / MISSING by Courier (${o.courier?.name || 'Courier'}). Compensation claim needed for Tk ${o.total || 0}.`;
+
+    history.push({ status: 'cancelled', at: new Date().toISOString(), note: noteText });
+    const updated = updateOrder(o.id, { 
+      status: 'cancelled', 
+      lossClaim: { 
+        type: isDamaged ? 'damaged' : 'lost_in_courier', 
+        amount: o.total || 0, 
+        courier: o.courier?.name || '', 
+        consignment: o.courier?.consignment || '',
+        flaggedAt: new Date().toISOString() 
+      },
+      history 
+    }) || o;
+
+    notifyOrder(updated, 'status');
+    return res.json({ 
+      ok: true, 
+      action: 'lost_flagged', 
+      order: updated, 
+      claimAmount: o.total || 0,
+      courier: o.courier?.name || 'Courier' 
+    });
+  }
+
   // Lookup mode
   res.json({
     ok: true,
