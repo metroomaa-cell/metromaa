@@ -9,7 +9,7 @@ import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns';
 try { dns.setDefaultResultOrder('ipv4first'); } catch {}
-import { getCatalog, getOrders, addOrder, updateOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, saveCustomer, initStorageProtection } from './store.js';
+import { getCatalog, getOrders, addOrder, updateOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, saveCustomer, syncCustomersFromOrders, initStorageProtection } from './store.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 initStorageProtection();
@@ -497,6 +497,7 @@ app.post('/api/orders', (req, res) => {
     if (existingCust) {
       const updateData = {
         ...existingCust,
+        name: existingCust.name && existingCust.name !== 'Customer' ? existingCust.name : (order.customer.name || 'Customer'),
         ordersCount: (existingCust.ordersCount || 0) + 1,
         lastOrderAt: order.createdAt,
       };
@@ -512,6 +513,24 @@ app.post('/api/orders', (req, res) => {
         };
       }
       saveCustomer(updateData);
+    } else {
+      saveCustomer({
+        id: 'cust_' + cleanP,
+        phone: order.customer.phone,
+        name: order.customer.name || 'Customer',
+        email: order.customer.email || '',
+        ordersCount: 1,
+        totalSpent: 0,
+        savedAddress: {
+          address: order.customer.address || '',
+          district: order.customer.district || '',
+          thana: order.customer.thana || '',
+          area: order.customer.area || 'outside',
+        },
+        createdAt: order.createdAt,
+        lastOrderAt: order.createdAt,
+        welcomeCouponUsed: couponCode === 'WELCOME5',
+      });
     }
   } catch {}
   const cat = getCatalog();
@@ -3547,6 +3566,7 @@ app.post('/api/customer/logout', (req, res) => {
 
 // 7. Admin Customer Management
 app.get('/api/admin/customers', adminAuth, (req, res) => {
+  syncCustomersFromOrders();
   const allCust = getCustomers();
   const allOrders = getOrders() || [];
   const enriched = allCust.map((c) => {
@@ -3590,11 +3610,65 @@ if (existsSync(dist)) {
       }
     }
   }));
-  app.get('*', (_req, res) => {
+  app.get('*', (req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
-    res.sendFile(join(dist, 'index.html'));
+    const indexPath = join(dist, 'index.html');
+    if (!existsSync(indexPath)) return res.status(404).send('Not found');
+
+    try {
+      let html = readFileSync(indexPath, 'utf8');
+      const baseUrl = 'https://metrroma.com';
+      const path = req.path || '/';
+
+      const cleanPath = path.replace(/^\/+|\/+$/g, '');
+      const parts = cleanPath.split('/').filter(Boolean);
+      let targetProduct = null;
+
+      const catalog = getCatalog().products || [];
+      if (parts[0] === 'product' && parts[1]) {
+        const slug = parts[1].toLowerCase();
+        targetProduct = catalog.find((p) => p.slug?.toLowerCase() === slug || p.id === parts[1]);
+      } else if (parts.length === 1 && !['shop', 'checkout', 'confirm', 'track', 'wp-admin', 'account', 'admin', 'terms', 'privacy', 'refund', 'contact'].includes(parts[0])) {
+        const slug = parts[0].toLowerCase();
+        targetProduct = catalog.find((p) => p.slug?.toLowerCase() === slug || p.id === parts[0] || (slug === 'love-forever' && p.id === 'mm-29267') || (slug === 'love-forever-gift-box' && p.id === 'mm-29267'));
+      }
+
+      if (targetProduct) {
+        const pTitle = `${targetProduct.name} — METRROMA`;
+        const pDesc = (targetProduct.desc || targetProduct.shortDesc || targetProduct.name).slice(0, 200).replace(/["\n\r]/g, ' ');
+        let pImg = targetProduct.image || (targetProduct.images && targetProduct.images[0]) || '/uploads/img_mvdpqsl1t81m6.webp';
+        if (!pImg.startsWith('http')) pImg = `${baseUrl}${pImg.startsWith('/') ? '' : '/'}${pImg}`;
+        const pUrl = `${baseUrl}/product/${targetProduct.slug || targetProduct.id}`;
+        const pPrice = String(targetProduct.price || 0);
+
+        html = html
+          .replace(/<title>[\s\S]*?<\/title>/i, `<title>${pTitle}</title>`)
+          .replace(/<meta property="og:title" content="[^"]*"/i, `<meta property="og:title" content="${pTitle}"`)
+          .replace(/<meta property="og:description" content="[^"]*"/i, `<meta property="og:description" content="${pDesc}"`)
+          .replace(/<meta property="og:image" content="[^"]*"/i, `<meta property="og:image" content="${pImg}"`)
+          .replace(/<meta name="twitter:title" content="[^"]*"/i, `<meta name="twitter:title" content="${pTitle}"`)
+          .replace(/<meta name="twitter:description" content="[^"]*"/i, `<meta name="twitter:description" content="${pDesc}"`)
+          .replace(/<meta name="twitter:image" content="[^"]*"/i, `<meta name="twitter:image" content="${pImg}"`);
+
+        const extraTags = `
+    <meta property="og:url" content="${pUrl}" />
+    <meta property="og:type" content="product" />
+    <meta property="product:price:amount" content="${pPrice}" />
+    <meta property="product:price:currency" content="BDT" />
+    <meta property="og:image:secure_url" content="${pImg}" />
+    <link rel="canonical" href="${pUrl}" />`;
+        html = html.replace('</head>', `${extraTags}\n</head>`);
+      } else {
+        html = html.replace(/<meta property="og:image" content="(\/[^"]+)"/i, `<meta property="og:image" content="${baseUrl}$1"`);
+      }
+
+      res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+      res.send(html);
+    } catch (_) {
+      res.sendFile(indexPath);
+    }
   });
 }
 

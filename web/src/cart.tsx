@@ -90,31 +90,53 @@ export function useRoute() {
 }
 function parseRoute() {
   const normalize = (part: string) => {
-    const p = part.toLowerCase();
+    const p = (part || '').toLowerCase();
     if (p === 'wp-admin' || p === 'admin' || p === 'admin.html') return 'admin';
+    if (p === 'products' || p === 'item' || p === 'items') return 'product';
+    if (p === 'collections' || p === 'collection' || p === 'category' || p === 'categories') return 'shop';
     return p;
   };
 
-  // If old hash is present, strip # and migrate cleanly to pathname
-  if (location.hash && location.hash.length > 1) {
-    const raw = location.hash.replace(/^#[!/]*\/?/, '');
-    const parts = raw.split('/').filter(Boolean);
-    const n = normalize(parts[0] || 'home');
-    const param = parts.slice(1).join('/');
-    const targetSlug = n === 'admin' ? 'wp-admin' : parts[0] || '';
-    const newPath = targetSlug ? '/' + [targetSlug, ...parts.slice(1)].join('/') : '/';
+  // 1. Clean up Facebook In-App Browser / OAuth hash artifact (#_=_ or empty hash)
+  if (location.hash === '#_=_' || location.hash === '#_' || location.hash === '#') {
     try {
-      window.history.replaceState(null, '', newPath);
+      window.history.replaceState(null, '', location.pathname + location.search);
     } catch {}
-    return { name: n, param };
   }
 
-  // Parse from pathname: e.g. /shop/category, /product/item, /checkout, /track, /wp-admin
+  // 2. Parse FIRST from pathname: e.g. /product/item, /shop/category, /checkout, /track, /wp-admin
   const pathParts = location.pathname.split('/').filter(Boolean);
   if (pathParts.length > 0) {
     const n = normalize(pathParts[0]);
+    // Direct product slug shortcuts & campaign links (e.g. from Facebook Ads)
+    if (n === 'love-forever' || n === 'love-forever-gift-box' || n === 'gift-box') {
+      return { name: 'product', param: 'love-forever-gift-box' };
+    }
+    if (n === 'double-poly-sunglass' || n === 'double-poly-polarized-sunglass' || n === 'sunglass-poly') {
+      return { name: 'product', param: 'double-poly-polarized-sunglass' };
+    }
+    if (n === 'landing' && (pathParts[1] === 'love-forever' || pathParts[1] === 'love-forever-gift-box')) {
+      return { name: 'product', param: 'love-forever-gift-box' };
+    }
     return { name: n, param: pathParts.slice(1).join('/') };
   }
+
+  // 3. Fallback: Only if pathname is "/" and hash actually starts with a route like "#/product/..."
+  if (location.hash && location.hash.length > 1) {
+    const raw = location.hash.replace(/^#[!/]*\/?/, '');
+    const parts = raw.split('/').filter(Boolean);
+    if (parts.length > 0 && parts[0] !== '_=_') {
+      const n = normalize(parts[0]);
+      const param = parts.slice(1).join('/');
+      const targetSlug = n === 'admin' ? 'wp-admin' : parts[0];
+      const newPath = '/' + [targetSlug, ...parts.slice(1)].join('/') + location.search;
+      try {
+        window.history.replaceState(null, '', newPath);
+      } catch {}
+      return { name: n, param };
+    }
+  }
+
   return { name: 'home', param: '' };
 }
 

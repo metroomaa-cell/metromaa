@@ -1,1 +1,36 @@
-[]
+[
+  {
+    "id": "cust_01827260950",
+    "phone": "01827260950",
+    "name": "Md Faisal Rabby",
+    "email": "",
+    "ordersCount": 1,
+    "totalSpent": 0,
+    "savedAddress": {
+      "address": "Dhaka",
+      "district": "Dhaka",
+      "thana": "",
+      "area": "inside"
+    },
+    "createdAt": "2026-10-18T13:58:00.000Z",
+    "lastOrderAt": "2026-10-18T13:58:00.000Z",
+    "welcomeCouponUsed": false
+  },
+  {
+    "id": "cust_01854576468",
+    "phone": "01854576468",
+    "name": "Rb sabbir",
+    "email": "",
+    "ordersCount": 1,
+    "totalSpent": 0,
+    "savedAddress": {
+      "address": "Dhaka",
+      "district": "Dhaka",
+      "thana": "",
+      "area": "inside"
+    },
+    "createdAt": "2026-10-18T06:46:00.000Z",
+    "lastOrderAt": "2026-10-18T06:46:00.000Z",
+    "welcomeCouponUsed": false
+  }
+]
