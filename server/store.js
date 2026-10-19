@@ -8,12 +8,32 @@ const PERSISTENT_DIR = join(DATA_DIR, 'persistent');
 const BACKUPS_DIR = join(DATA_DIR, 'backups');
 
 // External safe storage sitting completely outside the git repository (Hostinger protected space)
-const EXTERNAL_DIR = process.env.PERSISTENT_DATA_DIR || join(__dir, '..', '..', 'metrroma_persistent_data');
+let EXTERNAL_DIR = process.env.PERSISTENT_DATA_DIR;
+if (!EXTERNAL_DIR) {
+  const storeBaseName = existsSync('/var/www/secrate_persistent_data') || __dir.includes('secrate') ? 'secrate_persistent_data' : 'metrroma_persistent_data';
+  const candidates = [
+    join(__dir, '..', '..', storeBaseName),
+    join(__dir, '..', '..', '..', storeBaseName),
+    join('/var/www', storeBaseName),
+    join(__dir, '..', 'persistent_data')
+  ];
+  for (const cand of candidates) {
+    try {
+      if (!existsSync(cand)) mkdirSync(cand, { recursive: true });
+      writeFileSync(join(cand, '.probe'), '1');
+      unlinkSync(join(cand, '.probe'));
+      EXTERNAL_DIR = cand;
+      break;
+    } catch (_) {}
+  }
+}
+if (!EXTERNAL_DIR) EXTERNAL_DIR = join(DATA_DIR, 'persistent');
 
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 if (!existsSync(PERSISTENT_DIR)) mkdirSync(PERSISTENT_DIR, { recursive: true });
 if (!existsSync(BACKUPS_DIR)) mkdirSync(BACKUPS_DIR, { recursive: true });
 try { if (!existsSync(EXTERNAL_DIR)) mkdirSync(EXTERNAL_DIR, { recursive: true }); } catch (_) {}
+console.log('[Store] Isolated external database locked at:', EXTERNAL_DIR);
 
 // Primary file paths
 const CATALOG = join(DATA_DIR, 'catalog.json');
@@ -291,6 +311,18 @@ export function deleteCategory(slug) {
 }
 
 export function getOrders() {
+  // EXCLUSIVE SHIELD: If external safe storage exists, it is the 100% SINGLE SOURCE OF TRUTH.
+  // NEVER read BACKUP_ORDERS or ORDERS from inside the Git repo, because Git pulls overwrite them!
+  try {
+    if (existsSync(EXT_ORDERS)) {
+      const extList = JSON.parse(readFileSync(EXT_ORDERS, 'utf8'));
+      if (Array.isArray(extList) && extList.length > 0) {
+        return extList.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      }
+    }
+  } catch (_) {}
+
+  // Only reached on brand new blank server initialization
   const map = new Map();
 
   const absorb = (arr) => {
@@ -301,7 +333,6 @@ export function getOrders() {
           if (!prev) {
             map.set(o.id, o);
           } else {
-            // keep the one with newer history, more items, or confirmed status
             const prevHist = (prev.history || []).length;
             const newHist = (o.history || []).length;
             const prevItems = (prev.items || []).length;
@@ -317,16 +348,11 @@ export function getOrders() {
     }
   };
 
-  // 1. External safe orders sitting outside git
-  try { if (existsSync(EXT_ORDERS)) absorb(JSON.parse(readFileSync(EXT_ORDERS, 'utf8'))); } catch (_) {}
-  // 2. Immutable backup
-  try { if (existsSync(BACKUP_ORDERS)) absorb(JSON.parse(readFileSync(BACKUP_ORDERS, 'utf8'))); } catch (_) {}
-  // 3. Standard orders
-  try { if (existsSync(ORDERS)) absorb(JSON.parse(readFileSync(ORDERS, 'utf8'))); } catch (_) {}
-  // 4. Persistent orders (runtime state takes priority)
+  // Check fallback paths for one-time initialization
   try { if (existsSync(PERSISTENT_ORDERS)) absorb(JSON.parse(readFileSync(PERSISTENT_ORDERS, 'utf8'))); } catch (_) {}
+  try { if (existsSync(ORDERS)) absorb(JSON.parse(readFileSync(ORDERS, 'utf8'))); } catch (_) {}
+  try { if (existsSync(BACKUP_ORDERS)) absorb(JSON.parse(readFileSync(BACKUP_ORDERS, 'utf8'))); } catch (_) {}
 
-  // 5. Backups directory check if still empty
   if (map.size === 0) {
     try {
       if (existsSync(BACKUPS_DIR)) {
