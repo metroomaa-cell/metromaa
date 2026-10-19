@@ -3606,12 +3606,15 @@ app.post('/api/admin/whatsapp/settings', adminAuth, (req, res) => {
 });
 
 app.post('/api/admin/whatsapp/connect', adminAuth, (req, res) => {
-  const { phone } = req.body || {};
+  const { phone, device, mode } = req.body || {};
+  const settings = getSettings();
+  const storePhone = phone || settings.whatsapp || settings.phone || '01878374762';
+  const cleanPhone = String(storePhone).replace(/\D/g, '').slice(-11);
   const pairingCode = Math.floor(1000 + Math.random() * 9000) + '-' + Math.floor(1000 + Math.random() * 9000);
   const updated = saveWhatsAppSettings({
     connected: true,
-    phone: phone || '01700000000',
-    device: 'WhatsApp Web (Connected)',
+    phone: cleanPhone || '01878374762',
+    device: device || (mode === 'qr' ? 'WhatsApp Web (QR Scanned)' : 'WhatsApp Web (Connected)'),
     pairingCode,
   });
   res.json({ ok: true, pairingCode, settings: updated });

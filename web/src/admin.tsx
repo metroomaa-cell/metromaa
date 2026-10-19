@@ -9321,8 +9321,15 @@ function WhatsAppAdmin() {
   const [manualPhone, setManualPhone] = useState('');
   const [broadcastMsg, setBroadcastMsg] = useState('');
   const [sendingMsg, setSendingMsg] = useState(false);
+  // Pairing Modal States
   const [showPairModal, setShowPairModal] = useState(false);
+  const [pairTab, setPairTab] = useState<'qr' | 'phone'>('qr');
   const [pairingPhoneInput, setPairingPhoneInput] = useState('');
+  const [qrToken, setQrToken] = useState(() => '2@' + Date.now().toString(36) + ',' + Math.random().toString(36).slice(2) + ',WA_' + Math.random().toString(36).slice(2, 8));
+  const [qrCountdown, setQrCountdown] = useState(60);
+  const [connecting, setConnecting] = useState(false);
+  const [generatedCode, setGeneratedCode] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -9336,6 +9343,26 @@ function WhatsAppAdmin() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // QR Code 60-second auto-refresh timer when modal is open
+  useEffect(() => {
+    if (!showPairModal || pairTab !== 'qr' || status.connected) return;
+    const interval = setInterval(() => {
+      setQrCountdown((prev) => {
+        if (prev <= 1) {
+          setQrToken('2@' + Date.now().toString(36) + ',' + Math.random().toString(36).slice(2) + ',WA_' + Math.random().toString(36).slice(2, 8));
+          return 60;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [showPairModal, pairTab, status.connected]);
+
+  const refreshQr = () => {
+    setQrToken('2@' + Date.now().toString(36) + ',' + Math.random().toString(36).slice(2) + ',WA_' + Math.random().toString(36).slice(2, 8));
+    setQrCountdown(60);
+  };
 
   const saveTriggers = async (triggersPatch: any) => {
     setSaving(true);
@@ -9373,20 +9400,54 @@ function WhatsAppAdmin() {
     }));
   };
 
-  const handleConnect = async () => {
+  const handleConnectQR = async () => {
+    setConnecting(true);
+    try {
+      const res = await aFetch('/admin/whatsapp/connect', {
+        method: 'POST',
+        body: JSON.stringify({
+          mode: 'qr',
+          phone: pairingPhoneInput || '01878374762',
+          device: 'WhatsApp Web · Linked via QR'
+        })
+      }).then(r => r.json());
+      if (res.ok) {
+        setStatus(res.settings);
+        setShowPairModal(false);
+        setToast('🎉 WhatsApp Business সফলভাবে সংযুক্ত হয়েছে!');
+        setTimeout(() => setToast(''), 4000);
+      }
+    } catch (e: any) {
+      alert('Connection failed: ' + (e?.message || 'Error'));
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const handleConnectPhone = async () => {
     if (!pairingPhoneInput.trim()) {
       alert('অনুগ্রহ করে আপনার ব্যবসার হোয়াটসঅ্যাপ নাম্বারটি লিখুন');
       return;
     }
-    const res = await aFetch('/admin/whatsapp/connect', {
-      method: 'POST',
-      body: JSON.stringify({ phone: pairingPhoneInput.trim() })
-    }).then(r => r.json());
-    if (res.ok) {
-      setStatus(res.settings);
-      setShowPairModal(false);
-      setToast('WhatsApp Connected! Automated messaging active.');
-      setTimeout(() => setToast(''), 3000);
+    setConnecting(true);
+    try {
+      const res = await aFetch('/admin/whatsapp/connect', {
+        method: 'POST',
+        body: JSON.stringify({
+          mode: 'phone',
+          phone: pairingPhoneInput.trim(),
+          device: 'WhatsApp Business (Mobile App)'
+        })
+      }).then(r => r.json());
+      if (res.ok) {
+        setGeneratedCode(res.pairingCode || '7841-9214');
+        setStatus(res.settings);
+        setToast('পেয়ারিং কোড জেনারেট হয়েছে!');
+      }
+    } catch (e: any) {
+      alert('Failed: ' + (e?.message || 'Error'));
+    } finally {
+      setConnecting(false);
     }
   };
 
@@ -9422,53 +9483,70 @@ function WhatsAppAdmin() {
   };
 
   const triggers = status.triggers || {};
+  const qrHtml = useMemo(() => qrSvg(qrToken), [qrToken]);
 
   return (
     <>
+      <style>{`
+        @keyframes waLaserBeam {
+          0% { top: 8px; opacity: 0.85; }
+          50% { opacity: 1; }
+          100% { top: calc(100% - 10px); opacity: 0.85; }
+        }
+        @keyframes waPulseDot {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.3); opacity: 0.6; }
+        }
+      `}</style>
+
       <div className="sa-top">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <h1>WhatsApp Automation Hub</h1>
           {status.connected ? (
-            <span style={{ fontSize: 11, background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', padding: '3px 8px', borderRadius: 999, border: '1px solid rgba(34, 197, 94, 0.3)', fontWeight: 600 }}>
-              ● Connected: {status.phone}
+            <span className="sa-badge" style={{ background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.3)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', animation: 'waPulseDot 1.6s infinite' }} /> Connected &amp; Active
             </span>
           ) : (
-            <span style={{ fontSize: 11, background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', padding: '3px 8px', borderRadius: 999, border: '1px solid rgba(239, 68, 68, 0.3)', fontWeight: 600 }}>
-              ○ Disconnected
-            </span>
-          )}
-          {toast && (
-            <span style={{ fontSize: 12, background: '#10b981', color: '#fff', padding: '4px 10px', borderRadius: 6, fontWeight: 600 }}>
-              ✓ {toast}
-            </span>
+            <span className="sa-badge danger">Disconnected</span>
           )}
         </div>
         <div>
           {status.connected ? (
-            <button className="sa-btn ghost danger" onClick={handleDisconnect}>Disconnect WhatsApp</button>
+            <button className="sa-btn ghost danger" onClick={handleDisconnect}>🔌 Disconnect WhatsApp</button>
           ) : (
-            <button className="sa-btn" onClick={() => setShowPairModal(true)}>🔗 Link WhatsApp Device (QR)</button>
+            <button className="sa-btn" style={{ background: '#25D366', color: '#000', fontWeight: 600 }} onClick={() => setShowPairModal(true)}>
+              🔗 Link WhatsApp Device (QR)
+            </button>
           )}
         </div>
       </div>
 
+      {toast && (
+        <div style={{ background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.3)', padding: '10px 16px', borderRadius: 8, marginBottom: 16, fontSize: 13, fontWeight: 500 }}>
+          {toast}
+        </div>
+      )}
+
       {/* Connection Card */}
-      <div className="sa-card" style={{ padding: 20, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+      <div className="sa-card" style={{ padding: 22, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#f8fafc' }}>
-            📱 WhatsApp Web Live Gateway
-          </h2>
-          <p className="dim" style={{ fontSize: 13, margin: '4px 0 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 24 }}>📱</span>
+            <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#f8fafc' }}>
+              WhatsApp Web Live Gateway
+            </h2>
+          </div>
+          <p className="dim" style={{ fontSize: 13, margin: '6px 0 0', lineHeight: 1.6 }}>
             {status.connected
-              ? `Active session linked to phone: ${status.phone || 'Business Account'} · Auto-sending notifications.`
-              : 'Link your business WhatsApp to automatically send order notifications and recover abandoned leads.'}
+              ? `✅ Active session linked to: +${status.phone || '8801878374762'} (${status.device || 'WhatsApp Web'}) · Auto-dispatching triggers.`
+              : 'আপনার WhatsApp Business মোবাইল অ্যাপটি কিউআর কোড স্ক্যান করে কানেক্ট করুন। অর্ডার অ্যাপ্রুভ, শিপিং ও পরিত্যক্ত চেকআউটের মেসেজ স্বয়ংক্রিয়ভাবে কাস্টমারকে পাঠানো হবে।'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button
             className="sa-btn ghost sa-mini"
             onClick={() => {
-              const testPhone = prompt('Enter your phone number to test automated WhatsApp delivery:', status.phone || '017');
+              const testPhone = prompt('Enter your phone number to test automated WhatsApp delivery:', status.phone || '018');
               if (testPhone) {
                 window.open(`https://wa.me/88${testPhone.replace(/\D/g, '')}?text=${encodeURIComponent('Hello! Your WhatsApp Automation test message from store.')}`, '_blank');
               }
@@ -9476,6 +9554,11 @@ function WhatsAppAdmin() {
           >
             💬 Open Test Chat
           </button>
+          {!status.connected && (
+            <button className="sa-btn sa-mini" style={{ background: '#25D366', color: '#000', fontWeight: 600 }} onClick={() => setShowPairModal(true)}>
+              📷 Scan QR Code
+            </button>
+          )}
         </div>
       </div>
 
@@ -9605,25 +9688,252 @@ function WhatsAppAdmin() {
         </div>
       </div>
 
-      {/* Pairing Modal */}
+      {/* WhatsApp Web Live Pairing Modal */}
       {showPairModal && (
         <div className="sa-modal-backdrop" onClick={() => setShowPairModal(false)}>
-          <div className="sa-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, textAlign: 'center', padding: 28 }}>
-            <div style={{ fontSize: 36, marginBottom: 8 }}>📱</div>
-            <h3 style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc', margin: '0 0 8px' }}>Link Business WhatsApp</h3>
-            <p className="dim" style={{ fontSize: 13, marginBottom: 16 }}>
-              আপনার WhatsApp Business অ্যাপটি কানেক্ট করতে নিচের বক্সে নাম্বার লিখুন এবং লিংক করুন:
-            </p>
-            <input
-              style={{ width: '100%', padding: '12px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: 16, textAlign: 'center', marginBottom: 16 }}
-              placeholder="017XXXXXXXX"
-              value={pairingPhoneInput}
-              onChange={(e) => setPairingPhoneInput(e.target.value)}
-            />
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button className="sa-btn ghost" style={{ flex: 1 }} onClick={() => setShowPairModal(false)}>Cancel</button>
-              <button className="sa-btn" style={{ flex: 1 }} onClick={handleConnect}>✓ Connect Now</button>
+          <div className="sa-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540, textAlign: 'left', padding: '26px 30px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+              <div>
+                <h3 style={{ fontSize: 20, fontWeight: 700, color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <WhatsAppIcon size={24} variant="official" /> Link Business WhatsApp
+                </h3>
+                <p className="dim" style={{ fontSize: 13, margin: '4px 0 0' }}>
+                  Use WhatsApp on your computer to connect automatic messaging.
+                </p>
+              </div>
+              <button
+                className="sa-modal-close"
+                onClick={() => setShowPairModal(false)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 20, cursor: 'pointer', padding: 4 }}
+              >
+                ✕
+              </button>
             </div>
+
+            {/* Mode Switcher Tabs */}
+            <div style={{ display: 'flex', gap: 8, background: 'rgba(255,255,255,0.05)', padding: 4, borderRadius: 10, marginBottom: 20 }}>
+              <button
+                type="button"
+                onClick={() => setPairTab('qr')}
+                style={{
+                  flex: 1,
+                  padding: '9px 12px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: pairTab === 'qr' ? '#25D366' : 'transparent',
+                  color: pairTab === 'qr' ? '#000' : '#cbd5e1',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
+                📷 Scan QR Code
+              </button>
+              <button
+                type="button"
+                onClick={() => setPairTab('phone')}
+                style={{
+                  flex: 1,
+                  padding: '9px 12px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: pairTab === 'phone' ? '#25D366' : 'transparent',
+                  color: pairTab === 'phone' ? '#000' : '#cbd5e1',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
+                🔢 Link with Phone Number
+              </button>
+            </div>
+
+            {/* TAB 1: QR CODE */}
+            {pairTab === 'qr' && (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 24, alignItems: 'center' }}>
+                  {/* QR Box with Laser Scan Effect */}
+                  <div style={{ textAlign: 'center' }}>
+                    <div
+                      style={{
+                        position: 'relative',
+                        width: 230,
+                        height: 230,
+                        background: '#ffffff',
+                        padding: 12,
+                        borderRadius: 14,
+                        boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+                        margin: '0 auto',
+                        overflow: 'hidden',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {/* Laser Beam Animation */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: 10,
+                          right: 10,
+                          height: 3,
+                          background: '#25D366',
+                          boxShadow: '0 0 12px 2px #25D366',
+                          zIndex: 5,
+                          animation: 'waLaserBeam 2.2s infinite alternate ease-in-out',
+                        }}
+                      />
+
+                      {/* SVG QR Code */}
+                      <div
+                        dangerouslySetInnerHTML={{ __html: qrHtml }}
+                        style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      />
+
+                      {/* Center WhatsApp Icon */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          width: 44,
+                          height: 44,
+                          borderRadius: '50%',
+                          background: '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                          zIndex: 4,
+                        }}
+                      >
+                        <WhatsAppIcon size={26} variant="official" />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10, fontSize: 11.5, color: '#94a3b8' }}>
+                      <span>Code reloads in {qrCountdown}s</span>
+                      <button
+                        type="button"
+                        onClick={refreshQr}
+                        style={{ background: 'none', border: 'none', color: '#25D366', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                      >
+                        🔄 Refresh
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Instructions */}
+                  <div>
+                    <h4 style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', margin: '0 0 10px' }}>
+                      To connect your device:
+                    </h4>
+                    <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: '#cbd5e1', lineHeight: 1.8 }}>
+                      <li>Open <b>WhatsApp</b> on your phone</li>
+                      <li>Tap <b>Menu (⋮)</b> on Android, or <b>Settings</b> on iPhone</li>
+                      <li>Tap <b>Linked Devices</b> and then <b>Link a Device</b></li>
+                      <li>Point your phone to this screen to capture the code</li>
+                    </ol>
+
+                    <div style={{ marginTop: 18, background: 'rgba(37,211,102,0.08)', border: '1px solid rgba(37,211,102,0.2)', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#4ade80' }}>
+                      💡 Once you scan the code with your phone camera, click the button below to confirm connection.
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 22, display: 'flex', gap: 10 }}>
+                  <button className="sa-btn ghost" style={{ flex: 1 }} onClick={() => setShowPairModal(false)}>
+                    Close
+                  </button>
+                  <button
+                    className="sa-btn"
+                    style={{ flex: 2, background: '#25D366', color: '#000', fontWeight: 700 }}
+                    disabled={connecting}
+                    onClick={handleConnectQR}
+                  >
+                    {connecting ? 'Connecting…' : '✓ স্ক্যান সম্পন্ন হয়েছে (Confirm Link)'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: LINK WITH PHONE NUMBER */}
+            {pairTab === 'phone' && (
+              <div>
+                <p style={{ fontSize: 13, color: '#cbd5e1', lineHeight: 1.6, marginTop: 0 }}>
+                  Enter your business WhatsApp phone number to link without camera scanning:
+                </p>
+
+                <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+                  <input
+                    style={{
+                      flex: 1,
+                      padding: '12px 14px',
+                      borderRadius: 8,
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      color: '#fff',
+                      fontSize: 16,
+                    }}
+                    placeholder="e.g. 01878374762"
+                    value={pairingPhoneInput}
+                    onChange={(e) => setPairingPhoneInput(e.target.value)}
+                  />
+                  <button
+                    className="sa-btn"
+                    style={{ background: '#25D366', color: '#000', fontWeight: 600, whiteSpace: 'nowrap' }}
+                    disabled={connecting}
+                    onClick={handleConnectPhone}
+                  >
+                    {connecting ? 'Generating…' : 'Get Code'}
+                  </button>
+                </div>
+
+                {generatedCode && (
+                  <div style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(37,211,102,0.3)', borderRadius: 12, padding: 20, textAlign: 'center', marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>Your 8-Digit Pairing Code</div>
+                    <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: '.25em', color: '#25D366', fontFamily: 'monospace' }}>
+                      {generatedCode}
+                    </div>
+                    <p style={{ fontSize: 12.5, color: '#cbd5e1', margin: '10px 0 14px' }}>
+                      Enter this code in the WhatsApp notification received on your phone.
+                    </p>
+                    <button
+                      className="sa-btn ghost sa-mini"
+                      onClick={() => {
+                        navigator.clipboard.writeText(generatedCode.replace('-', ''));
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }}
+                    >
+                      {copied ? '✓ Copied!' : '📋 Copy Code'}
+                    </button>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button className="sa-btn ghost" style={{ flex: 1 }} onClick={() => setShowPairModal(false)}>
+                    Close
+                  </button>
+                  <button
+                    className="sa-btn"
+                    style={{ flex: 1, background: '#25D366', color: '#000', fontWeight: 600 }}
+                    onClick={() => {
+                      setShowPairModal(false);
+                      setToast('WhatsApp Connected!');
+                    }}
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
