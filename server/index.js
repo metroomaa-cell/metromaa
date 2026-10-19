@@ -419,19 +419,54 @@ app.post('/api/orders', (req, res) => {
       }
     }
 
-    // 2. Standard product match
-    const p = catalog.find((x) => x.id === it.id);
-    if (!p) {
-      if (it.name && it.price) {
+    // 2. Landing package match (e.g. packages in landing page)
+    if (landingPage && Array.isArray(landingPage.packages) && landingPage.packages.length > 0) {
+      const pkg = landingPage.packages.find((pk) =>
+        pk.id === it.id ||
+        pk.id === it.productId ||
+        (it.name && it.name.includes(pk.title))
+      );
+      if (pkg) {
+        const p = catalog.find((x) => x.id === it.id) || catalog.find((x) => x.id === pkg.id);
         const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
-        const itemPrice = Number(it.price) || 999;
+        const name = it.name || pkg.title || landingPage.title;
+        const image = it.image || pkg.image || landingPage.heroImage || '';
         lines.push({
-          id: it.id || 'pmv7bramh',
-          name: it.name,
+          id: pkg.id,
+          name,
+          price: pkg.price,
+          qty,
+          subtotal: pkg.price * qty,
+          image,
+          color: it.color || '',
+          size: it.size || '',
+        });
+        continue;
+      }
+    }
+
+    // 3. Robust standard product match (handling mm-29267, mm-29267-Black, mm-29610, slug, title, etc.)
+    const cleanId = String(it.id || '').trim();
+    const baseId = it.productId || (cleanId.startsWith('mm-') ? cleanId.split('-').slice(0, 2).join('-') : (cleanId.includes('-') ? cleanId.split('-')[0] : cleanId));
+    const p = catalog.find((x) => x.id === cleanId) ||
+              catalog.find((x) => x.id === baseId) ||
+              catalog.find((x) => x.slug === cleanId) ||
+              (landingPage && catalog.find((x) => (landingPage.productIds || []).includes(x.id))) ||
+              catalog.find((x) => it.name && x.name && (x.name.includes(it.name) || it.name.includes(x.name)));
+
+    if (!p) {
+      if (it.name || it.price != null || it.subtotal != null) {
+        const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
+        const itemPrice = Number(it.price) || Number(it.subtotal) || 590;
+        lines.push({
+          id: cleanId || 'item',
+          name: it.name || 'Product',
           price: itemPrice,
           qty,
           subtotal: itemPrice * qty,
-          image: it.image || '',
+          image: it.image || (landingPage ? landingPage.heroImage : ''),
+          color: it.color || '',
+          size: it.size || '',
         });
         continue;
       }
@@ -445,6 +480,8 @@ app.post('/api/orders', (req, res) => {
     if (it.variantId && Array.isArray(p.variations)) {
       const v = p.variations.find((x) => x.id === it.variantId);
       if (v && v.price) itemPrice = v.price;
+    } else if (it.price && Number(it.price) > 0) {
+      itemPrice = Number(it.price);
     }
 
     const sizeStr = it.size || '';

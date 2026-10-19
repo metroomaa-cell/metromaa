@@ -2858,7 +2858,8 @@ export function Checkout() {
     try {
       const res = await placeOrder({
         items: lines.map((l) => ({
-          id: l.id.includes('-') ? l.id.split('-')[0] : l.id,
+          id: l.id.startsWith('mm-') ? l.id.split('-').slice(0, 2).join('-') : (l.id.includes('-') ? l.id.split('-')[0] : l.id),
+          productId: l.id.startsWith('mm-') ? l.id.split('-').slice(0, 2).join('-') : (l.id.includes('-') ? l.id.split('-')[0] : l.id),
           qty: l.qty,
           size: l.size,
           color: l.color,
