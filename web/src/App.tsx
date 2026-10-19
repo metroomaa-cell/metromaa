@@ -41,7 +41,7 @@ function Effects() {
   }, [route.name, route.param]);
   useEffect(() => {
     const isSkin = isSkincareSite();
-    const defaultBrand = isSkin ? 'SECRATE' : 'METROMAA';
+    const defaultBrand = isSkin ? 'SECRATE' : 'METRROMA';
     getSettings().then((s) => {
       const brand = s.storeName && s.storeName !== 'dot.' ? s.storeName : defaultBrand;
       const t: any = isSkin
@@ -55,7 +55,7 @@ function Effects() {
             admin: `Admin Dashboard — ${brand}`,
           }
         : {
-            home: `${brand} | Contemporary Modest Fashion & Lifestyle`,
+            home: `${brand} | Modern Lifestyle, Sunglasses, Watches & Curated Gifts`,
             shop: `All Collections — ${brand}`,
             track: `Track Your Order — ${brand}`,
             checkout: `Checkout (Cash on Delivery) — ${brand}`,
@@ -65,14 +65,14 @@ function Effects() {
           };
       document.title = t[route.name] || brand;
     }).catch(() => {
-      document.title = isSkin ? 'SECRATE | Botanical Skincare' : 'METROMAA';
+      document.title = isSkin ? 'SECRATE | Botanical Skincare' : 'METRROMA | Modern Lifestyle, Watches & Gifts';
     });
 
     let md = document.querySelector('meta[name="description"]') as HTMLMetaElement | null;
     if (!md) { md = document.createElement('meta'); md.name = 'description'; document.head.appendChild(md); }
     md.content = isSkin
       ? 'Premium botanical skincare, hydrating serums, gentle cleansers & self-care essentials delivered across Bangladesh with cash on delivery.'
-      : 'Contemporary modest fashion, abayas, panjabis & lifestyle essentials delivered across Bangladesh with cash on delivery.';
+      : 'Premium sunglasses, authentic watches, handcrafted gift boxes & curated lifestyle essentials delivered across Bangladesh with cash on delivery.';
   }, [route.name]);
   useEffect(() => {
     const io = new IntersectionObserver(
@@ -105,11 +105,15 @@ function AnnouncementBar() {
         setAnnounce(
           isSkin
             ? `✨ Pure Botanical Skincare · Cash on Delivery Nationwide · Free Shipping Over ${threshold}`
-            : `✨ Cash on Delivery Nationwide | Free Shipping on Orders Over ${threshold} | 24/7 Helpline`
+            : `✨ Cash on Delivery Nationwide · 100% Authentic Watches, Sunglasses & Curated Gifts · Free Delivery Over ${threshold}`
         );
       }
     }).catch(() => {
-      setAnnounce('✨ Pure Botanical Skincare · Cash on Delivery Nationwide · 100% Authentic Quality');
+      setAnnounce(
+        isSkin
+          ? '✨ Pure Botanical Skincare · Cash on Delivery Nationwide · 100% Authentic Quality'
+          : '✨ 100% Authentic Watches, Sunglasses & Curated Gifts · Cash on Delivery Nationwide'
+      );
     });
   }, [isSkin]);
   if (!announce) return null;
@@ -127,7 +131,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
   const { customer, openAuth } = useCustomer();
   const [menu, setMenu] = useState(false);
   const isSkin = isSkincareSite();
-  const [storeName, setStoreName] = useState(isSkin ? 'SECRATE' : 'METROMAA');
+  const [storeName, setStoreName] = useState(isSkin ? 'SECRATE' : 'METRROMA');
   const [logo, setLogo] = useState('');
   const [cats, setCats] = useState<{ slug: string; name: string }[]>([]);
   const route = useRoute();
@@ -590,7 +594,7 @@ function MobileTabs() {
 function WhatsAppFloat() {
   const [num, setNum] = useState('');
   const isSkin = isSkincareSite();
-  const [brand, setBrand] = useState(isSkin ? 'SECRATE' : 'METROMAA');
+  const [brand, setBrand] = useState(isSkin ? 'SECRATE' : 'METRROMA');
   useEffect(() => {
     getSettings().then((s) => {
       const wa = s.whatsapp || s.phone || '';

@@ -2091,28 +2091,26 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
 }
 .pc-cta {
   width: 100%;
-  background: transparent;
-  border: 0;
-  background-image:
-    linear-gradient(#b48e4c, #b48e4c),
-    linear-gradient(#b48e4c, #b48e4c),
-    linear-gradient(#b48e4c, #b48e4c),
-    linear-gradient(#b48e4c, #b48e4c);
-  background-position: top left, top right, bottom right, top left;
-  background-size: 100% 1px, 1px 100%, calc(100% - 18px) 1px, 1px calc(100% - 12px);
-  background-repeat: no-repeat;
-  color: #8a6520;
-  padding: 10px 14px;
+  background: #1f3147;
+  border: 1px solid #1f3147;
+  color: #ffffff !important;
+  padding: 12px 14px;
   font-family: 'Inter', sans-serif;
-  font-size: 10px;
-  letter-spacing: 2.5px;
+  font-size: 11px;
+  letter-spacing: 2px;
   text-transform: uppercase;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  transition: color 0.4s ease;
+  border-radius: 4px;
+  transition: all 0.25s ease;
   margin-top: auto;
+  box-shadow: 0 2px 8px rgba(31, 49, 71, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 .pc-cta::before {
   content: '';
@@ -2124,11 +2122,14 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   background: linear-gradient(90deg, #b48e4c 0%, #d4b87a 100%);
   transform: scaleX(0);
   transform-origin: left;
-  transition: transform 0.45s cubic-bezier(0.23,1,0.32,1);
+  transition: transform 0.35s cubic-bezier(0.23,1,0.32,1);
   z-index: 0;
 }
 .pc-cta:hover {
-  color: #FAF8F5;
+  color: #ffffff !important;
+  border-color: #b48e4c;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(180, 142, 76, 0.4);
 }
 .pc-cta:hover::before {
   transform: scaleX(1);
@@ -2137,6 +2138,195 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   position: relative;
   z-index: 1;
 }
+
+/* ============================================================
+   🎯 HIGH-CONVERTING EYE-CATCHING ORDER BUTTONS & ANIMATIONS
+   Designed specifically for Bangladesh eCommerce CTR & Visibility
+   ============================================================ */
+
+@keyframes pulseGlowRed {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 4px 14px rgba(185, 28, 28, 0.45), 0 0 0 0 rgba(220, 38, 38, 0.6);
+  }
+  50% {
+    transform: scale(1.025);
+    box-shadow: 0 8px 26px rgba(185, 28, 28, 0.7), 0 0 0 10px rgba(220, 38, 38, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 4px 14px rgba(185, 28, 28, 0.45), 0 0 0 0 rgba(220, 38, 38, 0.6);
+  }
+}
+
+@keyframes pulseGlowNavy {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 4px 14px rgba(31, 49, 71, 0.35), 0 0 0 0 rgba(43, 69, 102, 0.5);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 8px 24px rgba(31, 49, 71, 0.6), 0 0 0 8px rgba(43, 69, 102, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 4px 14px rgba(31, 49, 71, 0.35), 0 0 0 0 rgba(43, 69, 102, 0.5);
+  }
+}
+
+@keyframes shimmerSweep {
+  0% {
+    transform: translateX(-150%) skewX(-25deg);
+  }
+  30%, 100% {
+    transform: translateX(250%) skewX(-25deg);
+  }
+}
+
+/* Primary PDP Order Now Button */
+.pdp-order-now-btn {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  background: linear-gradient(135deg, #c53030 0%, #991b1b 55%, #7f1d1d 100%);
+  color: #ffffff !important;
+  border: 1px solid #dc2626;
+  border-radius: 6px;
+  padding: 16px 20px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  font-family: inherit;
+  animation: pulseGlowRed 2.2s infinite ease-in-out;
+  transition: transform 0.2s, background 0.3s;
+  z-index: 1;
+}
+
+.pdp-order-now-btn::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: 0;
+  width: 60%;
+  height: 200%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transform: translateX(-150%) skewX(-25deg);
+  animation: shimmerSweep 3.2s infinite ease-in-out;
+  pointer-events: none;
+}
+
+.pdp-order-now-btn:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 55%, #991b1b 100%);
+  transform: translateY(-2px) scale(1.02);
+}
+
+.pdp-order-now-btn:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+.pdp-order-now-btn .btn-main-text {
+  font-size: 14.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.pdp-order-now-btn .btn-sub-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #fef08a; /* soft gold badge color */
+  letter-spacing: 0.04em;
+  font-family: 'Anek Bangla', 'Hind Siliguri', sans-serif;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+
+/* Sticky Bottom Bar Button */
+.sticky-buy-btn {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #c53030 0%, #991b1b 100%);
+  color: #ffffff !important;
+  border: 1px solid #dc2626;
+  border-radius: 6px;
+  padding: 12px 20px;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  animation: pulseGlowRed 2.2s infinite ease-in-out;
+  box-shadow: 0 4px 16px rgba(185, 28, 28, 0.5);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sticky-buy-btn::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: 0;
+  width: 50%;
+  height: 200%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transform: translateX(-150%) skewX(-25deg);
+  animation: shimmerSweep 2.8s infinite ease-in-out;
+  pointer-events: none;
+}
+
+/* Checkout Submit Confirm Button */
+.checkout-submit-btn {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  background: linear-gradient(135deg, #1f3147 0%, #152332 100%);
+  color: #ffffff !important;
+  border: 1px solid #2b4566;
+  border-radius: 6px;
+  padding: 18px 24px;
+  font-weight: 800;
+  font-size: 13.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  animation: pulseGlowNavy 2.5s infinite ease-in-out;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  box-shadow: 0 6px 20px rgba(31, 49, 71, 0.35);
+}
+
+.checkout-submit-btn::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: 0;
+  width: 50%;
+  height: 200%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transform: translateX(-150%) skewX(-25deg);
+  animation: shimmerSweep 3.4s infinite ease-in-out;
+  pointer-events: none;
+}
+
+.checkout-submit-btn:hover {
+  background: linear-gradient(135deg, #2b4566 0%, #1a2a3c 100%);
+  transform: translateY(-2px);
+}
+
 
 /* ── 4. TABAYA FEATURES / BRAND PILLARS (feature-section) ── */
 .feature-section {
@@ -2937,9 +3127,11 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
     font-size: 11.5px !important;
   }
   .pc-cta {
-    padding: 10px 8px !important;
-    font-size: 9.5px !important;
+    padding: 11px 10px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
     letter-spacing: 1px !important;
+    border-radius: 4px !important;
   }
 
   /* Product Details Page on Mobile */
@@ -4101,6 +4293,7 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   box-shadow: 0 12px 32px rgba(203, 32, 45, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.4);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   text-align: center;
+  animation: pulseGlowRed 2.4s infinite ease-in-out;
 }
 
 .ll-submit-order-btn:hover {
@@ -4246,6 +4439,7 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   box-shadow: 0 4px 14px rgba(203, 32, 45, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
   white-space: nowrap;
   transition: transform .15s ease;
+  animation: pulseGlowRed 2.2s infinite ease-in-out;
 }
 .ll-sticky-order:active {
   transform: scale(0.98);

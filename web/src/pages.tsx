@@ -578,12 +578,12 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
             <img
               src={isSkin
                 ? '/uploads/banner_secrate_desktop.webp'
-                : 'https://tabaya.com/cdn/shop/files/Cover_01.png?v=1778416287&width=1920'}
-              alt={isSkin ? 'Botanical Skincare & Essentials' : 'Contemporary Modest Living'}
+                : '/uploads/img_mvdpqsl1t81m6.webp'}
+              alt={isSkin ? 'Botanical Skincare & Essentials' : 'METRROMA Lifestyle & Gifts'}
               onError={(e: any) => {
                 e.currentTarget.src = isSkin
                   ? 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=1920&q=85'
-                  : 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=1920&q=85';
+                  : '/uploads/img_mvdpqsl1t81m6.webp';
               }}
             />
           </picture>
@@ -592,7 +592,7 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
         <div className="wrap tabaya-hero-wrap">
           <div className="tabaya-hero-card">
             <span className="tabaya-hero-badge">
-              {isSkin ? '🌿 DERMATOLOGICALLY CRAFTED · BOTANICAL CARE' : 'NEW ARRIVALS · 2026 COLLECTION'}
+              {isSkin ? '🌿 DERMATOLOGICALLY CRAFTED · BOTANICAL CARE' : '✨ EXCLUSIVE 2026 COLLECTION · PREMIUM LIFESTYLE'}
             </span>
             <h1 className="tabaya-hero-title serif">
               {isSkin ? (
@@ -602,27 +602,27 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
                 </>
               ) : (
                 <>
-                  Timeless Elegance & Modesty<br />
-                  <span className="it" style={{ color: '#b48e4c' }}>Contemporary Modest Living</span>
+                  Curated Modern Lifestyle<br />
+                  <span className="it" style={{ color: '#b48e4c' }}>Watches, Sunglasses & Gifts</span>
                 </>
               )}
             </h1>
             <p className="tabaya-hero-desc">
               {isSkin
                 ? 'Nourish your skin barrier with clinically-inspired botanical cleansers, hydrating serums, and restorative moisture balms. Cash on delivery nationwide.'
-                : 'A bespoke blend of sheer comfort and refined fabrics. Designed to exude understated elegance, graceful silhouettes, and modern aesthetic.'}
+                : 'Discover signature sunglasses, authentic timepieces, and bespoke gift boxes crafted for timeless elegance. Cash on delivery nationwide.'}
             </p>
             <div className="tabaya-hero-btns">
               <button className="tabaya-btn primary" onClick={() => go(isSkin ? 'shop/skincare' : 'shop')}>
                 {isSkin ? 'EXPLORE SKINCARE →' : 'EXPLORE COLLECTIONS →'}
               </button>
-              <button className="tabaya-btn outline" onClick={() => go(isSkin ? 'shop' : 'shop/modest-wear')}>
-                {isSkin ? 'ALL PRODUCTS' : 'MODEST ABAYAS'}
+              <button className="tabaya-btn outline" onClick={() => go('shop')}>
+                ALL PRODUCTS
               </button>
             </div>
             <div className="tabaya-hero-micro">
               <span>🚚 Cash on Delivery Nationwide</span>
-              <span>{isSkin ? '🌿 100% Authentic Quality Guaranteed' : '🔒 100% Satisfaction Guarantee'}</span>
+              <span>{isSkin ? '🌿 100% Authentic Quality Guaranteed' : '⭐ 100% Satisfaction Guarantee'}</span>
             </div>
           </div>
         </div>
@@ -947,7 +947,7 @@ export function Home() {
               <p className="ara-subtitle">
                 {isSkin
                   ? 'Formulated with clean, nutrient-rich botanicals to balance, hydrate, and protect your skin everyday.'
-                  : 'Discover timeless silhouettes tailored from premium breathable fabrics for effortless modesty.'}
+                  : 'Explore our handpicked curation of designer sunglasses, signature timepieces, and bespoke gift boxes.'}
               </p>
             </div>
 
@@ -980,12 +980,12 @@ export function Home() {
       <section className="tabaya-intro">
         <div className="tabaya-intro__frame">
           <h2 className="tabaya-intro__title">
-            {isSkin ? 'Pure Botanicals Meet Clinical Care' : 'Understated Elegance Meets Craftsmanship'}
+            {isSkin ? 'Pure Botanicals Meet Clinical Care' : 'Premium Craftsmanship Meets Modern Luxury'}
           </h2>
           <p className="tabaya-intro__desc">
             {isSkin
               ? 'Every product in our skincare and self-care collection is thoughtfully formulated with nutrient-dense botanical extracts to strengthen your skin barrier, balance hydration, and reveal a natural, healthy glow. Cash on delivery with doorstep inspection across Bangladesh.'
-              : 'Every piece in our collection is meticulously crafted with an unwavering commitment to modesty, breathability, and timeless luxury. We believe in clothing that honors tradition while embracing modern contemporary sophistication.'}
+              : 'Every item in our collection is curated with an unwavering commitment to craftsmanship, authentic premium quality, and timeless modern style. From iconic timepieces and designer sunglasses to unforgettable gift boxes delivered with cash on delivery across Bangladesh.'}
           </p>
         </div>
       </section>
@@ -1187,7 +1187,7 @@ export function Home() {
             </p>
             {subbed ? (
               <div style={{ color: '#10b981', fontWeight: 700, fontSize: 16 }}>
-                {isSkin ? '✓ Thank you! You have been subscribed to SECRATE VIP Club.' : '✓ Thank you! You have been subscribed to the METROMAA VIP Club.'}
+                {isSkin ? '✓ Thank you! You have been subscribed to SECRATE VIP Club.' : '✓ Thank you! You have been subscribed to the METRROMA VIP Club.'}
               </div>
             ) : (
               <form
@@ -1245,7 +1245,7 @@ export function Shop({ category }: { category: string }) {
       <div className="wrap" style={{ maxWidth: 1300 }}>
         <div className="phead" style={{ textAlign: 'center', padding: '30px 0 20px' }}>
           <p className="pc-section-kicker">
-            {isSkin ? 'PURE BOTANICAL FORMULATIONS' : 'METROMAA CURATED LINEUP'}
+            {isSkin ? 'PURE BOTANICAL FORMULATIONS' : 'METRROMA CURATED LINEUP'}
           </p>
           <h1 className="pc-section-title">
             {activeCat ? activeCat.name : (isSkin ? 'All Skincare & Essentials' : 'All Collections')}
@@ -1253,7 +1253,7 @@ export function Shop({ category }: { category: string }) {
           <p className="pc-section-subtitle">
             {activeCat ? activeCat.blurb : (isSkin
               ? 'Discover nutrient-dense botanical formulations crafted to nourish, balance, and restore your skin naturally.'
-              : 'Discover timeless silhouettes tailored from premium breathable fabrics for effortless modesty.')}
+              : 'Discover premium sunglasses, authentic timepieces, and curated gift boxes crafted for modern lifestyle.')}
           </p>
         </div>
 
@@ -1411,7 +1411,7 @@ export function ProductPage({ slug }: { slug: string }) {
         ) || pr.variations[0];
         setSelVar(found);
       }
-      document.title = `${pr.name} — ${isSkin ? 'SECRATE' : 'METROMAA'}`;
+      document.title = `${pr.name} — ${isSkin ? 'SECRATE' : 'METRROMA'}`;
       ecView({ id: pr.id, name: pr.name, price: pr.price });
     }).catch(() => setErr(true));
   }, [slug]);
@@ -1767,12 +1767,28 @@ export function ProductPage({ slug }: { slug: string }) {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <button
-                    className="pc-cta"
+                    className="pdp-order-now-btn"
                     onClick={handleDirectBuy}
-                    style={{ width: '100%', padding: '16px 24px', fontSize: 12, letterSpacing: '0.22em' }}
                   >
-                    ORDER NOW — CASH ON DELIVERY →
+                    <span className="btn-main-text">
+                      ⚡ ORDER NOW — CASH ON DELIVERY ➔
+                    </span>
+                    <span className="btn-sub-text">
+                      👉 অর্ডার করতে এখানে ক্লিক করুন (ক্যাশ অন ডেলিভারি)
+                    </span>
                   </button>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, margin: '2px 0 4px' }}>
+                    <div style={{ background: '#ffffff', border: '1px solid #e2dbcf', borderRadius: 4, padding: '7px 4px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#1f3147' }}>
+                      🚚 ক্যাশ অন ডেলিভারি
+                    </div>
+                    <div style={{ background: '#ffffff', border: '1px solid #e2dbcf', borderRadius: 4, padding: '7px 4px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#1f3147' }}>
+                      📦 দেখে নেওয়ার সুযোগ
+                    </div>
+                    <div style={{ background: '#ffffff', border: '1px solid #e2dbcf', borderRadius: 4, padding: '7px 4px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#1f3147' }}>
+                      ⭐ ১০০% অরিজিনাল
+                    </div>
+                  </div>
                   <button
                     className="tabaya-btn outline"
                     onClick={handleAddToCart}
@@ -1929,7 +1945,7 @@ export function ProductPage({ slug }: { slug: string }) {
           {/* Section Heading */}
           <div style={{ textAlign: 'center', padding: '36px 20px 22px', borderBottom: '1px solid #EAE5DC' }}>
             <span className="pc-eyebrow" style={{ display: 'block', marginBottom: 8, letterSpacing: '3px' }}>
-              {p.category ? p.category.toUpperCase().replace('-', ' ') : (isSkin ? 'SECRATE BOTANICALS' : 'METROMAA ARCHIVE')} • PRODUCT SPECIFICATIONS
+              {p.category ? p.category.toUpperCase().replace('-', ' ') : (isSkin ? 'SECRATE BOTANICALS' : 'METRROMA ARCHIVE')} • PRODUCT SPECIFICATIONS
             </span>
             <h2 className="serif" style={{ fontSize: 'clamp(22px, 2.5vw, 32px)', color: '#1f3147', margin: 0, fontWeight: 500 }}>
               {isSkin ? 'Product Information & Botanical Specifications' : 'Product Information, Sizing & Specifications'}
@@ -2723,25 +2739,10 @@ export function ProductPage({ slug }: { slug: string }) {
             </div>
           </div>
           <button
-            className="btn"
+            className="sticky-buy-btn"
             onClick={handleDirectBuy}
-            style={{
-              background: '#8B1E1E',
-              color: '#ffffff',
-              borderRadius: 4,
-              padding: '12px 18px',
-              fontWeight: 700,
-              fontSize: 12,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              whiteSpace: 'nowrap',
-              border: 'none',
-              cursor: 'pointer',
-              flexShrink: 0,
-              boxShadow: '0 2px 8px rgba(139,30,30,0.25)'
-            }}
           >
-            ORDER NOW →
+            <span>👉 ORDER NOW (ক্যাশ অন ডেলিভারি) ➔</span>
           </button>
         </div>
       )}
@@ -2904,7 +2905,7 @@ export function Checkout() {
         {/* Header */}
         <div className="phead" style={{ textAlign: 'center', padding: '6px 0 28px' }}>
           <p className="pc-section-kicker">
-            {isSkin ? 'SECRATE • SECURE ORDER CHECKOUT' : 'METROMAA • SECURE ORDER CHECKOUT'}
+            {isSkin ? 'SECRATE • SECURE ORDER CHECKOUT' : 'METRROMA • SECURE ORDER CHECKOUT'}
           </p>
           <h1 className="serif" style={{ fontSize: 'clamp(28px, 3.4vw, 40px)', fontWeight: 500, color: '#1f3147', margin: '6px 0 10px' }}>
             Finalize Your Order
@@ -3174,19 +3175,17 @@ export function Checkout() {
             )}
 
             <button
-              className="pc-cta"
+              className="checkout-submit-btn"
               disabled={busy}
               onClick={submit}
-              style={{
-                width: '100%',
-                padding: '18px 24px',
-                fontSize: 12.5,
-                letterSpacing: '0.22em',
-                marginTop: 18,
-                boxShadow: '0 6px 20px rgba(31,49,71,0.25)'
-              }}
+              style={{ marginTop: 18 }}
             >
-              <span>{busy ? 'PROCESSING ORDER…' : `CONFIRM ORDER — ${taka(grand)} →`}</span>
+              <span style={{ fontSize: 13.5, fontWeight: 800, letterSpacing: '0.12em' }}>
+                {busy ? 'PROCESSING ORDER…' : `CONFIRM ORDER — ${taka(grand)} ➔`}
+              </span>
+              <span style={{ fontSize: 11.5, color: '#fef08a', fontWeight: 600, fontFamily: "'Anek Bangla', 'Hind Siliguri', sans-serif" }}>
+                অর্ডার কনফার্ম করতে ক্লিক করুন (ক্যাশ অন ডেলিভারি)
+              </span>
             </button>
 
             <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: '#6b645c', textAlign: 'center' }}>
@@ -3229,7 +3228,7 @@ export function Confirm({ id }: { id: string }) {
           <div className="pc-corner-tr" />
           <div className="pc-corner-bl" />
           <div className="okcheck"><svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5" /></svg></div>
-          <p className="pc-section-kicker">{isSkin ? 'SECRATE • ORDER RECEIVED' : 'METROMAA • ORDER RECEIVED'}</p>
+          <p className="pc-section-kicker">{isSkin ? 'SECRATE • ORDER RECEIVED' : 'METRROMA • ORDER RECEIVED'}</p>
           <h1 className="serif" style={{ fontSize: 'clamp(26px, 3.2vw, 36px)', color: '#1f3147', fontWeight: 500, margin: '8px 0 12px' }}>
             Order Placed Successfully!
           </h1>
