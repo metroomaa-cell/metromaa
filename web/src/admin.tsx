@@ -9325,44 +9325,61 @@ function WhatsAppAdmin() {
   const [showPairModal, setShowPairModal] = useState(false);
   const [pairTab, setPairTab] = useState<'qr' | 'phone'>('qr');
   const [pairingPhoneInput, setPairingPhoneInput] = useState('');
-  const [qrToken, setQrToken] = useState(() => '2@' + Date.now().toString(36) + ',' + Math.random().toString(36).slice(2) + ',WA_' + Math.random().toString(36).slice(2, 8));
-  const [qrCountdown, setQrCountdown] = useState(60);
   const [connecting, setConnecting] = useState(false);
   const [generatedCode, setGeneratedCode] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const load = () => {
-    setLoading(true);
+  const startSession = async (reset = false) => {
+    setConnecting(true);
+    try {
+      await aFetch('/admin/whatsapp/start-session', {
+        method: 'POST',
+        body: JSON.stringify({ reset }),
+      });
+      load(false);
+    } catch {}
+    finally {
+      setConnecting(false);
+    }
+  };
+
+  const load = (showLoader = false) => {
+    if (showLoader) setLoading(true);
     aFetch('/admin/whatsapp/status')
       .then((r) => r.json())
       .then((d) => {
-        setStatus(d);
-        setLoading(false);
+        setStatus((prev: any) => {
+          if (!prev?.connected && d?.connected) {
+            setShowPairModal(false);
+            setToast(`🎉 WhatsApp Business সফলভাবে সংযুক্ত হয়েছে! (+${d.phone || ''})`);
+            setTimeout(() => setToast(''), 4500);
+          }
+          return d;
+        });
+        if (showLoader) setLoading(false);
       })
-      .catch(() => setLoading(false));
-  };
-
-  useEffect(() => { load(); }, []);
-
-  // QR Code 60-second auto-refresh timer when modal is open
-  useEffect(() => {
-    if (!showPairModal || pairTab !== 'qr' || status.connected) return;
-    const interval = setInterval(() => {
-      setQrCountdown((prev) => {
-        if (prev <= 1) {
-          setQrToken('2@' + Date.now().toString(36) + ',' + Math.random().toString(36).slice(2) + ',WA_' + Math.random().toString(36).slice(2, 8));
-          return 60;
-        }
-        return prev - 1;
+      .catch(() => {
+        if (showLoader) setLoading(false);
       });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [showPairModal, pairTab, status.connected]);
-
-  const refreshQr = () => {
-    setQrToken('2@' + Date.now().toString(36) + ',' + Math.random().toString(36).slice(2) + ',WA_' + Math.random().toString(36).slice(2, 8));
-    setQrCountdown(60);
   };
+
+  useEffect(() => { load(true); }, []);
+
+  // Poll real Baileys status while modal is open or waiting for connection
+  useEffect(() => {
+    if (status.connected && !showPairModal) return;
+    const interval = setInterval(() => {
+      load(false);
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [showPairModal, status.connected]);
+
+  // When opening modal for QR tab, make sure session is started on server
+  useEffect(() => {
+    if (showPairModal && pairTab === 'qr' && !status.connected && !status.qrDataUrl) {
+      startSession(false);
+    }
+  }, [showPairModal, pairTab, status.connected, status.qrDataUrl]);
 
   const saveTriggers = async (triggersPatch: any) => {
     setSaving(true);
@@ -9400,49 +9417,25 @@ function WhatsAppAdmin() {
     }));
   };
 
-  const handleConnectQR = async () => {
-    setConnecting(true);
-    try {
-      const res = await aFetch('/admin/whatsapp/connect', {
-        method: 'POST',
-        body: JSON.stringify({
-          mode: 'qr',
-          phone: pairingPhoneInput || '01878374762',
-          device: 'WhatsApp Web · Linked via QR'
-        })
-      }).then(r => r.json());
-      if (res.ok) {
-        setStatus(res.settings);
-        setShowPairModal(false);
-        setToast('🎉 WhatsApp Business সফলভাবে সংযুক্ত হয়েছে!');
-        setTimeout(() => setToast(''), 4000);
-      }
-    } catch (e: any) {
-      alert('Connection failed: ' + (e?.message || 'Error'));
-    } finally {
-      setConnecting(false);
-    }
-  };
-
   const handleConnectPhone = async () => {
     if (!pairingPhoneInput.trim()) {
-      alert('অনুগ্রহ করে আপনার ব্যবসার হোয়াটসঅ্যাপ নাম্বারটি লিখুন');
+      alert('অনুগ্রহ করে আপনার হোয়াটসঅ্যাপ নাম্বারটি লিখুন');
       return;
     }
     setConnecting(true);
     try {
-      const res = await aFetch('/admin/whatsapp/connect', {
+      const res = await aFetch('/admin/whatsapp/request-pair-code', {
         method: 'POST',
         body: JSON.stringify({
-          mode: 'phone',
           phone: pairingPhoneInput.trim(),
-          device: 'WhatsApp Business (Mobile App)'
         })
       }).then(r => r.json());
-      if (res.ok) {
-        setGeneratedCode(res.pairingCode || '7841-9214');
-        setStatus(res.settings);
-        setToast('পেয়ারিং কোড জেনারেট হয়েছে!');
+      if (res.ok && res.pairingCode) {
+        setGeneratedCode(res.pairingCode);
+        setToast('৮-ডিজিটের অফিসিয়াল পেয়ারিং কোড তৈরি হয়েছে!');
+        setTimeout(() => setToast(''), 4000);
+      } else {
+        alert(res.error || 'Failed to generate pairing code');
       }
     } catch (e: any) {
       alert('Failed: ' + (e?.message || 'Error'));
@@ -9483,7 +9476,7 @@ function WhatsAppAdmin() {
   };
 
   const triggers = status.triggers || {};
-  const qrHtml = useMemo(() => qrSvg(qrToken), [qrToken]);
+
 
   return (
     <>
@@ -9792,39 +9785,63 @@ function WhatsAppAdmin() {
                         }}
                       />
 
-                      {/* SVG QR Code */}
-                      <div
-                        dangerouslySetInnerHTML={{ __html: qrHtml }}
-                        style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      />
+                      {/* Real Baileys WhatsApp QR Image */}
+                      {status.qrDataUrl ? (
+                        <img
+                          src={status.qrDataUrl}
+                          alt="WhatsApp Web Multi-Device QR"
+                          style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                        />
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 14, textAlign: 'center' }}>
+                          <div style={{ fontSize: 28, marginBottom: 8, animation: 'waPulseDot 1.4s infinite' }}>⏳</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
+                            {connecting ? 'Creating Session…' : 'Generating QR Code…'}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                            Connecting to WhatsApp Web Multi-Device Gateway
+                          </div>
+                        </div>
+                      )}
 
-                      {/* Center WhatsApp Icon */}
-                      <div
-                        style={{
-                          position: 'absolute',
-                          width: 44,
-                          height: 44,
-                          borderRadius: '50%',
-                          background: '#ffffff',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                          zIndex: 4,
-                        }}
-                      >
-                        <WhatsAppIcon size={26} variant="official" />
-                      </div>
+                      {/* Center WhatsApp Icon (Only if QR is visible) */}
+                      {status.qrDataUrl && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            width: 44,
+                            height: 44,
+                            borderRadius: '50%',
+                            background: '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                            zIndex: 4,
+                          }}
+                        >
+                          <WhatsAppIcon size={26} variant="official" />
+                        </div>
+                      )}
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10, fontSize: 11.5, color: '#94a3b8' }}>
-                      <span>Code reloads in {qrCountdown}s</span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 12 }}>
                       <button
                         type="button"
-                        onClick={refreshQr}
-                        style={{ background: 'none', border: 'none', color: '#25D366', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                        disabled={connecting}
+                        onClick={() => startSession(true)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#25D366',
+                          cursor: 'pointer',
+                          padding: 0,
+                          textDecoration: 'underline',
+                          fontSize: 12.5,
+                          fontWeight: 600,
+                        }}
                       >
-                        🔄 Refresh
+                        🔄 {connecting ? 'Refreshing…' : 'Get Fresh QR Code'}
                       </button>
                     </div>
                   </div>
@@ -9838,11 +9855,11 @@ function WhatsAppAdmin() {
                       <li>Open <b>WhatsApp</b> on your phone</li>
                       <li>Tap <b>Menu (⋮)</b> on Android, or <b>Settings</b> on iPhone</li>
                       <li>Tap <b>Linked Devices</b> and then <b>Link a Device</b></li>
-                      <li>Point your phone to this screen to capture the code</li>
+                      <li>Point your phone camera to this screen to scan the QR code</li>
                     </ol>
 
                     <div style={{ marginTop: 18, background: 'rgba(37,211,102,0.08)', border: '1px solid rgba(37,211,102,0.2)', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#4ade80' }}>
-                      💡 Once you scan the code with your phone camera, click the button below to confirm connection.
+                      💡 This is the official WhatsApp Web multi-device handshake. Once scanned, your session pairs automatically without logging out from your phone.
                     </div>
                   </div>
                 </div>
@@ -9855,9 +9872,16 @@ function WhatsAppAdmin() {
                     className="sa-btn"
                     style={{ flex: 2, background: '#25D366', color: '#000', fontWeight: 700 }}
                     disabled={connecting}
-                    onClick={handleConnectQR}
+                    onClick={() => {
+                      load(true);
+                      if (status.connected) {
+                        setShowPairModal(false);
+                      } else {
+                        alert('আপনার মোবাইলের WhatsApp অ্যাপের Linked Devices দিয়ে QR কোডটি স্ক্যান করুন। স্ক্যান সম্পন্ন হলেই এটি স্বয়ংক্রিয়ভাবে কানেক্ট হবে।');
+                      }
+                    }}
                   >
-                    {connecting ? 'Connecting…' : '✓ স্ক্যান সম্পন্ন হয়েছে (Confirm Link)'}
+                    {status.connected ? '✓ Connected' : '🔄 Check Connection'}
                   </button>
                 </div>
               </div>

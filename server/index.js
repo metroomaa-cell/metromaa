@@ -11,6 +11,7 @@ import dns from 'node:dns';
 try { dns.setDefaultResultOrder('ipv4first'); } catch {}
 import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, saveCustomer, syncCustomersFromOrders, initStorageProtection } from './store.js';
 import { getWhatsAppSettings, saveWhatsAppSettings, sendWhatsAppNotification, formatWhatsAppMessage } from './whatsapp_engine.js';
+import { startWhatsAppSocket, getWhatsAppLiveStatus, requestPairingCode, sendBaileysMessage } from './whatsapp_baileys.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 initStorageProtection();
@@ -3587,17 +3588,36 @@ app.post('/api/admin/finance/toggle-payout', adminAuth, (req, res) => {
 // ==========================================
 // 4. WHATSAPP AUTOMATION HUB
 // ==========================================
+// REAL BAILEYS WHATSAPP ENGINE ROUTES
+// ==========================================
 app.get('/api/admin/whatsapp/status', adminAuth, (req, res) => {
-  const wa = getWhatsAppSettings();
-  res.json({
-    enabled: wa.enabled,
-    connected: wa.connected,
-    phone: wa.phone || '',
-    device: wa.device || 'WhatsApp Web Gateway',
-    pairingCode: wa.pairingCode || '',
-    triggers: wa.triggers || {},
-    logs: (wa.logs || []).slice(0, 50),
-  });
+  try {
+    const live = getWhatsAppLiveStatus();
+    res.json(live);
+  } catch (err) {
+    res.json(getWhatsAppSettings());
+  }
+});
+
+app.post('/api/admin/whatsapp/start-session', adminAuth, async (req, res) => {
+  try {
+    const forceNew = req.body?.reset === true;
+    const result = await startWhatsAppSocket(forceNew);
+    res.json({ ok: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/whatsapp/request-pair-code', adminAuth, async (req, res) => {
+  try {
+    const { phone } = req.body || {};
+    if (!phone) return res.status(400).json({ error: 'Phone number is required' });
+    const pairingCode = await requestPairingCode(phone);
+    res.json({ ok: true, pairingCode });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 app.post('/api/admin/whatsapp/settings', adminAuth, (req, res) => {
@@ -3605,48 +3625,51 @@ app.post('/api/admin/whatsapp/settings', adminAuth, (req, res) => {
   res.json({ ok: true, settings: updated });
 });
 
-app.post('/api/admin/whatsapp/connect', adminAuth, (req, res) => {
-  const { phone, device, mode } = req.body || {};
-  const settings = getSettings();
-  const storePhone = phone || settings.whatsapp || settings.phone || '01878374762';
-  const cleanPhone = String(storePhone).replace(/\D/g, '').slice(-11);
-  const pairingCode = Math.floor(1000 + Math.random() * 9000) + '-' + Math.floor(1000 + Math.random() * 9000);
-  const updated = saveWhatsAppSettings({
-    connected: true,
-    phone: cleanPhone || '01878374762',
-    device: device || (mode === 'qr' ? 'WhatsApp Web (QR Scanned)' : 'WhatsApp Web (Connected)'),
-    pairingCode,
-  });
-  res.json({ ok: true, pairingCode, settings: updated });
+app.post('/api/admin/whatsapp/connect', adminAuth, async (req, res) => {
+  try {
+    const { phone, device, mode } = req.body || {};
+    const settings = getSettings();
+    const storePhone = phone || settings.whatsapp || settings.phone || '01878374762';
+    const cleanPhone = String(storePhone).replace(/\D/g, '').slice(-11);
+    
+    // Trigger socket start if not running
+    startWhatsAppSocket(false).catch(() => {});
+
+    const updated = saveWhatsAppSettings({
+      connected: true,
+      phone: cleanPhone || '01878374762',
+      device: device || (mode === 'qr' ? 'WhatsApp Web (Live Multi-Device)' : 'WhatsApp Web (Connected)'),
+    });
+    res.json({ ok: true, settings: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/api/admin/whatsapp/disconnect', adminAuth, (req, res) => {
-  const updated = saveWhatsAppSettings({
-    connected: false,
-    phone: '',
-    device: 'Disconnected',
-    pairingCode: '',
-  });
-  res.json({ ok: true, settings: updated });
+app.post('/api/admin/whatsapp/disconnect', adminAuth, async (req, res) => {
+  try {
+    await startWhatsAppSocket(true);
+    const updated = saveWhatsAppSettings({
+      connected: false,
+      phone: '',
+      device: 'Disconnected',
+      pairingCode: '',
+    });
+    res.json({ ok: true, settings: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/admin/whatsapp/send', adminAuth, async (req, res) => {
   const { phone, message, orderId } = req.body || {};
   if (!phone || !message) return res.status(400).json({ error: 'Phone and message are required' });
-  const wa = getWhatsAppSettings();
-  const cleanPhone = String(phone).replace(/\D/g, '');
-  const logEntry = {
-    id: 'wa_' + Date.now().toString(36),
-    at: new Date().toISOString(),
-    phone: cleanPhone,
-    orderId: orderId || null,
-    eventType: 'manual_broadcast',
-    message,
-    status: 'delivered',
-  };
-  const logs = [logEntry, ...(wa.logs || [])].slice(0, 100);
-  saveWhatsAppSettings({ logs });
-  res.json({ ok: true, log: logEntry });
+  try {
+    const result = await sendBaileysMessage(phone, message, orderId, 'manual_broadcast');
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ---- Universal courier webhook endpoint (Multi-Account Support for Pathao, Steadfast, CarryBee, RedX, Generic) ----

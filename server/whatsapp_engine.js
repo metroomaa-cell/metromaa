@@ -69,7 +69,7 @@ export function formatWhatsAppMessage(template, order) {
   const total = order?.total || 0;
   const courier = order?.courier?.name || 'Courier';
   const consignment = order?.courier?.consignment || '';
-  const trackingUrl = order?.courier?.url || `https://metrroma.com/track?id=${orderId}`;
+  const trackingUrl = order?.courier?.url || `https://secrate.shop/track?id=${orderId}`;
   const address = order?.customer?.address || '';
   const items = (order?.items || []).map((i) => i.name || i.title || 'পণ্য').join(', ') || 'পণ্য';
 
@@ -83,6 +83,11 @@ export function formatWhatsAppMessage(template, order) {
     .replace(/{tracking_url}/g, trackingUrl)
     .replace(/{address}/g, address)
     .replace(/{items}/g, items);
+}
+
+let baileysSender = null;
+export function registerBaileysSender(fn) {
+  baileysSender = fn;
 }
 
 export async function sendWhatsAppNotification(order, eventType) {
@@ -100,6 +105,17 @@ export async function sendWhatsAppNotification(order, eventType) {
   }
 
   const formattedMsg = formatWhatsAppMessage(trigger.template, order);
+  let dispatchResult = { sent: true };
+
+  if (baileysSender) {
+    try {
+      dispatchResult = await baileysSender(phone, formattedMsg, order?.id, eventType);
+    } catch (e) {
+      console.warn('[WhatsApp Auto-Send Error]:', e?.message || e);
+      dispatchResult = { sent: false, error: e?.message };
+    }
+  }
+
   const logEntry = {
     id: 'wa_' + Date.now().toString(36),
     at: new Date().toISOString(),
@@ -107,13 +123,15 @@ export async function sendWhatsAppNotification(order, eventType) {
     orderId: order?.id,
     eventType,
     message: formattedMsg,
-    status: 'delivered',
+    status: dispatchResult?.sent ? 'delivered' : 'queued',
+    details: dispatchResult?.reason || dispatchResult?.error || null,
   };
 
   // Keep last 100 logs
   const logs = [logEntry, ...(wa.logs || [])].slice(0, 100);
   saveWhatsAppSettings({ logs });
 
-  console.log(`[WhatsApp Auto-Send] (${eventType}) -> ${phone}: ${formattedMsg.slice(0, 80)}...`);
-  return { sent: true, log: logEntry };
+  console.log(`[WhatsApp Auto-Send] (${eventType}) -> ${phone} [${logEntry.status}]: ${formattedMsg.slice(0, 80)}...`);
+  return { sent: dispatchResult?.sent !== false, log: logEntry };
 }
+
