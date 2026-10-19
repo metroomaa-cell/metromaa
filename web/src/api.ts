@@ -107,8 +107,18 @@ export function getSource(): string {
     if (saved) return saved;
     const p = new URLSearchParams(location.search);
     let src = p.get('utm_source') || p.get('ref') || p.get('source') || '';
+    if (!src && p.get('fbclid')) src = 'facebook';
+    if (!src && p.get('ttclid')) src = 'tiktok';
+    if (!src && p.get('gclid')) src = 'google';
     if (!src && document.referrer) {
-      try { const h = new URL(document.referrer).hostname.replace(/^www\./, ''); if (h && !location.hostname.includes(h)) src = h; } catch {}
+      try {
+        const h = new URL(document.referrer).hostname.replace(/^www\./, '');
+        if (h && !location.hostname.includes(h)) {
+          if (h.includes('facebook') || h.includes('fb.me') || h.includes('instagram')) src = 'facebook';
+          else if (h.includes('tiktok')) src = 'tiktok';
+          else src = h;
+        }
+      } catch {}
     }
     src = (src || 'direct').toLowerCase().slice(0, 60);
     localStorage.setItem('dot_src', src);

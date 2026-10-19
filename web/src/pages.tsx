@@ -1767,8 +1767,9 @@ export function ProductPage({ slug }: { slug: string }) {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <button
-                    className="pdp-order-now-btn"
+                    className="pc-cta"
                     onClick={handleDirectBuy}
+                    style={{ width: '100%', padding: '16px 24px', fontSize: 12, letterSpacing: '0.22em' }}
                   >
                     <span>ORDER NOW</span>
                   </button>
@@ -3163,7 +3164,7 @@ export function Checkout() {
               onClick={submit}
               style={{ marginTop: 18 }}
             >
-              <span>{busy ? 'PROCESSING ORDER…' : `PLACE ORDER — ${taka(grand)}`}</span>
+              <span>{busy ? 'PROCESSING ORDER…' : 'PLACE ORDER'}</span>
             </button>
 
             <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: '#6b645c', textAlign: 'center' }}>

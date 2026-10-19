@@ -2089,30 +2089,66 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   margin-bottom: 8px;
   min-height: 14px;
 }
-.pc-cta {
+@keyframes pcCtaPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(180, 142, 76, 0.4);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 4px 18px rgba(180, 142, 76, 0.45), 0 0 0 6px rgba(180, 142, 76, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(180, 142, 76, 0.4);
+  }
+}
+
+@keyframes pcCtaShimmer {
+  0% {
+    transform: translateX(-150%) skewX(-25deg);
+  }
+  30%, 100% {
+    transform: translateX(250%) skewX(-25deg);
+  }
+}
+
+.pc-cta,
+.pdp-order-now-btn,
+.checkout-submit-btn {
   width: 100%;
-  background: #1f3147;
-  border: 1px solid #1f3147;
-  color: #ffffff !important;
-  padding: 12px 14px;
+  background: transparent;
+  border: 0;
+  background-image:
+    linear-gradient(#b48e4c, #b48e4c),
+    linear-gradient(#b48e4c, #b48e4c),
+    linear-gradient(#b48e4c, #b48e4c),
+    linear-gradient(#b48e4c, #b48e4c);
+  background-position: top left, top right, bottom right, top left;
+  background-size: 100% 1px, 1px 100%, calc(100% - 18px) 1px, 1px calc(100% - 12px);
+  background-repeat: no-repeat;
+  color: #8a6520 !important;
+  padding: 14px 20px;
   font-family: 'Inter', sans-serif;
   font-size: 11px;
-  letter-spacing: 2px;
+  letter-spacing: 2.5px;
   text-transform: uppercase;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  border-radius: 4px;
-  transition: all 0.25s ease;
+  transition: color 0.4s ease, transform 0.25s ease;
   margin-top: auto;
-  box-shadow: 0 2px 8px rgba(31, 49, 71, 0.18);
+  animation: pcCtaPulse 2.4s infinite ease-in-out;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
 }
-.pc-cta::before {
+
+.pc-cta::before,
+.pdp-order-now-btn::before,
+.checkout-submit-btn::before {
   content: '';
   position: absolute;
   top: 0;
@@ -2122,131 +2158,88 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   background: linear-gradient(90deg, #b48e4c 0%, #d4b87a 100%);
   transform: scaleX(0);
   transform-origin: left;
-  transition: transform 0.35s cubic-bezier(0.23,1,0.32,1);
+  transition: transform 0.45s cubic-bezier(0.23,1,0.32,1);
   z-index: 0;
 }
-.pc-cta:hover {
-  color: #ffffff !important;
-  border-color: #b48e4c;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(180, 142, 76, 0.4);
-}
-.pc-cta:hover::before {
-  transform: scaleX(1);
-}
-.pc-cta span {
-  position: relative;
-  z-index: 1;
-}
 
-/* ============================================================
-   🎯 THEME-ALIGNED EYE-CATCHING ORDER BUTTONS & ANIMATIONS
-   Colors: Royal Midnight Navy (#1f3147), Gold Accent (#b48e4c)
-   ============================================================ */
-
-@keyframes pulseGlowTheme {
-  0% {
-    transform: scale(1);
-    box-shadow: 0 4px 14px rgba(31, 49, 71, 0.35), 0 0 0 0 rgba(180, 142, 76, 0.45);
-  }
-  50% {
-    transform: scale(1.02);
-    box-shadow: 0 8px 24px rgba(31, 49, 71, 0.55), 0 0 0 7px rgba(180, 142, 76, 0);
-  }
-  100% {
-    transform: scale(1);
-    box-shadow: 0 4px 14px rgba(31, 49, 71, 0.35), 0 0 0 0 rgba(180, 142, 76, 0.45);
-  }
-}
-
-@keyframes shimmerSweep {
-  0% {
-    transform: translateX(-150%) skewX(-25deg);
-  }
-  30%, 100% {
-    transform: translateX(250%) skewX(-25deg);
-  }
-}
-
-/* Primary PDP Order Now Button */
-.pdp-order-now-btn {
-  position: relative;
-  overflow: hidden;
-  width: 100%;
-  background: #1f3147;
-  color: #ffffff !important;
-  border: 1px solid #b48e4c;
-  border-radius: 4px;
-  padding: 16px 24px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  font-family: 'Inter', sans-serif;
-  font-size: 13.5px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  animation: pulseGlowTheme 2.4s infinite ease-in-out;
-  transition: all 0.25s ease;
-  box-shadow: 0 4px 16px rgba(31, 49, 71, 0.3);
-  z-index: 1;
-}
-
-.pdp-order-now-btn::after {
+.pc-cta::after,
+.pdp-order-now-btn::after,
+.checkout-submit-btn::after {
   content: '';
   position: absolute;
   top: -50%;
   left: 0;
-  width: 60%;
+  width: 50%;
   height: 200%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+  background: linear-gradient(90deg, transparent, rgba(180, 142, 76, 0.3), transparent);
   transform: translateX(-150%) skewX(-25deg);
-  animation: shimmerSweep 3.2s infinite ease-in-out;
+  animation: pcCtaShimmer 3s infinite ease-in-out;
   pointer-events: none;
-}
-
-.pdp-order-now-btn:hover {
-  background: #152332;
-  border-color: #d4af37;
-  color: #ffffff !important;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 22px rgba(31, 49, 71, 0.45);
-}
-
-.pdp-order-now-btn:active {
-  transform: translateY(1px);
-}
-
-.pdp-order-now-btn span {
-  position: relative;
   z-index: 1;
+}
+
+.pc-cta:hover,
+.pdp-order-now-btn:hover,
+.checkout-submit-btn:hover {
+  color: #FAF8F5 !important;
+}
+
+.pc-cta:hover::before,
+.pdp-order-now-btn:hover::before,
+.checkout-submit-btn:hover::before {
+  transform: scaleX(1);
+}
+
+.pc-cta span,
+.pdp-order-now-btn span,
+.checkout-submit-btn span {
+  position: relative;
+  z-index: 2;
 }
 
 /* Sticky Bottom Bar Button */
 .sticky-buy-btn {
-  position: relative;
-  overflow: hidden;
-  background: #1f3147;
-  color: #ffffff !important;
-  border: 1px solid #b48e4c;
-  border-radius: 4px;
-  padding: 12px 22px;
+  background: transparent;
+  border: 0;
+  background-image:
+    linear-gradient(#b48e4c, #b48e4c),
+    linear-gradient(#b48e4c, #b48e4c),
+    linear-gradient(#b48e4c, #b48e4c),
+    linear-gradient(#b48e4c, #b48e4c);
+  background-position: top left, top right, bottom right, top left;
+  background-size: 100% 1px, 1px 100%, calc(100% - 18px) 1px, 1px calc(100% - 12px);
+  background-repeat: no-repeat;
+  color: #8a6520 !important;
+  padding: 12px 20px;
   font-family: 'Inter', sans-serif;
-  font-weight: 700;
-  font-size: 12.5px;
-  letter-spacing: 0.12em;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 2px;
   text-transform: uppercase;
   white-space: nowrap;
   cursor: pointer;
   flex-shrink: 0;
-  animation: pulseGlowTheme 2.4s infinite ease-in-out;
-  box-shadow: 0 4px 14px rgba(31, 49, 71, 0.35);
+  position: relative;
+  overflow: hidden;
+  animation: pcCtaPulse 2.4s infinite ease-in-out;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.25s ease;
+  transition: color 0.4s ease, transform 0.25s ease;
+}
+
+.sticky-buy-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #b48e4c 0%, #d4b87a 100%);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.45s cubic-bezier(0.23,1,0.32,1);
+  z-index: 0;
 }
 
 .sticky-buy-btn::after {
@@ -2256,68 +2249,24 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   left: 0;
   width: 50%;
   height: 200%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+  background: linear-gradient(90deg, transparent, rgba(180, 142, 76, 0.3), transparent);
   transform: translateX(-150%) skewX(-25deg);
-  animation: shimmerSweep 2.8s infinite ease-in-out;
+  animation: pcCtaShimmer 3s infinite ease-in-out;
   pointer-events: none;
+  z-index: 1;
 }
 
 .sticky-buy-btn:hover {
-  background: #152332;
-  border-color: #d4af37;
+  color: #FAF8F5 !important;
+}
+
+.sticky-buy-btn:hover::before {
+  transform: scaleX(1);
 }
 
 .sticky-buy-btn span {
   position: relative;
-  z-index: 1;
-}
-
-/* Checkout Submit Confirm Button */
-.checkout-submit-btn {
-  position: relative;
-  overflow: hidden;
-  width: 100%;
-  background: #1f3147;
-  color: #ffffff !important;
-  border: 1px solid #b48e4c;
-  border-radius: 4px;
-  padding: 18px 24px;
-  font-family: 'Inter', sans-serif;
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  cursor: pointer;
-  animation: pulseGlowTheme 2.5s infinite ease-in-out;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 6px 20px rgba(31, 49, 71, 0.35);
-  transition: all 0.25s ease;
-}
-
-.checkout-submit-btn::after {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: 0;
-  width: 50%;
-  height: 200%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
-  transform: translateX(-150%) skewX(-25deg);
-  animation: shimmerSweep 3.4s infinite ease-in-out;
-  pointer-events: none;
-}
-
-.checkout-submit-btn:hover {
-  background: #152332;
-  border-color: #d4af37;
-  transform: translateY(-2px);
-}
-
-.checkout-submit-btn span {
-  position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 
