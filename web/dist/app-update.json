@@ -1,7 +1,7 @@
 {
-  "versionCode": 7,
-  "versionName": "2.4.1",
+  "versionCode": 9,
+  "versionName": "2.4.3",
   "apkUrl": "https://raw.githubusercontent.com/metroomaa-cell/metromaa/main/web/dist/ShakilEcom.apk",
-  "sha256": "4a112e8b14e9dfcddcb3da8c25259035fadeed03668aa35156d7da790099e4b0",
-  "releaseNotes": "Secure per-account sign-in, email OTP, server-enforced staff roles, and full website admin access. Android will ask you to confirm the install."
+  "sha256": "5292b751d0dab02ebb839419ead4e07112ef24c4db7bcfc79e632c51495e09d2",
+  "releaseNotes": "Sign in immediately on app launch, encrypted 72-hour sessions, premium action buttons, and a refined WhatsApp icon. Android will ask you to confirm the install."
 }

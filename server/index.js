@@ -942,7 +942,7 @@ app.get('/api/track', async (req, res) => {
 });
 
 // ---- admin auth: owner master key + staff accounts with roles ----
-const SESSION_TTL_MS = 48 * 60 * 60 * 1000; // 48 hours auto-logout
+const SESSION_TTL_MS = 72 * 60 * 60 * 1000; // 72 hours auto-logout
 const sessions = new Map(); // token -> { role, name, username, email, expiresAt }
 const pendingOtps = new Map(); // tempToken -> { username, role, name, otp, email, expiresAt }
 const pendingPasswordResets = new Map(); // resetToken -> { username, email, otp, expiresAt }
@@ -1242,7 +1242,7 @@ app.post('/api/admin/login', async (req, res) => {
     });
   }
 
-  // Fallback: direct 48-hour session if email is disabled or skipOtp is enabled
+  // Fallback: direct 72-hour session if email is disabled or skipOtp is enabled
   const token = 's_' + randomBytes(24).toString('hex');
   const expiresAt = Date.now() + SESSION_TTL_MS;
   sessions.set(token, { role: user.role, name: user.name, username: user.username, email: user.email || getOwnerEmail(), allowedProducts: Array.isArray(user.allowedProducts) ? user.allowedProducts : [], expiresAt });
@@ -1268,7 +1268,7 @@ app.post('/api/admin/verify-otp', (req, res) => {
     return res.status(400).json({ error: `Invalid OTP code. Please check your email. (${5 - pending.attempts} attempts remaining)` });
   }
 
-  // Valid OTP! Issue 48-hour session
+  // Valid OTP! Issue 72-hour session
   const token = 's_' + randomBytes(24).toString('hex');
   const expiresAt = Date.now() + SESSION_TTL_MS;
   sessions.set(token, {
@@ -1497,7 +1497,7 @@ app.post('/api/admin/users', adminAuth, requireRole('owner'), async (req, res) =
           <div style="margin-bottom:8px;"><span style="color:#A99E8E;font-size:13px;">Username:</span><br><code style="background:rgba(0,0,0,0.4);padding:4px 8px;border-radius:6px;color:#ECE4D8;font-size:14px;">${username}</code></div>
           <div style="color:#A99E8E;font-size:13px;">For security, your temporary password is shared separately by the store owner. Never share your password or verification code.</div>
         </div>
-        <p style="color:#6F665A;font-size:12px;line-height:1.5;">🔒 Security Notice: Your session automatically expires every 48 hours. When signing in, you will be prompted for an email OTP verification.</p>
+        <p style="color:#6F665A;font-size:12px;line-height:1.5;">🔒 Security Notice: Your session automatically expires every 72 hours. When signing in, you will be prompted for an email OTP verification.</p>
       </div>
       `
     ).catch(() => {});
