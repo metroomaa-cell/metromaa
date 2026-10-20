@@ -977,8 +977,8 @@ function resolveAuth(req) {
   if (!token) return null;
   const session = sessions.get(token);
   if (!session) {
-    const masterToken = process.env.ADMIN_TOKEN || 'dot_master_admin_token_2026';
-    if (token === masterToken || token === 'dot_master_admin_token_2026' || token === '074fe3a7777e1d0eb5a5fb18') {
+    const masterToken = process.env.ADMIN_TOKEN || '';
+    if (masterToken && token === masterToken) {
       return { role: 'owner', name: 'Owner', username: 'owner', email: getOwnerEmail(), expiresAt: Date.now() + SESSION_TTL_MS };
     }
     return null;
@@ -986,6 +986,17 @@ function resolveAuth(req) {
   if (session.expiresAt && Date.now() > session.expiresAt) {
     sessions.delete(token); // 48-hour session expired!
     return null;
+  }
+  if (session.role !== 'owner') {
+    const currentUser = getUsers().find((user) => user.username === session.username);
+    if (!currentUser) {
+      sessions.delete(token);
+      return null;
+    }
+    session.role = currentUser.role;
+    session.name = currentUser.name;
+    session.email = currentUser.email || '';
+    session.allowedProducts = Array.isArray(currentUser.allowedProducts) ? currentUser.allowedProducts : [];
   }
   return session;
 }
@@ -1378,8 +1389,8 @@ app.post('/api/admin/forgot-password', async (req, res) => {
 // 5. Reset Password (verifies OTP, updates password)
 app.post('/api/admin/reset-password', (req, res) => {
   const { resetToken, otp, newPassword } = req.body || {};
-  if (!resetToken || !otp || !newPassword || String(newPassword).length < 4) {
-    return res.status(400).json({ error: 'All fields required, new password must be at least 4 characters' });
+  if (!resetToken || !otp || !newPassword || String(newPassword).length < 8) {
+    return res.status(400).json({ error: 'All fields required, new password must be at least 8 characters' });
   }
   const pending = pendingPasswordResets.get(resetToken);
   if (!pending) return res.status(400).json({ error: 'Reset session expired. Please request a new one.' });
@@ -1413,13 +1424,14 @@ app.post('/api/admin/reset-password', (req, res) => {
 
 app.post('/api/admin/change-password', adminAuth, (req, res) => {
   const { currentPassword, newPassword } = req.body || {};
-  if (!newPassword || String(newPassword).length < 4) return res.status(400).json({ error: 'New password must be at least 4 characters' });
+  if (!newPassword || String(newPassword).length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
   const admin = req.admin;
   if (admin.role === 'owner') {
     if (!checkOwnerPassword(currentPassword)) return res.status(400).json({ error: 'Current password incorrect' });
     const { salt, hash } = makeHash(String(newPassword));
     saveSettings({ ownerPassword: { salt, hash, updatedAt: new Date().toISOString() } });
     process.env.ADMIN_TOKEN = String(newPassword);
+    for (const [token, session] of sessions) if (session.role === 'owner') sessions.delete(token);
     return res.json({ ok: true, message: 'Owner master password updated successfully!' });
   }
   const users = getUsers();
@@ -1429,6 +1441,7 @@ app.post('/api/admin/change-password', adminAuth, (req, res) => {
   u.salt = salt;
   u.hash = hash;
   saveUsers(users);
+  for (const [token, session] of sessions) if (session.username === admin.username) sessions.delete(token);
   res.json({ ok: true, message: 'Password updated successfully!' });
 });
 
@@ -1443,6 +1456,11 @@ app.put('/api/admin/security-email', adminAuth, requireRole('owner'), (req, res)
 });
 
 app.get('/api/admin/me', adminAuth, (req, res) => res.json(req.admin));
+app.post('/api/admin/logout', adminAuth, (req, res) => {
+  const token = req.get('x-admin-token') || '';
+  sessions.delete(token);
+  res.json({ ok: true });
+});
 
 app.get('/api/admin/users', adminAuth, requireRole('owner'), (_q, res) => res.json(getUsers().map((u) => ({ id: u.id, username: u.username, name: u.name, email: u.email || '', role: u.role, skipOtp: !!u.skipOtp, allowedProducts: Array.isArray(u.allowedProducts) ? u.allowedProducts : [] }))));
 
@@ -1455,7 +1473,7 @@ app.post('/api/admin/users', adminAuth, requireRole('owner'), async (req, res) =
   const allowedProducts = Array.isArray(b.allowedProducts) ? b.allowedProducts.map(String) : [];
   const password = String(b.password || '');
   const skipOtp = !!b.skipOtp;
-  if (!username || password.length < 4) return res.status(400).json({ error: 'username and a 4+ character password are required' });
+  if (!username || password.length < 8) return res.status(400).json({ error: 'username and an 8+ character password are required' });
   const users = getUsers();
   if (users.find((u) => u.username === username)) return res.status(400).json({ error: 'username already exists' });
   const { salt, hash } = makeHash(password);
@@ -1466,7 +1484,7 @@ app.post('/api/admin/users', adminAuth, requireRole('owner'), async (req, res) =
   // Send onboarding email to new staff member
   if (email) {
     const host = req.get('host') || 'dot.metromaa.com';
-    const loginUrl = `${req.protocol}://${host}/wp-admin`;
+    const loginUrl = `${req.protocol}://${host}/admin`;
     sendEmail(
       email,
       `Welcome to dot. Admin Team — Your Login Credentials`,
@@ -1477,7 +1495,7 @@ app.post('/api/admin/users', adminAuth, requireRole('owner'), async (req, res) =
         <div style="background:rgba(231,180,134,0.08);border:1px solid rgba(231,180,134,0.25);border-radius:14px;padding:20px;margin:18px 0;line-height:1.7;">
           <div style="margin-bottom:8px;"><span style="color:#A99E8E;font-size:13px;">Login URL:</span><br><a href="${loginUrl}" style="color:#E7B486;font-weight:600;word-break:break-all;">${loginUrl}</a></div>
           <div style="margin-bottom:8px;"><span style="color:#A99E8E;font-size:13px;">Username:</span><br><code style="background:rgba(0,0,0,0.4);padding:4px 8px;border-radius:6px;color:#ECE4D8;font-size:14px;">${username}</code></div>
-          <div><span style="color:#A99E8E;font-size:13px;">Temporary Password:</span><br><code style="background:rgba(0,0,0,0.4);padding:4px 8px;border-radius:6px;color:#ECE4D8;font-size:14px;">${password}</code></div>
+          <div style="color:#A99E8E;font-size:13px;">For security, your temporary password is shared separately by the store owner. Never share your password or verification code.</div>
         </div>
         <p style="color:#6F665A;font-size:12px;line-height:1.5;">🔒 Security Notice: Your session automatically expires every 48 hours. When signing in, you will be prompted for an email OTP verification.</p>
       </div>
@@ -1498,7 +1516,8 @@ app.patch('/api/admin/users/:id', adminAuth, requireRole('owner'), (req, res) =>
   if (b.role && ['manager', 'staff'].includes(b.role)) u.role = b.role;
   if (b.skipOtp != null) u.skipOtp = !!b.skipOtp;
   if (Array.isArray(b.allowedProducts)) u.allowedProducts = b.allowedProducts.map(String);
-  if (b.password && String(b.password).length >= 4) {
+  if (b.password && String(b.password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (b.password) {
     const { salt, hash } = makeHash(String(b.password));
     u.salt = salt;
     u.hash = hash;
@@ -1507,7 +1526,15 @@ app.patch('/api/admin/users/:id', adminAuth, requireRole('owner'), (req, res) =>
   res.json({ id: u.id, username: u.username, name: u.name, email: u.email || '', role: u.role, skipOtp: !!u.skipOtp, allowedProducts: Array.isArray(u.allowedProducts) ? u.allowedProducts : [] });
 });
 
-app.delete('/api/admin/users/:id', adminAuth, requireRole('owner'), (req, res) => { saveUsers(getUsers().filter((u) => u.id !== req.params.id)); res.json({ ok: true }); });
+app.delete('/api/admin/users/:id', adminAuth, requireRole('owner'), (req, res) => {
+  const users = getUsers();
+  const removed = users.find((u) => u.id === req.params.id);
+  saveUsers(users.filter((u) => u.id !== req.params.id));
+  if (removed) {
+    for (const [token, session] of sessions) if (session.username === removed.username) sessions.delete(token);
+  }
+  res.json({ ok: true });
+});
 
 app.get('/api/orders', adminAuth, (req, res) => {
   let list = getOrders();
@@ -1519,7 +1546,7 @@ app.get('/api/orders', adminAuth, (req, res) => {
 });
 
 // Admin create manual order (Phone call, WhatsApp, Facebook Messenger, POS)
-app.post('/api/admin/orders', adminAuth, (req, res) => {
+app.post('/api/admin/orders', adminAuth, requireRole('owner', 'manager'), (req, res) => {
   const { customer, items, delivery, discount, source, status, adminNote, courier } = req.body || {};
   const c = customer || {};
   const rawPhone = String(c.phone || '').trim();
@@ -1596,6 +1623,17 @@ app.post('/api/admin/orders', adminAuth, (req, res) => {
 });
 
 app.patch('/api/orders/:id', adminAuth, (req, res) => {
+  if (req.admin.role === 'staff') {
+    const allowedFields = new Set(['status', 'courier', 'adminNote']);
+    const submittedFields = Object.keys(req.body || {});
+    if (submittedFields.some((field) => !allowedFields.has(field))) {
+      return res.status(403).json({ error: 'Staff can only update order status, courier details, and internal notes' });
+    }
+    const nextStatus = req.body?.status;
+    if (nextStatus && !['pending', 'approved', 'confirmed', 'shipped'].includes(String(nextStatus))) {
+      return res.status(403).json({ error: 'Staff cannot cancel, return, or mark an order delivered' });
+    }
+  }
   const before = getOrders().find((x) => x.id === req.params.id);
   if (!before) return res.status(404).json({ error: 'not found' });
   if (req.admin.role === 'staff' && Array.isArray(req.admin.allowedProducts) && req.admin.allowedProducts.length > 0) {
@@ -1609,7 +1647,7 @@ app.patch('/api/orders/:id', adminAuth, (req, res) => {
   res.json(o);
 });
 
-app.delete('/api/orders/:id', adminAuth, (req, res) => {
+app.delete('/api/orders/:id', adminAuth, requireRole('owner', 'manager'), (req, res) => {
   const before = getOrders().find((x) => x.id === req.params.id);
   if (!before) return res.status(404).json({ error: 'not found' });
   if (req.admin.role === 'staff' && Array.isArray(req.admin.allowedProducts) && req.admin.allowedProducts.length > 0) {
@@ -1961,7 +1999,7 @@ app.post('/api/coupon/validate', (req, res) => {
   if (r.error) return res.status(400).json({ error: r.error });
   res.json(r);
 });
-app.get('/api/coupons', adminAuth, (_q, res) => res.json(getCoupons()));
+app.get('/api/coupons', adminAuth, requireRole('owner', 'manager'), (_q, res) => res.json(getCoupons()));
 app.post('/api/coupons', adminAuth, requireRole('owner', 'manager'), (req, res) => {
   const b = req.body || {};
   const code = String(b.code || '').trim().toUpperCase();
@@ -1980,7 +2018,7 @@ app.get('/api/reviews/:pid', (req, res) => {
   const avg = list.length ? list.reduce((s, r) => s + r.rating, 0) / list.length : 0;
   res.json({ count: list.length, avg: Math.round(avg * 10) / 10, reviews: list });
 });
-app.get('/api/admin/reviews', adminAuth, (req, res) => {
+app.get('/api/admin/reviews', adminAuth, requireRole('owner', 'manager'), (req, res) => {
   const all = getReviews();
   const reviews = Object.entries(all).flatMap(([productId, list]) =>
     (Array.isArray(list) ? list : []).map((review) => ({
@@ -2003,7 +2041,7 @@ app.post('/api/reviews', (req, res) => {
   all[pid] = list; saveReviews(all);
   res.status(201).json({ ok: true, status: 'pending' });
 });
-app.patch('/api/admin/reviews/:pid/:id', adminAuth, (req, res) => {
+app.patch('/api/admin/reviews/:pid/:id', adminAuth, requireRole('owner', 'manager'), (req, res) => {
   const body = req.body || {};
   const hasStatus = Object.prototype.hasOwnProperty.call(body, 'status');
   const hasReply = Object.prototype.hasOwnProperty.call(body, 'adminReply');
@@ -2021,7 +2059,7 @@ app.patch('/api/admin/reviews/:pid/:id', adminAuth, (req, res) => {
   saveReviews(all);
   res.json({ ok: true, ...(hasStatus ? { status } : {}), ...(hasReply ? { adminReply: review.adminReply } : {}) });
 });
-app.delete('/api/reviews/:pid/:id', adminAuth, (req, res) => {
+app.delete('/api/reviews/:pid/:id', adminAuth, requireRole('owner', 'manager'), (req, res) => {
   const all = getReviews(); all[req.params.pid] = (all[req.params.pid] || []).filter((r) => r.id !== req.params.id); saveReviews(all); res.json({ ok: true });
 });
 
@@ -3286,12 +3324,12 @@ app.put('/api/admin/integrations', adminAuth, requireRole('owner', 'manager'), (
   saveIntegrations({ email, sms, couriers, tracking, fraud });
   res.json(maskedIntegrations());
 });
-app.post('/api/admin/fraud/check', adminAuth, async (req, res) => {
+app.post('/api/admin/fraud/check', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   const phone = String(req.body?.phone || '').trim();
   if (!phone) return res.status(400).json({ error: 'phone required' });
   res.json(await fraudCheck(phone, req.body?.fraudConfig));
 });
-app.post('/api/admin/fraud/ping', adminAuth, async (req, res) => {
+app.post('/api/admin/fraud/ping', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   const apiKey = String(req.body?.apiKey || '').trim();
   if (!apiKey) return res.status(400).json({ ok: false, error: 'API key is required' });
   try {
@@ -3369,7 +3407,7 @@ app.post('/api/admin/courier/book', adminAuth, (req, res) => {
   }).catch((err) => res.status(500).json({ error: String(err.message || err) }));
 });
 
-app.post('/api/admin/courier/sync', adminAuth, async (req, res) => {
+app.post('/api/admin/courier/sync', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   const o = getOrders().find((x) => x.id === req.body?.orderId);
   if (!o) return res.status(404).json({ error: 'order not found' });
   if (!o.courier || !o.courier.consignment) return res.status(400).json({ error: 'this order has no courier consignment to sync' });
@@ -3377,7 +3415,7 @@ app.post('/api/admin/courier/sync', adminAuth, async (req, res) => {
   catch (err) { res.status(500).json({ error: String(err.message || err) }); }
 });
 
-app.post('/api/admin/courier/sync-all', adminAuth, async (req, res) => {
+app.post('/api/admin/courier/sync-all', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   const all = getOrders();
   const eligible = all.filter((o) => o.courier && o.courier.consignment && !['delivered', 'cancelled'].includes(o.status));
   let updatedCount = 0;
@@ -3567,7 +3605,7 @@ app.post('/api/admin/courier/pathao-test', adminAuth, requireRole('owner', 'mana
 // ==========================================
 // 1. BULK COURIER AUTO-BOOKING
 // ==========================================
-app.post('/api/admin/courier/bulk-book', adminAuth, async (req, res) => {
+app.post('/api/admin/courier/bulk-book', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   const { orderIds = [], defaultCourierName } = req.body || {};
   if (!Array.isArray(orderIds) || !orderIds.length) {
     return res.status(400).json({ error: 'No orders provided' });
@@ -3779,7 +3817,7 @@ app.post('/api/admin/backup/restore', adminAuth, requireRole('owner'), express.j
 // ==========================================
 // 3. FINANCE & COURIER RECONCILIATION LEDGER
 // ==========================================
-app.get('/api/admin/finance/summary', adminAuth, (req, res) => {
+app.get('/api/admin/finance/summary', adminAuth, requireRole('owner', 'manager'), (req, res) => {
   const orders = getOrders();
   let totalGross = 0;
   let totalDelivered = 0;
@@ -3836,7 +3874,7 @@ app.get('/api/admin/finance/summary', adminAuth, (req, res) => {
   });
 });
 
-app.post('/api/admin/finance/toggle-payout', adminAuth, (req, res) => {
+app.post('/api/admin/finance/toggle-payout', adminAuth, requireRole('owner', 'manager'), (req, res) => {
   const { orderId, received } = req.body || {};
   const o = getOrders().find((x) => x.id === orderId);
   if (!o) return res.status(404).json({ error: 'Order not found' });
@@ -3852,7 +3890,7 @@ app.post('/api/admin/finance/toggle-payout', adminAuth, (req, res) => {
 // ==========================================
 // REAL BAILEYS WHATSAPP ENGINE ROUTES
 // ==========================================
-app.get('/api/admin/whatsapp/status', adminAuth, (req, res) => {
+app.get('/api/admin/whatsapp/status', adminAuth, requireRole('owner', 'manager'), (req, res) => {
   try {
     const live = getWhatsAppLiveStatus();
     res.json(live);
@@ -3861,7 +3899,7 @@ app.get('/api/admin/whatsapp/status', adminAuth, (req, res) => {
   }
 });
 
-app.post('/api/admin/whatsapp/start-session', adminAuth, async (req, res) => {
+app.post('/api/admin/whatsapp/start-session', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   try {
     const forceNew = req.body?.reset === true;
     const result = await startWhatsAppSocket(forceNew);
@@ -3871,7 +3909,7 @@ app.post('/api/admin/whatsapp/start-session', adminAuth, async (req, res) => {
   }
 });
 
-app.post('/api/admin/whatsapp/request-pair-code', adminAuth, async (req, res) => {
+app.post('/api/admin/whatsapp/request-pair-code', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   try {
     const { phone } = req.body || {};
     if (!phone) return res.status(400).json({ error: 'Phone number is required' });
@@ -3882,12 +3920,12 @@ app.post('/api/admin/whatsapp/request-pair-code', adminAuth, async (req, res) =>
   }
 });
 
-app.post('/api/admin/whatsapp/settings', adminAuth, (req, res) => {
+app.post('/api/admin/whatsapp/settings', adminAuth, requireRole('owner', 'manager'), (req, res) => {
   const updated = saveWhatsAppSettings(req.body || {});
   res.json({ ok: true, settings: updated });
 });
 
-app.post('/api/admin/whatsapp/connect', adminAuth, async (req, res) => {
+app.post('/api/admin/whatsapp/connect', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   try {
     const { phone, device, mode } = req.body || {};
     const settings = getSettings();
@@ -3908,7 +3946,7 @@ app.post('/api/admin/whatsapp/connect', adminAuth, async (req, res) => {
   }
 });
 
-app.post('/api/admin/whatsapp/disconnect', adminAuth, async (req, res) => {
+app.post('/api/admin/whatsapp/disconnect', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   try {
     await startWhatsAppSocket(true);
     const updated = saveWhatsAppSettings({
@@ -3923,7 +3961,7 @@ app.post('/api/admin/whatsapp/disconnect', adminAuth, async (req, res) => {
   }
 });
 
-app.post('/api/admin/whatsapp/send', adminAuth, async (req, res) => {
+app.post('/api/admin/whatsapp/send', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   const { phone, message, orderId } = req.body || {};
   if (!phone || !message) return res.status(400).json({ error: 'Phone and message are required' });
   try {

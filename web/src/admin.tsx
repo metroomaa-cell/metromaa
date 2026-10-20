@@ -1540,14 +1540,15 @@ function Login({ onDone }: { onDone: () => void }) {
               />
               <input
                 type="password"
-                placeholder="New password (min 4 characters)"
+                placeholder="New password (min 8 characters)"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submitReset()}
+                minLength={8}
                 style={{ marginBottom: 14 }}
               />
               {err && <div className="err2" style={{ marginBottom: 12 }}>{err}</div>}
-              <button className="sa-btn full" disabled={busy || otp.length !== 6 || newPassword.length < 4} onClick={submitReset} style={{ marginBottom: 10 }}>{busy ? 'Updating…' : 'Update Password'}</button>
+              <button className="sa-btn full" disabled={busy || otp.length !== 6 || newPassword.length < 8} onClick={submitReset} style={{ marginBottom: 10 }}>{busy ? 'Updating…' : 'Update Password'}</button>
               <div style={{ marginTop: 12, fontSize: 12.5 }}>
                 <a style={{ color: '#94a3b8', cursor: 'pointer' }} onClick={() => { setMode('login'); setErr(''); }}>← Back to login</a>
               </div>
@@ -13587,8 +13588,8 @@ function StaffAdmin() {
               <input type="email" autoComplete="new-password" name="staff_email" placeholder="e.g. tanvir@gmail.com" value={f.email} onChange={(e) => setF((s: any) => ({ ...s, email: e.target.value }))} />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#cbd5e1' }}>
-              Password (min. 4 chars) *
-              <input type="password" autoComplete="new-password" name="staff_pwd" placeholder="Create temporary password" value={f.password} onChange={(e) => setF((s: any) => ({ ...s, password: e.target.value }))} required />
+              Password (min. 8 chars) *
+              <input type="password" autoComplete="new-password" name="staff_pwd" placeholder="Create temporary password" minLength={8} value={f.password} onChange={(e) => setF((s: any) => ({ ...s, password: e.target.value }))} required />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#cbd5e1' }}>
               Role &amp; Permissions *
@@ -13765,7 +13766,7 @@ function StaffAdmin() {
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13, color: '#cbd5e1' }}>
                 Update Password <span className="dim">(leave blank to keep current)</span>
-                <input type="password" value={editUser.password || ''} onChange={(e) => setEditUser((s: any) => ({ ...s, password: e.target.value }))} placeholder="New password" />
+                <input type="password" value={editUser.password || ''} onChange={(e) => setEditUser((s: any) => ({ ...s, password: e.target.value }))} placeholder="New password (min 8 characters)" minLength={8} />
               </label>
 
               {/* Product permissions in edit modal */}
@@ -13829,12 +13830,12 @@ function StaffAdmin() {
                 <input type="password" value={curPw} onChange={(e) => setCurPw(e.target.value)} placeholder="Enter current master password" />
               </label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#cbd5e1' }}>
-                New Password (min 4 chars)
-                <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="Enter new password" />
+                New Password (min 8 chars)
+                <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="Enter new password" minLength={8} />
               </label>
               {pwErr && <div className="err2">{pwErr}</div>}
               {pwMsg && <div style={{ color: '#4ade80', fontSize: 13 }}>{pwMsg}</div>}
-              <button className="sa-btn full" disabled={pwBusy || !curPw || newPw.length < 4} onClick={changePw} style={{ marginTop: 8 }}>
+              <button className="sa-btn full" disabled={pwBusy || !curPw || newPw.length < 8} onClick={changePw} style={{ marginTop: 8 }}>
                 {pwBusy ? 'Updating…' : 'Update Password'}
               </button>
             </div>
