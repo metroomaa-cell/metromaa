@@ -5,19 +5,21 @@ import { initGTM, initFB, dl, trackEngagement, initInteractionTracking } from '.
 import { Home, Shop, ProductPage, Checkout, Confirm, Track, SearchOverlay, InfoPage } from './pages';
 import { CustomerProvider, useCustomer, CustomerHeaderIcon, CustomerAccountPage } from './CustomerAccount';
 import { WhatsAppIcon } from './icons';
+import { setStoreLanguage, tr, useStoreLanguage } from './language';
 const Admin = lazy(() => import('./admin').then((m) => ({ default: m.Admin })));
 const LoveLockLanding = lazy(() => import('./LoveLockLanding').then((m) => ({ default: m.LoveLockLanding })));
 
 function Effects() {
   const route = useRoute();
+  const isLocalPreview = import.meta.env.DEV;
   const isAdmin = route.name === 'admin' || (typeof window !== 'undefined' && (/(\/|^)(admin|wp-admin)(\/|$)/i.test(window.location.pathname) || window.location.hash.includes('admin')));
 
   useEffect(() => {
-    if (!isAdmin) {
+    if (!isAdmin && !isLocalPreview) {
       initInteractionTracking();
     }
     getSettings().then((s) => {
-      if (!isAdmin) {
+      if (!isAdmin && !isLocalPreview) {
         if (s.gtmId) initGTM(s.gtmId);
         if (s.fbPixelId) initFB(s.fbPixelId);
       }
@@ -31,9 +33,9 @@ function Effects() {
         link.href = s.favicon;
       }
     }).catch(() => {});
-  }, [isAdmin]);
+  }, [isAdmin, isLocalPreview]);
   useEffect(() => {
-    if (isAdmin) return;
+    if (isAdmin || isLocalPreview) return;
     const p = '/' + (route.name === 'home' ? '' : route.name) + (route.param ? '/' + route.param : '');
     const q = new URLSearchParams(location.search);
     dl({
@@ -45,18 +47,19 @@ function Effects() {
       campaign_medium: q.get('utm_medium') || (q.get('fbclid') ? 'paid' : undefined),
       campaign_name: q.get('utm_campaign') || undefined,
     });
-  }, [route.name, route.param, isAdmin]);
+  }, [route.name, route.param, isAdmin, isLocalPreview]);
   useEffect(() => {
-    if (isAdmin) return;
+    if (isAdmin || isLocalPreview) return;
     const p = '/' + (route.name === 'home' ? '' : route.name) + (route.param ? '/' + route.param : '');
     trackEngagement(p || '/');
-  }, [route.name, route.param, isAdmin]);
+  }, [route.name, route.param, isAdmin, isLocalPreview]);
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
   }, [route.name, route.param]);
   useEffect(() => {
+    let active = true;
     const isSkin = isSkincareSite();
     const defaultBrand = isSkin ? 'SECRATE' : 'METRROMA';
     getSettings().then((s) => {
@@ -80,11 +83,21 @@ function Effects() {
             info: brand,
             admin: `Admin Dashboard — ${brand}`,
           };
-      if (route.name !== 'product') {
+      if (route.name === 'shop' && route.param) {
+        getCategories().then((categories) => {
+          if (!active) return;
+          const category = categories.find((item) => item.slug === route.param);
+          document.title = `${category?.name || (isSkin ? 'Shop Skincare' : 'Collection')} — ${brand}`;
+        }).catch(() => {
+          if (active) document.title = `${isSkin ? 'Shop Skincare' : 'Collection'} — ${brand}`;
+        });
+      } else if (route.name !== 'product') {
         document.title = t[route.name] || brand;
       }
     }).catch(() => {
-      if (route.name !== 'product') {
+      if (route.name === 'shop' && route.param) {
+        if (active) document.title = `${isSkin ? 'Shop Skincare' : 'Collection'} — ${defaultBrand}`;
+      } else if (route.name !== 'product') {
         document.title = isSkin ? 'SECRATE | Botanical Skincare' : 'METRROMA | Modern Lifestyle, Watches & Gifts';
       }
     });
@@ -94,7 +107,8 @@ function Effects() {
     md.content = isSkin
       ? 'Premium botanical skincare, hydrating serums, gentle cleansers & self-care essentials delivered across Bangladesh with cash on delivery.'
       : 'Premium sunglasses, authentic watches, handcrafted gift boxes & curated lifestyle essentials delivered across Bangladesh with cash on delivery.';
-  }, [route.name]);
+    return () => { active = false; };
+  }, [route.name, route.param]);
   useEffect(() => {
     const io = new IntersectionObserver(
       (es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }),
@@ -115,6 +129,7 @@ function Effects() {
 }
 
 function AnnouncementBar() {
+  const language = useStoreLanguage();
   const isSkin = isSkincareSite();
   const [announce, setAnnounce] = useState('');
   useEffect(() => {
@@ -141,13 +156,14 @@ function AnnouncementBar() {
   return (
     <div className="tabaya-announcement">
       <div className="wrap">
-        <span>{announce}</span>
+        <span>{tr(announce, language)}</span>
       </div>
     </div>
   );
 }
 
 function Header({ onSearch }: { onSearch: () => void }) {
+  const language = useStoreLanguage();
   const { count, setOpen } = useCart();
   const { customer, openAuth } = useCustomer();
   const [menu, setMenu] = useState(false);
@@ -228,7 +244,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
                   className={'tabaya-nav-item' + (route.name === 'home' ? ' active' : '')}
                   onClick={() => nav('home')}
                 >
-                  Home
+                  {tr('Home', language)}
                 </a>
               </li>
               <li>
@@ -236,7 +252,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
                   className={'tabaya-nav-item' + (route.name === 'shop' && !route.param ? ' active' : '')}
                   onClick={() => nav('shop')}
                 >
-                  {isSkin ? 'All Skincare' : 'All Collections'}
+                  {tr(isSkin ? 'All Skincare' : 'All Collections', language)}
                 </a>
               </li>
               {visibleCats.map((c) => {
@@ -247,7 +263,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
                       className={'tabaya-nav-item' + (isActive ? ' active' : '')}
                       onClick={() => nav('shop/' + c.slug)}
                     >
-                      {c.name}
+                      {tr(c.name, language)}
                     </a>
                   </li>
                 );
@@ -265,7 +281,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
                     className="tabaya-nav-dropdown-btn"
                     onClick={() => setCatDropdownOpen((o) => !o)}
                   >
-                    <span>More Categories</span>
+                    <span>{tr('More Categories', language)}</span>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="6 9 12 15 18 9" />
                     </svg>
@@ -280,7 +296,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
                             setCatDropdownOpen(false);
                           }}
                         >
-                          {c.name}
+                          {tr(c.name, language)}
                         </a>
                       </li>
                     ))}
@@ -293,7 +309,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
                   className={'tabaya-nav-item' + (route.name === 'track' ? ' active' : '')}
                   onClick={() => nav('track')}
                 >
-                  Track Order
+                  {tr('Track Order', language)}
                 </a>
               </li>
             </ul>
@@ -301,10 +317,16 @@ function Header({ onSearch }: { onSearch: () => void }) {
 
           {/* Right Column: Search Icon, User Icon & Cart Bag */}
           <div className="tabaya-header-right">
+            <label className="header-language-wrap" aria-label="Choose website language">
+              <select className="header-language" value={language} onChange={(e) => setStoreLanguage(e.target.value as 'en' | 'bn')} aria-label="Choose website language">
+                <option value="en">EN</option>
+                <option value="bn">BN</option>
+              </select>
+            </label>
             <button
               className="tabaya-h-btn"
               onClick={onSearch}
-              aria-label="Search collections"
+              aria-label={tr('Search collections', language)}
               title="Search"
             >
               <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -366,7 +388,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
               <circle cx="12" cy="7" r="4" />
             </svg>
-            <span>{customer ? `Account (${customer.name || customer.phone})` : 'VIP Sign In / Register (5% OFF)'}</span>
+            <span>{customer ? `${tr('Account', language)} (${customer.name || customer.phone})` : tr('VIP Sign In / Register (5% OFF)', language)}</span>
           </a>
           {navLinks.map((item) => (
             <a
@@ -374,7 +396,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
               onClick={() => nav(item.path)}
               className="tabaya-mmenu-link"
             >
-              {item.label}
+              {tr(item.label, language)}
             </a>
           ))}
           <a
@@ -382,12 +404,12 @@ function Header({ onSearch }: { onSearch: () => void }) {
             className="tabaya-mmenu-link"
             style={{ color: '#8B1E1E', fontWeight: 600 }}
           >
-            Shopping Bag ({count} {count === 1 ? 'item' : 'items'})
+            {tr('Shopping Bag', language)} ({count} {tr(count === 1 ? 'item' : 'items', language)})
           </a>
         </div>
         <div className="tabaya-mmenu-foot">
-          <div>🚚 Cash on Delivery Nationwide</div>
-          <div style={{ marginTop: 4 }}>📞 Helpline: Available 24/7</div>
+          <div>🚚 {tr('Cash on Delivery Nationwide', language)}</div>
+          <div style={{ marginTop: 4 }}>📞 {tr('Helpline: Available 24/7', language)}</div>
         </div>
       </div>
     </>
@@ -395,6 +417,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
 }
 
 function Footer() {
+  const language = useStoreLanguage();
   const [phone, setPhone] = useState('+880 1878-374762');
   const [whatsapp, setWhatsapp] = useState('');
   const isSkin = isSkincareSite();
@@ -430,33 +453,33 @@ function Footer() {
               )}
             </div>
             <p className="tabaya-footer-desc">
-              {isSkin
+              {tr(isSkin
                 ? 'Dermatologically-inspired botanical skincare, intimate wellness & everyday self-care rituals. Clean, gentle formulations crafted with active botanicals, delivered across Bangladesh with cash on delivery.'
-                : 'Contemporary modest fashion & lifestyle brand. Ethically crafted timeless modest attire, abayas, panjabis & essentials delivered across Bangladesh with cash on delivery.'}
+                : 'Contemporary modest fashion & lifestyle brand. Ethically crafted timeless modest attire, abayas, panjabis & essentials delivered across Bangladesh with cash on delivery.', language)}
             </p>
             <div className="tabaya-trust-pill">
-              <span>🚚 Cash on Delivery Nationwide</span>
-              <span>{isSkin ? '🌿 100% Authentic Quality Guaranteed' : '🔄 7-Day Easy Exchange Policy'}</span>
+              <span>🚚 {tr('Cash on Delivery Nationwide', language)}</span>
+              <span>{isSkin ? `🌿 ${tr('100% Authentic Quality Guaranteed', language)}` : `🔄 ${tr('7-Day Easy Exchange Policy', language)}`}</span>
             </div>
           </div>
           <div>
-            <h4>Collections</h4>
-            <a onClick={() => go('shop')}>{isSkin ? 'All Skincare & Essentials' : 'All Collections'}</a>
+            <h4>{tr('Collections', language)}</h4>
+            <a onClick={() => go('shop')}>{tr(isSkin ? 'All Skincare & Essentials' : 'All Collections', language)}</a>
             {cats.filter((c) => !c.adult).slice(0, 5).map((c) => (
-              <a key={c.slug} onClick={() => go('shop/' + c.slug)}>{c.name}</a>
+            <a key={c.slug} onClick={() => go('shop/' + c.slug)}>{tr(c.name, language)}</a>
             ))}
           </div>
           <div>
-            <h4>Customer Care</h4>
-            <a onClick={() => go('track')}>Track Your Order</a>
-            <a onClick={() => go('info/shipping')}>Shipping & Delivery</a>
-            <a onClick={() => go('info/returns')}>Returns & Exchanges</a>
-            <a onClick={() => go('info/contact')}>Contact Customer Support</a>
+            <h4>{tr('Customer Care', language)}</h4>
+            <a onClick={() => go('track')}>{tr('Track Your Order', language)}</a>
+            <a onClick={() => go('info/shipping')}>{tr('Shipping & Delivery', language)}</a>
+            <a onClick={() => go('info/returns')}>{tr('Returns & Exchanges', language)}</a>
+            <a onClick={() => go('info/contact')}>{tr('Contact Customer Support', language)}</a>
           </div>
           <div>
-            <h4>Hotline & Inquiries</h4>
+            <h4>{tr('Hotline & Inquiries', language)}</h4>
             <p style={{ fontSize: 14, color: '#9ca3af', lineHeight: 1.6 }}>
-              Need assistance? Call or WhatsApp our helpline:
+              {tr('Need assistance? Call or WhatsApp our helpline:', language)}
             </p>
             <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff', margin: '8px 0' }}>
               <a href={`tel:${phone}`} style={{ color: '#fff', textDecoration: 'none' }}>📞 {phone}</a>
@@ -483,13 +506,13 @@ function Footer() {
               </div>
             )}
             <div style={{ fontSize: 13, color: '#9ca3af', marginTop: 8 }}>
-              Everyday: 10:00 AM – 10:00 PM
+              {tr('Everyday: 10:00 AM – 10:00 PM', language)}
             </div>
           </div>
         </div>
         <div className="tabaya-footer-bottom">
-          <span>© 2026 {name}. All Rights Reserved.</span>
-          <span>Cash on Delivery · Steadfast Courier · 100% Authentic Quality Guaranteed</span>
+          <span>{language === 'bn' ? `© ২০২৬ ${name}. সর্বস্বত্ব সংরক্ষিত।` : `© 2026 ${name}. All Rights Reserved.`}</span>
+          <span>{tr('Cash on Delivery · Steadfast Courier · 100% Authentic Quality Guaranteed', language)}</span>
         </div>
       </div>
     </footer>
@@ -497,7 +520,9 @@ function Footer() {
 }
 
 function CartDrawer() {
+  const language = useStoreLanguage();
   const { lines, total, open, setOpen, setQty, remove } = useCart();
+  const isSkin = isSkincareSite();
   const [freeThreshold, setFreeThreshold] = useState(2500);
   useEffect(() => {
     getSettings().then((s) => {
@@ -513,7 +538,7 @@ function CartDrawer() {
       <aside className={'pc-cart-drawer' + (open ? ' open' : '')}>
         <div className="pc-drawer-head">
           <div style={{ display: 'flex', alignItems: 'baseline' }}>
-            <span className="pc-drawer-title">Shopping Bag</span>
+            <span className="pc-drawer-title">{tr('Shopping Bag', language)}</span>
             <span className="pc-drawer-count">({lines.length} {lines.length === 1 ? 'ITEM' : 'ITEMS'})</span>
           </div>
           <button className="pc-drawer-close" onClick={() => setOpen(false)} aria-label="Close cart">×</button>
@@ -522,9 +547,9 @@ function CartDrawer() {
         {/* Free Shipping Progress Meter */}
         <div className="tabaya-free-meter">
           {remainingForFree === 0 ? (
-            <span style={{ color: '#15803d', fontWeight: 600 }}>✓ Free Delivery Unlocked!</span>
+            <span style={{ color: '#15803d', fontWeight: 600 }}>✓ {tr('Free Delivery Unlocked!', language)}</span>
           ) : (
-            <span>Add <b>{taka(remainingForFree)}</b> more for <b>Free Delivery</b></span>
+            <span>{language === 'bn' ? <>ফ্রি ডেলিভারি পেতে আরও <b>{taka(remainingForFree)}</b> যোগ করুন</> : <>Add <b>{taka(remainingForFree)}</b> more for <b>Free Delivery</b></>}</span>
           )}
           <div className="tabaya-meter-bar">
             <div className="tabaya-meter-fill" style={{ width: `${progress}%` }} />
@@ -535,12 +560,12 @@ function CartDrawer() {
           {lines.length === 0 ? (
             <div className="pc-drawer-empty">
               <div style={{ fontSize: 40, marginBottom: 12 }}>🛍️</div>
-              <h4 style={{ fontFamily: 'Playfair Display, Georgia, serif', fontSize: 20, margin: '0 0 6px', color: '#1f3147' }}>Your Bag is Empty</h4>
+              <h4 style={{ fontFamily: 'Playfair Display, Georgia, serif', fontSize: 20, margin: '0 0 6px', color: '#1f3147' }}>{tr('Your Bag is Empty', language)}</h4>
               <p style={{ fontSize: 13, color: '#6b645c', margin: '0 0 18px', maxWidth: 260, lineHeight: 1.5 }}>
-                Discover our botanical skincare & self-care essentials to find your daily favorites.
+                {tr(isSkin ? 'Discover our botanical skincare & self-care essentials to find your daily favorites.' : 'Explore our curated gifts, accessories, and lifestyle essentials.', language)}
               </p>
               <button className="pc-checkout-btn" style={{ maxWidth: 220 }} onClick={() => { setOpen(false); go('shop'); }}>
-                EXPLORE SHOP
+                {tr('EXPLORE SHOP', language)}
               </button>
             </div>
           ) : (
@@ -551,8 +576,8 @@ function CartDrawer() {
                   <h4 className="pc-cart-item-title">{l.name}</h4>
                   <div className="pc-cart-item-variant">
                     {(l.size || l.color)
-                      ? [l.color ? `Color: ${l.color}` : null, l.size ? `Size: ${l.size}` : null].filter(Boolean).join(' · ')
-                      : (l.variantId ? 'Selected Option' : '')}
+                      ? [l.color ? `${tr('Color:', language)} ${l.color}` : null, l.size ? `${tr('Size:', language)} ${l.size}` : null].filter(Boolean).join(' · ')
+                      : (l.variantId ? tr('Selected Option', language) : '')}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div className="pc-cart-item-qty">
@@ -562,7 +587,7 @@ function CartDrawer() {
                     </div>
                     <span className="pc-cart-item-price">{taka(l.price * l.qty)}</span>
                   </div>
-                  <button className="pc-remove-btn" onClick={() => remove(l.id)}>Remove</button>
+                  <button className="pc-remove-btn" onClick={() => remove(l.id)}>{tr('Remove', language)}</button>
                 </div>
               </div>
             ))
@@ -572,14 +597,14 @@ function CartDrawer() {
         {lines.length > 0 && (
           <div className="pc-drawer-foot">
             <div className="pc-subtotal-row">
-              <span className="pc-subtotal-label">SUBTOTAL</span>
+              <span className="pc-subtotal-label">{tr('SUBTOTAL', language)}</span>
               <span className="pc-subtotal-val">{taka(total)}</span>
             </div>
             <button className="pc-checkout-btn" onClick={() => { setOpen(false); go('checkout'); }}>
-              PROCEED TO CHECKOUT →
+              {tr('PROCEED TO CHECKOUT →', language)}
             </button>
             <div style={{ textAlign: 'center', fontSize: 11, color: '#888', marginTop: 10, letterSpacing: '0.04em' }}>
-              🔒 Cash on Delivery · Inspect Before Payment
+              {tr('🔒 Cash on Delivery · Inspect Before Payment', language)}
             </div>
           </div>
         )}
@@ -589,30 +614,32 @@ function CartDrawer() {
 }
 
 function MobileTabs() {
+  const language = useStoreLanguage();
   const route = useRoute();
   const { count, setOpen } = useCart();
   return (
     <nav className="tabbar">
       <a className={'tab' + (route.name === 'home' ? ' on' : '')} onClick={() => go('home')}>
-        <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10.5 12 4l9 6.5" /><path d="M5.5 9.5V20h13V9.5" /></svg><span>Home</span>
+        <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10.5 12 4l9 6.5" /><path d="M5.5 9.5V20h13V9.5" /></svg><span>{tr('Home', language)}</span>
       </a>
       <a className={'tab' + (route.name === 'shop' ? ' on' : '')} onClick={() => go('shop')}>
-        <svg viewBox="0 0 24 24"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v6H4zM14 15h6v6h-6z" /></svg><span>Shop</span>
+        <svg viewBox="0 0 24 24"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v6H4zM14 15h6v6h-6z" /></svg><span>{tr('Shop', language)}</span>
       </a>
       <a className="tab" onClick={() => setOpen(true)}>
-        <span className="tabcart"><svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8h12l-.8 11.6a1 1 0 0 1-1 .9H7.8a1 1 0 0 1-1-.9L6 8z" /><path d="M9 8V7a3 3 0 0 1 6 0v1" /></svg>{count > 0 && <i className="badge" key={count}>{count}</i>}</span><span>Bag</span>
+        <span className="tabcart"><svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8h12l-.8 11.6a1 1 0 0 1-1 .9H7.8a1 1 0 0 1-1-.9L6 8z" /><path d="M9 8V7a3 3 0 0 1 6 0v1" /></svg>{count > 0 && <i className="badge" key={count}>{count}</i>}</span><span>{tr('Bag', language)}</span>
       </a>
       <a className={'tab' + (route.name === 'track' ? ' on' : '')} onClick={() => go('track')}>
-        <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-6.5-5-6.5-10.5A6.5 6.5 0 0 1 18.5 10.5C18.5 16 12 21 12 21z" /><circle cx="12" cy="10.5" r="2.3" /></svg><span>Track</span>
+        <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-6.5-5-6.5-10.5A6.5 6.5 0 0 1 18.5 10.5C18.5 16 12 21 12 21z" /><circle cx="12" cy="10.5" r="2.3" /></svg><span>{tr('Track Order', language)}</span>
       </a>
       <a className={'tab' + (route.name === 'account' ? ' on' : '')} onClick={() => go('account')}>
-        <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg><span>Account</span>
+        <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg><span>{tr('Account', language)}</span>
       </a>
     </nav>
   );
 }
 
 function WhatsAppFloat() {
+  const route = useRoute();
   const [num, setNum] = useState('');
   const isSkin = isSkincareSite();
   const [brand, setBrand] = useState(isSkin ? 'SECRATE' : 'METRROMA');
@@ -623,7 +650,7 @@ function WhatsAppFloat() {
       if (s.storeName && s.storeName !== 'dot.') setBrand(s.storeName);
     }).catch(() => {});
   }, [isSkin]);
-  if (!num) return null;
+  if (!num || route.name === 'product' || route.name === 'checkout') return null;
   const clean = num.replace(/[^0-9]/g, '');
   const href = `https://wa.me/${clean}?text=${encodeURIComponent(`Hello! I have an inquiry about ${brand}.`)}`;
   return (
@@ -662,6 +689,17 @@ function CartFab() {
 function Shell() {
   const route = useRoute();
   const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    getSettings().then((settings: any) => {
+      const appearance = settings?.appearance || {};
+      const root = document.documentElement;
+      if (typeof appearance.accent === 'string' && /^#[0-9a-f]{6}$/i.test(appearance.accent)) root.style.setProperty('--store-accent', appearance.accent);
+      if (typeof appearance.font === 'string') root.style.setProperty('--store-font', `'${appearance.font}', Inter, sans-serif`);
+      if ([2, 3, 4].includes(Number(appearance.desktopColumns))) root.style.setProperty('--store-columns-desktop', String(appearance.desktopColumns));
+      if ([1, 2].includes(Number(appearance.mobileColumns))) root.style.setProperty('--store-columns-mobile', String(appearance.mobileColumns));
+      if (['contain', 'cover'].includes(appearance.imageFit)) root.style.setProperty('--store-image-fit', appearance.imageFit);
+    }).catch(() => {});
+  }, []);
   if (route.name === 'admin') return <Suspense fallback={<div style={{ minHeight: '100vh' }} />}><Admin /></Suspense>;
 
   // Dedicated Landing Page Funnel (Standalone high-converting page)

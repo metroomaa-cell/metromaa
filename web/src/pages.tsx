@@ -5,10 +5,12 @@ import { useCustomer } from './CustomerAccount';
 import { BD_GEO } from './bd-geo';
 import { ecView, ecBeginCheckout, ecPurchase, dl } from './analytics';
 import { WhatsAppIcon } from './icons';
+import { tr, useStoreLanguage } from './language';
 
 export function formatProductDescription(raw?: string): string {
   if (!raw || typeof raw !== 'string') return '';
-  const trimmed = raw.trim();
+  // Drop only a legacy mojibake word rather than rendering replacement glyphs in product copy.
+  const trimmed = raw.replace(/[^\s<>]*\uFFFD+[^\s<>]*/g, '').replace(/[ \t]{2,}/g, ' ').trim();
   if (!trimmed) return '';
 
   const hasBlockHtml = /<\/?(p|div|ul|ol|li|h[1-6]|table|blockquote)\b/i.test(trimmed);
@@ -230,6 +232,7 @@ export function isUndergarmentOrApparel(p: Product): boolean {
 }
 
 export function ProductCard({ p }: { p: Product }) {
+  const language = useStoreLanguage();
   const { add } = useCart();
   const [added, setAdded] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -285,40 +288,26 @@ export function ProductCard({ p }: { p: Product }) {
       <div className="pc-corner-tr" />
       <div className="pc-corner-bl" />
 
-      {/* Badges Stack (No overlap) */}
-      <div className="pc-badges-col">
+      {/* Sale state stays in a reserved strip, outside the product photo. */}
+      {(p.soldOut || onSale) && <div className="pc-badges-col">
         {p.soldOut ? (
           <span className="pc-badge-save out">SOLD OUT</span>
         ) : onSale ? (
-          <span className="pc-badge-save">-{salePercent}% OFF</span>
+          <span className="pc-badge-save">{language === 'bn' ? `${salePercent}% ছাড়` : `-${salePercent}% OFF`}</span>
         ) : null}
-        {p.isDigital ? (
-          <span className="pc-badge-tag" style={{ background: '#10b981', color: '#fff', fontWeight: 700 }}>⚡ DIGITAL · ৳0 DELIVERY</span>
-        ) : p.category === 'sunglass' ? (
-          <span className="pc-badge-tag" style={{ background: '#1f2937', color: '#f9fafb' }}>🕶️ UV400 POLARIZED</span>
-        ) : p.category === 'watch' ? (
-          <span className="pc-badge-tag" style={{ background: '#b48e4c', color: '#fff' }}>⌚ TIMEPIECE</span>
-        ) : p.category === 'gift' ? (
-          <span className="pc-badge-tag" style={{ background: '#8B1E1E', color: '#fff' }}>🎁 GIFT SET</span>
-        ) : p.category === 'cloth' ? (
-          <span className="pc-badge-tag" style={{ background: '#2563eb', color: '#fff' }}>👔 APPAREL</span>
-        ) : p.category === 'accessories' ? (
-          <span className="pc-badge-tag" style={{ background: '#4b5563', color: '#fff' }}>👜 ACCESSORIES</span>
-        ) : p.tag ? (
-          <span className="pc-badge-tag">{p.tag}</span>
-        ) : null}
-      </div>
+      </div>}
 
       {/* Image */}
       <div className="pc-image-wrap">
-        <img ref={imgRef} className="pc-image" src={currentCardImage} alt={p.name} loading="lazy" style={p.soldOut ? { opacity: 0.55 } : undefined} />
+        <img ref={imgRef} className="pc-image" src={currentCardImage} alt={p.name} loading="lazy" decoding="async" onError={(e: any) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.classList.add('image-unavailable'); }} style={p.soldOut ? { opacity: 0.55 } : undefined} />
       </div>
 
       {/* Card Content */}
       <div className="pc-content">
         <div className="pc-divider" />
-        <div className="pc-eyebrow">{p.category ? p.category.replace(/-/g, ' ') : 'EXCLUSIVE COLLECTION'}</div>
+        <div className="pc-eyebrow">{p.category ? tr(p.category.replace(/-/g, ' '), language) : tr('EXCLUSIVE COLLECTION', language)}</div>
         <a className="pc-title">{p.name}</a>
+        {(p.tag || p.isDigital) && <span className="pc-product-note">{p.isDigital ? '⚡ DIGITAL · ৳0 DELIVERY' : p.tag}</span>}
 
         {/* Colors Preview Chips */}
         {colors.length > 0 && (
@@ -377,7 +366,7 @@ export function ProductCard({ p }: { p: Product }) {
               ))}
             </div>
             <div className="pc-size-hint">
-              {selSize ? `Size: ${selSize}` : 'Select size'}
+              {selSize ? `${tr('Size:', language)} ${selSize}` : tr('Select size', language)}
             </div>
           </>
         )}
@@ -389,7 +378,7 @@ export function ProductCard({ p }: { p: Product }) {
           disabled={p.soldOut}
           onClick={handleAddToCart}
         >
-          <span>{p.soldOut ? 'SOLD OUT' : added ? 'ADDED TO BAG ✓' : 'ADD TO CART'}</span>
+          <span>{p.soldOut ? tr('SOLD OUT', language) : added ? tr('ADDED TO BAG ✓', language) : tr('ADD TO CART', language)}</span>
         </button>
       </div>
     </article>
@@ -427,24 +416,27 @@ function Stars({ n }: { n: number }) {
 }
 
 function Reviews({ productId }: { productId: string }) {
+  const language = useStoreLanguage();
   const [data, setData] = useState<{ count: number; avg: number; reviews: Review[] }>({ count: 0, avg: 0, reviews: [] });
   const [form, setForm] = useState({ name: '', rating: 5, text: '' });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState('');
   const load = () => fetchReviews(productId).then(setData).catch(() => {});
   useEffect(() => { load(); }, [productId]);
   const submit = async () => {
-    if (!form.name.trim()) return;
+    if (!form.name.trim()) { setError('Please enter your name.'); return; }
+    setError('');
     setBusy(true);
-    try { await postReview({ productId, name: form.name.trim(), rating: form.rating, text: form.text.trim() }); setForm({ name: '', rating: 5, text: '' }); setDone(true); setTimeout(() => setDone(false), 2500); load(); } catch {}
+    try { await postReview({ productId, name: form.name.trim(), rating: form.rating, text: form.text.trim() }); setForm({ name: '', rating: 5, text: '' }); setDone(true); setTimeout(() => setDone(false), 3500); } catch (e: any) { setError(e.message || 'Could not submit your review. Please try again.'); }
     finally { setBusy(false); }
   };
   return (
     <section className="revs">
-      <div className="shd"><h2>reviews{data.count ? ` · ${data.avg} ★ (${data.count})` : ''}</h2></div>
+      <div className="shd"><h2>{tr('Reviews', language)}{data.count ? ` · ${data.avg} ★ (${data.count})` : ''}</h2></div>
       <div className="revgrid">
         <div className="revlist">
-          {data.reviews.length === 0 && <p className="dim">no reviews yet — be the first.</p>}
+          {data.reviews.length === 0 && <p className="dim">{tr('no reviews yet — be the first.', language)}</p>}
           {data.reviews.map((r) => (
             <div className="rev" key={r.id}>
               <div className="revh"><Stars n={r.rating} /><span className="dim">{r.name}</span></div>
@@ -453,11 +445,12 @@ function Reviews({ productId }: { productId: string }) {
           ))}
         </div>
         <div className="revform">
-          <h4>leave a review</h4>
+          <h4>{tr('leave a review', language)}</h4>
           <div className="ratepick">{[1, 2, 3, 4, 5].map((n) => <button key={n} className={n <= form.rating ? 'on' : ''} onClick={() => setForm((s) => ({ ...s, rating: n }))}>★</button>)}</div>
-          <input className="field" placeholder="your name" value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} />
-          <textarea className="field" placeholder="your thoughts (optional)" value={form.text} onChange={(e) => setForm((s) => ({ ...s, text: e.target.value }))} />
-          <button className="btn full" disabled={busy} onClick={submit}>{busy ? 'posting…' : done ? 'thank you ✓' : 'post review'}</button>
+          <input className="field" placeholder={tr('your name', language)} value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} />
+          <textarea className="field" placeholder={tr('your thoughts (optional)', language)} value={form.text} onChange={(e) => setForm((s) => ({ ...s, text: e.target.value }))} />
+          {error && <p className="rev-error" role="alert">{error}</p>}
+          <button className="btn full" disabled={busy} onClick={submit}>{busy ? tr('posting…', language) : done ? tr('submitted for approval ✓', language) : tr('post review', language)}</button>
         </div>
       </div>
     </section>
@@ -465,12 +458,13 @@ function Reviews({ productId }: { productId: string }) {
 }
 
 function Related({ product }: { product: Product }) {
+  const language = useStoreLanguage();
   const [items, setItems] = useState<Product[]>([]);
   useEffect(() => { getProducts(product.category).then((all) => setItems(all.filter((p) => p.id !== product.id).slice(0, 4))).catch(() => {}); }, [product.id]);
   if (items.length === 0) return null;
   return (
     <section>
-      <div className="shd"><h2>you may also like</h2></div>
+      <div className="shd"><h2>{tr('you may also like', language)}</h2></div>
       <div className="grid">{items.map((p) => <ProductCard key={p.id} p={p} />)}</div>
     </section>
   );
@@ -486,6 +480,7 @@ const INFO: Record<string, { title: string; body: string[] }> = {
   journal: { title: 'the journal', body: ['Style guides, fabric care notes & lifestyle stories — coming soon.'] },
 };
 export function InfoPage({ slug }: { slug: string }) {
+  const language = useStoreLanguage();
   const info = INFO[slug] || { title: 'page', body: ['coming soon.'] };
   const [wa, setWa] = useState('');
   useEffect(() => {
@@ -493,7 +488,7 @@ export function InfoPage({ slug }: { slug: string }) {
   }, []);
   return (
     <div className="page"><div className="wrap" style={{ maxWidth: 760 }}>
-      <span className="back" onClick={() => (history.length > 1 ? history.back() : go('home'))}>← back</span>
+      <span className="back" onClick={() => (history.length > 1 ? history.back() : go('home'))}>← {tr('back', language)}</span>
       <div className="phead"><h1>{info.title}</h1></div>
       {info.body.map((p, i) => <p key={i} style={{ color: 'var(--dim)', marginBottom: 14, maxWidth: '62ch', fontSize: 16 }}>{p}</p>)}
       {slug === 'contact' && wa && (
@@ -515,7 +510,7 @@ export function InfoPage({ slug }: { slug: string }) {
             }}
           >
             <WhatsAppIcon size={20} variant="official" />
-            <span>Chat on WhatsApp</span>
+            <span>{tr('Chat on WhatsApp', language)}</span>
           </a>
         </div>
       )}
@@ -556,6 +551,7 @@ function videoEmbed(url: string): { type: 'youtube' | 'facebook' | 'direct'; src
 }
 
 function HomeHeroSlider({ slides }: { slides: any[] }) {
+  const language = useStoreLanguage();
   const activeSlides = useMemo(() => slides.filter((s) => s.active !== false && s.image), [slides]);
   const [cur, setCur] = useState(0);
   const [touchStart, setTouchStart] = useState<number | null>(null);
@@ -571,58 +567,60 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
   if (activeSlides.length === 0) {
     const isSkin = isSkincareSite();
     return (
-      <section className="tabaya-hero">
+      <section className="tabaya-hero" style={isSkin ? { background: 'radial-gradient(ellipse at 78% 35%, rgba(104,126,78,.38), transparent 44%), radial-gradient(ellipse at 12% 100%, rgba(174,142,80,.18), transparent 42%), linear-gradient(120deg,#101b16 0%,#1d2b20 54%,#111914 100%)' } : undefined}>
         <div className="tabaya-hero-bg">
           <picture>
             {isSkin && <source media="(max-width: 768px)" srcSet="/uploads/banner_secrate_mobile.webp" />}
             <img
               src={isSkin
                 ? '/uploads/banner_secrate_desktop.webp'
-                : '/uploads/img_mvdpqsl1t81m6.webp'}
+                : '/uploads/img_mvcvyjixc2dpi.webp'}
               alt={isSkin ? 'Botanical Skincare & Essentials' : 'METRROMA Lifestyle & Gifts'}
               onError={(e: any) => {
-                e.currentTarget.src = isSkin
-                  ? 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=1920&q=85'
-                  : '/uploads/img_mvdpqsl1t81m6.webp';
+                if (isSkin) {
+                  e.currentTarget.src = 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=1920&q=85';
+                } else {
+                  e.currentTarget.style.display = 'none';
+                }
               }}
             />
           </picture>
         </div>
-        <div className="tabaya-hero-overlay" />
+        <div className="tabaya-hero-overlay" style={isSkin ? { background: 'linear-gradient(90deg,rgba(12,23,17,.90) 0%,rgba(12,23,17,.58) 60%,rgba(12,23,17,.24) 100%)' } : undefined} />
         <div className="wrap tabaya-hero-wrap">
           <div className="tabaya-hero-card">
             <span className="tabaya-hero-badge">
-              {isSkin ? '🌿 DERMATOLOGICALLY CRAFTED · BOTANICAL CARE' : '✨ EXCLUSIVE 2026 COLLECTION · PREMIUM LIFESTYLE'}
+              {tr(isSkin ? '🌿 DERMATOLOGICALLY CRAFTED · BOTANICAL CARE' : '✨ EXCLUSIVE 2026 COLLECTION · PREMIUM LIFESTYLE', language)}
             </span>
             <h1 className="tabaya-hero-title serif">
               {isSkin ? (
                 <>
-                  Pure Botanical Radiance<br />
-                  <span className="it" style={{ color: '#d4af37' }}>Elevated Everyday Skincare</span>
+                  {tr('Pure Botanical Radiance', language)}<br />
+                  <span className="it" style={{ color: '#d4af37' }}>{tr('Elevated Everyday Skincare', language)}</span>
                 </>
               ) : (
                 <>
-                  Curated Modern Lifestyle<br />
-                  <span className="it" style={{ color: '#b48e4c' }}>Watches, Sunglasses & Gifts</span>
+                  {tr('Curated Modern Lifestyle', language)}<br />
+                  <span className="it" style={{ color: '#b48e4c' }}>{tr('Watches, Sunglasses & Gifts', language)}</span>
                 </>
               )}
             </h1>
             <p className="tabaya-hero-desc">
-              {isSkin
+              {tr(isSkin
                 ? 'Nourish your skin barrier with clinically-inspired botanical cleansers, hydrating serums, and restorative moisture balms. Cash on delivery nationwide.'
-                : 'Discover signature sunglasses, authentic timepieces, and bespoke gift boxes crafted for timeless elegance. Cash on delivery nationwide.'}
+                : 'Discover signature sunglasses, authentic timepieces, and bespoke gift boxes crafted for timeless elegance. Cash on delivery nationwide.', language)}
             </p>
             <div className="tabaya-hero-btns">
               <button className="tabaya-btn primary" onClick={() => go(isSkin ? 'shop/skincare' : 'shop')}>
-                {isSkin ? 'EXPLORE SKINCARE →' : 'EXPLORE COLLECTIONS →'}
+                {tr(isSkin ? 'EXPLORE SKINCARE →' : 'EXPLORE COLLECTIONS →', language)}
               </button>
               <button className="tabaya-btn outline" onClick={() => go('shop')}>
-                ALL PRODUCTS
+                {tr('ALL PRODUCTS', language)}
               </button>
             </div>
             <div className="tabaya-hero-micro">
-              <span>🚚 Cash on Delivery Nationwide</span>
-              <span>{isSkin ? '🌿 100% Authentic Quality Guaranteed' : '⭐ 100% Satisfaction Guarantee'}</span>
+              <span>🚚 {tr('Cash on Delivery Nationwide', language)}</span>
+              <span>{isSkin ? `🌿 ${tr('100% Authentic Quality Guaranteed', language)}` : `⭐ ${tr('100% Satisfaction Guarantee', language)}`}</span>
             </div>
           </div>
         </div>
@@ -635,7 +633,7 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
   return (
     <section
       className="tabaya-hero"
-      style={{ position: 'relative', overflow: 'hidden' }}
+      style={{ position: 'relative', overflow: 'hidden', ...(isSkincareSite() ? { background: 'radial-gradient(ellipse at 78% 35%, rgba(104,126,78,.38), transparent 44%), radial-gradient(ellipse at 12% 100%, rgba(174,142,80,.18), transparent 42%), linear-gradient(120deg,#101b16 0%,#1d2b20 54%,#111914 100%)' } : {}) }}
       onTouchStart={(e) => setTouchStart(e.touches[0].clientX)}
       onTouchEnd={(e) => {
         if (touchStart === null) return;
@@ -653,10 +651,17 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
             src={s.image}
             alt={s.title || 'Hero Banner'}
             style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.6s ease-in-out' }}
+            onError={(e: any) => {
+              const fallback = isSkincareSite()
+                ? 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=1920&q=85'
+                : '/uploads/img_mvcvyjixc2dpi.webp';
+              if (e.currentTarget.src.endsWith(fallback)) return;
+              e.currentTarget.src = fallback;
+            }}
           />
         </picture>
       </div>
-      <div className="tabaya-hero-overlay" />
+      <div className="tabaya-hero-overlay" style={isSkincareSite() ? { background: 'linear-gradient(90deg,rgba(12,23,17,.90) 0%,rgba(12,23,17,.58) 60%,rgba(12,23,17,.24) 100%)' } : undefined} />
 
       {/* Navigation Arrows */}
       {activeSlides.length > 1 && (
@@ -719,35 +724,35 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
       {/* Slide Content Card */}
       <div className="wrap tabaya-hero-wrap">
         <div className="tabaya-hero-card" key={s.id || cur} style={{ animation: 'fadeIn 0.5s ease' }}>
-          {s.badge && <span className="tabaya-hero-badge">{s.badge}</span>}
+          {s.badge && <span className="tabaya-hero-badge">{tr(s.badge, language)}</span>}
           {s.title && (
             <h1 className="tabaya-hero-title serif">
-              {s.title}
+              {tr(s.title, language)}
               {s.subtitle && (
                 <>
                   <br />
-                  <span className="it" style={{ color: '#b48e4c' }}>{s.subtitle}</span>
+                  <span className="it" style={{ color: '#b48e4c' }}>{tr(s.subtitle, language)}</span>
                 </>
               )}
             </h1>
           )}
           {s.description && (
-            <p className="tabaya-hero-desc">{s.description}</p>
+            <p className="tabaya-hero-desc">{tr(s.description, language)}</p>
           )}
           <div className="tabaya-hero-btns">
             <button
               className="tabaya-btn primary"
               onClick={() => go(s.btnLink || 'shop')}
             >
-              {s.btnText || 'SHOP NOW →'}
+              {tr(s.btnText || 'SHOP NOW →', language)}
             </button>
             <button className="tabaya-btn outline" onClick={() => go('shop')}>
-              ALL COLLECTIONS
+              {tr('ALL COLLECTIONS', language)}
             </button>
           </div>
           <div className="tabaya-hero-micro">
-            <span>🚚 Cash on Delivery Nationwide</span>
-            <span>🔒 100% Satisfaction Guarantee</span>
+            <span>🚚 {tr('Cash on Delivery Nationwide', language)}</span>
+            <span>🔒 {tr('100% Satisfaction Guarantee', language)}</span>
           </div>
         </div>
       </div>
@@ -791,6 +796,7 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
 }
 
 export function Home() {
+  const language = useStoreLanguage();
   const { openAuth } = useCustomer();
   const [products, setProducts] = useState<Product[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -811,6 +817,8 @@ export function Home() {
   }, []);
 
   const isSkin = isSkincareSite();
+  const customHomeCopy = settings?.homeContent?.[language] || {};
+  const homeText = (key: string, fallback: string) => customHomeCopy[key]?.trim() || tr(fallback, language);
 
   const best = useMemo(() => {
     if (!products.length) return [];
@@ -839,7 +847,7 @@ export function Home() {
     });
   }, [best, activeTabCat]);
 
-  const faqs = isSkin
+  const defaultFaqs = isSkin
     ? [
         {
           q: 'How do I choose the right skincare routine for my skin type?',
@@ -884,6 +892,11 @@ export function Home() {
           a: 'For best results and longevity, we recommend dry cleaning or gentle hand-washing in cold water with mild detergent. Do not bleach or tumble dry in high heat. Steam iron on low setting.',
         },
       ];
+  const customFaqs = customHomeCopy.faqs;
+  const faqs = defaultFaqs.map((faq, index) => ({
+    q: customFaqs?.[index]?.q?.trim() || faq.q,
+    a: customFaqs?.[index]?.a?.trim() || faq.a,
+  }));
 
   return (
     <div className="tabaya-home">
@@ -929,7 +942,7 @@ export function Home() {
                   }}
                 >
                   <span>{catItem.icon}</span>
-                  <span>{catItem.label}</span>
+                  <span>{tr(catItem.label, language)}</span>
                 </button>
               );
             })}
@@ -942,35 +955,53 @@ export function Home() {
         <section className="ara-section">
           <div className="wrap">
             <div className="ara-header">
-              <p className="ara-eyebrow">{isSkin ? 'CURATED REGIMEN' : 'CURATED LINEUP'}</p>
-              <h2 className="ara-title">{isSkin ? 'Shop by Category' : 'Shop by Collection'}</h2>
+              <p className="ara-eyebrow">{homeText('collectionEyebrow', isSkin ? 'CURATED REGIMEN' : 'CURATED LINEUP')}</p>
+              <h2 className="ara-title">{homeText('collectionTitle', isSkin ? 'Shop by Category' : 'Shop by Collection')}</h2>
               <p className="ara-subtitle">
-                {isSkin
+                {homeText('collectionDescription', isSkin
                   ? 'Formulated with clean, nutrient-rich botanicals to balance, hydrate, and protect your skin everyday.'
-                  : 'Explore our handpicked curation of designer sunglasses, signature timepieces, and bespoke gift boxes.'}
+                  : 'Explore our handpicked curation of designer sunglasses, signature timepieces, and bespoke gift boxes.')}
               </p>
             </div>
 
             <div className="ara-grid">
-              {cats.map((c) => (
-                <div className="ara-card" key={c.slug} onClick={() => go('shop/' + c.slug)}>
-                  <div className="ara-card-visual">
-                    <img
-                      className="ara-card-img"
-                      src={c.image || (isSkin ? 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=800&q=80' : 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?auto=format&fit=crop&w=800&q=80')}
-                      alt={c.name}
-                    />
-                    <div className="ara-card-overlay" />
-                    <div className="ara-card-frame" />
-                    <div className="ara-card-corners" />
-                    <div className="ara-card-content">
-                      <span className="ara-card-kicker">{isSkin ? 'BOTANICAL CARE' : 'COLLECTION'}</span>
-                      <h3 className="ara-card-label">{c.name}</h3>
-                      <span className="ara-card-cta">EXPLORE →</span>
+              {cats.map((c) => {
+                const categoryKey = String(c.slug || c.name).toLowerCase().replace(/-/g, ' ').trim();
+                const categoryProduct = products.find((product) => String(product.category || '').toLowerCase().replace(/-/g, ' ').trim() === categoryKey && product.image);
+                const categoryFallback = categoryProduct?.image || '';
+                const categorySource = c.image || categoryFallback || (isSkin
+                  ? 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=800&q=80'
+                  : 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?auto=format&fit=crop&w=800&q=80');
+                return (
+                  <div className="ara-card" key={c.slug} onClick={() => go('shop/' + c.slug)}>
+                    <div className="ara-card-visual">
+                      <img
+                        className="ara-card-img"
+                        src={categorySource}
+                        alt={tr(c.name, language)}
+                        loading="lazy"
+                        decoding="async"
+                        onError={(e: any) => {
+                          const fallbackUrl = categoryFallback ? new URL(categoryFallback, window.location.href).href : '';
+                          if (fallbackUrl && e.currentTarget.src !== fallbackUrl) e.currentTarget.src = categoryFallback;
+                          else {
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.parentElement?.classList.add('image-unavailable');
+                          }
+                        }}
+                      />
+                      <div className="ara-card-overlay" />
+                      <div className="ara-card-frame" />
+                      <div className="ara-card-corners" />
+                      <div className="ara-card-content">
+                        <span className="ara-card-kicker">{tr(isSkin ? 'BOTANICAL CARE' : 'COLLECTION', language)}</span>
+                        <h3 className="ara-card-label">{tr(c.name, language)}</h3>
+                        <span className="ara-card-cta">{tr('EXPLORE →', language)}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </section>
@@ -980,12 +1011,12 @@ export function Home() {
       <section className="tabaya-intro">
         <div className="tabaya-intro__frame">
           <h2 className="tabaya-intro__title">
-            {isSkin ? 'Pure Botanicals Meet Clinical Care' : 'Premium Craftsmanship Meets Modern Luxury'}
+            {homeText('introTitle', isSkin ? 'Pure Botanicals Meet Clinical Care' : 'Premium Craftsmanship Meets Modern Luxury')}
           </h2>
           <p className="tabaya-intro__desc">
-            {isSkin
+            {homeText('introDescription', isSkin
               ? 'Every product in our skincare and self-care collection is thoughtfully formulated with nutrient-dense botanical extracts to strengthen your skin barrier, balance hydration, and reveal a natural, healthy glow. Cash on delivery with doorstep inspection across Bangladesh.'
-              : 'Every item in our collection is curated with an unwavering commitment to craftsmanship, authentic premium quality, and timeless modern style. From iconic timepieces and designer sunglasses to unforgettable gift boxes delivered with cash on delivery across Bangladesh.'}
+              : 'Every item in our collection is curated with an unwavering commitment to craftsmanship, authentic premium quality, and timeless modern style. From iconic timepieces and designer sunglasses to unforgettable gift boxes delivered with cash on delivery across Bangladesh.')}
           </p>
         </div>
       </section>
@@ -995,15 +1026,15 @@ export function Home() {
         <div className="wrap">
           <div className="pc-section-header">
             <p className="pc-section-kicker">
-              {isSkin ? 'CLINICAL BOTANICAL FORMULATIONS' : 'CURATED LIFESTYLE & GIFTS'}
+              {homeText('featuredEyebrow', isSkin ? 'CLINICAL BOTANICAL FORMULATIONS' : 'CURATED LIFESTYLE & GIFTS')}
             </p>
             <h2 className="pc-section-title">
-              {isSkin ? 'Signature Skincare Essentials' : 'Trending & Best Sellers'}
+              {homeText('featuredTitle', isSkin ? 'Signature Skincare Essentials' : 'Trending & Best Sellers')}
             </h2>
             <p className="pc-section-subtitle">
-              {isSkin
+              {homeText('featuredDescription', isSkin
                 ? 'Explore our most coveted cleansers, serums, and restorative moisture balms delivered with cash on delivery across Bangladesh.'
-                : 'Explore premium watches, apparel, curated gift boxes, and lifestyle essentials with nationwide doorstep delivery.'}
+                : 'Explore premium watches, apparel, curated gift boxes, and lifestyle essentials with nationwide doorstep delivery.')}
             </p>
 
             {!isSkin && (
@@ -1034,7 +1065,7 @@ export function Home() {
                       boxShadow: activeTabCat === f.id ? '0 2px 6px rgba(0,0,0,0.1)' : 'none',
                     }}
                   >
-                    {f.label}
+                    {tr(f.label.replace(/^[^A-Za-z]+\s*/, ''), language)}
                   </button>
                 ))}
               </div>
@@ -1050,10 +1081,10 @@ export function Home() {
                   <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px 20px', color: '#6b645c' }}>
                     <div style={{ fontSize: 40, marginBottom: 12 }}>📦</div>
                     <h3 style={{ fontSize: 20, color: '#1f3147', fontFamily: "'Playfair Display', Georgia, serif" }}>
-                      No Products Found in this Category
+                      {tr('No Products Found in this Category', language)}
                     </h3>
                     <p style={{ fontSize: 14, marginTop: 6, color: '#8c7d6b' }}>
-                      We are adding exciting new arrivals to this section shortly!
+                      {tr('We are adding exciting new arrivals to this section shortly!', language)}
                     </p>
                     <button
                       type="button"
@@ -1070,7 +1101,7 @@ export function Home() {
                         fontWeight: 600,
                       }}
                     >
-                      VIEW ALL PRODUCTS
+                      {tr('VIEW ALL PRODUCTS', language)}
                     </button>
                   </div>
                 )}
@@ -1083,7 +1114,7 @@ export function Home() {
                 style={{ padding: '14px 34px', fontSize: 12, letterSpacing: '2.5px' }}
                 onClick={() => go('shop')}
               >
-                VIEW ALL PRODUCTS ({products.length}) →
+                {language === 'bn' ? `সব পণ্য দেখুন (${products.length}) →` : `VIEW ALL PRODUCTS (${products.length}) →`}
               </button>
             </div>
           )}
@@ -1096,30 +1127,30 @@ export function Home() {
           <div className="feature-grid">
             <div className="feature-item">
               <div className="feature-icon">🚚</div>
-              <h3>Cash on Delivery Nationwide</h3>
-              <p>Inspect your parcel upon arrival before making payment at your doorstep.</p>
+              <h3>{tr('Cash on Delivery Nationwide', language)}</h3>
+              <p>{tr('Inspect your parcel upon arrival before making payment at your doorstep.', language)}</p>
             </div>
             <div className="feature-item">
               <div className="feature-icon">{isSkin ? '🌿' : '🛡️'}</div>
-              <h3>{isSkin ? '100% Dermatologist-Safe & Authentic' : '100% Authentic Fabrics'}</h3>
+              <h3>{tr(isSkin ? '100% Dermatologist-Safe & Authentic' : '100% Authentic Fabrics', language)}</h3>
               <p>
-                {isSkin
+                {tr(isSkin
                   ? 'Clean botanical formulations gentle on sensitive skin. Zero harsh parabens.'
-                  : 'Hand-picked breathable fabrics crafted with meticulous stitching and finishing.'}
+                  : 'Hand-picked breathable fabrics crafted with meticulous stitching and finishing.', language)}
               </p>
             </div>
             <div className="feature-item">
               <div className="feature-icon">📦</div>
-              <h3>Discreet & Secure Packaging</h3>
-              <p>Every order is wrapped with utmost care to ensure pristine arrival.</p>
+              <h3>{tr('Discreet & Secure Packaging', language)}</h3>
+              <p>{tr('Every order is wrapped with utmost care to ensure pristine arrival.', language)}</p>
             </div>
             <div className="feature-item">
               <div className="feature-icon">{isSkin ? '💬' : '🔄'}</div>
-              <h3>{isSkin ? 'Skincare Consultation Helpline' : '7-Day Easy Exchange'}</h3>
+              <h3>{tr(isSkin ? 'Skincare Consultation Helpline' : '7-Day Easy Exchange', language)}</h3>
               <p>
-                {isSkin
+                {tr(isSkin
                   ? 'Have questions about your skin? Message our skincare support on WhatsApp anytime.'
-                  : "Simple and hassle-free sizing exchange if the fit isn't absolutely perfect."}
+                  : "Simple and hassle-free sizing exchange if the fit isn't absolutely perfect.", language)}
               </p>
             </div>
           </div>
@@ -1132,7 +1163,7 @@ export function Home() {
           {/* Left Column: Rotated Vertical Text + Editorial Photo */}
           <div className="faq-left">
             <div className="faq-vertical-title">
-              FREQUENTLY ASKED QUESTIONS
+              {tr('FREQUENTLY ASKED QUESTIONS', language)}
             </div>
             <div className="faq-image-box">
               <img
@@ -1155,12 +1186,12 @@ export function Home() {
                     onClick={() => setOpenFaq(isOpen ? null : idx)}
                     aria-expanded={isOpen}
                   >
-                    <span>{f.q}</span>
+                    <span>{tr(f.q, language)}</span>
                     <span className="faq-icon">{isOpen ? '−' : '+'}</span>
                   </button>
                   {isOpen && (
                     <div className="faq-answer">
-                      {f.a}
+                      {tr(f.a, language)}
                     </div>
                   )}
                 </div>
@@ -1175,15 +1206,15 @@ export function Home() {
         <div className="wrap">
           <div className="tabaya-news-card">
             <span className="tabaya-sec-subtitle" style={{ color: '#b48e4c' }}>
-              {isSkin ? 'EXCLUSIVE OFFERS & SKINCARE LAUNCHES' : 'EXCLUSIVE OFFERS & NEW ARRIVALS'}
+              {homeText('newsletterEyebrow', isSkin ? 'EXCLUSIVE OFFERS & SKINCARE LAUNCHES' : 'EXCLUSIVE OFFERS & NEW ARRIVALS')}
             </span>
             <h2 className="serif" style={{ fontSize: 'clamp(24px, 3.2vw, 36px)', margin: '10px 0' }}>
-              {isSkin ? 'Be the First to Experience New Skincare Drops' : 'Be the First to Experience New Collections'}
+              {homeText('newsletterTitle', isSkin ? 'Be the First to Experience New Skincare Drops' : 'Be the First to Experience New Collections')}
             </h2>
             <p style={{ color: '#9ca3af', maxWidth: 480, margin: '0 auto 20px', fontSize: 14 }}>
-              {isSkin
+              {homeText('newsletterDescription', isSkin
                 ? 'Join our exclusive VIP circle to receive personalized skincare guides, early access to new botanical drops, and special member discounts.'
-                : 'Join our exclusive VIP circle to receive private sale previews, early access to new arrivals, and special member discounts.'}
+                : 'Join our exclusive VIP circle to receive private sale previews, early access to new arrivals, and special member discounts.')}
             </p>
             {subbed ? (
               <div style={{ color: '#10b981', fontWeight: 700, fontSize: 16 }}>
@@ -1210,11 +1241,11 @@ export function Home() {
                 <input
                   type="text"
                   required
-                  placeholder="Enter your mobile number or email"
+                  placeholder={tr('Enter your mobile number or email', language)}
                   value={subEmail}
                   onChange={(e) => setSubEmail(e.target.value)}
                 />
-                <button type="submit">Join Now →</button>
+                <button type="submit">{tr('Join Now →', language)}</button>
               </form>
             )}
           </div>
@@ -1224,6 +1255,7 @@ export function Home() {
   );
 }
 export function Shop({ category }: { category: string }) {
+  const language = useStoreLanguage();
   const { ok, confirm } = useAge();
   const [cats, setCats] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -1245,15 +1277,15 @@ export function Shop({ category }: { category: string }) {
       <div className="wrap" style={{ maxWidth: 1300 }}>
         <div className="phead" style={{ textAlign: 'center', padding: '30px 0 20px' }}>
           <p className="pc-section-kicker">
-            {isSkin ? 'PURE BOTANICAL FORMULATIONS' : 'METRROMA CURATED LINEUP'}
+            {tr(isSkin ? 'PURE BOTANICAL FORMULATIONS' : 'METRROMA CURATED LINEUP', language)}
           </p>
           <h1 className="pc-section-title">
-            {activeCat ? activeCat.name : (isSkin ? 'All Skincare & Essentials' : 'All Collections')}
+            {activeCat ? tr(activeCat.name, language) : tr(isSkin ? 'All Skincare & Essentials' : 'All Collections', language)}
           </h1>
           <p className="pc-section-subtitle">
-            {activeCat ? activeCat.blurb : (isSkin
+            {activeCat ? activeCat.blurb : tr(isSkin
               ? 'Discover nutrient-dense botanical formulations crafted to nourish, balance, and restore your skin naturally.'
-              : 'Discover premium sunglasses, authentic timepieces, and curated gift boxes crafted for modern lifestyle.')}
+              : 'Discover premium sunglasses, authentic timepieces, and curated gift boxes crafted for modern lifestyle.', language)}
           </p>
         </div>
 
@@ -1276,7 +1308,7 @@ export function Shop({ category }: { category: string }) {
               transition: 'all 0.25s',
             }}
           >
-            All Products ({products.length})
+            {tr('All Products', language)} ({products.length})
           </span>
           {cats.map((c) => (
             <span
@@ -1297,7 +1329,7 @@ export function Shop({ category }: { category: string }) {
                 transition: 'all 0.25s',
               }}
             >
-              {c.name}
+              {tr(c.name, language)}
             </span>
           ))}
         </div>
@@ -1314,9 +1346,9 @@ export function Shop({ category }: { category: string }) {
             {visible.length === 0 && (
               <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b645c' }}>
                 <div style={{ fontSize: 40, marginBottom: 12 }}>📦</div>
-                <h3 style={{ fontSize: 20, color: '#1f3147', fontFamily: "'Playfair Display', Georgia, serif" }}>No products found in this collection</h3>
-                <p style={{ fontSize: 14, marginTop: 4 }}>New pieces will be added shortly.</p>
-                <button className="tabaya-btn primary" style={{ marginTop: 16 }} onClick={() => go('shop')}>View All Collections</button>
+                <h3 style={{ fontSize: 20, color: '#1f3147', fontFamily: "'Playfair Display', Georgia, serif" }}>{tr('No products found in this collection', language)}</h3>
+                <p style={{ fontSize: 14, marginTop: 4 }}>{tr('New pieces will be added shortly.', language)}</p>
+                <button className="tabaya-btn primary" style={{ marginTop: 16 }} onClick={() => go('shop')}>{tr('View All Collections', language)}</button>
               </div>
             )}
           </>
@@ -1327,6 +1359,7 @@ export function Shop({ category }: { category: string }) {
 }
 
 export function ProductPage({ slug }: { slug: string }) {
+  const language = useStoreLanguage();
   const { ok, confirm } = useAge();
   const { add, setOpen } = useCart();
   const [p, setP] = useState<Product | null>(null);
@@ -1337,7 +1370,7 @@ export function ProductPage({ slug }: { slug: string }) {
   const [selVar, setSelVar] = useState<any>(null);
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<string>('');
-  const [activeAcc, setActiveAcc] = useState<string>('desc');
+  const [activeAcc, setActiveAcc] = useState<string>('');
   const [pdpTab, setPdpTab] = useState<'desc' | 'specs' | 'size' | 'delivery' | 'care'>('desc');
   const [waNum, setWaNum] = useState('');
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -1413,17 +1446,19 @@ export function ProductPage({ slug }: { slug: string }) {
       }
       const pTitle = `${pr.name} — ${isSkin ? 'SECRATE' : 'METRROMA'}`;
       document.title = pTitle;
-      const q = new URLSearchParams(location.search);
-      dl({
-        event: 'page_view',
-        page_location: location.href,
-        page_path: location.pathname + location.search,
-        page_title: pTitle,
-        campaign_source: q.get('utm_source') || (q.get('fbclid') ? 'facebook' : undefined),
-        campaign_medium: q.get('utm_medium') || (q.get('fbclid') ? 'paid' : undefined),
-        campaign_name: q.get('utm_campaign') || undefined,
-      });
-      ecView({ id: pr.id, name: pr.name, price: pr.price });
+      if (!import.meta.env.DEV) {
+        const q = new URLSearchParams(location.search);
+        dl({
+          event: 'page_view',
+          page_location: location.href,
+          page_path: location.pathname + location.search,
+          page_title: pTitle,
+          campaign_source: q.get('utm_source') || (q.get('fbclid') ? 'facebook' : undefined),
+          campaign_medium: q.get('utm_medium') || (q.get('fbclid') ? 'paid' : undefined),
+          campaign_name: q.get('utm_campaign') || undefined,
+        });
+        ecView({ id: pr.id, name: pr.name, price: pr.price });
+      }
     }).catch(() => setErr(true));
   }, [slug]);
 
@@ -1521,15 +1556,7 @@ export function ProductPage({ slug }: { slug: string }) {
           {/* Left: Gallery */}
           <div>
             <div className="pimg" style={{ overflow: 'hidden', border: '1px solid rgba(180, 150, 100, 0.25)', background: '#EDE9E3', position: 'relative' }}>
-              <div className="pc-badges-col">
-                {onSale && (
-                  <span className="pc-badge-save">
-                    -{salePercent}% OFF
-                  </span>
-                )}
-                {p.tag && <span className="pc-badge-tag">{p.tag}</span>}
-              </div>
-              <img ref={pimgRef} key={gi} className="pdimg-fade" src={gallery[gi] || p.image} alt={p.name} style={{ width: '100%', height: 'auto', maxHeight: 580, objectFit: 'contain' }} />
+              <img ref={pimgRef} key={gi} className="pdimg-fade" src={gallery[gi] || p.image} alt={p.name} onError={(e: any) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.classList.add('image-unavailable'); }} />
             </div>
 
             {gallery.length > 1 && (
@@ -1541,7 +1568,7 @@ export function ProductPage({ slug }: { slug: string }) {
                     onClick={() => setGi(i)}
                     style={{ width: 72, height: 90, overflow: 'hidden', border: i === gi ? '2px solid #b48e4c' : '1px solid rgba(180, 150, 100, 0.3)', background: '#FAF8F5', cursor: 'pointer', padding: 0 }}
                   >
-                    <img src={im} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={im} alt={`${p.name} view ${i + 1}`} onError={(e: any) => { e.currentTarget.closest('button')?.remove(); }} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </button>
                 ))}
               </div>
@@ -1560,6 +1587,10 @@ export function ProductPage({ slug }: { slug: string }) {
             <h1 className="serif" style={{ fontSize: 'clamp(26px, 3.2vw, 38px)', fontWeight: 500, color: '#1f3147', margin: '8px 0 12px', lineHeight: 1.2 }}>
               {p.name}
             </h1>
+            {(onSale || p.tag || p.isDigital) && <div className="pdp-product-flags">
+              {onSale && <span className="pdp-sale-flag">{language === 'bn' ? `${salePercent}% ছাড়` : `-${salePercent}% OFF`}</span>}
+              {p.isDigital ? <span className="pdp-note-flag">⚡ Digital · ৳0 delivery</span> : p.tag ? <span className="pdp-note-flag">{p.tag}</span> : null}
+            </div>}
 
             {/* Real Reviews & Stock Status */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -1572,16 +1603,16 @@ export function ProductPage({ slug }: { slug: string }) {
                     {revData.avg.toFixed(1)}
                   </span>
                   <span style={{ fontSize: 12.5, color: '#6b645c' }}>
-                    ({revData.count} {revData.count === 1 ? 'Customer Review' : 'Customer Reviews'})
+                    ({revData.count} {tr(revData.count === 1 ? 'Customer Review' : 'Customer Reviews', language)})
                   </span>
                 </div>
               ) : (
                 <span style={{ fontSize: 12.5, fontWeight: 500, color: '#6b645c' }}>
-                  {isSkin ? '🌿 100% Authentic Botanical' : '✨ Verified Authentic Item'}
+                  {tr(isSkin ? '🌿 100% Authentic Botanical' : '✨ Verified Authentic Item', language)}
                 </span>
               )}
               <span style={{ color: p.soldOut ? '#dc2626' : '#15803d', fontSize: 11, fontWeight: 600, background: p.soldOut ? 'rgba(220,38,38,0.08)' : 'rgba(21,128,61,0.08)', padding: '2px 8px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                {p.soldOut ? 'Sold Out' : 'In Stock'}
+                {tr(p.soldOut ? 'Sold Out' : 'In Stock', language)}
               </span>
             </div>
 
@@ -1589,7 +1620,7 @@ export function ProductPage({ slug }: { slug: string }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 6, marginBottom: 14 }}>
                 <span style={{ fontSize: 16 }}>⚡</span>
                 <div style={{ fontSize: 12.5, color: '#065f46', fontWeight: 600 }}>
-                  Instant Digital Product · 100% Free Instant Delivery (৳0 Courier Fee)
+                  {tr('Instant Digital Product · 100% Free Instant Delivery (৳0 Courier Fee)', language)}
                 </div>
               </div>
             )}
@@ -1601,7 +1632,7 @@ export function ProductPage({ slug }: { slug: string }) {
                 <>
                   <s style={{ fontSize: 16, color: '#8c7d6b', fontWeight: 400, fontFamily: "'Inter', sans-serif", fontVariantNumeric: 'tabular-nums' }}>{taka(currentCompareAt!)}</s>
                   <span className="pc-badge-save" style={{ position: 'static' }}>
-                    Save {taka(currentCompareAt! - currentPrice)}
+                    {tr('Save', language)} {taka(currentCompareAt! - currentPrice)}
                   </span>
                 </>
               )}
@@ -1633,7 +1664,7 @@ export function ProductPage({ slug }: { slug: string }) {
                   textUnderlineOffset: 3
                 }}
               >
-                <span>📖 {isSkin ? 'Read Full Description & Specifications ↓' : 'Read Full Description & Details ↓'}</span>
+                <span>📖 {tr(isSkin ? 'Read Full Description & Specifications ↓' : 'Read Full Description & Details ↓', language)}</span>
               </button>
             </div>
 
@@ -1763,12 +1794,12 @@ export function ProductPage({ slug }: { slug: string }) {
             {/* Quantity & CTA */}
             {p.soldOut ? (
               <div style={{ marginTop: 24 }}>
-                <button className="pc-checkout-btn" disabled style={{ width: '100%', opacity: 0.6 }}>SOLD OUT (RESTOCKING SOON)</button>
+                <button className="pc-checkout-btn" disabled style={{ width: '100%', opacity: 0.6 }}>{tr('SOLD OUT (RESTOCKING SOON)', language)}</button>
               </div>
             ) : (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#1f3147', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Quantity:</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#1f3147', letterSpacing: '0.12em', textTransform: 'uppercase' }}>{tr('Quantity:', language)}</span>
                   <div style={{ display: 'flex', alignItems: 'center' }}>
                     <button className="pc-qty-btn" onClick={() => setQty((q) => Math.max(1, q - 1))}>−</button>
                     <span className="pc-qty-num" style={{ width: 40 }}>{qty}</span>
@@ -1782,7 +1813,7 @@ export function ProductPage({ slug }: { slug: string }) {
                     onClick={handleDirectBuy}
                     style={{ width: '100%', padding: '16px 24px', fontSize: 12, letterSpacing: '0.22em' }}
                   >
-                    <span>ORDER NOW</span>
+                    <span>{tr('ORDER NOW', language)}</span>
                   </button>
                   <button
                     className="tabaya-btn outline"
@@ -1799,7 +1830,7 @@ export function ProductPage({ slug }: { slug: string }) {
                       cursor: 'pointer',
                     }}
                   >
-                    + ADD TO SHOPPING BAG
+                    {tr('+ ADD TO SHOPPING BAG', language)}
                   </button>
                   {waNum && (
                     <a
@@ -1825,7 +1856,7 @@ export function ProductPage({ slug }: { slug: string }) {
                       }}
                     >
                       <WhatsAppIcon size={18} variant="official" />
-                      <span>ORDER VIA WHATSAPP</span>
+                      <span>{tr('ORDER VIA WHATSAPP', language)}</span>
                     </a>
                   )}
                 </div>
@@ -1834,10 +1865,10 @@ export function ProductPage({ slug }: { slug: string }) {
 
             {/* Trust Badges */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 26, padding: '18px', background: '#f3f0ec', border: '1px solid rgba(180, 150, 100, 0.25)', fontSize: 12, color: '#6b645c' }}>
-              <div>🚚 Express Delivery Nationwide</div>
-              <div>💵 Cash on Delivery at Doorstep</div>
-              <div>🛡️ 100% Authentic Quality</div>
-              <div>🔄 7-Day Easy Exchange Policy</div>
+              <div>{tr('🚚 Express Delivery Nationwide', language)}</div>
+              <div>{tr('💵 Cash on Delivery at Doorstep', language)}</div>
+              <div>{tr('🛡️ 100% Authentic Quality', language)}</div>
+              <div>{tr('🔄 7-Day Easy Exchange Policy', language)}</div>
             </div>
 
             {/* Tabaya Style Accordions */}
@@ -2745,6 +2776,7 @@ export function ProductPage({ slug }: { slug: string }) {
   );
 }
 export function Checkout() {
+  const language = useStoreLanguage();
   const { lines, total: subtotal, clear } = useCart();
   const { customer, openAuth } = useCustomer();
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -2847,12 +2879,20 @@ export function Checkout() {
     }
   };
 
+  const showCheckoutIssue = (message: string, selector: string) => {
+    setErr(message);
+    window.setTimeout(() => {
+      const target = document.querySelector(selector) as HTMLElement | null;
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 60);
+  };
+
   const submit = async () => {
     setErr('');
-    if (!/^01[3-9]\d{8}$/.test(f.phone)) { setErr('Please enter a valid 11-digit Bangladeshi mobile number (01XXXXXXXXX)'); return; }
+    if (!/^01[3-9]\d{8}$/.test(f.phone)) { showCheckoutIssue('Please enter a valid 11-digit Bangladeshi mobile number (01XXXXXXXXX)', '.checkout-phone-input'); return; }
     if (!isAllDigital) {
-      if (!district || !thana) { setErr('Please select your District and Thana'); return; }
-      if (!f.address.trim()) { setErr('Please enter your street address / delivery location'); return; }
+      if (!district || !thana) { showCheckoutIssue('Please select your District and Thana', !district ? '.checkout-district-field' : '.checkout-thana-field'); return; }
+      if (!f.address.trim()) { showCheckoutIssue('Please enter your street address / delivery location', '.checkout-address-field'); return; }
     }
     setBusy(true);
     try {
@@ -2912,7 +2952,7 @@ export function Checkout() {
     );
 
   return (
-    <div className="page" style={{ background: '#f3f0ec', minHeight: '100vh', paddingTop: '28px', paddingBottom: '70px' }}>
+    <div className="page checkout-page" style={{ background: '#f3f0ec', minHeight: '100vh', paddingTop: '28px', paddingBottom: '70px' }}>
       <div className="wrap" style={{ maxWidth: 1120 }}>
         {/* Breadcrumb */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#8c7d6b', marginBottom: 20, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
@@ -2920,7 +2960,7 @@ export function Checkout() {
           <span>/</span>
           <span style={{ cursor: 'pointer' }} onClick={() => go('shop')}>Collections</span>
           <span>/</span>
-          <span style={{ color: '#1f3147', fontWeight: 600 }}>Checkout</span>
+          <span style={{ color: '#1f3147', fontWeight: 600 }}>{tr('Checkout', language)}</span>
         </div>
 
         {/* Header */}
@@ -2929,10 +2969,10 @@ export function Checkout() {
             {isSkin ? 'SECRATE • SECURE ORDER CHECKOUT' : 'METRROMA • SECURE ORDER CHECKOUT'}
           </p>
           <h1 className="serif" style={{ fontSize: 'clamp(28px, 3.4vw, 40px)', fontWeight: 500, color: '#1f3147', margin: '6px 0 10px' }}>
-            Finalize Your Order
+            {tr('Finalize Your Order', language)}
           </h1>
           <p style={{ color: '#6b645c', fontSize: 14, maxWidth: 520, margin: '0 auto' }}>
-            Pay with Cash on Delivery at your doorstep. Inspect your parcel before completing payment.
+            {tr('Pay with Cash on Delivery at your doorstep. Inspect your parcel before completing payment.', language)}
           </p>
         </div>
 
@@ -2954,7 +2994,7 @@ export function Checkout() {
                 }}
               >
                 <div style={{ fontSize: 13, color: '#334155' }}>
-                  Have a VIP account or want 5% off your first order?
+                  {tr('Have a VIP account or want 5% off your first order?', language)}
                 </div>
                 <button
                   type="button"
@@ -2970,7 +3010,7 @@ export function Checkout() {
                     padding: 0,
                   }}
                 >
-                  Sign In / Register
+                  {tr('Sign In / Register', language)}
                 </button>
               </div>
             )}
@@ -2981,17 +3021,17 @@ export function Checkout() {
               <div className="pc-corner-bl" />
               <div className="cobox-h">
                 <span className="cobox-n">1</span>
-                <span>Contact & Personal Details</span>
+                <span>{tr('Contact & Personal Details', language)}</span>
               </div>
               <div className="cobox-b">
                 <div>
-                  <label>Full Name *</label>
-                  <input className="field" value={f.name} onChange={set('name')} placeholder="Enter your full name" />
+                  <label>{tr('Full Name *', language)}</label>
+                  <input className="field" value={f.name} onChange={set('name')} placeholder={tr('Enter your full name', language)} />
                 </div>
                 <div>
-                  <label>Mobile Number *</label>
+                  <label>{tr('Mobile Number *', language)}</label>
                   <input
-                    className="field"
+                    className="field checkout-phone-input"
                     value={f.phone}
                     onChange={(e) => setF((s) => ({ ...s, phone: e.target.value.replace(/\D/g, '').slice(0, 11) }))}
                     placeholder="01XXXXXXXXX"
@@ -2999,7 +3039,7 @@ export function Checkout() {
                     maxLength={11}
                   />
                   {f.phone.length > 0 && !/^01[3-9]\d{8}$/.test(f.phone) && (
-                    <div className="fieldhint">Please enter a valid 11-digit mobile number (e.g. 017XXXXXXXX)</div>
+                    <div className="fieldhint">{tr('Please enter a valid 11-digit mobile number (e.g. 017XXXXXXXX)', language)}</div>
                   )}
                 </div>
               </div>
@@ -3011,15 +3051,15 @@ export function Checkout() {
               <div className="pc-corner-bl" />
               <div className="cobox-h">
                 <span className="cobox-n">2</span>
-                <span>{isAllDigital ? 'Instant Digital Fulfillment' : 'Shipping & Doorstep Delivery Address'}</span>
+                <span>{tr(isAllDigital ? 'Instant Digital Fulfillment' : 'Shipping & Doorstep Delivery Address', language)}</span>
               </div>
               {isAllDigital ? (
                 <div className="cobox-b">
                   <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '14px 16px', marginBottom: 14 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#166534', fontWeight: 700, fontSize: 13.5 }}>
-                      <span>⚡ Instant Digital Access</span>
+                      <span>{tr('⚡ Instant Digital Access', language)}</span>
                       <span style={{ fontSize: 10.5, background: '#16a34a', color: '#fff', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
-                        FREE ৳0 DELIVERY
+                        {tr('FREE ৳0 DELIVERY', language)}
                       </span>
                     </div>
                     <p style={{ margin: '6px 0 0', fontSize: 12.5, color: '#4b5563', lineHeight: 1.5 }}>
@@ -3027,62 +3067,62 @@ export function Checkout() {
                     </p>
                   </div>
                   <div>
-                    <label>Email Address (for download delivery & invoice) *</label>
+                    <label>{tr('Email Address (for download delivery & invoice) *', language)}</label>
                     <input className="field" type="email" value={f.email || ''} onChange={set('email')} placeholder="yourname@gmail.com" />
                   </div>
                   <div style={{ marginTop: 12 }}>
-                    <label>Order Note (Optional)</label>
+                    <label>{tr('Order Note (Optional)', language)}</label>
                     <input className="field" value={f.note} onChange={set('note')} placeholder="WhatsApp instructions or special notes" />
                   </div>
                 </div>
               ) : (
                 <div className="cobox-b">
                   <div className="corow">
-                    <div>
-                      <label>District (Zilla) *</label>
-                      <SearchSelect value={district} onChange={pickDistrict} options={districts} placeholder="Search district…" />
+                    <div className="checkout-district-field">
+                      <label>{tr('District (Zilla) *', language)}</label>
+                      <SearchSelect value={district} onChange={pickDistrict} options={districts} placeholder={tr('Search district…', language)} />
                     </div>
-                    <div>
-                      <label>Thana / Upazila *</label>
-                      <SearchSelect value={thana} onChange={setThana} options={thanas} placeholder={district ? 'Search thana…' : 'Select district first'} disabled={!district} />
+                    <div className="checkout-thana-field">
+                      <label>{tr('Thana / Upazila *', language)}</label>
+                      <SearchSelect value={thana} onChange={setThana} options={thanas} placeholder={district ? tr('Search thana…', language) : tr('Select district first', language)} disabled={!district} />
                     </div>
                   </div>
 
-                  <div>
-                    <label>Detailed Street Address *</label>
+                  <div className="checkout-address-field">
+                    <label>{tr('Detailed Street Address *', language)}</label>
                     <textarea className="field" value={f.address} onChange={set('address')} placeholder="House / Flat / Road, Village, Landmark or Area description" />
                   </div>
 
                   <div>
-                    <label>Delivery Zone</label>
+                    <label>{tr('Delivery Zone', language)}</label>
                     <div className="area">
                       <button type="button" className={'areaopt' + (area === 'inside' ? ' on' : '')} onClick={() => setArea('inside')}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                          <b style={{ fontSize: 13, color: area === 'inside' ? '#FAF8F5' : '#1f3147' }}>Inside Dhaka</b>
+                          <b style={{ fontSize: 13, color: area === 'inside' ? '#FAF8F5' : '#1f3147' }}>{tr('Inside Dhaka', language)}</b>
                           <span style={{ fontSize: 13, fontWeight: 700, color: area === 'inside' ? '#d4af37' : '#1f3147' }}>
                             {settings ? (freeShip ? 'FREE' : taka(settings.deliveryInside)) : '৳80'}
                           </span>
                         </div>
                         <span style={{ fontSize: 11.5, color: area === 'inside' ? 'rgba(250,248,245,0.75)' : '#8c7d6b' }}>
-                          Delivered in 24–48 Hours
+                          {tr('Delivered in 24–48 Hours', language)}
                         </span>
                       </button>
                       <button type="button" className={'areaopt' + (area === 'outside' ? ' on' : '')} onClick={() => setArea('outside')}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                          <b style={{ fontSize: 13, color: area === 'outside' ? '#FAF8F5' : '#1f3147' }}>Outside Dhaka</b>
+                          <b style={{ fontSize: 13, color: area === 'outside' ? '#FAF8F5' : '#1f3147' }}>{tr('Outside Dhaka', language)}</b>
                           <span style={{ fontSize: 13, fontWeight: 700, color: area === 'outside' ? '#d4af37' : '#1f3147' }}>
                             {settings ? (freeShip ? 'FREE' : taka(settings.deliveryOutside)) : '৳130'}
                           </span>
                         </div>
                         <span style={{ fontSize: 11.5, color: area === 'outside' ? 'rgba(250,248,245,0.75)' : '#8c7d6b' }}>
-                          Delivered across 64 Districts
+                          {tr('Delivered across 64 Districts', language)}
                         </span>
                       </button>
                     </div>
                   </div>
 
                   <div>
-                    <label>Order Note (Optional)</label>
+                    <label>{tr('Order Note (Optional)', language)}</label>
                     <input className="field" value={f.note} onChange={set('note')} placeholder="Special delivery instructions, timing or landmarks" />
                   </div>
                 </div>
@@ -3094,7 +3134,7 @@ export function Checkout() {
           <div className="summ">
             <div className="pc-corner-tr" />
             <div className="pc-corner-bl" />
-            <h3>Order Summary ({lines.reduce((s, l) => s + l.qty, 0)} Items)</h3>
+            <h3>{tr('Order Summary', language)} ({lines.reduce((s, l) => s + l.qty, 0)} {tr('Items', language)})</h3>
 
             <div className="summ-items">
               {lines.map((l) => (
@@ -3190,7 +3230,7 @@ export function Checkout() {
             </div>
 
             {err && (
-              <div style={{ background: '#fee2e2', border: '1px solid #f87171', color: '#b91c1c', padding: '10px 14px', borderRadius: 2, fontSize: 13, marginTop: 14 }}>
+              <div className="checkout-error" style={{ background: '#fee2e2', border: '1px solid #f87171', color: '#b91c1c', padding: '10px 14px', borderRadius: 2, fontSize: 13, marginTop: 14 }}>
                 ⚠️ {err}
               </div>
             )}
@@ -3201,7 +3241,7 @@ export function Checkout() {
               onClick={submit}
               style={{ marginTop: 18 }}
             >
-              <span>{busy ? 'PROCESSING ORDER…' : 'PLACE ORDER'}</span>
+              <span>{busy ? tr('PROCESSING ORDER…', language) : `${tr('PLACE ORDER', language)} · ${taka(grand)}`}</span>
             </button>
 
             <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: '#6b645c', textAlign: 'center' }}>
@@ -3210,12 +3250,22 @@ export function Checkout() {
             </div>
           </div>
         </div>
+        <div className="checkout-mobile-action" aria-label="Quick order action">
+          {err && <div className="checkout-mobile-error" role="alert">⚠️ {err}</div>}
+          <div className="checkout-mobile-action-row">
+            <div className="checkout-mobile-total"><span>Total payable</span><strong>{taka(grand)}</strong></div>
+            <button className="checkout-submit-btn" disabled={busy} onClick={submit}>
+              <span>{busy ? tr('PROCESSING…', language) : tr('PLACE ORDER', language)}</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
 export function Confirm({ id }: { id: string }) {
+  const language = useStoreLanguage();
   const [copied, setCopied] = useState(false);
   const [wa, setWa] = useState('');
   const isSkin = isSkincareSite();
@@ -3349,7 +3399,7 @@ function courierLink(cour: any): string {
   return '';
 }
 
-function CopyMini({ text }: { text: string }) {
+function CopyMini({ text, language = 'en' }: { text: string; language?: 'en' | 'bn' }) {
   const [done, setDone] = useState(false);
   const copy = async () => {
     try { await navigator.clipboard.writeText(text); } catch {}
@@ -3371,23 +3421,38 @@ function CopyMini({ text }: { text: string }) {
         transition: 'all .2s ease',
       }}
     >
-      {done ? '✓ Copied' : 'Copy'}
+      {done ? (language === 'bn' ? '✓ কপি হয়েছে' : '✓ Copied') : (language === 'bn' ? 'কপি' : 'Copy')}
     </button>
   );
 }
 
 export function Track({ id: initialId }: { id?: string }) {
+  const language = useStoreLanguage();
   const [id, setId] = useState(initialId || '');
   const [phone, setPhone] = useState('');
   const [res, setRes] = useState<any>(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const copy = language === 'bn' ? {
+    eyebrow: 'রিয়েল-টাইম কুরিয়ার ট্র্যাকিং', title: 'আপনার অর্ডার ট্র্যাক করুন',
+    intro: 'অর্ডার আইডি অথবা ফোন নম্বর দিয়ে অর্ডারের সর্বশেষ অবস্থা ও কুরিয়ার ট্র্যাকিং দেখুন।',
+    orderId: 'অর্ডার আইডি', phone: 'ফোন নম্বর', orderPlaceholder: 'যেমন: DOT-83BE276D',
+    phonePlaceholder: 'যেমন: 018XXXXXXXX', search: 'অর্ডার ট্র্যাক করুন', searching: 'অর্ডার খোঁজা হচ্ছে…',
+    needInput: 'অর্ডার আইডি অথবা ফোন নম্বর লিখুন',
+  } : {
+    eyebrow: 'Real-Time Courier Tracking', title: 'Track Your Order',
+    intro: 'Enter your order ID or phone number to view the latest order status and courier tracking details.',
+    orderId: 'Order ID', phone: 'Phone Number', orderPlaceholder: 'e.g. DOT-83BE276D',
+    phonePlaceholder: 'e.g. 018XXXXXXXX', search: 'Track My Order', searching: 'Searching orders…',
+    needInput: 'Please enter your Order ID or Phone number',
+  };
+
   const lookup = async (targetId?: string, targetPhone?: string, quiet?: boolean) => {
     const searchId = targetId !== undefined ? targetId : id;
     const searchPhone = targetPhone !== undefined ? targetPhone : phone;
     if (!searchId.trim() && !searchPhone.trim()) {
-      if (!quiet) setErr('Please enter your Order ID or Phone number');
+      if (!quiet) setErr(copy.needInput);
       return;
     }
     try {
@@ -3437,19 +3502,20 @@ export function Track({ id: initialId }: { id?: string }) {
   return (
     <div className="page" style={{ minHeight: '80vh', paddingBottom: 70, background: '#FAF8F5' }}>
       <div className="wrap" style={{ maxWidth: 780, margin: '0 auto', padding: '0 20px' }}>
-        <div className="phead" style={{ padding: '40px 0 20px', textAlign: 'center' }}>
+        <div className="phead tracking-heading" style={{ padding: '24px 0 20px', textAlign: 'center' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#b49664', marginBottom: 8 }}>
-            <span>📦</span> Real-Time Courier Tracking
+            <span>📦</span> {copy.eyebrow}
           </div>
           <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontSize: 'clamp(28px, 4vw, 38px)', color: '#1f3147', letterSpacing: '-0.02em', margin: 0 }}>
-            Track Your Order
+            {copy.title}
           </h1>
           <p style={{ color: '#6b645c', marginTop: 10, fontSize: 14.5, maxWidth: 460, margin: '10px auto 0' }}>
-            আপনার অর্ডার নম্বর অথবা মোবাইল নম্বর দিয়ে অর্ডারের বর্তমান অবস্থা ও লাইভ কুরিয়ার লোকেশন দেখুন।
+            {copy.intro}
           </p>
         </div>
 
         <div
+          className="tracking-card"
           style={{
             background: '#ffffff',
             borderRadius: 12,
@@ -3458,14 +3524,14 @@ export function Track({ id: initialId }: { id?: string }) {
             boxShadow: '0 4px 20px rgba(31, 49, 71, 0.05)',
           }}
         >
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div className="track-form">
             <div style={{ flex: 1, minWidth: 200 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#1f3147', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Order ID (অর্ডার আইডি)
+                {copy.orderId}
               </label>
               <input
                 className="field"
-                placeholder="e.g. DOT-83BE276D"
+                placeholder={copy.orderPlaceholder}
                 value={id}
                 onChange={(e) => setId(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submit()}
@@ -3474,11 +3540,11 @@ export function Track({ id: initialId }: { id?: string }) {
             </div>
             <div style={{ flex: 1, minWidth: 200 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#1f3147', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Phone Number (মোবাইল নম্বর)
+                {copy.phone}
               </label>
               <input
                 className="field"
-                placeholder="e.g. 018XXXXXXXX"
+                placeholder={copy.phonePlaceholder}
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submit()}
@@ -3509,7 +3575,7 @@ export function Track({ id: initialId }: { id?: string }) {
                   boxShadow: '0 4px 14px rgba(31,49,71,0.2)',
                 }}
               >
-                <span>{busy ? 'Searching Orders…' : '🔍 Track My Order (অর্ডার ট্র্যাক করুন)'}</span>
+                <span>{busy ? copy.searching : copy.search}</span>
               </button>
             </div>
           </div>
@@ -3536,28 +3602,33 @@ export function Track({ id: initialId }: { id?: string }) {
           )}
         </div>
 
-        {res && <TrackResult o={res} />}
+        {res && <TrackResult o={res} language={language} />}
       </div>
     </div>
   );
 }
 
-function TrackResult({ o }: { o: any }) {
+function TrackResult({ o, language }: { o: any; language: 'en' | 'bn' }) {
+  const bn = language === 'bn';
   const cancelled = ['cancelled', 'canceled', 'return', 'returned', 'failed'].includes(String(o.status || '').toLowerCase());
   const returned = String(o.status || '').toLowerCase() === 'return' || String(o.status || '').toLowerCase() === 'returned';
   const special = cancelled || returned;
   const idx = getTrackStepIndex(o.status);
-  const date = new Date(o.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const rawStatus = String(o.status || 'pending').toLowerCase();
+  const statusText: Record<string, string> = bn
+    ? { delivered: 'ডেলিভারি সম্পন্ন', shipped: 'কুরিয়ারে পাঠানো', approved: 'নিশ্চিত', confirmed: 'নিশ্চিত', hold: 'স্থগিত', cancelled: 'বাতিল', canceled: 'বাতিল', return: 'ফেরত', returned: 'ফেরত', pending: 'অপেক্ষমাণ', placed: 'গ্রহণ করা হয়েছে' }
+    : { delivered: 'DELIVERED', shipped: 'SHIPPED', approved: 'APPROVED', confirmed: 'CONFIRMED', hold: 'ON HOLD', cancelled: 'CANCELLED', canceled: 'CANCELLED', return: 'RETURNED', returned: 'RETURNED', pending: 'PENDING', placed: 'PLACED' };
+  const date = new Date(o.createdAt).toLocaleDateString(bn ? 'bn-BD' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   // Status Badge Configuration
   const getBadge = () => {
     const s = String(o.status || '').toLowerCase();
-    if (s === 'delivered') return { label: 'Delivered (ডেলিভারি সম্পন্ন)', bg: '#dcfce7', color: '#15803d', border: '#bbf7d0', icon: '🎉' };
-    if (s === 'shipped') return { label: 'In Transit / Shipped (কুরিয়ারে পাঠানো হয়েছে)', bg: '#dbeafe', color: '#1e40af', border: '#bfdbfe', icon: '🚚' };
-    if (s === 'approved' || s === 'confirmed') return { label: 'Order Approved & Confirmed (অর্ডার অনুমোদিত)', bg: '#d1fae5', color: '#065f46', border: '#a7f3d0', icon: '✓' };
-    if (s === 'hold') return { label: 'Order on Hold (অপেক্ষমান)', bg: '#fef3c7', color: '#92400e', border: '#fde68a', icon: '⏸️' };
-    if (cancelled) return { label: 'Order Cancelled (বাতিলকৃত)', bg: '#fee2e2', color: '#991b1b', border: '#fecaca', icon: '✕' };
-    return { label: 'Order Placed (অর্ডার গৃহীত হয়েছে)', bg: '#fef3c7', color: '#854d0e', border: '#fde68a', icon: '⏳' };
+    if (s === 'delivered') return { label: bn ? 'ডেলিভারি সম্পন্ন' : 'Delivered', bg: '#dcfce7', color: '#15803d', border: '#bbf7d0', icon: '🎉' };
+    if (s === 'shipped') return { label: bn ? 'কুরিয়ারে পাঠানো হয়েছে' : 'In Transit / Shipped', bg: '#dbeafe', color: '#1e40af', border: '#bfdbfe', icon: '🚚' };
+    if (s === 'approved' || s === 'confirmed') return { label: bn ? 'অর্ডার নিশ্চিত হয়েছে' : 'Order Approved & Confirmed', bg: '#d1fae5', color: '#065f46', border: '#a7f3d0', icon: '✓' };
+    if (s === 'hold') return { label: bn ? 'অর্ডার স্থগিত' : 'Order on Hold', bg: '#fef3c7', color: '#92400e', border: '#fde68a', icon: '⏸️' };
+    if (cancelled) return { label: bn ? 'অর্ডার বাতিল' : 'Order Cancelled', bg: '#fee2e2', color: '#991b1b', border: '#fecaca', icon: '✕' };
+    return { label: bn ? 'অর্ডার গ্রহণ করা হয়েছে' : 'Order Placed', bg: '#fef3c7', color: '#854d0e', border: '#fde68a', icon: '⏳' };
   };
   const badge = getBadge();
 
@@ -3577,23 +3648,23 @@ function TrackResult({ o }: { o: any }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14, borderBottom: '1px solid #EAE5DC', paddingBottom: 20 }}>
         <div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#8c7d6b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Order ID:</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#8c7d6b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{bn ? 'অর্ডার আইডি:' : 'Order ID:'}</span>
             <code style={{ fontSize: 15, fontWeight: 800, color: '#1f3147', background: '#FAF8F5', padding: '2px 8px', borderRadius: 4, border: '1px solid #EAE5DC' }}>
               {o.id}
             </code>
-            <CopyMini text={o.id} />
+            <CopyMini text={o.id} language={language} />
           </div>
           <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontSize: 24, margin: '8px 0 4px', color: '#1f3147' }}>
             {badge.label}
           </h2>
           <p style={{ color: '#6b645c', fontSize: 13.5, margin: 0 }}>
-            অর্ডার গ্রহণের তারিখ: <b>{date}</b> • ক্যাশ অন ডেলিভারি (Cash on Delivery)
+            {bn ? 'অর্ডারের তারিখ:' : 'Order placed:'} <b>{date}</b> • {bn ? 'ক্যাশ অন ডেলিভারি' : 'Cash on Delivery'}
           </p>
         </div>
 
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: badge.bg, color: badge.color, border: `1.5px solid ${badge.border}`, borderRadius: 100, fontSize: 13, fontWeight: 700 }}>
           <span>{badge.icon}</span>
-          <span>{o.status ? String(o.status).toUpperCase() : 'PENDING'}</span>
+          <span>{statusText[rawStatus] || (bn ? o.status : String(o.status || 'pending').toUpperCase())}</span>
         </div>
       </div>
 
@@ -3648,10 +3719,7 @@ function TrackResult({ o }: { o: any }) {
                   {/* Label */}
                   <div style={{ textAlign: 'center', marginTop: 10 }}>
                     <div style={{ fontSize: 12.5, fontWeight: isPassed ? 700 : 500, color: isPassed ? '#1f3147' : '#94a3b8' }}>
-                      {s.label}
-                    </div>
-                    <div style={{ fontSize: 11, color: isPassed ? '#64748b' : '#cbd5e1', marginTop: 2 }}>
-                      {s.labelBn}
+                      {bn ? ['অর্ডার গ্রহণ', 'অর্ডার নিশ্চিত', 'কুরিয়ারে পাঠানো', 'ডেলিভারি সম্পন্ন'][i] : s.label}
                     </div>
                   </div>
                 </div>
@@ -3662,8 +3730,8 @@ function TrackResult({ o }: { o: any }) {
       ) : (
         <div style={{ margin: '24px 0', padding: 18, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', textAlign: 'center', fontWeight: 600 }}>
           {cancelled
-            ? 'এই অর্ডারটি বাতিল করা হয়েছে। যদি এটি কোনো ভুলবশত হয়ে থাকে, অনুগ্রহ করে আমাদের সাপোর্টে যোগাযোগ করুন।'
-            : 'এই পার্সেলটি রিটার্ন প্রক্রিয়ায় রয়েছে। যেকোনো তথ্যের জন্য আমাদের কল করুন।'}
+            ? (bn ? 'এই অর্ডারটি বাতিল করা হয়েছে। ভুলবশত হয়ে থাকলে আমাদের সাপোর্ট টিমের সঙ্গে যোগাযোগ করুন।' : 'This order has been cancelled. If you think this is a mistake, please contact our support team.')
+            : (bn ? 'এই পার্সেলটি ফেরত পাঠানো হচ্ছে। আরও তথ্যের জন্য আমাদের সঙ্গে যোগাযোগ করুন।' : 'This parcel is being returned. Please contact us if you need more information.')}
         </div>
       )}
 
@@ -3683,7 +3751,7 @@ function TrackResult({ o }: { o: any }) {
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 18 }}>🚚</span>
               <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#1f3147' }}>
-                Delivery Courier Partner
+                {bn ? 'ডেলিভারি কুরিয়ার পার্টনার' : 'Delivery Courier Partner'}
               </span>
             </div>
             {o.courier.liveStatus && (
@@ -3695,25 +3763,25 @@ function TrackResult({ o }: { o: any }) {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, fontSize: 13.5 }}>
             <div>
-              <span style={{ color: '#64748b', fontSize: 12 }}>Courier Company:</span>
+              <span style={{ color: '#64748b', fontSize: 12 }}>{bn ? 'কুরিয়ার কোম্পানি:' : 'Courier Company:'}</span>
               <div style={{ fontWeight: 700, color: '#1f3147', fontSize: 15, marginTop: 2 }}>{o.courier.name}</div>
             </div>
 
             {o.courier.consignment && (
               <div>
-                <span style={{ color: '#64748b', fontSize: 12 }}>Tracking / Consignment ID:</span>
+                <span style={{ color: '#64748b', fontSize: 12 }}>{bn ? 'ট্র্যাকিং / কনসাইনমেন্ট আইডি:' : 'Tracking / Consignment ID:'}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
                   <code style={{ fontWeight: 700, color: '#0f172a', background: '#ffffff', padding: '3px 8px', borderRadius: 4, border: '1px solid #cbd5e1', fontSize: 14 }}>
                     {o.courier.consignment}
                   </code>
-                  <CopyMini text={o.courier.consignment} />
+                  <CopyMini text={o.courier.consignment} language={language} />
                 </div>
               </div>
             )}
 
             {o.courier.phone && (
               <div>
-                <span style={{ color: '#64748b', fontSize: 12 }}>Courier Helpline:</span>
+                <span style={{ color: '#64748b', fontSize: 12 }}>{bn ? 'কুরিয়ার হেল্পলাইন:' : 'Courier Helpline:'}</span>
                 <div style={{ marginTop: 2 }}>
                   <a href={'tel:' + o.courier.phone} style={{ color: '#2563eb', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>
                     📞 {o.courier.phone}
@@ -3725,7 +3793,7 @@ function TrackResult({ o }: { o: any }) {
 
           {o.courier.riderNote && (
             <div style={{ marginTop: 14, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, fontSize: 13, color: '#92400e' }}>
-              <b>🛵 Rider Note:</b> {o.courier.riderNote}
+              <b>🛵 {bn ? 'রাইডারের নোট:' : 'Rider Note:'}</b> {o.courier.riderNote}
             </div>
           )}
 
@@ -3749,7 +3817,7 @@ function TrackResult({ o }: { o: any }) {
                 boxShadow: '0 2px 8px rgba(31,49,71,0.2)',
               }}
             >
-              <span>Track Live on {o.courier.name} Official Website</span>
+              <span>{bn ? `${o.courier.name} এর অফিসিয়াল ওয়েবসাইটে লাইভ ট্র্যাক করুন` : `Track Live on ${o.courier.name} Official Website`}</span>
               <span>→</span>
             </a>
           )}
@@ -3760,7 +3828,7 @@ function TrackResult({ o }: { o: any }) {
       {Array.isArray(o.history) && o.history.length > 0 && (
         <div style={{ marginTop: 24, padding: '20px 22px', background: '#ffffff', borderRadius: 10, border: '1px solid #EAE5DC', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1f3147', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span>📜</span> Order Activity &amp; Timeline
+            <span>📜</span> {bn ? 'অর্ডারের কার্যক্রম ও সময়রেখা' : 'Order Activity &amp; Timeline'}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {o.history.map((h: any, i: number) => {
@@ -3781,10 +3849,10 @@ function TrackResult({ o }: { o: any }) {
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 6 }}>
                       <span style={{ textTransform: 'capitalize', fontWeight: 700, color: '#1f3147', fontSize: 13.5 }}>
-                        {h.status === 'approved' ? 'Order Confirmed (অর্ডার অনুমোদিত হয়েছে)' : h.status === 'pending' ? 'Order Placed (নতুন অর্ডার তৈরি)' : h.status === 'shipped' ? 'Handed over to Courier (কুরিয়ারে হস্তান্তর)' : h.status}
+                        {h.status === 'approved' ? (bn ? 'অর্ডার নিশ্চিত' : 'Order Confirmed') : h.status === 'pending' ? (bn ? 'অর্ডার গ্রহণ' : 'Order Placed') : h.status === 'shipped' ? (bn ? 'কুরিয়ারে হস্তান্তর' : 'Handed over to Courier') : h.status}
                       </span>
                       <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 500 }}>
-                        {new Date(h.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} • {new Date(h.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                        {new Date(h.at).toLocaleDateString(bn ? 'bn-BD' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} • {new Date(h.at).toLocaleTimeString(bn ? 'bn-BD' : 'en-US', { hour: 'numeric', minute: '2-digit' })}
                       </span>
                     </div>
                     {h.note && (
@@ -3805,7 +3873,7 @@ function TrackResult({ o }: { o: any }) {
         <div style={{ marginTop: 22, padding: '18px 22px', background: '#FAF8F5', borderRadius: 10, border: '1px solid #EAE5DC', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#8c7d6b' }}>
-              Delivery Destination
+              {bn ? 'ডেলিভারির ঠিকানা' : 'Delivery Destination'}
             </div>
             <div style={{ fontWeight: 700, color: '#1f3147', fontSize: 14, marginTop: 4 }}>
               {o.customer.name} {o.customer.phone && `(${o.customer.phone})`}
@@ -3834,7 +3902,8 @@ function TrackResult({ o }: { o: any }) {
                 boxShadow: '0 2px 8px rgba(37,211,102,0.25)',
               }}
             >
-              <span>💬 WhatsApp Support</span>
+              <WhatsAppIcon size={16} variant="official" />
+              <span>{bn ? 'হোয়াটসঅ্যাপ সাপোর্ট' : 'WhatsApp Support'}</span>
             </a>
             <a
               href="tel:01633617136"
@@ -3852,7 +3921,7 @@ function TrackResult({ o }: { o: any }) {
                 textDecoration: 'none',
               }}
             >
-              <span>📞 Call Hotline</span>
+              <span>📞 {bn ? 'হটলাইনে কল করুন' : 'Call Hotline'}</span>
             </a>
           </div>
         </div>
@@ -3861,7 +3930,7 @@ function TrackResult({ o }: { o: any }) {
       {/* Items Summary & Total */}
       <div className="trk-items" style={{ marginTop: 24, borderTop: '1px solid #EAE5DC', paddingTop: 20 }}>
         <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#8c7d6b', marginBottom: 12 }}>
-          Order Items Summary
+          {bn ? 'অর্ডারের পণ্যের বিবরণ' : 'Order Items Summary'}
         </div>
         {o.items.map((it: any) => (
           <div className="sl" key={it.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px dashed rgba(180, 150, 100, 0.25)' }}>
@@ -3871,7 +3940,7 @@ function TrackResult({ o }: { o: any }) {
               )}
               <div>
                 <span style={{ fontWeight: 700, color: '#1f3147', fontSize: 14 }}>{it.name}</span>
-                <div style={{ color: '#64748b', fontSize: 12, marginTop: 2 }}>Quantity: {it.qty}</div>
+                <div style={{ color: '#64748b', fontSize: 12, marginTop: 2 }}>{bn ? 'পরিমাণ:' : 'Quantity:'} {it.qty}</div>
               </div>
             </div>
             <span style={{ fontWeight: 700, color: '#1f3147', fontSize: 15 }}>{taka(it.subtotal || it.price * it.qty)}</span>
@@ -3880,15 +3949,15 @@ function TrackResult({ o }: { o: any }) {
 
         {o.delivery != null && (
           <div className="sl" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: '#64748b', padding: '10px 0' }}>
-            <span>Home Delivery Charge ({o.customer?.area === 'inside' ? 'Inside Dhaka' : 'Outside Dhaka'})</span>
+            <span>{bn ? `হোম ডেলিভারি চার্জ (${o.customer?.area === 'inside' ? 'ঢাকার ভিতরে' : 'ঢাকার বাইরে'})` : `Home Delivery Charge (${o.customer?.area === 'inside' ? 'Inside Dhaka' : 'Outside Dhaka'})`}</span>
             <span style={{ fontWeight: 600, color: '#1f3147' }}>{taka(o.delivery)}</span>
           </div>
         )}
 
         <div className="tot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: '2px solid #1f3147', marginTop: 14, paddingTop: 16 }}>
           <div>
-            <span style={{ fontSize: 16, fontWeight: 800, color: '#1f3147', display: 'block' }}>Total Payable Amount</span>
-            <span style={{ fontSize: 12, color: '#64748b' }}>ক্যাশ অন ডেলিভারিতে প্রডাক্ট বুঝে পেয়ে পরিশোধ করুন</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: '#1f3147', display: 'block' }}>{bn ? 'সর্বমোট পরিশোধযোগ্য' : 'Total Payable Amount'}</span>
+            <span style={{ fontSize: 12, color: '#64748b' }}>{bn ? 'পণ্য হাতে পেয়ে মূল্য পরিশোধ করুন।' : 'Pay when your order is delivered.'}</span>
           </div>
           <b style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: 26, color: '#1f3147' }}>{taka(o.total)}</b>
         </div>
