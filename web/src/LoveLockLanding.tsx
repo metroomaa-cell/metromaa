@@ -364,7 +364,7 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
                 src={cfg.videoUrl}
                 controls
                 playsInline
-                preload="metadata"
+                preload="none"
                 controlsList="nodownload"
               />
             </div>
@@ -391,6 +391,8 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
                 src={cfg.heroImage}
                 alt={cfg.productTitle || cfg.title}
                 className="ll-product-hero-img"
+                loading="lazy"
+                decoding="async"
               />
             </div>
           )}
@@ -452,6 +454,8 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
                   src={cfg.usageImage}
                   alt={cfg.usageHeading}
                   className="ll-usage-img"
+                  loading="lazy"
+                  decoding="async"
                 />
                 {cfg.usageCaption && (
                   <div className="ll-usage-caption">{cfg.usageCaption}</div>
@@ -494,6 +498,8 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
                     src={reviewsList[reviewIdx]}
                     alt={`কাস্টমার রিভিউ ${reviewIdx + 1}`}
                     className="ll-review-img"
+                    loading="lazy"
+                    decoding="async"
                   />
                 </div>
                 {reviewsList.length > 1 && (
@@ -502,6 +508,8 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
                       src={reviewsList[(reviewIdx + 1) % reviewsList.length]}
                       alt={`কাস্টমার রিভিউ ${((reviewIdx + 1) % reviewsList.length) + 1}`}
                       className="ll-review-img"
+                      loading="lazy"
+                      decoding="async"
                     />
                   </div>
                 )}

@@ -103,6 +103,7 @@ export const DEFAULT_SETTINGS = {
   favicon: '',
   appearance: { font: 'Inter', accent: '#b48e4c', desktopColumns: 4, mobileColumns: 2, imageFit: 'contain' },
   homeContent: { en: {}, bn: {} },
+  siteContent: { sections: { hero: true, quickCategories: true, collections: true, intro: true, featured: true, benefits: true, faq: true, newsletter: true }, textOverrides: {}, infoPages: {} },
   sliders: [],
   fraudDetector: {
     enabled: true,
@@ -189,6 +190,11 @@ export function getSettings() {
   const saved = readSafe(EXT_SETTINGS, PERSISTENT_SETTINGS, SETTINGS, {}, BACKUP_SETTINGS);
   const savedAppearance = saved.appearance && typeof saved.appearance === 'object' && !Array.isArray(saved.appearance) ? saved.appearance : {};
   const savedHomeContent = saved.homeContent && typeof saved.homeContent === 'object' && !Array.isArray(saved.homeContent) ? saved.homeContent : {};
+  const savedSiteContent = saved.siteContent && typeof saved.siteContent === 'object' && !Array.isArray(saved.siteContent) ? saved.siteContent : {};
+  const savedSections = savedSiteContent.sections && typeof savedSiteContent.sections === 'object' && !Array.isArray(savedSiteContent.sections) ? savedSiteContent.sections : {};
+  const savedTextOverrides = savedSiteContent.textOverrides && typeof savedSiteContent.textOverrides === 'object' && !Array.isArray(savedSiteContent.textOverrides) ? savedSiteContent.textOverrides : {};
+  const savedInfoPages = savedSiteContent.infoPages && typeof savedSiteContent.infoPages === 'object' && !Array.isArray(savedSiteContent.infoPages) ? savedSiteContent.infoPages : {};
+  const defaultSiteContent = DEFAULT_SETTINGS.siteContent;
   return {
     ...base, ...saved,
     appearance: { ...base.appearance, ...savedAppearance },
@@ -196,6 +202,7 @@ export function getSettings() {
       en: { ...(savedHomeContent.en || {}) },
       bn: { ...(savedHomeContent.bn || {}) },
     },
+    siteContent: { ...defaultSiteContent, ...savedSiteContent, sections: { ...defaultSiteContent.sections, ...savedSections }, textOverrides: { ...savedTextOverrides }, infoPages: { ...savedInfoPages } },
   };
 }
 

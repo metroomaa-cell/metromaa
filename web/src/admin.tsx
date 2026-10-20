@@ -3,6 +3,7 @@ import qrcode from 'qrcode-generator';
 import './admin.css';
 import { taka, getCategories, fetchMasterColors, createMasterColor, deleteMasterColor, type MasterColor } from './api';
 import { WhatsAppIcon } from './icons';
+import { STORE_COPY_KEYS } from './language';
 
 const KEY = 'dot_admin';
 const getTok = () => localStorage.getItem(KEY) || '';
@@ -1756,7 +1757,7 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
             <button className={period === 'all' ? 'on' : ''} onClick={() => setPeriod('all')}>All Time</button>
           </div>
           <button className="sa-btn small" onClick={() => load()} title="Reload latest data">
-            🔄 Refresh
+            Refresh
           </button>
         </div>
       </div>
@@ -1765,8 +1766,8 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
       <div className="dash-funnel-strip">
         <div className="dash-funnel-card f-pending" onClick={() => onNav?.('orders')} title="Click to view pending orders">
           <div className="dash-funnel-top">
-            <span className="dash-funnel-icon">🟡</span>
-            <span className="dash-funnel-count" style={{ color: '#fbbf24' }}>{funnel.pending}</span>
+            <span className="dash-funnel-icon" aria-hidden="true" />
+            <span className="dash-funnel-count">{funnel.pending}</span>
           </div>
           <div className="dash-funnel-label">Pending Orders</div>
           <div className="dash-funnel-sub">Needs call &amp; approval</div>
@@ -1774,8 +1775,8 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
 
         <div className="dash-funnel-card f-confirmed" onClick={() => onNav?.('orders')} title="Click to view approved orders">
           <div className="dash-funnel-top">
-            <span className="dash-funnel-icon">🔵</span>
-            <span className="dash-funnel-count" style={{ color: '#60a5fa' }}>{funnel.confirmed}</span>
+            <span className="dash-funnel-icon" aria-hidden="true" />
+            <span className="dash-funnel-count">{funnel.confirmed}</span>
           </div>
           <div className="dash-funnel-label">Approved &amp; Ready</div>
           <div className="dash-funnel-sub">Ready to pack &amp; book</div>
@@ -1783,8 +1784,8 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
 
         <div className="dash-funnel-card f-transit" onClick={() => onNav?.('orders')} title="Click to view shipped orders">
           <div className="dash-funnel-top">
-            <span className="dash-funnel-icon">🚚</span>
-            <span className="dash-funnel-count" style={{ color: '#a78bfa' }}>{funnel.transit}</span>
+            <span className="dash-funnel-icon" aria-hidden="true" />
+            <span className="dash-funnel-count">{funnel.transit}</span>
           </div>
           <div className="dash-funnel-label">In Courier Transit</div>
           <div className="dash-funnel-sub">Shipped with rider</div>
@@ -1792,8 +1793,8 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
 
         <div className="dash-funnel-card f-delivered" onClick={() => onNav?.('orders')} title="Click to view delivered orders">
           <div className="dash-funnel-top">
-            <span className="dash-funnel-icon">🟢</span>
-            <span className="dash-funnel-count" style={{ color: '#34d399' }}>{funnel.delivered}</span>
+            <span className="dash-funnel-icon" aria-hidden="true" />
+            <span className="dash-funnel-count">{funnel.delivered}</span>
           </div>
           <div className="dash-funnel-label">Delivered Orders</div>
           <div className="dash-funnel-sub">Cash safely collected</div>
@@ -1801,8 +1802,8 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
 
         <div className="dash-funnel-card f-return" onClick={() => onNav?.('orders')} title="Click to view return orders">
           <div className="dash-funnel-top">
-            <span className="dash-funnel-icon">🔄</span>
-            <span className="dash-funnel-count" style={{ color: '#fb7185' }}>{funnel.returns}</span>
+            <span className="dash-funnel-icon" aria-hidden="true" />
+            <span className="dash-funnel-count">{funnel.returns}</span>
           </div>
           <div className="dash-funnel-label">Returns Received</div>
           <div className="dash-funnel-sub">Returned parcels</div>
@@ -1810,8 +1811,8 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
 
         <div className="dash-funnel-card f-cancelled" onClick={() => onNav?.('orders')} title="Click to view cancelled orders">
           <div className="dash-funnel-top">
-            <span className="dash-funnel-icon">❌</span>
-            <span className="dash-funnel-count" style={{ color: '#94a3b8' }}>{funnel.cancelled}</span>
+            <span className="dash-funnel-icon" aria-hidden="true" />
+            <span className="dash-funnel-count">{funnel.cancelled}</span>
           </div>
           <div className="dash-funnel-label">Cancelled Orders</div>
           <div className="dash-funnel-sub">Rejected / cancelled</div>
@@ -1826,7 +1827,7 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
             <span className="exec-card-title">Realized Revenue</span>
             <span className="exec-card-pill p-delivered">Cash Collected</span>
           </div>
-          <div className="exec-card-val" style={{ color: '#34d399' }}>{taka(deliveredRevenue)}</div>
+          <div className="exec-card-val">{taka(deliveredRevenue)}</div>
           <div className="exec-card-sub">{deliveredOrders.length} orders safely delivered &amp; collected</div>
         </div>
 
@@ -1836,7 +1837,7 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
             <span className="exec-card-title">Pipeline Cash</span>
             <span className="exec-card-pill p-transit">In Transit</span>
           </div>
-          <div className="exec-card-val" style={{ color: '#60a5fa' }}>{taka(inTransitRevenue)}</div>
+          <div className="exec-card-val">{taka(inTransitRevenue)}</div>
           <div className="exec-card-sub">{inTransitOrders.length} parcels currently with courier</div>
         </div>
 
@@ -1846,7 +1847,7 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
             <span className="exec-card-title">Gross Sales</span>
             <span className="exec-card-pill p-gross">Active Demand</span>
           </div>
-          <div className="exec-card-val" style={{ color: '#c4b5fd' }}>{taka(grossSales)}</div>
+          <div className="exec-card-val">{taka(grossSales)}</div>
           <div className="exec-card-sub">{activeOrders.length} active orders placed in period</div>
         </div>
 
@@ -1856,7 +1857,7 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
             <span className="exec-card-title">Delivery Success Rate</span>
             <span className="exec-card-pill p-rate">{successRate == null ? 'Pending' : successRate >= 75 ? 'Optimal' : 'Needs Focus'}</span>
           </div>
-          <div className="exec-card-val" style={{ color: successRate == null ? '#94a3b8' : successRate >= 75 ? '#2dd4bf' : successRate >= 50 ? '#fbbf24' : '#f87171' }}>
+          <div className="exec-card-val">
             {successRate == null ? 'No data' : `${successRate}%`}
           </div>
           {successRate != null && (
@@ -1875,7 +1876,7 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
             <span className="exec-card-title">Avg Order Value (AOV)</span>
             <span className="exec-card-pill p-aov">Cart Basket</span>
           </div>
-          <div className="exec-card-val" style={{ color: '#818cf8' }}>{taka(aov)}</div>
+          <div className="exec-card-val">{taka(aov)}</div>
           <div className="exec-card-sub">Average cart value per buying customer</div>
         </div>
 
@@ -1885,14 +1886,14 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
             <span className="exec-card-title">Lost Sales</span>
             <span className="exec-card-pill p-loss">Cancel / Return</span>
           </div>
-          <div className="exec-card-val" style={{ color: '#f87171' }}>{taka(lostAmount)}</div>
+          <div className="exec-card-val">{taka(lostAmount)}</div>
           <div className="exec-card-sub">{lostOrders.length} orders cancelled or returned</div>
         </div>
       </div>
 
       {/* Row 2: Sales Trend Chart & Sales Channel Attribution */}
       <div className="dash-section-head">
-        <div className="dash-section-title">📊 Revenue &amp; Channel Attribution</div>
+        <div className="dash-section-title">Revenue &amp; Channel Attribution</div>
       </div>
       <div className="dash-grid-2">
         {/* Interactive Chart */}
@@ -1962,10 +1963,10 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
 
       {/* Row 3: Courier Logistics & Top Products / Inventory Alerts */}
       <div className="dash-section-head">
-        <div className="dash-section-title">🚚 Logistics &amp; Product Intelligence</div>
+        <div className="dash-section-title">Logistics &amp; Product Intelligence</div>
         {onNav && (
           <button className="sa-btn small" onClick={() => onNav('scanner')}>
-            📦 Open QR Scanner →
+            Open QR Scanner →
           </button>
         )}
       </div>
@@ -2032,24 +2033,14 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
 
       {/* Row 4: Recent Orders Table (Clickable to open Order Modal) */}
       <div className="dash-section-head">
-        <div className="dash-section-title">📋 Recent Orders Activity</div>
+        <div className="dash-section-title">Recent Orders Activity</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button
-            className="sa-btn small primary"
+            className="sa-btn small primary sa-dashboard-create-order"
             onClick={() => setShowCreateModal(true)}
-            style={{
-              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-              color: '#ffffff',
-              fontWeight: 700,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              border: 'none',
-              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
-              cursor: 'pointer'
-            }}
           >
-            ➕ নতুন অর্ডার (Phone / WhatsApp)
+            <span className="sa-create-order-plus" aria-hidden="true">+</span>
+            Create new order (Phone / WhatsApp)
           </button>
           {onNav && (
             <button className="sa-btn small" onClick={() => onNav('orders')}>
@@ -2226,11 +2217,11 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
   const runFraudCheck = async () => {
     const clean = phone.trim().replace(/\D/g, '');
     if (!clean || clean.length < 11) {
-      setFraudMsg('সঠিক ১১ ডিজিটের ফোন নম্বর দিন');
+      setFraudMsg('Enter a valid 11-digit phone number.');
       return;
     }
     setFraudLoading(true);
-    setFraudMsg('কুরিয়ার ডেলিভারি হিস্ট্রি চেক করা হচ্ছে...');
+    setFraudMsg('Checking courier delivery history…');
     setFraud(null);
     try {
       const res = await aFetch('/fraud-check?phone=' + encodeURIComponent(clean));
@@ -2239,10 +2230,10 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
         setFraud(data);
         setFraudMsg('');
       } else {
-        setFraudMsg('কুরিয়ার হিস্ট্রি পাওয়া যায়নি');
+        setFraudMsg('No courier history was found.');
       }
     } catch {
-      setFraudMsg('কানেকশন সমস্যা');
+      setFraudMsg('Connection problem. Please try again.');
     } finally {
       setFraudLoading(false);
     }
@@ -2285,11 +2276,11 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
     setError('');
     const clean = phone.trim().replace(/\D/g, '');
     if (!clean || clean.length < 11) {
-      setError('অনুগ্রহ করে সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন');
+      setError('Enter a valid 11-digit mobile number.');
       return;
     }
     if (items.length === 0) {
-      setError('কমপক্ষে একটি পণ্য সিলেক্ট করুন');
+      setError('Select at least one product.');
       return;
     }
     setBusy(true);
@@ -2316,12 +2307,12 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
       });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.error || 'অর্ডার তৈরি করতে সমস্যা হয়েছে');
+        throw new Error(d.error || 'Could not create the order.');
       }
       const newOrder = await res.json();
       onCreated(newOrder);
     } catch (err: any) {
-      setError(err.message || 'অর্ডার তৈরি করতে সমস্যা হয়েছে');
+      setError(err.message || 'Could not create the order.');
     } finally {
       setBusy(false);
     }
@@ -2334,8 +2325,8 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 24 }}>🛍️</span>
             <div>
-              <h3 style={{ margin: 0, fontSize: 17, color: '#fff' }}>নতুন অর্ডার তৈরি করুন (Manual / Phone / WhatsApp)</h3>
-              <div className="dim small" style={{ marginTop: 2 }}>ফোনে বা হোয়াটসঅ্যাপে আসা অর্ডার সরাসরি সিস্টেমে এন্ট্রি করুন</div>
+              <h3 style={{ margin: 0, fontSize: 17, color: '#fff' }}>Create a new order (Manual / Phone / WhatsApp)</h3>
+              <div className="dim small" style={{ marginTop: 2 }}>Add orders received by phone or WhatsApp directly to the system.</div>
             </div>
           </div>
           <button className="sa-btn-subtle" onClick={onClose} style={{ fontSize: 20, color: '#94a3b8', padding: '4px 10px', background: 'transparent', border: 'none', cursor: 'pointer' }}>✕</button>
@@ -2352,14 +2343,14 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
             {/* 1. Order Source Selection */}
             <div>
               <label style={{ fontSize: 11.5, fontWeight: 700, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, display: 'block' }}>
-                অর্ডারের উৎস (Order Source)
+                Order source
               </label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {[
-                  { key: 'phone_call', icon: <span style={{ fontSize: 13 }}>📞</span>, label: 'ফোন কল (Phone Call)', color: '#3b82f6' },
-                  { key: 'whatsapp', icon: <WhatsAppIcon size={16} variant="official" />, label: 'হোয়াটসঅ্যাপ (WhatsApp)', color: '#25D366' },
-                  { key: 'facebook', icon: <span style={{ fontSize: 13 }}>📘</span>, label: 'ফেসবুক মেসেঞ্জার (Facebook)', color: '#6366f1' },
-                  { key: 'manual', icon: <span style={{ fontSize: 13 }}>🛍️</span>, label: 'ডিরেক্ট / ম্যানুয়াল (Manual)', color: '#8b5cf6' },
+                  { key: 'phone_call', icon: <span style={{ fontSize: 13 }}>☎</span>, label: 'Phone call', color: '#3b82f6' },
+                  { key: 'whatsapp', icon: <WhatsAppIcon size={16} variant="official" />, label: 'WhatsApp', color: '#25D366' },
+                  { key: 'facebook', icon: <span style={{ fontSize: 13 }}>f</span>, label: 'Facebook Messenger', color: '#6366f1' },
+                  { key: 'manual', icon: <span style={{ fontSize: 13 }}>+</span>, label: 'Manual entry', color: '#8b5cf6' },
                 ].map((s) => (
                   <button
                     key={s.key}
@@ -2390,12 +2381,12 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
             {/* 2. Customer Information */}
             <div style={{ background: '#181624', padding: 16, borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span>👤</span> কাস্টমার তথ্য (Customer Details)
+                <span>Customer details</span>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 12 }}>
                 <div>
-                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>গ্রাহকের নাম</label>
+                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Customer name</label>
                   <input
                     type="text"
                     placeholder="Customer Name"
@@ -2405,7 +2396,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 </div>
 
                 <div>
-                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>মোবাইল নম্বর <span style={{ color: '#ef4444' }}>*</span></label>
+                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Mobile number <span style={{ color: '#ef4444' }}>*</span></label>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <input
                       type="tel"
@@ -2419,10 +2410,10 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                       className="sa-btn secondary"
                       onClick={runFraudCheck}
                       disabled={fraudLoading || phone.length < 11}
-                      title="কুরিয়ার ডেলিভারি সাকসেস হিস্ট্রি চেক করুন"
+                      title="Check courier delivery success history"
                       style={{ whiteSpace: 'nowrap', fontSize: 12, padding: '0 10px' }}
                     >
-                      {fraudLoading ? 'Checking…' : '🔍 চেক হিস্ট্রি'}
+                      {fraudLoading ? 'Checking…' : 'Check history'}
                     </button>
                   </div>
                 </div>
@@ -2438,9 +2429,9 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
               )}
 
               <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>সম্পূর্ণ ডেলিভারি ঠিকানা</label>
+                <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Delivery address</label>
                 <textarea
-                  placeholder="রোড, বাড়ি, এলাকা বা থানা ও জেলার নাম লিখুন..."
+                  placeholder="Street, building, area, subdistrict, and district"
                   rows={2}
                   value={address}
                   onChange={(e) => handleAddressChange(e.target.value)}
@@ -2449,7 +2440,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
                 <div>
-                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>জেলা (District)</label>
+                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>District</label>
                   <input
                     type="text"
                     placeholder="e.g. Dhaka, Chittagong"
@@ -2462,7 +2453,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 </div>
 
                 <div>
-                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>থানা / উপজেলা (Thana)</label>
+                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Subdistrict / Thana</label>
                   <input
                     type="text"
                     placeholder="e.g. Mirpur, Sadar"
@@ -2472,7 +2463,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 </div>
 
                 <div>
-                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>ডেলিভারি এরিয়া</label>
+                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Delivery area</label>
                   <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                     <button
                       type="button"
@@ -2489,7 +2480,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                         cursor: 'pointer'
                       }}
                     >
-                      ঢাকা (৳৬০)
+                      Inside Dhaka (৳60)
                     </button>
                     <button
                       type="button"
@@ -2506,7 +2497,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                         cursor: 'pointer'
                       }}
                     >
-                      ঢাকার বাইরে (৳১২০)
+                      Outside Dhaka (৳120)
                     </button>
                   </div>
                 </div>
@@ -2516,13 +2507,13 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
             {/* 3. Items Selection */}
             <div style={{ background: '#181624', padding: 16, borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9' }}>📦 পণ্যের তালিকা (Products)</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9' }}>Products</span>
                 <span style={{ fontSize: 12, color: '#a78bfa' }}>{items.length} item(s)</span>
               </div>
 
               {/* Quick Preset Buttons for Love Lock */}
               <div style={{ marginBottom: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 11.5, color: '#94a3b8', alignSelf: 'center', marginRight: 4 }}>কুইক অ্যাড:</span>
+                <span style={{ fontSize: 11.5, color: '#94a3b8', alignSelf: 'center', marginRight: 4 }}>Quick add:</span>
                 {[
                   { id: 'lovelock-6-7', name: 'লাভ লক ম্যাজিক কনডম (৬.৭ ইঞ্চি)', price: 999, image: '/landing/package-6-7.jpg' },
                   { id: 'lovelock-5-7', name: 'লাভ লক ম্যাজিক কনডম (৫.৭ ইঞ্চি)', price: 999, image: '/landing/package-5-7.jpg' },
@@ -2567,7 +2558,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                       />
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 12, color: '#94a3b8' }}>মূল্য: ৳</span>
+                      <span style={{ fontSize: 12, color: '#94a3b8' }}>Price: ৳</span>
                       <input
                         type="number"
                         value={it.price}
@@ -2576,7 +2567,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                       />
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontSize: 12, color: '#94a3b8' }}>পরিমাণ:</span>
+                      <span style={{ fontSize: 12, color: '#94a3b8' }}>Quantity:</span>
                       <input
                         type="number"
                         min="1"
@@ -2608,7 +2599,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                     onChange={(e) => setSelectedCatalogId(e.target.value)}
                     style={{ flex: 1 }}
                   >
-                    <option value="">-- ক্যাটালগ থেকে অন্য কোনো পণ্য যোগ করুন --</option>
+                    <option value="">-- Add another product from the catalog --</option>
                     {catalog.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} — {taka(p.price)}
@@ -2630,21 +2621,21 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
             {/* 4. Pricing Calculation */}
             <div style={{ background: '#181624', padding: 16, borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9', marginBottom: 12 }}>
-                💰 মূল্য ও চার্জ হিসাব (Pricing Summary)
+                Pricing summary
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13.5 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8' }}>
-                  <span>পণ্যের মোট মূল্য (Items Subtotal):</span>
+                  <span>Items subtotal:</span>
                   <span style={{ color: '#fff', fontWeight: 600 }}>{taka(computedItemsTotal)}</span>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ color: '#94a3b8' }}>ডেলিভারি চার্জ:</span>
-                    <button type="button" className="sa-btn-subtle" onClick={() => setDelivery(0)} style={{ fontSize: 11, padding: '2px 6px', background: delivery === 0 ? '#10b981' : 'rgba(255,255,255,0.06)', color: '#fff' }}>ফ্রি (৳০)</button>
-                    <button type="button" className="sa-btn-subtle" onClick={() => setDelivery(60)} style={{ fontSize: 11, padding: '2px 6px', background: delivery === 60 ? '#3b82f6' : 'rgba(255,255,255,0.06)', color: '#fff' }}>ঢাকা (৳৬০)</button>
-                    <button type="button" className="sa-btn-subtle" onClick={() => setDelivery(120)} style={{ fontSize: 11, padding: '2px 6px', background: delivery === 120 ? '#3b82f6' : 'rgba(255,255,255,0.06)', color: '#fff' }}>বাইরে (৳১২০)</button>
+                    <span style={{ color: '#94a3b8' }}>Delivery charge:</span>
+                    <button type="button" className="sa-btn-subtle" onClick={() => setDelivery(0)} style={{ fontSize: 11, padding: '2px 6px', background: delivery === 0 ? '#10b981' : 'rgba(255,255,255,0.06)', color: '#fff' }}>Free (৳0)</button>
+                    <button type="button" className="sa-btn-subtle" onClick={() => setDelivery(60)} style={{ fontSize: 11, padding: '2px 6px', background: delivery === 60 ? '#3b82f6' : 'rgba(255,255,255,0.06)', color: '#fff' }}>Inside Dhaka (৳60)</button>
+                    <button type="button" className="sa-btn-subtle" onClick={() => setDelivery(120)} style={{ fontSize: 11, padding: '2px 6px', background: delivery === 120 ? '#3b82f6' : 'rgba(255,255,255,0.06)', color: '#fff' }}>Outside Dhaka (৳120)</button>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span>৳</span>
@@ -2658,7 +2649,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: '#94a3b8' }}>ডিসকাউন্ট (Discount):</span>
+                  <span style={{ color: '#94a3b8' }}>Discount:</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span>−৳</span>
                     <input
@@ -2671,7 +2662,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 10, marginTop: 4 }}>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>সর্বমোট বিল (Total COD):</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>Total due (cash on delivery):</span>
                   <span style={{ fontSize: 20, fontWeight: 800, color: '#34d399' }}>{taka(grandTotal)}</span>
                 </div>
               </div>
@@ -2680,18 +2671,18 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
             {/* 5. Status & Admin Note */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
               <div>
-                <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>অর্ডার স্ট্যাটাস</label>
+                <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Order status</label>
                 <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                  <option value="confirmed">✓ Confirmed (কনফার্মড - কুরিয়ারে বুক করার প্রস্তুত)</option>
-                  <option value="pending">⏳ Pending (পেন্ডিং - পরে নিশ্চিত করবেন)</option>
+                  <option value="confirmed">Confirmed — ready to book with courier</option>
+                  <option value="pending">Pending — confirm later</option>
                 </select>
               </div>
 
               <div>
-                <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>অ্যাডমিন / কলার নোট</label>
+                <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Admin / caller note</label>
                 <input
                   type="text"
-                  placeholder="e.g. কাস্টমার বিকেলে কল দিতে বলেছে"
+                  placeholder="e.g. Customer asked for a call this afternoon"
                   value={adminNote}
                   onChange={(e) => setAdminNote(e.target.value)}
                 />
@@ -2701,7 +2692,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
           <div className="sa-modal-f" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <button type="button" className="sa-btn ghost" onClick={onClose} disabled={busy}>
-              বাতিল (Cancel)
+              Cancel
             </button>
             <button
               type="submit"
@@ -2718,7 +2709,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 cursor: 'pointer'
               }}
             >
-              {busy ? 'অর্ডার তৈরি হচ্ছে…' : '✓ অর্ডার সেভ করুন (Create Order)'}
+              {busy ? 'Creating order…' : 'Save order'}
             </button>
           </div>
         </form>
@@ -2953,7 +2944,7 @@ function OrdersAdmin() {
             type="button"
           >
             <span style={{ fontSize: 14 }}>➕</span>
-            <span>নতুন অর্ডার (Phone / WhatsApp)</span>
+            <span>Create New Order (Phone / WhatsApp)</span>
           </button>
           <button className="sa-btn ghost" onClick={syncAllCouriers} disabled={syncingAll} title="Fetch latest status for all active courier shipments">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" className={syncingAll ? 'spin' : ''} style={{ width: 13, height: 13, marginRight: 6 }}><path d="M13.5 7a5.5 5.5 0 0 0-9.4-3L2 6" /><path d="M2.5 9a5.5 5.5 0 0 0 9.4 3L14 10" /><path d="M2 2.5V6h3.5M14 13.5V10h-3.5" /></svg>
@@ -3851,11 +3842,11 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                   <span style={{ fontSize: 22 }}>⚡</span>
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 800, color: '#fb923c', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span>অসম্পূর্ণ অর্ডার (Abandoned Checkout Lead)</span>
+                      <span>Incomplete Order (Abandoned Checkout Lead)</span>
                       <span style={{ fontSize: 10.5, background: '#ea580c', color: '#fff', padding: '1px 8px', borderRadius: 999, fontWeight: 800 }}>DRAFT</span>
                     </div>
                     <div style={{ fontSize: 12, color: '#fdba74', marginTop: 2 }}>
-                      কাস্টমার চেকআউটে পণ্য ও নম্বর প্রদান করেছিল কিন্তু অর্ডার চূড়ান্ত করেনি। সরাসরি যোগাযোগ করে দ্রুত অর্ডার কনফার্ম করুন।
+                      The customer entered their product and phone number but did not complete checkout. Contact them directly to confirm the order.
                     </div>
                   </div>
                 </div>
@@ -3877,7 +3868,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                     boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
                   }}
                 >
-                  ✓ অর্ডার কনফার্ম করুন
+                  ✓ Confirm Order
                 </button>
               </div>
 
@@ -3906,7 +3897,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                     }}
                   >
                     <WhatsAppIcon size={16} variant="official" />
-                    <span>WhatsApp রিকভারি মেসেজ পাঠান</span>
+                    <span>Send WhatsApp Recovery Message</span>
                   </a>
                 )}
                 {custPhone && (
@@ -3927,7 +3918,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                       textDecoration: 'none'
                     }}
                   >
-                    <span>📞 সরাসরি গ্রাহককে কল দিন</span>
+                    <span>📞 Call Customer</span>
                   </a>
                 )}
               </div>
@@ -7161,7 +7152,10 @@ function SettingsAdmin() {
   const [f, setF] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState<'brand' | 'slider' | 'store' | 'fraud' | 'appearance' | 'content'>('brand');
+  const [tab, setTab] = useState<'brand' | 'slider' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend'>('brand');
+  const [copySearch, setCopySearch] = useState('');
+  const [copyKey, setCopyKey] = useState('');
+  const [infoSlug, setInfoSlug] = useState('shipping');
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingFavicon, setUploadingFavicon] = useState(false);
   const [showSlideModal, setShowSlideModal] = useState(false);
@@ -7187,6 +7181,7 @@ function SettingsAdmin() {
         logo: s.logo || '',
         favicon: s.favicon || '',
         sliders: Array.isArray(s.sliders) ? s.sliders : [],
+        siteContent: s.siteContent || { sections: {}, textOverrides: {} },
       });
     }).catch(() => {});
   }, []);
@@ -7282,6 +7277,25 @@ function SettingsAdmin() {
     faqs[index] = { ...(faqs[index] || {}), [key]: value };
     return { ...current, homeContent: { ...(current.homeContent || {}), [lang]: { ...(current.homeContent?.[lang] || {}), faqs } } };
   });
+  const siteSections = f.siteContent?.sections || {};
+  const textOverrides = f.siteContent?.textOverrides || {};
+  const editTextOverride = (lang: 'en' | 'bn', value: string) => setF((current: any) => ({
+    ...current,
+    siteContent: {
+      ...(current.siteContent || {}),
+      textOverrides: { ...(current.siteContent?.textOverrides || {}), [copyKey]: { ...(current.siteContent?.textOverrides?.[copyKey] || {}), [lang]: value } },
+    },
+  }));
+  const setInfoPageCopy = (lang: 'en' | 'bn', field: 'title' | 'body', value: string, paragraphIndex = 0) => setF((current: any) => {
+    const oldPage = current.siteContent?.infoPages?.[infoSlug]?.[lang] || {};
+    const body = [...(oldPage.body || ['', '', ''])];
+    if (field === 'body') body[paragraphIndex] = value;
+    const localized = field === 'title' ? { ...oldPage, title: value } : { ...oldPage, body };
+    return { ...current, siteContent: { ...(current.siteContent || {}), infoPages: { ...(current.siteContent?.infoPages || {}), [infoSlug]: { ...(current.siteContent?.infoPages?.[infoSlug] || {}), [lang]: localized } } } };
+  });
+  const sectionLabels: Record<string, string> = { hero: 'Hero banner / slider', quickCategories: 'Quick category links', collections: 'Shop by collection', intro: 'Brand introduction', featured: 'Featured products', benefits: 'Store benefits', faq: 'FAQ section', newsletter: 'Newsletter signup' };
+  const matchingCopyKeys = STORE_COPY_KEYS.filter((key) => !copySearch || key.toLowerCase().includes(copySearch.toLowerCase())).slice(0, 100);
+  const infoPageLabels: Record<string, string> = { shipping: 'Shipping & Delivery', returns: 'Returns & Exchanges', contact: 'Contact', about: 'About', privacy: 'Privacy Policy', terms: 'Terms of Service', journal: 'Journal' };
 
   const moveSlide = (idx: number, dir: -1 | 1) => {
     const target = idx + dir;
@@ -7379,6 +7393,9 @@ function SettingsAdmin() {
           <button className={tab === 'content' ? 'on' : ''} onClick={() => setTab('content')}>
             <span>✎ Homepage Content</span>
           </button>
+          <button className={tab === 'frontend' ? 'on' : ''} onClick={() => setTab('frontend')}>
+            <span>✦ Frontend Editor</span>
+          </button>
         </div>
       </div>
 
@@ -7389,7 +7406,7 @@ function SettingsAdmin() {
           <div className="sa-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 16, color: '#fff' }}>Store Logo (মূল লোগো)</h3>
+                <h3 style={{ margin: 0, fontSize: 16, color: '#fff' }}>Store logo</h3>
                 <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8' }}>
                   Used in storefront navigation bar, mobile menu & invoices.
                 </p>
@@ -7472,7 +7489,7 @@ function SettingsAdmin() {
           <div className="sa-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 16, color: '#fff' }}>Site Icon / Favicon (ব্রাউজার আইকন)</h3>
+                <h3 style={{ margin: 0, fontSize: 16, color: '#fff' }}>Site icon / favicon</h3>
                 <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8' }}>
                   The small icon shown in browser tabs, bookmarks & mobile shortcuts.
                 </p>
@@ -7569,7 +7586,7 @@ function SettingsAdmin() {
         <div className="sa-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: 17, color: '#fff' }}>Homepage Hero Sliders & Banners (হোমপেজ স্লাইডার)</h3>
+              <h3 style={{ margin: 0, fontSize: 17, color: '#fff' }}>Homepage hero sliders &amp; banners</h3>
               <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>
                 Upload rotating banner slides for your storefront. Banners auto-cycle with touch swipe & navigation arrows.
               </p>
@@ -7580,7 +7597,7 @@ function SettingsAdmin() {
               onClick={openAddSlide}
               style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)' }}
             >
-              ➕ Add New Slide (নতুন স্লাইড যোগ করুন)
+              Add new slide
             </button>
           </div>
 
@@ -7777,7 +7794,7 @@ function SettingsAdmin() {
         <div className="sa-home-languages">
           {(['en', 'bn'] as const).map((lang) => (
             <section className="sa-card sa-home-language" key={lang}>
-              <div className="sa-home-language-title"><h3>{lang === 'en' ? 'English' : 'বাংলা'}</h3><span>{lang === 'en' ? 'EN' : 'BN'}</span></div>
+              <div className="sa-home-language-title"><h3>{lang === 'en' ? 'English' : 'Bangla'}</h3><span>{lang === 'en' ? 'EN' : 'BN'}</span></div>
               <div className="sa-home-copy-grid">
                 {homeCopyFields.map((field) => (
                   <label key={field.key} className={field.long ? 'wide' : ''}>{field.label}
@@ -7799,6 +7816,54 @@ function SettingsAdmin() {
               </div>
             </section>
           ))}
+        </div>
+      </div>}
+
+      {tab === 'frontend' && <div style={{ display: 'grid', gap: 18 }}>
+        <div className="sa-card" style={{ padding: 24 }}>
+          <div style={{ marginBottom: 18 }}><h2 style={{ margin: '0 0 6px', color: '#fff' }}>Homepage sections</h2><p style={{ margin: 0, color: '#94a3b8' }}>Choose which sections appear on the storefront. Save All Changes to publish these settings to this store.</p></div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 10 }}>
+            {Object.entries(sectionLabels).map(([key, label]) => (
+              <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 10, background: '#1c1830', color: '#e2e8f0', cursor: 'pointer' }}>
+                <input type="checkbox" checked={siteSections[key] !== false} onChange={(e) => setF((current: any) => ({ ...current, siteContent: { ...(current.siteContent || {}), sections: { ...(current.siteContent?.sections || {}), [key]: e.target.checked } } }))} />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="sa-card" style={{ padding: 24, display: 'grid', gap: 14 }}>
+          <div><h2 style={{ margin: '0 0 6px', color: '#fff' }}>Storefront text & translations</h2><p style={{ margin: 0, color: '#94a3b8' }}>Find a visible storefront phrase and set its English and Bangla versions. Blank fields use the built-in text.</p></div>
+          <input value={copySearch} onChange={(e) => { setCopySearch(e.target.value); if (copyKey && !copyKey.toLowerCase().includes(e.target.value.toLowerCase())) setCopyKey(''); }} placeholder="Search text, e.g. Add to Cart" style={{ padding: 12, borderRadius: 8, background: '#0f0c1b', color: '#fff', border: '1px solid rgba(255,255,255,.14)' }} />
+          <select value={copyKey} onChange={(e) => setCopyKey(e.target.value)} style={{ padding: 12, borderRadius: 8, background: '#0f0c1b', color: '#fff', border: '1px solid rgba(255,255,255,.14)' }}>
+            <option value="">Select storefront text ({matchingCopyKeys.length} shown)</option>
+            {matchingCopyKeys.map((key) => <option key={key} value={key}>{key}</option>)}
+          </select>
+          {copySearch.trim() && !STORE_COPY_KEYS.includes(copySearch.trim()) && <button type="button" className="sa-btn ghost" onClick={() => setCopyKey(copySearch.trim())}>＋ Add custom text: “{copySearch.trim()}”</button>}
+          {copyKey && <>
+            <div style={{ padding: 12, borderRadius: 8, background: '#0f0c1b', color: '#cbd5e1' }}>Current default: {copyKey}</div>
+            <div className="sa-sgrid">
+              <label>English version<input maxLength={1200} value={textOverrides[copyKey]?.en || ''} onChange={(e) => editTextOverride('en', e.target.value)} placeholder={copyKey} /></label>
+              <label>Bangla copy<input maxLength={1200} value={textOverrides[copyKey]?.bn || ''} onChange={(e) => editTextOverride('bn', e.target.value)} placeholder="Enter Bangla storefront copy" /></label>
+            </div>
+          </>}
+        </div>
+        <div className="sa-card" style={{ padding: 24, display: 'grid', gap: 16 }}>
+          <div><h2 style={{ margin: '0 0 6px', color: '#fff' }}>Information pages</h2><p style={{ margin: 0, color: '#94a3b8' }}>Edit the storefront’s shipping, returns, contact, about, privacy, terms and journal pages in both languages.</p></div>
+          <select value={infoSlug} onChange={(e) => setInfoSlug(e.target.value)} style={{ padding: 12, borderRadius: 8, background: '#0f0c1b', color: '#fff', border: '1px solid rgba(255,255,255,.14)' }}>
+            {Object.entries(infoPageLabels).map(([slug, label]) => <option key={slug} value={slug}>{label}</option>)}
+          </select>
+          <div className="sa-home-languages">
+            {(['en', 'bn'] as const).map((lang) => {
+              const localized = f.siteContent?.infoPages?.[infoSlug]?.[lang] || {};
+              return <section className="sa-card sa-home-language" key={lang}>
+                <div className="sa-home-language-title"><h3>{lang === 'en' ? 'English' : 'Bangla'}</h3><span>{lang.toUpperCase()}</span></div>
+                <div className="sa-home-copy-grid">
+                  <label className="wide">Page title<input maxLength={180} value={localized.title || ''} onChange={(e) => setInfoPageCopy(lang, 'title', e.target.value)} placeholder="Use current default" /></label>
+                  {[0, 1, 2].map((index) => <label className="wide" key={index}>Paragraph {index + 1}<textarea rows={3} maxLength={1500} value={localized.body?.[index] || ''} onChange={(e) => setInfoPageCopy(lang, 'body', e.target.value, index)} placeholder="Leave blank to keep the default paragraph" /></label>)}
+                </div>
+              </section>;
+            })}
+          </div>
         </div>
       </div>}
 
@@ -7832,7 +7897,7 @@ function SettingsAdmin() {
               {/* Image Uploader */}
               <div>
                 <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                  Desktop Banner Image (ডেস্কটপ ব্যানার ছবি) *
+                  Desktop banner image *
                 </label>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                   <button
@@ -7876,7 +7941,7 @@ function SettingsAdmin() {
               {/* Mobile Image (Optional) */}
               <div>
                 <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                  Mobile Banner Image (মোবাইল ভার্সন ছবি - ঐচ্ছিক)
+                  Mobile banner image (optional)
                 </label>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                   <button
@@ -7912,7 +7977,7 @@ function SettingsAdmin() {
               {/* Badge Text */}
               <div>
                 <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                  Badge Tag (ছোট শিরোনাম)
+                  Badge tag
                 </label>
                 <input
                   style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
@@ -7925,7 +7990,7 @@ function SettingsAdmin() {
               {/* Main Title */}
               <div>
                 <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                  Main Title (মূল হেডলাইন)
+                  Main title
                 </label>
                 <input
                   style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
@@ -7938,7 +8003,7 @@ function SettingsAdmin() {
               {/* Subtitle */}
               <div>
                 <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                  Subtitle / Tagline (সাবটাইটেল)
+                  Subtitle / tagline
                 </label>
                 <textarea
                   style={{ width: '100%', minHeight: 64, padding: '8px 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13, resize: 'vertical' }}
@@ -7952,7 +8017,7 @@ function SettingsAdmin() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                    Button Text (বাটন লেখা)
+                    Button text
                   </label>
                   <input
                     style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
@@ -7963,7 +8028,7 @@ function SettingsAdmin() {
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                    Button Link (লিংক গন্তব্য)
+                    Button link
                   </label>
                   <input
                     style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
@@ -7984,7 +8049,7 @@ function SettingsAdmin() {
                   style={{ width: 18, height: 18, accentColor: '#8b5cf6', cursor: 'pointer' }}
                 />
                 <label htmlFor="slideActiveCheck" style={{ fontSize: 13.5, color: '#fff', cursor: 'pointer', fontWeight: 500 }}>
-                  Active on Storefront (হোমপেজে সক্রিয় থাকবে)
+                  Active on storefront
                 </label>
               </div>
 
@@ -9242,33 +9307,33 @@ function FinanceAdmin() {
       {/* KPI Cards Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, marginBottom: 20 }}>
         <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #38bdf8' }}>
-          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>মোট ডেলিভারি COD</div>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Total COD Collected</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc', marginTop: 4 }}>৳{(s.totalDelivered || 0).toLocaleString()}</div>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>কাস্টমার থেকে কুরিয়ারের কাছে জমা</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Collected from customers by the courier</div>
         </div>
 
         <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #f43f5e' }}>
-          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>কুরিয়ার চার্জ ও COD ফি</div>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Courier Charges & COD Fees</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#f43f5e', marginTop: 4 }}>-৳{(s.totalCourierFees || 0).toLocaleString()}</div>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>ডেলিভারি ফি + ১% COD চার্জ</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Delivery fee + 1% COD charge</div>
         </div>
 
         <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #10b981' }}>
-          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>প্রাপ্য নিট টাকা (Net Receivable)</div>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Net Receivable</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#10b981', marginTop: 4 }}>৳{(s.netDeliveredCash || 0).toLocaleString()}</div>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>চার্জ বাদে আপনার প্রাপ্য</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Amount due after charges</div>
         </div>
 
         <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #eab308' }}>
-          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>কুরিয়ারে বকেয়া (Pending Cash)</div>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Pending Courier Payout</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#eab308', marginTop: 4 }}>৳{(s.pendingCourierBalance || 0).toLocaleString()}</div>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>যা এখনও কুরিয়ার দেয়নি</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Still due from the courier</div>
         </div>
 
         <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #a855f7' }}>
-          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>রিসিভড পেমেন্ট (Reconciled)</div>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Payments Reconciled</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#a855f7', marginTop: 4 }}>৳{(s.totalReconciled || 0).toLocaleString()}</div>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>ব্যাংক/বিকাশে জমা পাওয়া গেছে</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Received in your bank or bKash account</div>
         </div>
       </div>
 
@@ -9427,7 +9492,7 @@ function WhatsAppAdmin() {
         setStatus((prev: any) => {
           if (!prev?.connected && d?.connected) {
             setShowPairModal(false);
-            setToast(`🎉 WhatsApp Business সফলভাবে সংযুক্ত হয়েছে! (+${d.phone || ''})`);
+            setToast(`🎉 WhatsApp Business connected successfully! (+${d.phone || ''})`);
             setTimeout(() => setToast(''), 4500);
           }
           return d;
@@ -9501,7 +9566,7 @@ function WhatsAppAdmin() {
 
   const handleConnectPhone = async () => {
     if (!pairingPhoneInput.trim()) {
-      alert('অনুগ্রহ করে আপনার হোয়াটসঅ্যাপ নাম্বারটি লিখুন');
+      alert('Please enter your WhatsApp phone number.');
       return;
     }
     setConnecting(true);
@@ -9514,7 +9579,7 @@ function WhatsAppAdmin() {
       }).then(r => r.json());
       if (res.ok && res.pairingCode) {
         setGeneratedCode(res.pairingCode);
-        setToast('৮-ডিজিটের অফিসিয়াল পেয়ারিং কোড তৈরি হয়েছে!');
+        setToast('Your 8-digit pairing code is ready.');
         setTimeout(() => setToast(''), 4000);
       } else {
         alert(res.error || 'Failed to generate pairing code');
@@ -9626,7 +9691,7 @@ function WhatsAppAdmin() {
           <p className="dim" style={{ fontSize: 13, margin: '6px 0 0', lineHeight: 1.6 }}>
             {status.connected
               ? `✅ Active session linked to: +${status.phone || '8801878374762'} (${status.device || 'WhatsApp Web'}) · Auto-dispatching triggers.`
-              : 'আপনার WhatsApp Business মোবাইল অ্যাপটি কিউআর কোড স্ক্যান করে কানেক্ট করুন। অর্ডার অ্যাপ্রুভ, শিপিং ও পরিত্যক্ত চেকআউটের মেসেজ স্বয়ংক্রিয়ভাবে কাস্টমারকে পাঠানো হবে।'}
+              : 'Connect your WhatsApp Business app by scanning the QR code. Order approvals, shipping updates, and abandoned checkout messages will be sent automatically.'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -9663,7 +9728,7 @@ function WhatsAppAdmin() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div>
               <b style={{ fontSize: 14, color: '#f8fafc' }}>1. Incomplete Order Recovery</b>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>চেকআউট ফর্ম পূরণ করে বের হয়ে গেলে অটো রিকভারি মেসেজ</div>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>Send an automatic recovery message when a customer leaves checkout.</div>
             </div>
             <label className="sa-chk">
               <input type="checkbox" checked={!!triggers.incomplete?.enabled} onChange={() => toggleTrigger('incomplete')} />
@@ -9693,7 +9758,7 @@ function WhatsAppAdmin() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div>
               <b style={{ fontSize: 14, color: '#f8fafc' }}>2. Order Approved Confirmation</b>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>অর্ডার কনফার্ম বা অ্যাপ্রুভ করলে সাথে সাথে মেসেজ</div>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>Send a message as soon as an order is confirmed or approved.</div>
             </div>
             <label className="sa-chk">
               <input type="checkbox" checked={!!triggers.approved?.enabled} onChange={() => toggleTrigger('approved')} />
@@ -9717,7 +9782,7 @@ function WhatsAppAdmin() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div>
               <b style={{ fontSize: 14, color: '#f8fafc' }}>3. Order Shipped &amp; Tracking</b>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>কুরিয়ারে পার্সেল এন্ট্রি হলে ট্র্যাকিং কোডসহ নোটিফিকেশন</div>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>Send a tracking notification when a parcel is registered with the courier.</div>
             </div>
             <label className="sa-chk">
               <input type="checkbox" checked={!!triggers.shipped?.enabled} onChange={() => toggleTrigger('shipped')} />
@@ -9741,7 +9806,7 @@ function WhatsAppAdmin() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div>
               <b style={{ fontSize: 14, color: '#f8fafc' }}>4. Order Cancelled Notice</b>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>অর্ডার বাতিল হলে কারণসহ কাস্টমারকে নোটিশ</div>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>Notify the customer with the reason when an order is cancelled.</div>
             </div>
             <label className="sa-chk">
               <input type="checkbox" checked={!!triggers.cancelled?.enabled} onChange={() => toggleTrigger('cancelled')} />
@@ -9767,7 +9832,7 @@ function WhatsAppAdmin() {
           📤 Direct WhatsApp Messenger &amp; Marketing
         </h2>
         <p className="dim" style={{ fontSize: 13, margin: '4px 0 14px' }}>
-          যেকোনো কাস্টমারের নাম্বারে তাৎক্ষণিক কাস্টম অফার বা মেসেজ পাঠান।
+          Send a custom offer or message to any customer instantly.
         </p>
         <div className="wa-direct-grid" style={{ display: 'grid', gridTemplateColumns: '220px 1fr auto', gap: 12, alignItems: 'center' }}>
           <input
@@ -9778,7 +9843,7 @@ function WhatsAppAdmin() {
           />
           <input
             className="sa-search"
-            placeholder="মেসেজ লিখুন (যেমন: ভাইয়া আপনার জন্য বিশেষ ২০% ডিসকাউন্ট কুপন...)"
+            placeholder="Write a message (e.g. Here is your exclusive 20% discount coupon...)"
             value={broadcastMsg}
             onChange={(e) => setBroadcastMsg(e.target.value)}
           />
@@ -9984,7 +10049,7 @@ function WhatsAppAdmin() {
                       if (status.connected) {
                         setShowPairModal(false);
                       } else {
-                        alert('আপনার মোবাইলের WhatsApp অ্যাপের Linked Devices দিয়ে QR কোডটি স্ক্যান করুন। স্ক্যান সম্পন্ন হলেই এটি স্বয়ংক্রিয়ভাবে কানেক্ট হবে।');
+                        alert('Scan the QR code from Linked Devices in WhatsApp on your phone. It will connect automatically once scanned.');
                       }
                     }}
                   >
@@ -10080,7 +10145,52 @@ function BackupAdmin() {
   const [downloading, setDownloading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [preview, setPreview] = useState<any>(null);
+  const [restorePhrase, setRestorePhrase] = useState('');
+  const [fileError, setFileError] = useState('');
   const [toast, setToast] = useState('');
+  const [lastBackup, setLastBackup] = useState<any>(null);
+  const [includeFrontend, setIncludeFrontend] = useState(false);
+
+  const formatBytes = (bytes: number) => {
+    if (!bytes) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    return `${(bytes / Math.pow(1024, i)).toFixed(i ? 1 : 0)} ${units[i]}`;
+  };
+
+  const verifyIntegrity = async (data: any) => {
+    if (!data?.manifest) return { valid: false, legacy: true };
+    const { manifest, ...unsignedBackup } = data;
+    if (manifest.algorithm !== 'SHA-256' || !/^[a-f0-9]{64}$/i.test(String(manifest.digest || ''))) {
+      throw new Error('The backup manifest is invalid.');
+    }
+    if (!globalThis.crypto?.subtle) return { valid: false, legacy: false };
+    const bytes = new TextEncoder().encode(JSON.stringify(unsignedBackup));
+    const hash = await crypto.subtle.digest('SHA-256', bytes);
+    const actual = Array.from(new Uint8Array(hash), (b) => b.toString(16).padStart(2, '0')).join('');
+    if (actual !== String(manifest.digest).toLowerCase()) throw new Error('Integrity check failed. The file may be damaged or modified.');
+    return { valid: true, legacy: false };
+  };
+
+  const isCompleteBackup = (data: any) => !!data && typeof data === 'object' && !Array.isArray(data) &&
+    (!data.format || data.format === 'metrroma-store-backup') &&
+    Array.isArray(data.orders) && Array.isArray(data.customers) &&
+    !!data.catalog && Array.isArray(data.catalog.products) && Array.isArray(data.catalog.categories) &&
+    !!data.settings && typeof data.settings === 'object' && !Array.isArray(data.settings) &&
+    !!data.integrations && typeof data.integrations === 'object' && !Array.isArray(data.integrations) &&
+    Array.isArray(data.landings) && Array.isArray(data.coupons) && Array.isArray(data.colors) &&
+    Array.isArray(data.users) && !!data.reviews && typeof data.reviews === 'object' && !Array.isArray(data.reviews) &&
+    Array.isArray(data.media) && (data.frontendFiles == null || Array.isArray(data.frontendFiles));
+
+  const sectionCounts = (data: any) => ({
+    orders: data?.orders?.length || 0,
+    products: data?.catalog?.products?.length || 0,
+    categories: data?.catalog?.categories?.length || 0,
+    customers: data?.customers?.length || 0,
+    staff: data?.users?.length || 0,
+    media: data?.media?.length || 0,
+    frontendFiles: data?.frontendFiles?.length || 0,
+  });
 
   useEffect(() => {
     Promise.all([
@@ -10098,20 +10208,27 @@ function BackupAdmin() {
 
   const handleDownloadBackup = async () => {
     setDownloading(true);
+    setToast('');
     try {
-      const res = await aFetch('/admin/backup/export');
+      const res = await aFetch(`/admin/backup/export${includeFrontend ? '?includeFrontend=true' : ''}`);
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Backup export failed');
       const blob = await res.blob();
+      const backupData = JSON.parse(await blob.text());
+      if (!isCompleteBackup(backupData)) throw new Error('The server returned an incomplete backup. No file was saved.');
+      const integrity = await verifyIntegrity(backupData);
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const fileName = `store-backup${includeFrontend ? '-with-frontend' : ''}-${stamp}.json`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `store_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = fileName;
       a.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setToast('Store backup downloaded to your computer!');
-      setTimeout(() => setToast(''), 3000);
+      setLastBackup({ fileName, size: blob.size, at: new Date(), integrity: integrity.valid, includesFrontend: !!backupData.frontendFiles });
+      setToast(`Backup created${backupData.frontendFiles ? ' with frontend files' : ''} and verified · ${formatBytes(blob.size)}`);
+      setTimeout(() => setToast(''), 5000);
     } catch (e: any) {
-      alert('Download failed: ' + e.message);
+      setToast(`Backup failed: ${e.message}`);
     } finally {
       setDownloading(false);
     }
@@ -10120,154 +10237,109 @@ function BackupAdmin() {
   const handleFileSelect = (e: any) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setFileError('');
+    setPreview(null);
+    setRestorePhrase('');
+    if (file.size > 90 * 1024 * 1024) {
+      setFileError('This file is over the 90 MB restore limit.');
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const json = JSON.parse(event.target?.result as string);
-        if (!json || typeof json !== 'object') throw new Error('Invalid JSON file');
-        setPreview(json);
+        if (!isCompleteBackup(json)) throw new Error('This file is not a complete, supported store backup.');
+        const integrity = await verifyIntegrity(json);
+        setPreview({ payload: json, fileName: file.name, size: file.size, integrity, counts: sectionCounts(json) });
       } catch (err: any) {
-        alert('Invalid backup file: ' + err.message);
+        setFileError(err.message || 'Could not read this backup file.');
       }
+      e.target.value = '';
     };
+    reader.onerror = () => setFileError('Could not read this file. Please choose it again.');
     reader.readAsText(file);
   };
 
   const executeRestore = async () => {
-    if (!preview) return;
-    if (!confirm('⚠️ সতর্কবার্তা: ব্যাকআপ ফাইলটি রিস্টোর করলে বর্তমান ডাটাবেস আপডেট ও সিঙ্ক হবে। আপনি কি নিশ্চিত?')) return;
+    const requiredPhrase = preview?.counts.frontendFiles > 0 ? 'RESTORE FRONTEND' : 'RESTORE';
+    if (!preview || restorePhrase !== requiredPhrase) return;
+    if (!confirm(`Restore “${preview.fileName}” to ${preview.payload.store || 'this store'}? Current store data${preview.counts.frontendFiles > 0 ? ' and frontend files' : ''} will be replaced. A pre-restore snapshot will be created automatically.`)) return;
+    setToast('');
     setRestoring(true);
     try {
       const res = await aFetch('/admin/backup/restore', {
         method: 'POST',
-        body: JSON.stringify(preview)
-      }).then(r => r.json());
-      if (res.ok) {
-        alert('✓ সম্পূর্ণ ডাটাবেস সফলভাবে রিস্টোর হয়েছে! পেজটি এখন রিফ্রেশ হবে।');
-        location.reload();
-      } else {
-        alert('Restore failed: ' + (res.error || 'Unknown error'));
-      }
+        body: JSON.stringify(preview.payload)
+      });
+      const result = await res.json();
+      if (!res.ok || !result.ok) throw new Error(result.error || 'Restore failed.');
+      setToast(`Restore complete · ${Object.entries(result.counts || {}).map(([key, value]) => `${key}: ${value}`).join(' · ')}`);
+      setPreview(null);
+      setRestorePhrase('');
+      setTimeout(() => location.reload(), 1800);
     } catch (e: any) {
-      alert('Restore failed: ' + e.message);
+      setToast(`Restore failed: ${e.message}`);
     } finally {
       setRestoring(false);
-      setPreview(null);
     }
   };
 
   return (
-    <>
-      <div className="sa-top">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h1>Backup &amp; Restore Hub</h1>
-          <span style={{ fontSize: 11, background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', padding: '3px 8px', borderRadius: 999, border: '1px solid rgba(34, 197, 94, 0.3)', fontWeight: 600 }}>
-            🛡️ Zero Data Loss Shield Active
-          </span>
-          {toast && (
-            <span style={{ fontSize: 12, background: '#10b981', color: '#fff', padding: '4px 10px', borderRadius: 6, fontWeight: 600 }}>
-              ✓ {toast}
-            </span>
-          )}
-        </div>
+    <div className="sa-backup-page">
+      <div className="sa-backup-header">
+        <div><span className="sa-backup-eyebrow">DATA PROTECTION</span><h1>Backup &amp; Restore</h1><p>Create a verified copy of your store data or restore a complete backup.</p></div>
+        <span className="sa-backup-secure"><span /> Automatic pre-restore snapshot enabled</span>
       </div>
-
-      {/* Database Health Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 24 }}>
-        <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #38bdf8' }}>
-          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>সংরক্ষিত মোট অর্ডার</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc', marginTop: 4 }}>{stats ? stats.ordersCount : '…'} টি</div>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>সব হিস্ট্রি ও স্ট্যাটাসসহ</div>
-        </div>
-
-        <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #10b981' }}>
-          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>নিবন্ধিত কাস্টমার</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#10b981', marginTop: 4 }}>{stats ? stats.customersCount : '…'} জন</div>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>ঠিকানা ও ফোন নাম্বারসহ</div>
-        </div>
-
-        <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #eab308' }}>
-          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>ক্যাটালগ প্রোডাক্টস</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#eab308', marginTop: 4 }}>{stats ? stats.productsCount : '…'} টি</div>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>ভ্যারিয়েশন ও প্রাইসিংসহ</div>
-        </div>
+      {toast && <div className={`sa-backup-notice ${toast.includes('failed') ? 'error' : 'success'}`} role="status">{toast}</div>}
+      <div className="sa-backup-summary">
+        <div className="sa-backup-stat"><span>ORDERS</span><strong>{stats ? stats.ordersCount : '—'}</strong><small>Order history and statuses</small></div>
+        <div className="sa-backup-stat"><span>CUSTOMERS</span><strong>{stats ? stats.customersCount : '—'}</strong><small>Customer records</small></div>
+        <div className="sa-backup-stat"><span>PRODUCTS</span><strong>{stats ? stats.productsCount : '—'}</strong><small>Catalog and variations</small></div>
       </div>
-
-      {/* 2 Big Action Columns: Download vs Upload */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 20 }}>
-        {/* Column 1: Download */}
-        <div className="sa-card" style={{ padding: 24 }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>📥</div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 6px', color: '#f8fafc' }}>
-            ১-ক্লিক সম্পূর্ণ ডাটাবেস ডাউনলোড
-          </h2>
-          <p className="dim" style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 20 }}>
-            আপনার সমস্ত অর্ডার, কাস্টমার লিস্ট, প্রোডাক্ট ক্যাটালগ, সেটিংস, ল্যান্ডিং পেজ ও কুরিয়ার কনফিগারেশনের একটি সম্পূর্ণ <code>.json</code> ব্যাকআপ ফাইল ডাউনলোড করে আপনার নিজের কম্পিউটারে সংরক্ষণ করুন।
-          </p>
-          <button
-            className="sa-btn"
-            style={{ width: '100%', padding: '12px 18px', fontSize: 14, fontWeight: 700 }}
-            disabled={downloading}
-            onClick={handleDownloadBackup}
-          >
-            {downloading ? 'Creating Backup…' : '📥 Download Store Backup (.json)'}
+      <label className="sa-backup-include-frontend">
+        <input type="checkbox" checked={includeFrontend} onChange={(e) => setIncludeFrontend(e.target.checked)} />
+        <span><strong>Include frontend files</strong><small>Add frontend source, public assets, build output, and build configuration to this backup.</small></span>
+      </label>
+      <div className="sa-backup-grid">
+        <section className="sa-card sa-backup-action">
+          <div className="sa-backup-action-icon">↓</div>
+          <span className="sa-backup-eyebrow">EXPORT</span>
+          <h2>Create a store backup</h2>
+          <p>Download a complete JSON archive with orders, customers, products, settings, staff, integrations, landing pages, and uploaded media.</p>
+          <div className="sa-backup-includes">Includes a timestamped manifest and SHA-256 integrity check{includeFrontend ? ', plus the frontend files selected above.' : '.'}</div>
+          <button className="sa-btn sa-backup-primary" disabled={downloading} onClick={handleDownloadBackup}>
+            {downloading ? 'Creating and verifying…' : 'Download verified backup'}
           </button>
-        </div>
-
-        {/* Column 2: Upload & Restore */}
-        <div className="sa-card" style={{ padding: 24 }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>📤</div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 6px', color: '#f8fafc' }}>
-            ব্যাকআপ ফাইল থেকে রিস্টোর (Uploader)
-          </h2>
-          <p className="dim" style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 16 }}>
-            পূর্বে ডাউনলোড করা যেকোনো <code>.json</code> ব্যাকআপ ফাইল আপলোড করে ১ ক্লিকে সমস্ত ডাটা ফিরিয়ে আনুন।
-          </p>
-
-          <input
-            type="file"
-            accept=".json"
-            id="backup-file-input"
-            style={{ display: 'none' }}
-            onChange={handleFileSelect}
-          />
-          <button
-            type="button"
-            className="sa-btn ghost"
-            style={{ width: '100%', padding: '12px 18px', fontSize: 14, marginBottom: 12, border: '1px dashed rgba(255,255,255,0.25)' }}
-            onClick={() => document.getElementById('backup-file-input')?.click()}
-          >
-            📁 Select Backup File from PC
+          {lastBackup && <div className="sa-backup-last"><strong>Last backup created</strong><span>{lastBackup.fileName}</span><small>{lastBackup.at.toLocaleString()} · {formatBytes(lastBackup.size)} · {lastBackup.integrity ? 'SHA-256 verified' : 'Compatibility format'}</small></div>}
+        </section>
+        <section className="sa-card sa-backup-action">
+          <div className="sa-backup-action-icon">↑</div>
+          <span className="sa-backup-eyebrow">RESTORE</span>
+          <h2>Restore from a backup</h2>
+          <p>Choose a complete store backup to inspect its contents and verify file integrity before restoring.</p>
+          <div className="sa-backup-includes">Restoring replaces current store data. A snapshot of the current data is saved first.</div>
+          <input type="file" accept=".json,application/json" id="backup-file-input" className="sa-backup-file-input" onChange={handleFileSelect} />
+          <button type="button" className="sa-btn ghost sa-backup-select" onClick={() => document.getElementById('backup-file-input')?.click()}>
+            Choose backup file <small>JSON · up to 90 MB</small>
           </button>
-
-          {preview && (
-            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 14, marginTop: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#38bdf8', marginBottom: 4 }}>
-                ✓ Valid Backup File Selected:
-              </div>
-              <div style={{ fontSize: 12, color: '#cbd5e1' }}>
-                • Export Date: {preview.exportedAt ? new Date(preview.exportedAt).toLocaleString() : 'N/A'}<br/>
-                • Orders: {Array.isArray(preview.orders) ? preview.orders.length : 0} items<br/>
-                • Products: {preview.catalog?.products ? preview.catalog.products.length : 0} items<br/>
-                • Customers: {Array.isArray(preview.customers) ? preview.customers.length : 0} customers<br/>
-                • Staff accounts: {Array.isArray(preview.users) ? preview.users.length : 0}<br/>
-                • Uploaded media: {Array.isArray(preview.media) ? preview.media.length : 0} files<br/>
-                • Backup version: {preview.version || 'Legacy JSON'}
-              </div>
-              <button
-                type="button"
-                className="sa-btn danger"
-                style={{ width: '100%', marginTop: 12, padding: 10, fontWeight: 700 }}
-                disabled={restoring}
-                onClick={executeRestore}
-              >
-                {restoring ? 'Restoring…' : '⚠️ Confirm &amp; Restore Live Store'}
-              </button>
+          {fileError && <div className="sa-backup-file-error" role="alert">{fileError}</div>}
+          {preview && <div className="sa-backup-preview">
+            <div className="sa-backup-preview-head"><span className="sa-backup-valid-dot" /><strong>{preview.integrity.valid ? 'Backup integrity verified' : 'Backup structure checked'}</strong><button type="button" onClick={() => { setPreview(null); setRestorePhrase(''); }}>Remove</button></div>
+            <div className="sa-backup-file-meta"><span title={preview.fileName}>{preview.fileName}</span><small>{formatBytes(preview.size)} · Version {preview.payload.version || 'Legacy'} · {preview.integrity.valid ? 'SHA-256 verified' : 'Legacy backup'}</small></div>
+            <div className="sa-backup-counts">
+              {Object.entries(preview.counts).map(([label, value]) => <div key={label}><strong>{value as number}</strong><span>{label}</span></div>)}
             </div>
-          )}
-        </div>
+            {preview.counts.frontendFiles > 0 && <div className="sa-backup-includes">This backup includes frontend files. Restore replaces saved source, public assets, and build output. A pre-restore snapshot will be saved first.</div>}
+            <label className="sa-backup-confirm-label">Type <b>{preview.counts.frontendFiles > 0 ? 'RESTORE FRONTEND' : 'RESTORE'}</b> to enable the restore action<input value={restorePhrase} onChange={(e) => setRestorePhrase(e.target.value)} placeholder={preview.counts.frontendFiles > 0 ? 'Type RESTORE FRONTEND' : 'Type RESTORE'} autoComplete="off" /></label>
+            <button type="button" className="sa-btn danger sa-backup-restore" disabled={restoring || restorePhrase !== (preview.counts.frontendFiles > 0 ? 'RESTORE FRONTEND' : 'RESTORE')} onClick={executeRestore}>
+              {restoring ? 'Restoring store data and frontend…' : 'Restore this backup'}
+            </button>
+          </div>}
+        </section>
       </div>
-    </>
+      <p className="sa-backup-privacy">Backups contain private customer information, staff accounts, and store settings. Store downloaded files securely.</p>
+    </div>
   );
 }
 
@@ -10275,6 +10347,7 @@ function ProductReviewsAdmin() {
   const [reviews, setReviews] = useState<any[]>([]);
   const [status, setStatus] = useState<'pending' | 'approved' | 'rejected'>('pending');
   const [busyId, setBusyId] = useState('');
+  const [replyBusyId, setReplyBusyId] = useState('');
   const [error, setError] = useState('');
   const load = () => { setError(''); return aFetch('/admin/reviews').then(async (r) => {
     const d = await r.json();
@@ -10295,6 +10368,20 @@ function ProductReviewsAdmin() {
     } catch (e: any) { setError(e.message || 'Could not update review'); }
     finally { setBusyId(''); }
   };
+  const editReply = (review: any, adminReply: string) => setReviews((items) => items.map((item) => item.id === review.id && item.productId === review.productId ? { ...item, adminReply } : item));
+  const saveReply = async (review: any) => {
+    setReplyBusyId(review.id);
+    setError('');
+    try {
+      const r = await aFetch(`/admin/reviews/${encodeURIComponent(review.productId)}/${encodeURIComponent(review.id)}`, {
+        method: 'PATCH', body: JSON.stringify({ adminReply: review.adminReply || '' }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Could not save store reply');
+      await load();
+    } catch (e: any) { setError(e.message || 'Could not save store reply'); }
+    finally { setReplyBusyId(''); }
+  };
   const shown = reviews.filter((review) => (review.status || 'approved') === status);
   const count = (key: string) => reviews.filter((review) => (review.status || 'approved') === key).length;
   return (
@@ -10309,6 +10396,11 @@ function ProductReviewsAdmin() {
           <div className="prv-card-top"><div><strong>{review.name || 'Customer'}</strong><span className="prv-rating" aria-label={`${review.rating} out of 5 stars`}>{'★'.repeat(Math.max(0, Math.min(5, Number(review.rating) || 0)))}</span></div><time>{review.at ? new Date(review.at).toLocaleString() : ''}</time></div>
           <p className="prv-product">Product ID: {review.productId}</p>
           <p className="prv-copy">{review.text || 'No written comment.'}</p>
+          <section className="prv-reply">
+            <label htmlFor={`review-reply-${review.productId}-${review.id}`}>Store reply <span>Visible to customers when this review is approved</span></label>
+            <textarea id={`review-reply-${review.productId}-${review.id}`} maxLength={2000} value={review.adminReply || ''} placeholder="Write a helpful response…" onChange={(e) => editReply(review, e.target.value)} />
+            <div className="prv-reply-footer"><small>{(review.adminReply || '').length}/2000</small><button className="sa-btn" disabled={replyBusyId === review.id} onClick={() => saveReply(review)}>{replyBusyId === review.id ? 'Saving…' : 'Save reply'}</button></div>
+          </section>
           <div className="prv-actions">
             {status !== 'approved' && <button className="sa-btn" disabled={busyId === review.id} onClick={() => changeStatus(review, 'approved')}>{busyId === review.id ? 'Saving…' : '✓ Approve & publish'}</button>}
             {status !== 'rejected' && <button className="sa-btn ghost" disabled={busyId === review.id} onClick={() => changeStatus(review, 'rejected')}>Reject</button>}
@@ -10592,14 +10684,14 @@ function LandingsAdmin() {
     onSelect: (url: string) => void;
   } | null>(null);
   const [mediaLibrary, setMediaLibrary] = useState<any[]>([
-    { url: '/landing/package-6-7.jpg', name: 'package-6-7.jpg (৬.৭ ইঞ্চি প্যাকেজ)', category: 'landing' },
-    { url: '/landing/package-5-7.jpg', name: 'package-5-7.jpg (৫.৭ ইঞ্চি প্যাকেজ)', category: 'landing' },
-    { url: '/landing/banner-product.png', name: 'banner-product.png (হিরো ব্যানার)', category: 'landing' },
-    { url: '/landing/usage-guide.jpg', name: 'usage-guide.jpg (ব্যবহারের নির্দেশিকা)', category: 'landing' },
-    { url: '/landing/review-1.png', name: 'review-1.png (রিভিউ ১)', category: 'landing' },
-    { url: '/landing/review-2.png', name: 'review-2.png (রিভিউ ২)', category: 'landing' },
-    { url: '/landing/review-3.png', name: 'review-3.png (রিভিউ ৩)', category: 'landing' },
-    { url: '/landing/review-4.png', name: 'review-4.png (রিভিউ ৪)', category: 'landing' }
+    { url: '/landing/package-6-7.jpg', name: 'package-6-7.jpg (6.7-inch package)', category: 'landing' },
+    { url: '/landing/package-5-7.jpg', name: 'package-5-7.jpg (5.7-inch package)', category: 'landing' },
+    { url: '/landing/banner-product.png', name: 'banner-product.png (Hero banner)', category: 'landing' },
+    { url: '/landing/usage-guide.jpg', name: 'usage-guide.jpg (Usage guide)', category: 'landing' },
+    { url: '/landing/review-1.png', name: 'review-1.png (Review 1)', category: 'landing' },
+    { url: '/landing/review-2.png', name: 'review-2.png (Review 2)', category: 'landing' },
+    { url: '/landing/review-3.png', name: 'review-3.png (Review 3)', category: 'landing' },
+    { url: '/landing/review-4.png', name: 'review-4.png (Review 4)', category: 'landing' }
   ]);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [mediaSearch, setMediaSearch] = useState('');
@@ -10620,14 +10712,14 @@ function LandingsAdmin() {
         : [];
 
       const baseList = [
-        { url: '/landing/package-6-7.jpg', name: 'package-6-7.jpg (৬.৭ ইঞ্চি প্যাকেজ)', category: 'landing' },
-        { url: '/landing/package-5-7.jpg', name: 'package-5-7.jpg (৫.৭ ইঞ্চি প্যাকেজ)', category: 'landing' },
-        { url: '/landing/banner-product.png', name: 'banner-product.png (হিরো ব্যানার)', category: 'landing' },
-        { url: '/landing/usage-guide.jpg', name: 'usage-guide.jpg (ব্যবহারের নির্দেশিকা)', category: 'landing' },
-        { url: '/landing/review-1.png', name: 'review-1.png (রিভিউ ১)', category: 'landing' },
-        { url: '/landing/review-2.png', name: 'review-2.png (রিভিউ ২)', category: 'landing' },
-        { url: '/landing/review-3.png', name: 'review-3.png (রিভিউ ৩)', category: 'landing' },
-        { url: '/landing/review-4.png', name: 'review-4.png (রিভিউ ৪)', category: 'landing' }
+        { url: '/landing/package-6-7.jpg', name: 'package-6-7.jpg (6.7-inch package)', category: 'landing' },
+        { url: '/landing/package-5-7.jpg', name: 'package-5-7.jpg (5.7-inch package)', category: 'landing' },
+        { url: '/landing/banner-product.png', name: 'banner-product.png (Hero banner)', category: 'landing' },
+        { url: '/landing/usage-guide.jpg', name: 'usage-guide.jpg (Usage guide)', category: 'landing' },
+        { url: '/landing/review-1.png', name: 'review-1.png (Review 1)', category: 'landing' },
+        { url: '/landing/review-2.png', name: 'review-2.png (Review 2)', category: 'landing' },
+        { url: '/landing/review-3.png', name: 'review-3.png (Review 3)', category: 'landing' },
+        { url: '/landing/review-4.png', name: 'review-4.png (Review 4)', category: 'landing' }
       ];
 
       const seen = new Set();
@@ -10766,7 +10858,7 @@ function LandingsAdmin() {
           });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save landing page');
-      setMsg('✅ ল্যান্ডিং পেজ সফলভাবে সংরক্ষণ করা হয়েছে!');
+      setMsg('✅ Landing page saved successfully!');
       await load();
       setTimeout(() => setMsg(''), 4000);
     } catch (e: any) {
@@ -10821,7 +10913,7 @@ function LandingsAdmin() {
               onClick={() => { setEditItem(null); load(); }}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
-              ← ব্যাক (Back to List)
+              Back to list
             </button>
             <div>
               <h1 style={{ fontSize: 20, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -10834,7 +10926,7 @@ function LandingsAdmin() {
               <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
                 Slug: <code>/step/{f.slug}</code> &nbsp;·&nbsp;
                 <a href={`/step/${f.slug}`} target="_blank" rel="noreferrer" style={{ color: '#a78bfa', textDecoration: 'none' }}>
-                  লাইভ প্রিভিউ দেখুন ↗
+                  Open live preview ↗
                 </a>
               </div>
             </div>
@@ -10845,8 +10937,8 @@ function LandingsAdmin() {
               onChange={(e) => setF((s: any) => ({ ...s, status: e.target.value }))}
               style={{ padding: '7px 12px', background: '#1c192e', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
             >
-              <option value="live">🟢 Live (সক্রিয়)</option>
-              <option value="draft">⚪ Draft (ড্রাফট)</option>
+              <option value="live">Live</option>
+              <option value="draft">Draft</option>
             </select>
             <button
               className="sa-btn primary"
@@ -10854,7 +10946,7 @@ function LandingsAdmin() {
               disabled={saving}
               style={{ minWidth: 140, fontWeight: 600, background: '#8b5cf6', borderColor: '#8b5cf6' }}
             >
-              {saving ? 'সংরক্ষণ হচ্ছে...' : '💾 সেভ করুন (Save)'}
+              {saving ? 'Saving…' : 'Save'}
             </button>
           </div>
         </div>
@@ -10874,14 +10966,14 @@ function LandingsAdmin() {
         {/* Sub-Tabs Bar */}
         <div style={{ display: 'flex', gap: 4, margin: '16px 0 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', overflowX: 'auto', paddingBottom: 2 }}>
           {[
-            { id: 'general', label: '⚙️ সাধারণ (General)' },
-            { id: 'hero', label: '🌟 হিরো ও হেডার (Hero)' },
-            { id: 'video', label: '🎬 ভিডিও ও অফার (Video & Offer)' },
-            { id: 'packages', label: '📦 প্যাকেজ সমূহ (Packages)' },
-            { id: 'benefits', label: '⭐ সুবিধাসমূহ (Benefits)' },
-            { id: 'usage', label: '📖 নিয়মাবলী (Usage Guide)' },
-            { id: 'reviews', label: '💬 রিভিউ (Reviews)' },
-            { id: 'guarantee', label: '🛡️ গ্যারান্টি ও যোগাযোগ (Policy)' }
+            { id: 'general', label: 'General' },
+            { id: 'hero', label: 'Hero & Header' },
+            { id: 'video', label: 'Video & Offer' },
+            { id: 'packages', label: 'Packages' },
+            { id: 'benefits', label: 'Benefits' },
+            { id: 'usage', label: 'Usage Guide' },
+            { id: 'reviews', label: 'Reviews' },
+            { id: 'guarantee', label: 'Policy & Contact' }
           ].map((t) => (
             <button
               key={t.id}
@@ -10908,23 +11000,23 @@ function LandingsAdmin() {
         {/* TAB 1: GENERAL SETTINGS */}
         {tab === 'general' && (
           <div className="sa-card" style={{ padding: 24 }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: 16, color: '#f8fafc' }}>বেসিক ও পেজ ইনফরমেশন</h3>
+            <h3 style={{ margin: '0 0 16px', fontSize: 16, color: '#f8fafc' }}>Basic page information</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  পৃষ্ঠার নাম / Title
+                  Page title
                 </label>
                 <input
                   value={f.title || ''}
                   onChange={(e) => setF((s: any) => ({ ...s, title: e.target.value }))}
-                  placeholder="যেমন: ম্যাজিক লাভ লক কনডম"
+                  placeholder="e.g. Signature Skincare Set"
                   style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                 />
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  URL স্ল্যাগ / Slug (যে লিংকে পেজ ওপেন হবে)
+                  URL slug
                 </label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: 13, color: '#94a3b8' }}>/step/</span>
@@ -10936,13 +11028,13 @@ function LandingsAdmin() {
                   />
                 </div>
                 <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-                  পেজটি <code>/step/{f.slug || 'lovelock'}</code> এবং <code>/page/{f.slug || 'lovelock'}</code> উভয় লিংকেই দেখাবে।
+                  This page will be available at <code>/step/{f.slug || 'lovelock'}</code> and <code>/page/{f.slug || 'lovelock'}</code>.
                 </div>
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  বিকল্প স্ল্যাগ / Aliases (কমা দিয়ে আলাদা করুন)
+                  URL aliases (comma-separated)
                 </label>
                 <input
                   value={Array.isArray(f.aliases) ? f.aliases.join(', ') : (f.aliases || '')}
@@ -10954,49 +11046,49 @@ function LandingsAdmin() {
                   style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                 />
                 <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-                  এসব বিকল্প লিংকেও একই ল্যান্ডিং পেজ লোড হবে।
+                  The same landing page will load from each alias.
                 </div>
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  পাবলিশ স্ট্যাটাস
+                  Publish status
                 </label>
                 <select
                   value={f.status || 'live'}
                   onChange={(e) => setF((s: any) => ({ ...s, status: e.target.value }))}
                   style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                 >
-                  <option value="live">🟢 লাইভ (Live - দৃশ্যমান)</option>
-                  <option value="draft">⚪ ড্রাফট (Draft - অদৃশ্য)</option>
+              <option value="live">Live — visible</option>
+              <option value="draft">Draft — hidden</option>
                 </select>
               </div>
             </div>
 
             <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.08)', margin: '24px 0' }} />
 
-            <h3 style={{ margin: '0 0 16px', fontSize: 16, color: '#f8fafc' }}>টপ নোটিফিকেশন ও গ্যারান্টি রিবন</h3>
+            <h3 style={{ margin: '0 0 16px', fontSize: 16, color: '#f8fafc' }}>Top announcement &amp; guarantee ribbon</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  টপ অ্যানাউন্সমেন্ট ব্যাজ (সবচেয়ে উপরের লাল রঙের স্ট্রিপ)
+                  Top announcement badge
                 </label>
                 <input
                   value={f.badgeTop || ''}
                   onChange={(e) => setF((s: any) => ({ ...s, badgeTop: e.target.value }))}
-                  placeholder="১০০% অরিজিনাল প্রিমিয়াম কোয়ালিটি নিশ্চিত"
+                  placeholder="100% authentic quality"
                   style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                 />
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  গ্যারান্টি রিবন ব্যাজ (উপরের হলুদ রঙের রিবন)
+                  Guarantee ribbon badge
                 </label>
                 <input
                   value={f.badgeGuarantee || ''}
                   onChange={(e) => setF((s: any) => ({ ...s, badgeGuarantee: e.target.value }))}
-                  placeholder="একমাত্র আমরাই দিচ্ছি ৩ দিনের রিপ্লেসমেন্ট গ্যারান্টি"
+                  placeholder="3-day replacement guarantee"
                   style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                 />
               </div>
@@ -11007,29 +11099,29 @@ function LandingsAdmin() {
         {/* TAB 2: HERO & HEADINGS */}
         {tab === 'hero' && (
           <div className="sa-card" style={{ padding: 24 }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: 16, color: '#f8fafc' }}>হিরো সেকশন ও প্রডাক্ট ডেসক্রিপশন</h3>
+            <h3 style={{ margin: '0 0 16px', fontSize: 16, color: '#f8fafc' }}>Hero section &amp; product description</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  মূল হেডলাইন (Main Headline)
+                  Main headline
                 </label>
                 <input
                   value={f.headline || ''}
                   onChange={(e) => setF((s: any) => ({ ...s, headline: e.target.value }))}
-                  placeholder="ম্যাজিক লাভ লক কনডম"
+                  placeholder="A premium product headline"
                   style={{ width: '100%', padding: '10px 12px', fontSize: 15, background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                 />
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  সাবটাইটেল / সংক্ষিপ্ত বর্ণনা (Subtitle)
+                  Subtitle / short description
                 </label>
                 <textarea
                   rows={3}
                   value={f.subtitle || ''}
                   onChange={(e) => setF((s: any) => ({ ...s, subtitle: e.target.value }))}
-                  placeholder="এই কনডমটি ব্যবহারে..."
+                  placeholder="Briefly describe the product and its key benefit."
                   style={{ width: '100%', padding: '10px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, lineHeight: 1.5 }}
                 />
               </div>
@@ -11037,24 +11129,24 @@ function LandingsAdmin() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                    প্রোডাক্টের নাম (Product Title)
+                    Product title
                   </label>
                   <input
                     value={f.productTitle || ''}
                     onChange={(e) => setF((s: any) => ({ ...s, productTitle: e.target.value }))}
-                    placeholder="লাভ লক ম্যাজিক কনডম"
+                    placeholder="Product name"
                     style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                   />
                 </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                    প্রোডাক্ট ট্যাগলাইন (Product Tagline)
+                    Product tagline
                   </label>
                   <input
                     value={f.productTagline || ''}
                     onChange={(e) => setF((s: any) => ({ ...s, productTagline: e.target.value }))}
-                    placeholder="বিশেষ সিলিকন লক প্রযুক্তিসম্পন্ন — যা ব্যবহারে আনে দীর্ঘস্থায়ী পরিতৃপ্তি..."
+                    placeholder="A concise product tagline"
                     style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                   />
                 </div>
@@ -11062,7 +11154,7 @@ function LandingsAdmin() {
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  হিরো ব্যানার ইমেজ (Hero Banner Image)
+                  Hero banner image
                 </label>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#100e1c', padding: 12, borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)' }}>
                   {f.heroImage ? (
@@ -11076,12 +11168,12 @@ function LandingsAdmin() {
                         type="button"
                         className="sa-btn primary"
                         style={{ padding: '7px 14px', fontSize: 12, background: '#7c3aed', borderColor: '#7c3aed', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                        onClick={() => openMediaPicker('হিরো ব্যানার ইমেজ', f.heroImage || '', (url) => setF((s: any) => ({ ...s, heroImage: url })))}
+                        onClick={() => openMediaPicker('Hero banner image', f.heroImage || '', (url) => setF((s: any) => ({ ...s, heroImage: url })))}
                       >
-                        <span>🖼️ গ্যালারি / মিডিয়া লাইব্রেরি থেকে বেছে নিন</span>
+                        <span>Choose from media library</span>
                       </button>
                       <label className="sa-btn ghost" style={{ cursor: 'pointer', whiteSpace: 'nowrap', padding: '7px 12px', fontSize: 12 }}>
-                        {uploadingKey === 'heroImage' ? 'আপলোড হচ্ছে...' : '📁 পিসি থেকে ফাইল আপলোড'}
+                        {uploadingKey === 'heroImage' ? 'Uploading…' : 'Upload from computer'}
                         <input
                           type="file"
                           accept="image/*"
@@ -11094,14 +11186,14 @@ function LandingsAdmin() {
                       </label>
                       {f.heroImage && (
                         <button className="sa-link danger" type="button" onClick={() => setF((s: any) => ({ ...s, heroImage: '' }))} style={{ fontSize: 12 }}>
-                          ছবি সরান
+                          Remove image
                         </button>
                       )}
                     </div>
                     <input
                       value={f.heroImage || ''}
                       onChange={(e) => setF((s: any) => ({ ...s, heroImage: e.target.value }))}
-                      placeholder="/landing/banner-product.png বা ছবির লিংক"
+                      placeholder="/landing/banner-product.png or an image URL"
                       style={{ width: '100%', padding: '7px 10px', background: '#090812', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 5, fontSize: 11 }}
                     />
                   </div>
@@ -11114,11 +11206,11 @@ function LandingsAdmin() {
         {/* TAB 3: VIDEO & OFFER */}
         {tab === 'video' && (
           <div className="sa-card" style={{ padding: 24 }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: 16, color: '#f8fafc' }}>ভিডিও প্লেয়ার ও অফার ব্যানার সেটিংস</h3>
+            <h3 style={{ margin: '0 0 16px', fontSize: 16, color: '#f8fafc' }}>Video player &amp; offer banner settings</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  ভিডিও ফাইল URL (Video URL - mp4 অথবা ওয়েব লিংক)
+                  Video file URL (MP4 or web link)
                 </label>
                 <input
                   value={f.videoUrl || ''}
@@ -11127,59 +11219,59 @@ function LandingsAdmin() {
                   style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                 />
                 <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-                  লোকাল ফাইল <code>/landing/lovelock-video.mp4</code> অথবা যেকোনো ডাইরেক্ট ভিডিও URL ব্যবহার করতে পারেন।
+                  Use a local file such as <code>/landing/lovelock-video.mp4</code> or a direct video URL.
                 </div>
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  ভিডিওর নিচের ব্যাজ / ক্যাপশন (Video Badge Text)
+                  Video badge / caption
                 </label>
                 <input
                   value={f.videoBadge || ''}
                   onChange={(e) => setF((s: any) => ({ ...s, videoBadge: e.target.value }))}
-                  placeholder="ভিডিওতে পণ্যের আসল গঠন, লক সিস্টেম এবং নিখুঁত ব্যবহার প্রণালী দেখুন"
+                  placeholder="See the product details and how to use it"
                   style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                 />
               </div>
 
               <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.08)', margin: '10px 0' }} />
 
-              <h4 style={{ margin: '0 0 10px', fontSize: 14, color: '#f8fafc' }}>রেড অফার বক্স ও ডেলিভারি সেটিংস</h4>
+              <h4 style={{ margin: '0 0 10px', fontSize: 14, color: '#f8fafc' }}>Offer box &amp; delivery settings</h4>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                    অফার প্যাকেজ শিরোনাম (Offer Title)
+                    Offer title
                   </label>
                   <input
                     value={f.packageTitle || ''}
                     onChange={(e) => setF((s: any) => ({ ...s, packageTitle: e.target.value }))}
-                    placeholder="লাভ লক ম্যাজিকাল কনডম (একক প্যাক)"
+                    placeholder="Single product pack"
                     style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                   />
                 </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                    অফার মূল্য টেক্সট (Price Banner Text)
+                    Price banner text
                   </label>
                   <input
                     value={f.offerPriceText || ''}
                     onChange={(e) => setF((s: any) => ({ ...s, offerPriceText: e.target.value }))}
-                    placeholder="অফার মূল্য মাত্র ৯৯৯ টাকা"
+                    placeholder="Special price: ৳999"
                     style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                   />
                 </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                    ফ্রি ডেলিভারি টেক্সট (Free Delivery Note)
+                    Free delivery note
                   </label>
                   <input
                     value={f.freeDeliveryText || ''}
                     onChange={(e) => setF((s: any) => ({ ...s, freeDeliveryText: e.target.value }))}
-                    placeholder="(সারা বাংলাদেশে হোম ডেলিভারি সম্পূর্ণ ফ্রি!)"
+                    placeholder="Free home delivery nationwide"
                     style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                   />
                 </div>
@@ -11192,10 +11284,10 @@ function LandingsAdmin() {
                     checked={f.freeDelivery !== false}
                     onChange={(e) => setF((s: any) => ({ ...s, freeDelivery: e.target.checked }))}
                   />
-                  &nbsp; <strong>🚚 সারা বাংলাদেশে ফ্রি ডেলিভারি চালু রাখুন (Free Delivery Everywhere - ৳0 Delivery Charge)</strong>
+                  &nbsp; <strong>Enable free nationwide delivery (৳0 delivery charge)</strong>
                 </label>
                 <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4, paddingLeft: 22 }}>
-                  টিক দেওয়া থাকলে এই ল্যান্ডিং পেজ থেকে অর্ডারের সময় ডেলিভারি চার্জ সম্পূর্ণ ফ্রি (৳০) হিসেবে অর্ডার টেবিলে যুক্ত হবে।
+                  Orders from this landing page will have a ৳0 delivery charge when this option is enabled.
                 </div>
               </div>
             </div>
@@ -11207,9 +11299,9 @@ function LandingsAdmin() {
           <div className="sa-card" style={{ padding: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 16, color: '#f8fafc' }}>চেকআউট প্যাকেজ ও সাইজসমূহ (Selectable Packages)</h3>
+                <h3 style={{ margin: 0, fontSize: 16, color: '#f8fafc' }}>Checkout packages &amp; sizes</h3>
                 <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
-                  কাস্টমার অর্ডারের সময় এই প্যাকেজগুলো সিলেক্ট করতে পারবে
+                  Customers can select one of these packages when placing an order.
                 </div>
               </div>
               <button
@@ -11218,7 +11310,7 @@ function LandingsAdmin() {
                 onClick={() => {
                   const newPkg = {
                     id: 'pkg_' + Date.now().toString(36),
-                    title: 'নতুন প্যাকেজ / সাইজ',
+                    title: 'New package / size',
                     price: 999,
                     originalPrice: 1500,
                     image: '',
@@ -11227,7 +11319,7 @@ function LandingsAdmin() {
                   setF((s: any) => ({ ...s, packages: [...(s.packages || []), newPkg] }));
                 }}
               >
-                + নতুন প্যাকেজ যোগ করুন
+                + Add package
               </button>
             </div>
 
@@ -11247,8 +11339,8 @@ function LandingsAdmin() {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontWeight: 700, color: '#a78bfa' }}>প্যাকেজ #{idx + 1}</span>
-                      {pkg.popular && <span className="sa-badge b-ok">সর্বাধিক জনপ্রিয়</span>}
+                      <span style={{ fontWeight: 700, color: '#a78bfa' }}>Package #{idx + 1}</span>
+                      {pkg.popular && <span className="sa-badge b-ok">Popular</span>}
                     </div>
                     <button
                       type="button"
@@ -11260,14 +11352,14 @@ function LandingsAdmin() {
                         }));
                       }}
                     >
-                      🗑️ রিমুভ করুন
+                      Remove
                     </button>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
                     <div style={{ gridColumn: 'span 2' }}>
                       <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
-                        প্যাকেজের নাম ও বিবরণ (Title)
+                        Package name &amp; description
                       </label>
                       <input
                         value={pkg.title || ''}
@@ -11279,14 +11371,14 @@ function LandingsAdmin() {
                             return { ...s, packages: pkgs };
                           });
                         }}
-                        placeholder="যেমন: যাদের পেনিস ৪ ইঞ্চি থেকে ৫.৫ ইঞ্চি তাদের জন্য ৬.৭ দাম"
+                        placeholder="e.g. Starter skincare bundle"
                         style={{ width: '100%', padding: '8px 10px', background: '#100e1a', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6 }}
                       />
                     </div>
 
                     <div>
                       <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
-                        অফার মূল্য (৳ Price)
+                        Offer price (৳)
                       </label>
                       <input
                         type="number"
@@ -11306,7 +11398,7 @@ function LandingsAdmin() {
 
                     <div>
                       <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
-                        পূর্বের মূল্য (৳ Original Price)
+                        Original price (৳)
                       </label>
                       <input
                         type="number"
@@ -11338,14 +11430,14 @@ function LandingsAdmin() {
                             });
                           }}
                         />
-                        &nbsp; "সর্বাধিক জনপ্রিয়" ব্যাজ দিন
+                        &nbsp; Mark as popular
                       </label>
                     </div>
                   </div>
 
                   <div>
                     <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginBottom: 6 }}>
-                      প্যাকেজের ছবি (Package Photo)
+                      Package image
                     </label>
                     <div style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#100e1c', padding: 10, borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)' }}>
                       {pkg.image ? (
@@ -11368,7 +11460,7 @@ function LandingsAdmin() {
                             style={{ padding: '6px 14px', fontSize: 12, background: '#7c3aed', borderColor: '#7c3aed', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}
                             onClick={() => {
                               openMediaPicker(
-                                `প্যাকেজ #${idx + 1} (${pkg.title || 'প্যাকেজ'})`,
+                                `Package #${idx + 1} (${pkg.title || 'package'})`,
                                 pkg.image || '',
                                 (url) => {
                                   setF((s: any) => {
@@ -11380,11 +11472,11 @@ function LandingsAdmin() {
                               );
                             }}
                           >
-                            <span>🖼️ গ্যালারি / মিডিয়া লাইব্রেরি থেকে বেছে নিন</span>
+                            <span>Choose from media library</span>
                           </button>
 
                           <label className="sa-btn ghost" style={{ cursor: 'pointer', whiteSpace: 'nowrap', padding: '6px 12px', fontSize: 12 }}>
-                            {uploadingKey === `pkg_${idx}` ? 'আপলোড হচ্ছে...' : '📁 পিসি থেকে ফাইল আপলোড'}
+                            {uploadingKey === `pkg_${idx}` ? 'Uploading…' : 'Upload from computer'}
                             <input
                               type="file"
                               accept="image/*"
@@ -11417,7 +11509,7 @@ function LandingsAdmin() {
                                 });
                               }}
                             >
-                              ছবি সরান
+                              Remove image
                             </button>
                           )}
                         </div>
@@ -11432,7 +11524,7 @@ function LandingsAdmin() {
                               return { ...s, packages: pkgs };
                             });
                           }}
-                          placeholder="বা ছবির URL (যেমন: /landing/package-6-7.jpg)"
+                          placeholder="Or enter an image URL, e.g. /landing/package-6-7.jpg"
                           style={{ width: '100%', padding: '6px 10px', background: '#090812', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 5, fontSize: 11 }}
                         />
                       </div>
@@ -11442,7 +11534,7 @@ function LandingsAdmin() {
               ))}
 
               {(!f.packages || f.packages.length === 0) && (
-                <div className="sa-empty">কোনো প্যাকেজ এখনো যোগ করা হয়নি।</div>
+                <div className="sa-empty">No packages have been added yet.</div>
               )}
             </div>
           </div>
@@ -11453,9 +11545,9 @@ function LandingsAdmin() {
           <div className="sa-card" style={{ padding: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 16, color: '#f8fafc' }}>পণ্যের সুবিধাসমূহ (Key Benefits)</h3>
+                <h3 style={{ margin: 0, fontSize: 16, color: '#f8fafc' }}>Product Benefits</h3>
                 <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
-                  ল্যান্ডিং পেজে টিক চিহ্ন সহ প্রদর্শিত পয়েন্টসমূহ
+                  Points displayed with checkmarks on the landing page.
                 </div>
               </div>
               <button
@@ -11465,18 +11557,18 @@ function LandingsAdmin() {
                   setF((s: any) => ({ ...s, benefits: [...(s.benefits || []), ''] }));
                 }}
               >
-                + নতুন সুবিধা যোগ করুন
+                + Add Benefit
               </button>
             </div>
 
             <div style={{ marginBottom: 18 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                সেকশন শিরোনাম (Benefits Heading)
+                Section Heading (Benefits)
               </label>
               <input
                 value={f.benefitsHeading || ''}
                 onChange={(e) => setF((s: any) => ({ ...s, benefitsHeading: e.target.value }))}
-                placeholder="কেন নিবেন এই ম্যাজিক কনডম?"
+                placeholder="Why choose this product?"
                 style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
               />
             </div>
@@ -11495,7 +11587,7 @@ function LandingsAdmin() {
                         return { ...s, benefits: next };
                       });
                     }}
-                    placeholder={`সুবিধা পয়েন্ট #${idx + 1}`}
+                    placeholder={`Benefit #${idx + 1}`}
                     style={{ flex: 1, padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                   />
                   <button
@@ -11521,9 +11613,9 @@ function LandingsAdmin() {
           <div className="sa-card" style={{ padding: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 16, color: '#f8fafc' }}>ব্যবহারের নিয়মাবলী (Usage Instructions)</h3>
+                <h3 style={{ margin: 0, fontSize: 16, color: '#f8fafc' }}>Usage Instructions</h3>
                 <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
-                  ধাপ অনুসারে সঠিক ব্যবহারের নির্দেশিকা
+                  Step-by-step instructions for proper use.
                 </div>
               </div>
               <button
@@ -11533,18 +11625,18 @@ function LandingsAdmin() {
                   setF((s: any) => ({ ...s, usageSteps: [...(s.usageSteps || []), ''] }));
                 }}
               >
-                + নতুন ধাপ যোগ করুন
+                + Add Step
               </button>
             </div>
 
             <div style={{ marginBottom: 18 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                সেকশন শিরোনাম (Usage Heading)
+                Section Heading (Usage)
               </label>
               <input
                 value={f.usageHeading || ''}
                 onChange={(e) => setF((s: any) => ({ ...s, usageHeading: e.target.value }))}
-                placeholder="ব্যবহারের নিয়মাবলী :"
+                placeholder="Usage instructions"
                 style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
               />
             </div>
@@ -11565,7 +11657,7 @@ function LandingsAdmin() {
                         return { ...s, usageSteps: next };
                       });
                     }}
-                    placeholder={`ব্যবহারের ধাপ #${idx + 1}`}
+                    placeholder={`Step #${idx + 1}`}
                     style={{ flex: 1, padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                   />
                   <button
@@ -11586,11 +11678,11 @@ function LandingsAdmin() {
 
             <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.08)', margin: '20px 0' }} />
 
-            <h4 style={{ margin: '0 0 12px', fontSize: 14, color: '#f8fafc' }}>ব্যবহারের নির্দেশিকা ছবি ও ক্যাপশন</h4>
+            <h4 style={{ margin: '0 0 12px', fontSize: 14, color: '#f8fafc' }}>Usage Guide Image & Caption</h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  নির্দেশিকা ছবি (Usage Image)
+                  Instruction Image (Usage)
                 </label>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#100e1c', padding: 12, borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)' }}>
                   {f.usageImage ? (
@@ -11604,12 +11696,12 @@ function LandingsAdmin() {
                         type="button"
                         className="sa-btn primary"
                         style={{ padding: '7px 14px', fontSize: 12, background: '#7c3aed', borderColor: '#7c3aed', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                        onClick={() => openMediaPicker('ব্যবহারের নির্দেশিকা ছবি', f.usageImage || '', (url) => setF((s: any) => ({ ...s, usageImage: url })))}
+                        onClick={() => openMediaPicker('Usage guide Image', f.usageImage || '', (url) => setF((s: any) => ({ ...s, usageImage: url })))}
                       >
-                        <span>🖼️ গ্যালারি / মিডিয়া লাইব্রেরি থেকে বেছে নিন</span>
+                        <span>🖼️ Choose from Media Library</span>
                       </button>
                       <label className="sa-btn ghost" style={{ cursor: 'pointer', whiteSpace: 'nowrap', padding: '7px 12px', fontSize: 12 }}>
-                        {uploadingKey === 'usageImg' ? 'আপলোড হচ্ছে...' : '📁 পিসি থেকে ফাইল আপলোড'}
+                        {uploadingKey === 'usageImg' ? 'Uploading...' : '📁 Upload File'}
                         <input
                           type="file"
                           accept="image/*"
@@ -11622,14 +11714,14 @@ function LandingsAdmin() {
                       </label>
                       {f.usageImage && (
                         <button className="sa-link danger" type="button" onClick={() => setF((s: any) => ({ ...s, usageImage: '' }))} style={{ fontSize: 12 }}>
-                          ছবি সরান
+                          Remove Image
                         </button>
                       )}
                     </div>
                     <input
                       value={f.usageImage || ''}
                       onChange={(e) => setF((s: any) => ({ ...s, usageImage: e.target.value }))}
-                      placeholder="/landing/usage-guide.jpg বা ছবির লিংক"
+                      placeholder="/landing/usage-guide.jpg or image URL"
                       style={{ width: '100%', padding: '7px 10px', background: '#090812', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 5, fontSize: 11 }}
                     />
                   </div>
@@ -11638,12 +11730,12 @@ function LandingsAdmin() {
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  ছবির ক্যাপশন (Usage Image Caption)
+                  Image Caption (Usage)
                 </label>
                 <input
                   value={f.usageCaption || ''}
                   onChange={(e) => setF((s: any) => ({ ...s, usageCaption: e.target.value }))}
-                  placeholder="সহজ লক সিস্টেম — শতভাগ নিরাপদ ফিটিং"
+                  placeholder="Image caption"
                   style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                 />
               </div>
@@ -11656,9 +11748,9 @@ function LandingsAdmin() {
           <div className="sa-card" style={{ padding: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 16, color: '#f8fafc' }}>কাস্টমার রিভিউ ছবি সমূহ (Review Screenshots)</h3>
+                <h3 style={{ margin: 0, fontSize: 16, color: '#f8fafc' }}>Customer Review Images (Screenshots)</h3>
                 <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
-                  হোয়াটসঅ্যাপ বা ইনবক্স রিভিউ স্ক্রিনশট গ্যালারি
+                  Gallery of WhatsApp or inbox review screenshots.
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -11667,15 +11759,15 @@ function LandingsAdmin() {
                   className="sa-btn primary"
                   style={{ background: '#7c3aed', borderColor: '#7c3aed', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}
                   onClick={() => {
-                    openMediaPicker('নতুন রিভিউ ছবি', '', (url) => {
+                    openMediaPicker('New Review Image', '', (url) => {
                       setF((s: any) => ({ ...s, reviews: [...(s.reviews || []), url] }));
                     });
                   }}
                 >
-                  <span>🖼️ মিডিয়া লাইব্রেরি থেকে যোগ করুন</span>
+                  <span>🖼️ Add from Media Library</span>
                 </button>
                 <label className="sa-btn ghost" style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  {uploadingKey === 'newReview' ? 'আপলোড হচ্ছে...' : '📁 পিসি থেকে নতুন আপলোড'}
+                  {uploadingKey === 'newReview' ? 'Uploading...' : '📁 Upload New Image'}
                   <input
                     type="file"
                     accept="image/*"
@@ -11696,24 +11788,24 @@ function LandingsAdmin() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 20 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  রিভিউ ব্যাজ টেক্সট (Reviews Badge)
+                  Review Badge Text
                 </label>
                 <input
                   value={f.reviewsBadge || ''}
                   onChange={(e) => setF((s: any) => ({ ...s, reviewsBadge: e.target.value }))}
-                  placeholder="১,৪০০+ ভেরিফায়েড ক্রেতার সন্তুষ্টি"
+                  placeholder="Verified customer badge"
                   style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                 />
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  রিভিউ সেকশন শিরোনাম (Reviews Title)
+                  Review Section Title
                 </label>
                 <input
                   value={f.reviewsTitle || ''}
                   onChange={(e) => setF((s: any) => ({ ...s, reviewsTitle: e.target.value }))}
-                  placeholder="বাস্তব কাস্টমার অভিজ্ঞতা ও রিভিউ"
+                  placeholder="Customer reviews heading"
                   style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                 />
               </div>
@@ -11745,7 +11837,7 @@ function LandingsAdmin() {
                         className="sa-link"
                         style={{ fontSize: 11, color: '#a78bfa' }}
                         onClick={() => {
-                          openMediaPicker(`রিভিউ #${idx + 1}`, revUrl, (url) => {
+                          openMediaPicker(`Review #${idx + 1}`, revUrl, (url) => {
                             setF((s: any) => {
                               const revs = [...(s.reviews || [])];
                               revs[idx] = url;
@@ -11754,7 +11846,7 @@ function LandingsAdmin() {
                           });
                         }}
                       >
-                        বদলান
+                        Change
                       </button>
                       <button
                         type="button"
@@ -11767,7 +11859,7 @@ function LandingsAdmin() {
                           }));
                         }}
                       >
-                        মুছুন
+                        Remove
                       </button>
                     </div>
                   </div>
@@ -11780,29 +11872,29 @@ function LandingsAdmin() {
         {/* TAB 8: GUARANTEE & CONTACT */}
         {tab === 'guarantee' && (
           <div className="sa-card" style={{ padding: 24 }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: 16, color: '#f8fafc' }}>গ্যারান্টি পলিসি ও জরুরি যোগাযোগ</h3>
+            <h3 style={{ margin: '0 0 16px', fontSize: 16, color: '#f8fafc' }}>Guarantee Policy & Contact</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  গ্যারান্টি ব্যাজ (Guarantee Badge Heading)
+                  Guarantee Badge Heading
                 </label>
                 <input
                   value={f.guaranteeBadge || ''}
                   onChange={(e) => setF((s: any) => ({ ...s, guaranteeBadge: e.target.value }))}
-                  placeholder="শতভাগ সন্তুষ্টি ও নিশ্চিন্ত ক্রয়ের অঙ্গীকার"
+                  placeholder="Guarantee badge heading"
                   style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                 />
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  রিটার্ন পলিসি ও গ্যারান্টি বিবরণ (Guarantee Full Text)
+                  Return Policy & Guarantee Details
                 </label>
                 <textarea
                   rows={4}
                   value={f.guaranteeText || ''}
                   onChange={(e) => setF((s: any) => ({ ...s, guaranteeText: e.target.value }))}
-                  placeholder="আমাদের প্রদর্শিত পণ্যের সাথে প্রাপ্ত পণ্যের মিল না থাকলে এক টাকাও দিতে হবে না..."
+                  placeholder="Describe your return and guarantee policy..."
                   style={{ width: '100%', padding: '10px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, lineHeight: 1.5 }}
                 />
               </div>
@@ -11810,7 +11902,7 @@ function LandingsAdmin() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                    📞 সরাসরি ফোন নম্বর (Direct Call Phone Number)
+                    📞 Direct Call Phone Number
                   </label>
                   <input
                     value={f.phone || ''}
@@ -11819,14 +11911,14 @@ function LandingsAdmin() {
                     style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                   />
                   <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-                    ল্যান্ডিং পেজের "সরাসরি কল করতে পারেন" বাটনে এই নম্বরে কল যাবে।
+                    This number will be called from the landing page direct call button.
                   </div>
                 </div>
 
                 <div>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
                     <WhatsAppIcon size={16} variant="official" />
-                    <span>হোয়াটসঅ্যাপ নম্বর (WhatsApp Number with Country Code)</span>
+                    <span>WhatsApp Number (with Country Code)</span>
                   </label>
                   <input
                     value={f.whatsapp || ''}
@@ -11835,7 +11927,7 @@ function LandingsAdmin() {
                     style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                   />
                   <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-                    কান্ট্রি কোড সহ (যেমন 8801...) দিলে সরাসরি WhatsApp চ্যাটে যাবে।
+                    Include the country code (e.g. 8801...) to link directly to WhatsApp chat.
                   </div>
                 </div>
               </div>
@@ -11846,7 +11938,7 @@ function LandingsAdmin() {
         {/* Bottom Save Bar */}
         <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end', gap: 12, alignItems: 'center' }}>
           <button className="sa-btn ghost" onClick={() => { setEditItem(null); load(); }}>
-            বাতিল (Cancel)
+            Cancel
           </button>
           <button
             className="sa-btn primary"
@@ -11854,7 +11946,7 @@ function LandingsAdmin() {
             disabled={saving}
             style={{ minWidth: 160, fontWeight: 600, background: '#8b5cf6', borderColor: '#8b5cf6' }}
           >
-            {saving ? 'সংরক্ষণ হচ্ছে...' : '💾 সেভ করুন (Save Changes)'}
+            {saving ? 'Saving...' : '💾 Save Changes'}
           </button>
         </div>
 
@@ -11896,10 +11988,10 @@ function LandingsAdmin() {
                 <div>
                   <h3 style={{ margin: 0, fontSize: 17, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span>🖼️</span>
-                    <span>মিডিয়া লাইব্রেরি থেকে ছবি সিলেক্ট করুন</span>
+                    <span>Select an Image from the Media Library</span>
                   </h3>
                   <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
-                    <strong>{mediaPickerTarget.title}</strong> এর জন্য ছবি বেছে নিন
+                    <strong>{mediaPickerTarget.title}</strong> — Choose an image for this field
                   </div>
                 </div>
                 <button
@@ -11917,12 +12009,12 @@ function LandingsAdmin() {
                   <input
                     value={mediaSearch}
                     onChange={(e) => setMediaSearch(e.target.value)}
-                    placeholder="🔍 ছবির নাম দিয়ে ফিল্টার করুন (Filter images)..."
+                    placeholder="🔍 Filter images by name..."
                     style={{ width: '100%', padding: '8px 12px', background: '#0e0c18', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 13 }}
                   />
                 </div>
                 <label className="sa-btn primary" style={{ cursor: 'pointer', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6, background: '#7c3aed', borderColor: '#7c3aed' }}>
-                  <span>📁 পিসি থেকে নতুন আপলোড</span>
+                  <span>📁 Upload New Image</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -11944,18 +12036,18 @@ function LandingsAdmin() {
                   onClick={loadMediaLibrary}
                   style={{ padding: '8px 12px' }}
                 >
-                  🔄 রিফ্রেশ
+                  🔄 Refresh
                 </button>
               </div>
 
               {/* Gallery Grid */}
               <div style={{ flex: 1, overflowY: 'auto', padding: 20, minHeight: 320, maxHeight: '55vh' }}>
-                {mediaLoading && <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>ছবি লোড হচ্ছে...</div>}
+                {mediaLoading && <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>Loading images...</div>}
 
                 {!mediaLoading && (
                   <>
                     <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>
-                      মোট {filteredMedia.length} টি ছবি পাওয়া গেছে (সিলেক্ট করতে যেকোনো ছবির উপর ক্লিক করুন):
+                      {filteredMedia.length} images found. Click an image to select it:
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 14 }}>
                       {filteredMedia.map((m: any, idx: number) => {
@@ -12005,18 +12097,18 @@ function LandingsAdmin() {
                     <>
                       <img src={selectedModalImg} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6, border: '1px solid #a855f7' }} />
                       <div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>সিলেক্টেড ছবি:</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>Selected Image:</div>
                         <div style={{ fontSize: 11, color: '#94a3b8', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedModalImg}</div>
                       </div>
                     </>
                   ) : (
-                    <div style={{ fontSize: 12, color: '#94a3b8' }}>যেকোনো একটি ছবি সিলেক্ট করুন</div>
+                    <div style={{ fontSize: 12, color: '#94a3b8' }}>Select an image to continue.</div>
                   )}
                 </div>
 
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button type="button" className="sa-btn ghost" onClick={() => setMediaPickerTarget(null)}>
-                    বাতিল (Cancel)
+                    Cancel
                   </button>
                   <button
                     type="button"
@@ -12030,7 +12122,7 @@ function LandingsAdmin() {
                     }}
                     style={{ background: '#8b5cf6', borderColor: '#8b5cf6', fontWeight: 600, minWidth: 140 }}
                   >
-                    ✓ সিলেক্ট করুন (Apply)
+                    ✓ Apply Selection
                   </button>
                 </div>
               </div>
@@ -12048,10 +12140,10 @@ function LandingsAdmin() {
         <div>
           <h1 style={{ margin: 0, fontSize: 22, display: 'flex', alignItems: 'center', gap: 10 }}>
             <span>🎯</span>
-            <span>Landing Pages (ল্যান্ডিং পেজসমূহ)</span>
+            <span>Landing Pages</span>
           </h1>
           <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
-            উচ্চ কনভার্সন যুক্ত একক প্রোডাক্টের ল্যান্ডিং পেজ তৈরি ও সম্পূর্ণ নিয়ন্ত্রণ করুন
+            Create and manage high-converting, single-product landing pages.
           </div>
         </div>
         <button
@@ -12059,23 +12151,23 @@ function LandingsAdmin() {
           onClick={createNewLanding}
           style={{ background: '#8b5cf6', borderColor: '#8b5cf6', fontWeight: 600 }}
         >
-          + নতুন ল্যান্ডিং পেজ তৈরি করুন
+          + Create Landing Page
         </button>
       </div>
 
-      {loading && <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>লোড হচ্ছে...</div>}
+      {loading && <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Loading...</div>}
 
       {!loading && (
         <div className="sa-card" style={{ marginTop: 16 }}>
           <table className="sa-table">
             <thead>
               <tr>
-                <th style={{ width: 60 }}>ছবি</th>
-                <th>শিরোনাম ও স্ল্যাগ</th>
-                <th>লাইভ লিংকসমূহ</th>
-                <th>প্যাকেজ</th>
-                <th>স্ট্যাটাস</th>
-                <th className="r">অ্যাকশন</th>
+                <th style={{ width: 60 }}>Image</th>
+                <th>Title & Slug</th>
+                <th>Live Links</th>
+                <th>Packages</th>
+                <th>Status</th>
+                <th className="r">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -12137,7 +12229,7 @@ function LandingsAdmin() {
                   </td>
                   <td>
                     <div style={{ fontSize: 13, color: '#e2e8f0' }}>
-                      {(item.packages || []).length} টি প্যাকেজ
+                      {(item.packages || []).length}  packages
                     </div>
                     <div style={{ fontSize: 11, color: '#22c55e', fontWeight: 600 }}>
                       {item.offerPriceText || '৳ ৯৯৯'}
@@ -12173,7 +12265,7 @@ function LandingsAdmin() {
           </table>
           {list.length === 0 && (
             <div className="sa-empty" style={{ padding: 40, textAlign: 'center' }}>
-              কোনো ল্যান্ডিং পেজ পাওয়া যায়নি। নতুন একটি তৈরি করতে উপরের বাটনে চাপুন।
+              No landing pages found. Use the button above to create one.
             </div>
           )}
         </div>
