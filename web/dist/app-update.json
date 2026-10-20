@@ -1,7 +1,7 @@
 {
-  "versionCode": 4,
-  "versionName": "2.2.0",
-  "apkUrl": "https://raw.githubusercontent.com/metroomaa-cell/metromaa/codex/premium-commerce-refresh/web/dist/ShakilEcom.apk",
-  "sha256": "b46560ff4e5a6ebbd14266dddd51b0c8c89135ab2a630c752e5e5dfbddc6db61",
-  "releaseNotes": "Automatic app updates are now available. Future releases will be offered here."
+  "versionName": "2.4.0",
+  "releaseNotes": "Secure per-account sign-in, email OTP, server-enforced staff roles, and full website admin access. Android will ask you to confirm the install.",
+  "versionCode": 6,
+  "sha256": "c2c26289053fbba67a91d64bd40555de3b8104a1407f68d5c0649b8c6dc91de6",
+  "apkUrl": "https://raw.githubusercontent.com/metroomaa-cell/metromaa/main/web/dist/ShakilEcom.apk"
 }
