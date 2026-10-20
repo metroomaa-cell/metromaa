@@ -7151,6 +7151,8 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
 
 function SettingsAdmin() {
   const [f, setF] = useState<any>(null);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsLoadError, setSettingsLoadError] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState<'brand' | 'slider' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend'>('brand');
@@ -7176,15 +7178,30 @@ function SettingsAdmin() {
   const [pickerTarget, setPickerTarget] = useState<{ title: string; currentImg: string; onSelect: (url: string) => void } | null>(null);
 
   useEffect(() => {
-    fetch('/api/settings').then((r) => r.json()).then((s) => {
+    fetch('/api/settings').then(async (r) => {
+      if (!r.ok) throw new Error(`Settings request failed (${r.status})`);
+      return r.json();
+    }).then((s) => {
+      if (!s || typeof s !== 'object' || Array.isArray(s)) {
+        throw new Error('Settings response was empty or invalid.');
+      }
+      const siteContent = s.siteContent && typeof s.siteContent === 'object' && !Array.isArray(s.siteContent)
+        ? s.siteContent
+        : {};
       setF({
         ...s,
         logo: s.logo || '',
         favicon: s.favicon || '',
         sliders: Array.isArray(s.sliders) ? s.sliders : [],
-        siteContent: s.siteContent || { sections: {}, textOverrides: {} },
+        siteContent: {
+          ...siteContent,
+          sections: siteContent.sections && typeof siteContent.sections === 'object' && !Array.isArray(siteContent.sections) ? siteContent.sections : {},
+          textOverrides: siteContent.textOverrides && typeof siteContent.textOverrides === 'object' && !Array.isArray(siteContent.textOverrides) ? siteContent.textOverrides : {},
+        },
       });
-    }).catch(() => {});
+    }).catch((error) => {
+      setSettingsLoadError(error?.message || 'Could not load settings.');
+    }).finally(() => setSettingsLoading(false));
   }, []);
 
   const set = (k: string) => (e: any) => setF((s: any) => ({ ...s, [k]: e.target.value }));
@@ -7278,8 +7295,8 @@ function SettingsAdmin() {
     faqs[index] = { ...(faqs[index] || {}), [key]: value };
     return { ...current, homeContent: { ...(current.homeContent || {}), [lang]: { ...(current.homeContent?.[lang] || {}), faqs } } };
   });
-  const siteSections = f.siteContent?.sections || {};
-  const textOverrides = f.siteContent?.textOverrides || {};
+  const siteSections = f?.siteContent?.sections || {};
+  const textOverrides = f?.siteContent?.textOverrides || {};
   const editTextOverride = (lang: 'en' | 'bn', value: string) => setF((current: any) => ({
     ...current,
     siteContent: {
@@ -7358,7 +7375,14 @@ function SettingsAdmin() {
     setEditingSlideIdx(null);
   };
 
-  if (!f) return <div className="sa-top"><h1>Settings</h1></div>;
+  if (!f) return (
+    <div className="sa-top">
+      <h1>Settings</h1>
+      <span style={{ fontSize: 12, color: '#94a3b8' }}>
+        {settingsLoading ? 'Loading settings…' : settingsLoadError || 'Settings are unavailable.'}
+      </span>
+    </div>
+  );
 
   return (
     <>
