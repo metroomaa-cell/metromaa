@@ -9,7 +9,7 @@ import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns';
 try { dns.setDefaultResultOrder('ipv4first'); } catch {}
-import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, saveCustomer, syncCustomersFromOrders, initStorageProtection } from './store.js';
+import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, saveColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, saveCustomer, syncCustomersFromOrders, initStorageProtection, getPersistentDataDirectory } from './store.js';
 import { getWhatsAppSettings, saveWhatsAppSettings, sendWhatsAppNotification, formatWhatsAppMessage } from './whatsapp_engine.js';
 import { startWhatsAppSocket, getWhatsAppLiveStatus, requestPairingCode, sendBaileysMessage } from './whatsapp_baileys.js';
 
@@ -48,6 +48,32 @@ if (!existsSync(UPLOADS)) mkdirSync(UPLOADS, { recursive: true });
 if (!existsSync(PERSISTENT_UPLOADS)) mkdirSync(PERSISTENT_UPLOADS, { recursive: true });
 if (!existsSync(ROOT_UPLOADS)) mkdirSync(ROOT_UPLOADS, { recursive: true });
 
+const UPLOAD_DIRS = { app: UPLOADS, persistent: PERSISTENT_UPLOADS, root: ROOT_UPLOADS };
+function collectBackupMedia() {
+  const media = [];
+  for (const [location, dir] of Object.entries(UPLOAD_DIRS)) {
+    for (const name of readdirSync(dir)) {
+      if (!name || name.startsWith('.')) continue;
+      const path = join(dir, name);
+      try {
+        if (!statSync(path).isFile()) continue;
+        media.push({ location, name, data: readFileSync(path).toString('base64') });
+      } catch {}
+    }
+  }
+  return media;
+}
+
+function createStoreBackup() {
+  return {
+    format: 'metrroma-store-backup', version: '3.0', exportedAt: new Date().toISOString(),
+    store: getSettings().storeName || 'Store', orders: getOrders(), customers: getCustomers(),
+    catalog: getCatalog(), settings: getSettings(), integrations: getIntegrations(),
+    landings: getLandings(), coupons: getCoupons(), reviews: getReviews(), colors: getColors(),
+    users: getUsers(), media: collectBackupMedia(),
+  };
+}
+
 const staticUploadOptions = {
   maxAge: '30d',
   setHeaders: (res) => {
@@ -63,7 +89,6 @@ const withFlags = (p) => ({ ...p, soldOut: !!p.soldOut || (p.stock != null && p.
 const BD_PHONE = /^01[3-9]\d{8}$/;
 
 // ---- incomplete / abandoned checkout capture (order appears after a valid checkout is started but not placed) ----
-const INCOMPLETE_DELAY = 90 * 1000; // 90 seconds
 const draftTimers = new Map(); // phone -> { timer, data }
 function cancelDraft(phone) {
   if (!phone) return;
@@ -269,12 +294,14 @@ app.post('/api/checkout/ping', (req, res) => {
     return res.json({ ok: true }); // refresh data while timer is running
   }
 
+  const configuredDelayMinutes = Number(getWhatsAppSettings().triggers?.incomplete?.delayMinutes);
+  const incompleteDelayMs = Math.max(1, Math.min(120, Number.isFinite(configuredDelayMinutes) && configuredDelayMinutes ? configuredDelayMinutes : 2)) * 60 * 1000;
   const entry = { data };
   entry.timer = setTimeout(() => {
     draftTimers.delete(cleanPhone);
     try {
       // 1. If customer completed an actual order within the last 5 minutes, do not capture as abandoned
-      const realOrder = getOrders().find((o) => o.status !== 'incomplete' && o.customer && String(o.customer.phone).replace(/\D/g, '').slice(-11) === cleanPhone && Date.now() - new Date(o.createdAt).getTime() < INCOMPLETE_DELAY + 240000);
+      const realOrder = getOrders().find((o) => o.status !== 'incomplete' && o.customer && String(o.customer.phone).replace(/\D/g, '').slice(-11) === cleanPhone && Date.now() - new Date(o.createdAt).getTime() < incompleteDelayMs + 240000);
       if (realOrder) return;
 
       const draft = buildDraftOrder(entry.data);
@@ -299,7 +326,7 @@ app.post('/api/checkout/ping', (req, res) => {
     } catch (err) {
       console.error('[DraftCapture] Error capturing incomplete order:', err.message);
     }
-  }, INCOMPLETE_DELAY);
+  }, incompleteDelayMs);
 
   draftTimers.set(cleanPhone, entry);
   res.json({ ok: true });
@@ -326,6 +353,21 @@ app.put('/api/settings', adminAuth, requireRole('owner', 'manager'), (req, res) 
   const b = req.body || {};
   const num = (v, d) => { const n = parseInt(v, 10); return isNaN(n) ? d : Math.max(0, n); };
   const cur = getSettings();
+  const homeContentKeys = ['collectionEyebrow', 'collectionTitle', 'collectionDescription', 'introTitle', 'introDescription', 'featuredEyebrow', 'featuredTitle', 'featuredDescription', 'newsletterEyebrow', 'newsletterTitle', 'newsletterDescription'];
+  const homeContent = { en: { ...(cur.homeContent?.en || {}) }, bn: { ...(cur.homeContent?.bn || {}) } };
+  for (const lang of ['en', 'bn']) {
+    const incoming = b.homeContent?.[lang];
+    if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) continue;
+    for (const key of homeContentKeys) {
+      if (typeof incoming[key] === 'string') homeContent[lang][key] = incoming[key].trim().slice(0, 900);
+    }
+    if (Array.isArray(incoming.faqs)) {
+      homeContent[lang].faqs = incoming.faqs.slice(0, 8).map((faq) => ({
+        q: typeof faq?.q === 'string' ? faq.q.trim().slice(0, 240) : '',
+        a: typeof faq?.a === 'string' ? faq.a.trim().slice(0, 900) : '',
+      }));
+    }
+  }
   const curFd = cur.fraudDetector || {};
   let fraudDetector = curFd;
   if (b.fraudDetector && typeof b.fraudDetector === 'object') {
@@ -354,6 +396,20 @@ app.put('/api/settings', adminAuth, requireRole('owner', 'manager'), (req, res) 
     fbPixelId: typeof b.fbPixelId === 'string' ? b.fbPixelId.trim().slice(0, 30) : cur.fbPixelId,
     logo: typeof b.logo === 'string' ? b.logo.trim() : (cur.logo || ''),
     favicon: typeof b.favicon === 'string' ? b.favicon.trim() : (cur.favicon || ''),
+    appearance: (() => {
+      const a = b.appearance && typeof b.appearance === 'object' ? b.appearance : cur.appearance || {};
+      const fonts = ['Inter', 'Anek Bangla', 'Hind Siliguri', 'Playfair Display', 'Cormorant Garamond'];
+      const fit = ['contain', 'cover'];
+      const accent = /^#[0-9a-f]{6}$/i.test(a.accent || '') ? a.accent : (cur.appearance?.accent || '#b48e4c');
+      return {
+        font: fonts.includes(a.font) ? a.font : (cur.appearance?.font || 'Inter'),
+        accent,
+        desktopColumns: [2, 3, 4].includes(Number(a.desktopColumns)) ? Number(a.desktopColumns) : (cur.appearance?.desktopColumns || 4),
+        mobileColumns: [1, 2].includes(Number(a.mobileColumns)) ? Number(a.mobileColumns) : (cur.appearance?.mobileColumns || 2),
+        imageFit: fit.includes(a.imageFit) ? a.imageFit : (cur.appearance?.imageFit || 'contain'),
+      };
+    })(),
+    homeContent,
     sliders: Array.isArray(b.sliders) ? b.sliders : (cur.sliders || []),
     fraudDetector,
   }));
@@ -1516,7 +1572,7 @@ function normalizeProduct(b) {
     slug: slugify(b.slug || name),
     price: Math.max(0, parseInt(b.price, 10) || 0),
     compareAt: Math.max(0, parseInt(b.compareAt, 10) || 0),
-    category: String(b.category || '').trim() || 'skincare',
+    category: String(b.category || '').trim(),
     adult: !!b.adult,
     tag: String(b.tag || '').trim(),
     desc: String(b.desc || '').trim(),
@@ -1731,6 +1787,7 @@ app.post('/api/products', adminAuth, requireRole('owner', 'manager'), (req, res)
   const p = normalizeProduct(req.body);
   if (!p.name) return res.status(400).json({ error: 'product name is required' });
   if (!p.price) return res.status(400).json({ error: 'price must be greater than 0' });
+  if (!p.category || !getCatalog().categories.some((category) => category.slug === p.category)) return res.status(400).json({ error: 'Select a category created in Category Management.' });
   p.id = 'p' + Date.now().toString(36);
   addProduct(p);
   res.status(201).json(p);
@@ -1739,6 +1796,8 @@ app.post('/api/products', adminAuth, requireRole('owner', 'manager'), (req, res)
 app.put('/api/products/:id', adminAuth, requireRole('owner', 'manager'), (req, res) => {
   const p = normalizeProduct(req.body);
   if (!p.name) return res.status(400).json({ error: 'product name is required' });
+  const existingProduct = getCatalog().products.find((product) => product.id === req.params.id);
+  if (p.category && p.category !== existingProduct?.category && !getCatalog().categories.some((category) => category.slug === p.category)) return res.status(400).json({ error: 'Select a category created in Category Management.' });
   const o = updateProduct(req.params.id, p);
   if (!o) return res.status(404).json({ error: 'not found' });
   res.json(o);
@@ -1813,9 +1872,20 @@ app.delete('/api/coupons/:code', adminAuth, requireRole('owner', 'manager'), (re
   res.json({ ok: true });
 });
 app.get('/api/reviews/:pid', (req, res) => {
-  const list = getReviews()[req.params.pid] || [];
+  const list = (getReviews()[req.params.pid] || []).filter((review) => !review.status || review.status === 'approved');
   const avg = list.length ? list.reduce((s, r) => s + r.rating, 0) / list.length : 0;
   res.json({ count: list.length, avg: Math.round(avg * 10) / 10, reviews: list });
+});
+app.get('/api/admin/reviews', adminAuth, (req, res) => {
+  const all = getReviews();
+  const reviews = Object.entries(all).flatMap(([productId, list]) =>
+    (Array.isArray(list) ? list : []).map((review) => ({
+      ...review,
+      productId,
+      status: review.status || 'approved',
+    }))
+  ).sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime());
+  res.json({ reviews });
 });
 app.post('/api/reviews', (req, res) => {
   const b = req.body || {};
@@ -1825,9 +1895,21 @@ app.post('/api/reviews', (req, res) => {
   const text = String(b.text || '').trim().slice(0, 500);
   if (!pid || !rating || !name) return res.status(400).json({ error: 'name and rating required' });
   const all = getReviews(); const list = all[pid] || [];
-  list.unshift({ id: randomUUID().slice(0, 8), name, rating, text, at: new Date().toISOString() });
+  list.unshift({ id: randomUUID().slice(0, 8), name, rating, text, at: new Date().toISOString(), status: 'pending' });
   all[pid] = list; saveReviews(all);
-  res.status(201).json({ ok: true });
+  res.status(201).json({ ok: true, status: 'pending' });
+});
+app.patch('/api/admin/reviews/:pid/:id', adminAuth, (req, res) => {
+  const status = String(req.body?.status || '');
+  if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'status must be approved or rejected' });
+  const all = getReviews();
+  const list = all[req.params.pid] || [];
+  const review = list.find((item) => item.id === req.params.id);
+  if (!review) return res.status(404).json({ error: 'review not found' });
+  review.status = status;
+  all[req.params.pid] = list;
+  saveReviews(all);
+  res.json({ ok: true, status });
 });
 app.delete('/api/reviews/:pid/:id', adminAuth, (req, res) => {
   const all = getReviews(); all[req.params.pid] = (all[req.params.pid] || []).filter((r) => r.id !== req.params.id); saveReviews(all); res.json({ ok: true });
@@ -3446,22 +3528,9 @@ app.post('/api/admin/courier/bulk-book', adminAuth, async (req, res) => {
 // ==========================================
 // 2. DEDICATED STORE BACKUP & RESTORE
 // ==========================================
-app.get('/api/admin/backup/export', adminAuth, (req, res) => {
+app.get('/api/admin/backup/export', adminAuth, requireRole('owner'), (req, res) => {
   try {
-    const backupData = {
-      version: '2.5',
-      exportedAt: new Date().toISOString(),
-      store: getSettings().storeName || 'Store',
-      orders: getOrders(),
-      customers: getCustomers(),
-      catalog: getCatalog(),
-      settings: getSettings(),
-      integrations: getIntegrations(),
-      landings: getLandings(),
-      coupons: getCoupons(),
-      colors: getColors(),
-      users: getUsers().map((u) => ({ username: u.username, name: u.name, role: u.role, email: u.email })),
-    };
+    const backupData = createStoreBackup();
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename="store_backup_${new Date().toISOString().slice(0, 10)}.json"`);
     res.json(backupData);
@@ -3470,12 +3539,24 @@ app.get('/api/admin/backup/export', adminAuth, (req, res) => {
   }
 });
 
-app.post('/api/admin/backup/restore', adminAuth, (req, res) => {
+app.post('/api/admin/backup/restore', adminAuth, requireRole('owner'), (req, res) => {
   try {
     const payload = req.body;
-    if (!payload || typeof payload !== 'object') {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       return res.status(400).json({ error: 'Invalid backup file structure' });
     }
+    if (payload.format && payload.format !== 'metrroma-store-backup') {
+      return res.status(400).json({ error: 'This backup belongs to a different application.' });
+    }
+    if (payload.media != null && (!Array.isArray(payload.media) || payload.media.some((m) => !m || !['app', 'persistent', 'root'].includes(m.location) || typeof m.name !== 'string' || m.name !== m.name.split(/[\\/]/).pop() || !/^[\w.-]+$/.test(m.name) || typeof m.data !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(m.data)))) {
+      return res.status(400).json({ error: 'Backup contains an invalid media file entry.' });
+    }
+    // Preserve the exact current state before applying any part of a restore.
+    const backupDir = join(getPersistentDataDirectory(), 'backups');
+    mkdirSync(backupDir, { recursive: true });
+    const beforeRestore = createStoreBackup();
+    const snapshotFile = join(backupDir, `pre-restore-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+    writeFileSync(snapshotFile, JSON.stringify(beforeRestore, null, 2), { flag: 'wx' });
     const counts = {};
 
     if (Array.isArray(payload.orders)) {
@@ -3507,8 +3588,28 @@ app.post('/api/admin/backup/restore', adminAuth, (req, res) => {
       saveCoupons(payload.coupons);
       counts.coupons = payload.coupons.length;
     }
+    if (Array.isArray(payload.colors)) {
+      saveColors(payload.colors);
+      counts.colors = payload.colors.length;
+    }
+    if (Array.isArray(payload.users)) {
+      saveUsers(payload.users);
+      counts.users = payload.users.length;
+    }
+    if (payload.reviews && typeof payload.reviews === 'object' && !Array.isArray(payload.reviews)) {
+      saveReviews(payload.reviews);
+      counts.reviews = Object.keys(payload.reviews).length;
+    }
+    if (Array.isArray(payload.media)) {
+      for (const item of payload.media) {
+        const target = join(UPLOAD_DIRS[item.location], item.name);
+        const bytes = Buffer.from(item.data, 'base64');
+        writeFileSync(target, bytes);
+      }
+      counts.media = payload.media.length;
+    }
 
-    res.json({ ok: true, message: 'Store restored successfully', counts });
+    res.json({ ok: true, message: 'Store restored successfully', counts, preRestoreSnapshot: snapshotFile.split(/[\\/]/).pop() });
   } catch (err) {
     res.status(500).json({ error: 'Restore failed: ' + err.message });
   }

@@ -70,6 +70,8 @@ export type Settings = {
   phone: string;
   gtmId?: string;
   fbPixelId?: string;
+  appearance?: { font?: string; accent?: string; desktopColumns?: number; mobileColumns?: number; imageFit?: 'contain' | 'cover' };
+  homeContent?: Record<'en' | 'bn', Record<string, any>>;
   fraudDetector?: FraudDetectorSettings;
 };
 export const getSettings = (): Promise<Settings> => fetch('/api/settings').then(j);

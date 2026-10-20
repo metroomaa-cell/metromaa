@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import qrcode from 'qrcode-generator';
-import { Html5Qrcode } from 'html5-qrcode';
 import './admin.css';
 import { taka, getCategories, fetchMasterColors, createMasterColor, deleteMasterColor, type MasterColor } from './api';
 import { WhatsAppIcon } from './icons';
@@ -823,7 +822,8 @@ export function Admin() {
   const role = me?.role || 'owner';
   const allowed = role === 'staff' ? ['dashboard', 'orders', 'scanner', 'customers']
     : role === 'manager' ? ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'customers', 'products', 'categories', 'landings', 'media', 'coupons', 'fraud', 'integrations', 'settings']
-      : ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'backup', 'customers', 'products', 'categories', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings'];
+      : ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'backup', 'customers', 'products', 'categories', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings'];
+  if (role === 'manager' && !allowed.includes('reviews')) allowed.push('reviews');
   const cur = allowed.includes(nav) ? nav : 'dashboard';
   const newOrders = cur === 'orders' || lastSeen == null || orderTotal == null ? 0 : Math.max(0, orderTotal - lastSeen);
   const item = (id: string, icon: any, label: string, badge?: number) => allowed.includes(id) && (!navq || label.toLowerCase().includes(navq.toLowerCase()))
@@ -908,6 +908,7 @@ export function Admin() {
           {item('customers', I.customers, 'Customers')}
           {item('products', I.products, 'Products')}
           {item('categories', I.categories, 'Categories')}
+          {item('reviews', I.customers, 'Product Reviews')}
           {item('colors', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><circle cx="12" cy="12" r="10"/><path d="M12 2a7 7 0 0 0-7 7c0 3 2 4.5 4 4.5 1 0 2 1 2 2 0 1.5-1 2.5-1 4.5a2 2 0 0 0 2 2 10 10 0 0 0 0-20z"/></svg>, 'Color Palette')}
           {item('landings', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>, 'Landing Pages')}
           {item('media', I.media, 'Media')}
@@ -933,6 +934,7 @@ export function Admin() {
         {cur === 'customers' && <CustomersAdmin />}
         {cur === 'products' && <ProductsAdmin />}
         {cur === 'categories' && <CategoriesAdmin />}
+        {cur === 'reviews' && <ProductReviewsAdmin />}
         {cur === 'colors' && <ColorsAdmin />}
         {cur === 'landings' && <LandingsAdmin />}
         {cur === 'media' && <MediaAdmin />}
@@ -4798,8 +4800,8 @@ function ProductsAdmin() {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="sa-toolbar" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 1, minWidth: 280, flexWrap: 'wrap' }}>
+      <div className="sa-toolbar sa-products-toolbar" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div className="sa-products-filter-main" style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 1, minWidth: 280, flexWrap: 'wrap' }}>
           <div style={{ position: 'relative', flex: '1 1 240px', maxWidth: 360 }}>
             <input
               className="sa-search"
@@ -4813,7 +4815,7 @@ function ProductsAdmin() {
             </span>
           </div>
 
-          <div className="sa-filters" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          <div className="sa-filters sa-products-category-filters" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             <button className={cat === 'all' ? 'on' : ''} onClick={() => setCat('all')}>All Categories</button>
             {cats.map((c) => (
               <button key={c.slug} className={cat === c.slug ? 'on' : ''} onClick={() => setCat(c.slug)}>
@@ -4824,7 +4826,7 @@ function ProductsAdmin() {
         </div>
 
         {/* Sort Dropdown */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="sa-products-sort" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <span style={{ fontSize: 12, color: '#94a3b8' }}>Sort:</span>
           <select
             value={sortBy}
@@ -4863,7 +4865,7 @@ function ProductsAdmin() {
       )}
 
       {/* Table Card */}
-      <div className="sa-card" style={{ overflow: 'hidden' }}>
+      <div className="sa-card sa-products-table-wrap" style={{ overflow: 'hidden' }}>
         <table className="sa-table rows">
           <thead>
             <tr>
@@ -5178,7 +5180,7 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
       compareAt: '',
       stock: '',
       lowStockThreshold: 5,
-      category: cats[0]?.slug || 'skincare',
+      category: cats[0]?.slug || '',
       adult: false,
       soldOut: false,
       tag: '',
@@ -5220,6 +5222,7 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
 
   // Quick variant generator state
   const [newVarSize, setNewVarSize] = useState('');
+  const [sizeRun, setSizeRun] = useState('');
   const [newVarColor, setNewVarColor] = useState('');
   const [newVarPrice, setNewVarPrice] = useState('');
   const [newVarStock, setNewVarStock] = useState('');
@@ -5244,19 +5247,6 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
     if (res.colors && res.colors.length > 0) setMasterColors(res.colors);
     setCustomColorName('');
   };
-
-  const COLOR_PRESETS = [
-    { name: 'Jet Black', hex: '#111111' },
-    { name: 'Deep Maroon', hex: '#58111A' },
-    { name: 'Emerald Green', hex: '#1B4D3E' },
-    { name: 'Navy Blue', hex: '#1A2B4C' },
-    { name: 'Dusty Rose', hex: '#DCAE96' },
-    { name: 'Desert Beige', hex: '#D9CBB7' },
-    { name: 'Pearl White', hex: '#F8F9FA' },
-    { name: 'Olive Green', hex: '#556B2F' },
-    { name: 'Mocha Brown', hex: '#4A2E1B' },
-    { name: 'Charcoal Grey', hex: '#495057' },
-  ];
 
   const TAG_PRESETS = ['Bestseller', 'New Arrival', 'Trending', 'Luxury Silk', 'Exclusive Offer', 'Limited Edition'];
 
@@ -5394,14 +5384,21 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
   };
 
   const generateColorSizeMatrix = (sizes: string[]) => {
+    const uniqueSizes = Array.from(new Set(sizes.map((size) => size.trim()).filter(Boolean)));
+    if (!uniqueSizes.length) {
+      setErr('Enter the sizes you want to create, separated by commas.');
+      return;
+    }
     const currentColors: { name: string; hex?: string; image?: string }[] =
-      f.colors && f.colors.length > 0
-        ? f.colors.map((c: any) => (typeof c === 'string' ? { name: c, hex: '#111111', image: '' } : c))
-        : [{ name: 'Standard', hex: '#111111', image: '' }];
+      (f.colors || []).map((c: any) => (typeof c === 'string' ? { name: c, hex: '#111111', image: '' } : c));
+    if (!currentColors.length) {
+      setErr('Add an admin-created color before generating a color and size matrix.');
+      return;
+    }
 
     const newVars: any[] = [];
     currentColors.forEach((c) => {
-      sizes.forEach((sz) => {
+      uniqueSizes.forEach((sz) => {
         newVars.push({
           id: 'v_' + Math.random().toString(36).slice(2, 9),
           title: `${sz} / ${c.name}`,
@@ -5563,6 +5560,10 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
 
   const save = async () => {
     setErr('');
+    if (!f.category || !cats.some((c: any) => c.slug === f.category)) {
+      setErr('Create/select a category in Category Management before saving this product.');
+      return;
+    }
     setBusy(true);
     try {
       const payload = {
@@ -5911,6 +5912,9 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
                 <div>
                   <label style={{ display: 'block', marginBottom: 6 }}>Store Category *</label>
                   <select value={f.category} onChange={set('category')} style={{ fontSize: 14 }}>
+                    {!cats.length && <option value="">Create a category first</option>}
+                    {cats.length > 0 && !cats.some((c: any) => c.slug === f.category) && <option value="">Select a category</option>}
+                    {product.category && !cats.some((c: any) => c.slug === product.category) && <option value={product.category}>Existing: {product.category}</option>}
                     {cats.map((c) => (
                       <option key={c.slug} value={c.slug}>
                         {c.name}
@@ -6377,9 +6381,7 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                       ⚡ Master Color Library (Click any color to add/remove from this product)
                     </div>
-                    <span style={{ fontSize: 11, color: '#94a3b8' }}>
-                      {masterColors.length || COLOR_PRESETS.length} colors saved
-                    </span>
+                    <span style={{ fontSize: 11, color: '#94a3b8' }}>{masterColors.length} admin-created colors</span>
                   </div>
                   <div
                     style={{
@@ -6394,7 +6396,8 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
                       border: '1px solid rgba(255,255,255,0.08)',
                     }}
                   >
-                    {(masterColors.length > 0 ? masterColors : COLOR_PRESETS).map((p: any) => {
+                    {masterColors.length === 0 && <span style={{ padding: 8, color: '#94a3b8', fontSize: 12 }}>No saved colors yet. Create one below or add a color to this product.</span>}
+                    {masterColors.map((p: any) => {
                       const isSelected = (f.colors || []).some(
                         (c: any) => (typeof c === 'string' ? c : c.name).toLowerCase() === p.name.toLowerCase()
                       );
@@ -6486,18 +6489,15 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
                   <div>
                     <h4 style={{ margin: 0, fontSize: 14, color: '#c4b5fd' }}>⚡ Generate Variations Matrix (Sizes & Colors)</h4>
                     <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8' }}>
-                      Auto-generates all variation rows combining your selected colors and size runs, with individual photos, pricing, and stock.
+                      Enter the sizes you want and generate variants using only colors selected for this product.
                     </p>
                   </div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    <button type="button" className="sa-btn ghost sa-mini" onClick={() => generateColorSizeMatrix(['50', '52', '54', '56'])}>
-                      ⚡ Matrix: Abaya Sizes (50-56)
-                    </button>
-                    <button type="button" className="sa-btn ghost sa-mini" onClick={() => generateColorSizeMatrix(['38', '40', '42', '44', '46'])}>
-                      ⚡ Matrix: Panjabi Sizes (38-46)
-                    </button>
-                    <button type="button" className="sa-btn ghost sa-mini" onClick={() => generateColorSizeMatrix(['S', 'M', 'L', 'XL', 'XXL'])}>
-                      ⚡ Matrix: S-XXL
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap', minWidth: 'min(100%, 320px)' }}>
+                    <label style={{ flex: '1 1 220px', fontSize: 11, color: '#94a3b8' }}>Sizes (comma separated)
+                      <input value={sizeRun} onChange={(e) => setSizeRun(e.target.value)} placeholder="e.g. S, M, L or 50, 52, 54" />
+                    </label>
+                    <button type="button" className="sa-btn ghost sa-mini" onClick={() => generateColorSizeMatrix(sizeRun.split(',').map((size) => size.trim()).filter(Boolean))}>
+                      Generate selected sizes
                     </button>
                   </div>
                 </div>
@@ -7161,7 +7161,7 @@ function SettingsAdmin() {
   const [f, setF] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState<'brand' | 'slider' | 'store' | 'fraud'>('brand');
+  const [tab, setTab] = useState<'brand' | 'slider' | 'store' | 'fraud' | 'appearance' | 'content'>('brand');
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingFavicon, setUploadingFavicon] = useState(false);
   const [showSlideModal, setShowSlideModal] = useState(false);
@@ -7243,7 +7243,10 @@ function SettingsAdmin() {
   const save = async () => {
     setBusy(true); setSaved(false);
     try {
-      await aFetch('/settings', { method: 'PUT', body: JSON.stringify(f) });
+      const res = await aFetch('/settings', { method: 'PUT', body: JSON.stringify(f) });
+      const updated = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(updated.error || 'The server rejected these settings.');
+      setF(updated);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e: any) {
@@ -7254,6 +7257,31 @@ function SettingsAdmin() {
   };
 
   const sliders: any[] = Array.isArray(f?.sliders) ? f.sliders : [];
+  const homeCopyFields = [
+    { key: 'collectionEyebrow', label: 'Collection section eyebrow', long: false },
+    { key: 'collectionTitle', label: 'Collection section title', long: false },
+    { key: 'collectionDescription', label: 'Collection description', long: true },
+    { key: 'introTitle', label: 'Brand introduction title', long: false },
+    { key: 'introDescription', label: 'Brand introduction paragraph', long: true },
+    { key: 'featuredEyebrow', label: 'Featured products eyebrow', long: false },
+    { key: 'featuredTitle', label: 'Featured products title', long: false },
+    { key: 'featuredDescription', label: 'Featured products description', long: true },
+    { key: 'newsletterEyebrow', label: 'Newsletter eyebrow', long: false },
+    { key: 'newsletterTitle', label: 'Newsletter title', long: false },
+    { key: 'newsletterDescription', label: 'Newsletter description', long: true },
+  ];
+  const setHomeCopy = (lang: 'en' | 'bn', key: string, value: string) => setF((current: any) => ({
+    ...current,
+    homeContent: {
+      ...(current.homeContent || {}),
+      [lang]: { ...(current.homeContent?.[lang] || {}), [key]: value },
+    },
+  }));
+  const setHomeFaq = (lang: 'en' | 'bn', index: number, key: 'q' | 'a', value: string) => setF((current: any) => {
+    const faqs = [...(current.homeContent?.[lang]?.faqs || [])];
+    faqs[index] = { ...(faqs[index] || {}), [key]: value };
+    return { ...current, homeContent: { ...(current.homeContent || {}), [lang]: { ...(current.homeContent?.[lang] || {}), faqs } } };
+  });
 
   const moveSlide = (idx: number, dir: -1 | 1) => {
     const target = idx + dir;
@@ -7344,6 +7372,12 @@ function SettingsAdmin() {
           </button>
           <button className={tab === 'fraud' ? 'on' : ''} onClick={() => setTab('fraud')}>
             <span>🛡️ Fraud Shield</span>
+          </button>
+          <button className={tab === 'appearance' ? 'on' : ''} onClick={() => setTab('appearance')}>
+            <span>✦ Storefront Design</span>
+          </button>
+          <button className={tab === 'content' ? 'on' : ''} onClick={() => setTab('content')}>
+            <span>✎ Homepage Content</span>
           </button>
         </div>
       </div>
@@ -7725,6 +7759,48 @@ function SettingsAdmin() {
 
       {/* TAB 4: FRAUD DETECTOR */}
       {tab === 'fraud' && <FraudDetectorAdmin embedded={true} />}
+
+      {tab === 'appearance' && <div className="sa-card sa-appearance-panel">
+        <div className="sa-appearance-heading"><div><span className="sa-appearance-eyebrow">STOREFRONT CONTROLS</span><h2>Appearance & Product Layout</h2><p>Choose the shared visual settings for this storefront. Changes apply after saving and refreshing the storefront.</p></div><span className="sa-appearance-chip">Store settings</span></div>
+        <div className="sa-appearance-grid">
+          <label>Store font<select value={f.appearance?.font || 'Inter'} onChange={(e) => setF((s: any) => ({ ...s, appearance: { ...s.appearance, font: e.target.value } }))}><option>Inter</option><option>Anek Bangla</option><option>Hind Siliguri</option><option>Playfair Display</option><option>Cormorant Garamond</option></select><small>Applies to storefront text and product details.</small></label>
+          <label>Accent color<div className="sa-appearance-color"><input aria-label="Accent color" type="color" value={f.appearance?.accent || '#b48e4c'} onChange={(e) => setF((s: any) => ({ ...s, appearance: { ...s.appearance, accent: e.target.value } }))}/><input value={f.appearance?.accent || '#b48e4c'} onChange={(e) => setF((s: any) => ({ ...s, appearance: { ...s.appearance, accent: e.target.value } }))} /></div><small>Used for subtle highlights across the shop.</small></label>
+          <label>Products per row · desktop<select value={f.appearance?.desktopColumns || 4} onChange={(e) => setF((s: any) => ({ ...s, appearance: { ...s.appearance, desktopColumns: Number(e.target.value) } }))}><option value={2}>2 columns</option><option value={3}>3 columns</option><option value={4}>4 columns</option></select></label>
+          <label>Products per row · mobile<select value={f.appearance?.mobileColumns || 2} onChange={(e) => setF((s: any) => ({ ...s, appearance: { ...s.appearance, mobileColumns: Number(e.target.value) } }))}><option value={1}>1 column</option><option value={2}>2 columns</option></select></label>
+          <label>Product image style<select value={f.appearance?.imageFit || 'contain'} onChange={(e) => setF((s: any) => ({ ...s, appearance: { ...s.appearance, imageFit: e.target.value } }))}><option value="contain">Show full product</option><option value="cover">Fill image frame</option></select><small>Choose based on how product photography is framed.</small></label>
+        </div>
+        <div className="sa-appearance-note"><span>✓</span><div><strong>Tracking protected</strong><p>Pixel and analytics code stays as it is. These controls only change storefront presentation.</p></div></div>
+      </div>}
+
+      {tab === 'content' && <div className="sa-home-content">
+        <div className="sa-home-content-head"><div><span>STOREFRONT EDITOR</span><h2>Homepage content</h2><p>Edit the homepage headings and descriptions in both languages. Leave a field blank to keep its current brand-specific copy.</p></div><span className="sa-home-content-savehint">Save All Changes above</span></div>
+        <div className="sa-home-languages">
+          {(['en', 'bn'] as const).map((lang) => (
+            <section className="sa-card sa-home-language" key={lang}>
+              <div className="sa-home-language-title"><h3>{lang === 'en' ? 'English' : 'বাংলা'}</h3><span>{lang === 'en' ? 'EN' : 'BN'}</span></div>
+              <div className="sa-home-copy-grid">
+                {homeCopyFields.map((field) => (
+                  <label key={field.key} className={field.long ? 'wide' : ''}>{field.label}
+                    {field.long
+                      ? <textarea rows={3} maxLength={900} value={f.homeContent?.[lang]?.[field.key] || ''} onChange={(e) => setHomeCopy(lang, field.key, e.target.value)} placeholder="Use current default" />
+                      : <input maxLength={900} value={f.homeContent?.[lang]?.[field.key] || ''} onChange={(e) => setHomeCopy(lang, field.key, e.target.value)} placeholder="Use current default" />}
+                  </label>
+                ))}
+              </div>
+              <div className="sa-home-faq-editor">
+                <h4>Frequently asked questions</h4>
+                {Array.from({ length: 5 }, (_, index) => (
+                  <div className="sa-home-faq-row" key={index}>
+                    <span>FAQ {index + 1}</span>
+                    <input maxLength={240} value={f.homeContent?.[lang]?.faqs?.[index]?.q || ''} onChange={(e) => setHomeFaq(lang, index, 'q', e.target.value)} placeholder="Question (blank keeps current default)" />
+                    <textarea rows={2} maxLength={900} value={f.homeContent?.[lang]?.faqs?.[index]?.a || ''} onChange={(e) => setHomeFaq(lang, index, 'a', e.target.value)} placeholder="Answer (blank keeps current default)" />
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      </div>}
 
       {/* Slide Add/Edit Modal */}
       {showSlideModal && (
@@ -9381,21 +9457,27 @@ function WhatsAppAdmin() {
     }
   }, [showPairModal, pairTab, status.connected, status.qrDataUrl]);
 
-  const saveTriggers = async (triggersPatch: any) => {
+  const saveWhatsAppPatch = async (patch: any) => {
     setSaving(true);
     try {
-      const res = await aFetch('/admin/whatsapp/settings', {
+      const response = await aFetch('/admin/whatsapp/settings', {
         method: 'POST',
-        body: JSON.stringify({ triggers: triggersPatch })
-      }).then(r => r.json());
+        body: JSON.stringify(patch)
+      });
+      const res = await response.json().catch(() => ({}));
+      if (!response.ok || !res.ok) throw new Error(res.error || 'Could not save WhatsApp settings.');
       if (res.ok) {
-        setStatus((prev: any) => ({ ...prev, triggers: res.settings.triggers }));
-        setToast('WhatsApp message templates saved!');
+        setStatus((prev: any) => ({ ...prev, ...res.settings }));
+        setToast('WhatsApp settings saved!');
         setTimeout(() => setToast(''), 3000);
       }
-    } catch {}
+    } catch (err: any) {
+      setToast(err?.message || 'Could not save WhatsApp settings.');
+    }
     finally { setSaving(false); }
   };
+
+  const saveTriggers = (triggersPatch: any) => saveWhatsAppPatch({ triggers: triggersPatch });
 
   const toggleTrigger = (key: string) => {
     const current = status.triggers?.[key] || {};
@@ -9476,6 +9558,14 @@ function WhatsAppAdmin() {
   };
 
   const triggers = status.triggers || {};
+  const waPreview = (key: string) => {
+    const sample: Record<string, string> = {
+      name: 'সাকিব', store: 'METRROMA', items: 'Premium Gift Box', total: '৳1,200',
+      order_id: 'MM-2048', courier: 'Steadfast', consignment: 'SFD123456',
+      tracking_url: 'https://metrroma.com/track/MM-2048',
+    };
+    return String(triggers[key]?.template || '').replace(/\{([^}]+)\}/g, (token: string, name: string) => sample[name] ?? token);
+  };
 
 
   return (
@@ -9502,6 +9592,10 @@ function WhatsAppAdmin() {
           ) : (
             <span className="sa-badge danger">Disconnected</span>
           )}
+          <label className="sa-chk" title="Turn all automatic WhatsApp messages on or off">
+            <input type="checkbox" checked={status.enabled !== false} disabled={saving} onChange={() => saveWhatsAppPatch({ enabled: status.enabled === false })} />
+            <span>{status.enabled === false ? 'Automation off' : 'Automation on'}</span>
+          </label>
         </div>
         <div>
           {status.connected ? (
@@ -9541,7 +9635,10 @@ function WhatsAppAdmin() {
             onClick={() => {
               const testPhone = prompt('Enter your phone number to test automated WhatsApp delivery:', status.phone || '018');
               if (testPhone) {
-                window.open(`https://wa.me/88${testPhone.replace(/\D/g, '')}?text=${encodeURIComponent('Hello! Your WhatsApp Automation test message from store.')}`, '_blank');
+                const digits = testPhone.replace(/\D/g, '');
+                const internationalPhone = digits.startsWith('880') ? digits : digits.startsWith('0') ? `88${digits.slice(1)}` : digits;
+                const message = `TEST MESSAGE\n${waPreview('approved') || 'Your WhatsApp automation test message.'}`;
+                window.open(`https://wa.me/${internationalPhone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
               }
             }}
           >
@@ -9560,7 +9657,7 @@ function WhatsAppAdmin() {
         ⚡ Automated Customer Notifications
       </h2>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16, marginBottom: 24 }}>
+      <div className="wa-trigger-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16, marginBottom: 24 }}>
         {/* 1. Incomplete Order Lead */}
         <div className="sa-card" style={{ padding: 18 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -9578,10 +9675,17 @@ function WhatsAppAdmin() {
             value={triggers.incomplete?.template || ''}
             onChange={(e) => updateTemplate('incomplete', e.target.value)}
           />
+          <label className="wa-delay-control">Recovery message delay (minutes)
+            <input type="number" min={1} max={120} step={1} value={Math.max(1, Math.min(120, Number(triggers.incomplete?.delayMinutes) || 2))} onChange={(e) => {
+              const current = status.triggers?.incomplete || {};
+              setStatus((prev: any) => ({ ...prev, triggers: { ...prev.triggers, incomplete: { ...current, delayMinutes: Math.max(1, Math.min(120, Number(e.target.value) || 1)) } } }));
+            }} />
+          </label>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
             <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {store} {items} {total}'}</span>
             <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
           </div>
+          <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p>{waPreview('incomplete') || 'Write a template to preview the customer message.'}</p></div>
         </div>
 
         {/* 2. Order Approved */}
@@ -9605,6 +9709,7 @@ function WhatsAppAdmin() {
             <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {total} {store}'}</span>
             <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
           </div>
+          <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p>{waPreview('approved') || 'Write a template to preview the customer message.'}</p></div>
         </div>
 
         {/* 3. Order Shipped */}
@@ -9628,6 +9733,7 @@ function WhatsAppAdmin() {
             <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {courier} {consignment} {tracking_url}'}</span>
             <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
           </div>
+          <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p>{waPreview('shipped') || 'Write a template to preview the customer message.'}</p></div>
         </div>
 
         {/* 4. Order Cancelled */}
@@ -9651,6 +9757,7 @@ function WhatsAppAdmin() {
             <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {store}'}</span>
             <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
           </div>
+          <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p>{waPreview('cancelled') || 'Write a template to preview the customer message.'}</p></div>
         </div>
       </div>
 
@@ -9662,7 +9769,7 @@ function WhatsAppAdmin() {
         <p className="dim" style={{ fontSize: 13, margin: '4px 0 14px' }}>
           যেকোনো কাস্টমারের নাম্বারে তাৎক্ষণিক কাস্টম অফার বা মেসেজ পাঠান।
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr auto', gap: 12, alignItems: 'center' }}>
+        <div className="wa-direct-grid" style={{ display: 'grid', gridTemplateColumns: '220px 1fr auto', gap: 12, alignItems: 'center' }}>
           <input
             className="sa-search"
             placeholder="017xxxxxxxx"
@@ -9993,13 +10100,14 @@ function BackupAdmin() {
     setDownloading(true);
     try {
       const res = await aFetch('/admin/backup/export');
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Backup export failed');
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `store_backup_${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       setToast('Store backup downloaded to your computer!');
       setTimeout(() => setToast(''), 3000);
     } catch (e: any) {
@@ -10141,7 +10249,10 @@ function BackupAdmin() {
                 • Export Date: {preview.exportedAt ? new Date(preview.exportedAt).toLocaleString() : 'N/A'}<br/>
                 • Orders: {Array.isArray(preview.orders) ? preview.orders.length : 0} items<br/>
                 • Products: {preview.catalog?.products ? preview.catalog.products.length : 0} items<br/>
-                • Customers: {Array.isArray(preview.customers) ? preview.customers.length : 0} customers
+                • Customers: {Array.isArray(preview.customers) ? preview.customers.length : 0} customers<br/>
+                • Staff accounts: {Array.isArray(preview.users) ? preview.users.length : 0}<br/>
+                • Uploaded media: {Array.isArray(preview.media) ? preview.media.length : 0} files<br/>
+                • Backup version: {preview.version || 'Legacy JSON'}
               </div>
               <button
                 type="button"
@@ -10155,6 +10266,55 @@ function BackupAdmin() {
             </div>
           )}
         </div>
+      </div>
+    </>
+  );
+}
+
+function ProductReviewsAdmin() {
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [status, setStatus] = useState<'pending' | 'approved' | 'rejected'>('pending');
+  const [busyId, setBusyId] = useState('');
+  const [error, setError] = useState('');
+  const load = () => { setError(''); return aFetch('/admin/reviews').then(async (r) => {
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Could not load reviews');
+    setReviews(Array.isArray(d.reviews) ? d.reviews : []);
+  }).catch((e) => setError(e.message || 'Could not load reviews')); };
+  useEffect(() => { load(); }, []);
+  const changeStatus = async (review: any, next: 'approved' | 'rejected') => {
+    setBusyId(review.id);
+    setError('');
+    try {
+      const r = await aFetch(`/admin/reviews/${encodeURIComponent(review.productId)}/${encodeURIComponent(review.id)}`, {
+        method: 'PATCH', body: JSON.stringify({ status: next }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Could not update review');
+      await load();
+    } catch (e: any) { setError(e.message || 'Could not update review'); }
+    finally { setBusyId(''); }
+  };
+  const shown = reviews.filter((review) => (review.status || 'approved') === status);
+  const count = (key: string) => reviews.filter((review) => (review.status || 'approved') === key).length;
+  return (
+    <>
+      <div className="sa-top"><div><h1>Product Reviews</h1><p className="dim">Customer reviews are published only after approval.</p></div><button className="sa-btn ghost" onClick={load}>↻ Refresh</button></div>
+      <div className="prv-tabs">
+        {(['pending', 'approved', 'rejected'] as const).map((key) => <button key={key} className={status === key ? 'active' : ''} onClick={() => setStatus(key)}>{key[0].toUpperCase() + key.slice(1)} <b>{count(key)}</b></button>)}
+      </div>
+      {error && <div className="err2" role="alert">{error}</div>}
+      <div className="prv-list">
+        {shown.map((review) => <article className="sa-card prv-card" key={`${review.productId}-${review.id}`}>
+          <div className="prv-card-top"><div><strong>{review.name || 'Customer'}</strong><span className="prv-rating" aria-label={`${review.rating} out of 5 stars`}>{'★'.repeat(Math.max(0, Math.min(5, Number(review.rating) || 0)))}</span></div><time>{review.at ? new Date(review.at).toLocaleString() : ''}</time></div>
+          <p className="prv-product">Product ID: {review.productId}</p>
+          <p className="prv-copy">{review.text || 'No written comment.'}</p>
+          <div className="prv-actions">
+            {status !== 'approved' && <button className="sa-btn" disabled={busyId === review.id} onClick={() => changeStatus(review, 'approved')}>{busyId === review.id ? 'Saving…' : '✓ Approve & publish'}</button>}
+            {status !== 'rejected' && <button className="sa-btn ghost" disabled={busyId === review.id} onClick={() => changeStatus(review, 'rejected')}>Reject</button>}
+          </div>
+        </article>)}
+        {!shown.length && !error && <div className="sa-card sa-empty">No {status} reviews.</div>}
       </div>
     </>
   );
@@ -12578,12 +12738,12 @@ function ScannerAdmin() {
       setCameraActive(false);
       return;
     }
-    let html5QrCode: Html5Qrcode | null = null;
+    let html5QrCode: any = null;
     let mounted = true;
-
-    try {
+    import('html5-qrcode').then(({ Html5Qrcode }) => {
+      if (!mounted) return;
       html5QrCode = new Html5Qrcode('qr-reader');
-      html5QrCode
+      return html5QrCode
         .start(
           { facingMode: 'environment' },
           { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 },
@@ -12604,10 +12764,12 @@ function ScannerAdmin() {
             setCamError('Camera not available or permission denied. You can use Barcode Gun or manual entry below.');
           }
         });
-    } catch (e: any) {
-      setCameraActive(false);
-      setCamError(e?.message || 'Camera init failed');
-    }
+    }).catch((err: any) => {
+      if (mounted) {
+        setCameraActive(false);
+        setCamError(err?.message || 'Camera scanner could not be loaded.');
+      }
+    });
 
     return () => {
       mounted = false;

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync, readdirSync, statSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync, copyFileSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -86,32 +86,7 @@ const PERSISTENT_LANDINGS = join(PERSISTENT_DIR, 'landings.json');
 const BACKUP_LANDINGS = join(DATA_DIR, 'landings.metrroma.backup.json');
 const EXT_LANDINGS = join(EXTERNAL_DIR, 'landings.json');
 
-export const DEFAULT_COLORS = [
-  { id: 'jet-black', name: 'Jet Black', hex: '#111111' },
-  { id: 'pure-white', name: 'Pure White', hex: '#FFFFFF' },
-  { id: 'pearl-white', name: 'Pearl / Off-White', hex: '#F8F9FA' },
-  { id: 'charcoal-grey', name: 'Charcoal Grey', hex: '#495057' },
-  { id: 'silver', name: 'Silver / Metallic', hex: '#C0C0C0' },
-  { id: 'gold', name: 'Luxury Gold', hex: '#D4AF37' },
-  { id: 'rose-gold', name: 'Rose Gold', hex: '#B76E79' },
-  { id: 'gunmetal', name: 'Gunmetal / Matte Grey', hex: '#2C3539' },
-  { id: 'navy-blue', name: 'Navy Blue', hex: '#1A2B4C' },
-  { id: 'royal-blue', name: 'Royal Blue', hex: '#2563EB' },
-  { id: 'sky-blue', name: 'Sky Blue', hex: '#87CEEB' },
-  { id: 'deep-maroon', name: 'Deep Maroon', hex: '#58111A' },
-  { id: 'burgundy', name: 'Burgundy / Wine', hex: '#800020' },
-  { id: 'dusty-rose', name: 'Dusty Rose', hex: '#DCAE96' },
-  { id: 'emerald-green', name: 'Emerald Green', hex: '#1B4D3E' },
-  { id: 'olive-green', name: 'Olive Green', hex: '#556B2F' },
-  { id: 'mint-green', name: 'Mint Green', hex: '#98FF98' },
-  { id: 'mocha-brown', name: 'Mocha Brown', hex: '#4A2E1B' },
-  { id: 'tan-camel', name: 'Tan / Camel', hex: '#C19A6B' },
-  { id: 'desert-beige', name: 'Desert Beige', hex: '#D9CBB7' },
-  { id: 'chocolate', name: 'Dark Chocolate', hex: '#3D2314' },
-  { id: 'tortoise', name: 'Tortoise Shell / Amber', hex: '#8B4513' },
-  { id: 'lavender', name: 'Lavender', hex: '#E6E6FA' },
-  { id: 'coral', name: 'Peach / Coral', hex: '#F88379' },
-];
+export const getPersistentDataDirectory = () => EXTERNAL_DIR;
 
 export const DEFAULT_SETTINGS = {
   storeName: 'METRROMA',
@@ -126,6 +101,8 @@ export const DEFAULT_SETTINGS = {
   fbPixelId: '1122829254194671',
   logo: '',
   favicon: '',
+  appearance: { font: 'Inter', accent: '#b48e4c', desktopColumns: 4, mobileColumns: 2, imageFit: 'contain' },
+  homeContent: { en: {}, bn: {} },
   sliders: [],
   fraudDetector: {
     enabled: true,
@@ -140,6 +117,13 @@ export const DEFAULT_SETTINGS = {
 };
 
 // Safe generic reader that checks external safe copy first (outside git), then persistent, then standard, then backup
+function writeAtomic(targetPath, data) {
+  mkdirSync(dirname(targetPath), { recursive: true });
+  const tempPath = `${targetPath}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(tempPath, data, { flag: 'wx' });
+  renameSync(tempPath, targetPath);
+}
+
 function readSafe(extPath, persistentPath, stdPath, defaultVal, backupPath = null) {
   try {
     if (extPath && existsSync(extPath)) {
@@ -151,7 +135,7 @@ function readSafe(extPath, persistentPath, stdPath, defaultVal, backupPath = nul
     if (existsSync(persistentPath)) {
       const parsed = JSON.parse(readFileSync(persistentPath, 'utf8'));
       if (parsed != null) {
-        if (extPath) try { writeFileSync(extPath, JSON.stringify(parsed, null, 2)); } catch (_) {}
+        if (extPath) try { writeAtomic(extPath, JSON.stringify(parsed, null, 2)); } catch (_) {}
         return parsed;
       }
     }
@@ -160,8 +144,8 @@ function readSafe(extPath, persistentPath, stdPath, defaultVal, backupPath = nul
     if (existsSync(stdPath)) {
       const parsed = JSON.parse(readFileSync(stdPath, 'utf8'));
       if (parsed != null) {
-        if (extPath) try { writeFileSync(extPath, JSON.stringify(parsed, null, 2)); } catch (_) {}
-        try { writeFileSync(persistentPath, JSON.stringify(parsed, null, 2)); } catch (_) {}
+        if (extPath) try { writeAtomic(extPath, JSON.stringify(parsed, null, 2)); } catch (_) {}
+        try { writeAtomic(persistentPath, JSON.stringify(parsed, null, 2)); } catch (_) {}
         return parsed;
       }
     }
@@ -171,10 +155,9 @@ function readSafe(extPath, persistentPath, stdPath, defaultVal, backupPath = nul
       if (existsSync(backupPath)) {
         const parsed = JSON.parse(readFileSync(backupPath, 'utf8'));
         if (parsed != null) {
-          if (extPath) try { writeFileSync(extPath, JSON.stringify(parsed, null, 2)); } catch (_) {}
+          if (extPath) try { writeAtomic(extPath, JSON.stringify(parsed, null, 2)); } catch (_) {}
           try {
-            writeFileSync(persistentPath, JSON.stringify(parsed, null, 2));
-            writeFileSync(stdPath, JSON.stringify(parsed, null, 2));
+            writeAtomic(persistentPath, JSON.stringify(parsed, null, 2));
           } catch (_) {}
           return parsed;
         }
@@ -184,21 +167,19 @@ function readSafe(extPath, persistentPath, stdPath, defaultVal, backupPath = nul
   return defaultVal;
 }
 
-// Safe writer that writes to external storage (outside git), persistent storage, standard storage, and immutable backup
+// Runtime writes stay outside tracked source data. Keep a second ignored copy and daily recovery snapshot.
 function writeSafe(extPath, persistentPath, stdPath, val, backupPrefix = null, backupPath = null) {
   const jsonStr = JSON.stringify(val, null, 2);
+  let durableCopies = 0;
   if (extPath) {
-    try { writeFileSync(extPath, jsonStr); } catch (e) { console.error('[Store] External write error:', e.message); }
+    try { writeAtomic(extPath, jsonStr); durableCopies += 1; } catch (e) { console.error('[Store] External write error:', e.message); }
   }
-  try { writeFileSync(persistentPath, jsonStr); } catch (e) { console.error('[Store] Persistent write error:', e.message); }
-  try { writeFileSync(stdPath, jsonStr); } catch (e) { console.error('[Store] Standard write error:', e.message); }
-  if (backupPath) {
-    try { writeFileSync(backupPath, jsonStr); } catch (_) {}
-  }
+  try { writeAtomic(persistentPath, jsonStr); durableCopies += 1; } catch (e) { console.error('[Store] Persistent write error:', e.message); }
+  if (!durableCopies) throw new Error('Could not safely persist data to external or persistent storage; source data was not overwritten.');
   if (backupPrefix) {
     try {
       const day = new Date().toISOString().slice(0, 10);
-      writeFileSync(join(BACKUPS_DIR, `${backupPrefix}-${day}.json`), jsonStr);
+      writeAtomic(join(BACKUPS_DIR, `${backupPrefix}-${day}.json`), jsonStr);
     } catch (_) {}
   }
 }
@@ -206,7 +187,16 @@ function writeSafe(extPath, persistentPath, stdPath, val, backupPrefix = null, b
 export function getSettings() {
   const base = { ...DEFAULT_SETTINGS };
   const saved = readSafe(EXT_SETTINGS, PERSISTENT_SETTINGS, SETTINGS, {}, BACKUP_SETTINGS);
-  return { ...base, ...saved };
+  const savedAppearance = saved.appearance && typeof saved.appearance === 'object' && !Array.isArray(saved.appearance) ? saved.appearance : {};
+  const savedHomeContent = saved.homeContent && typeof saved.homeContent === 'object' && !Array.isArray(saved.homeContent) ? saved.homeContent : {};
+  return {
+    ...base, ...saved,
+    appearance: { ...base.appearance, ...savedAppearance },
+    homeContent: {
+      en: { ...(savedHomeContent.en || {}) },
+      bn: { ...(savedHomeContent.bn || {}) },
+    },
+  };
 }
 
 export function saveSettings(patch) {
@@ -229,28 +219,29 @@ export function getCatalog() {
     }
   };
 
-  // 1. External safe catalog outside of git
-  try { if (existsSync(EXT_CATALOG)) absorb(JSON.parse(readFileSync(EXT_CATALOG, 'utf8'))); } catch (_) {}
-  // 2. Immutable backup
+  // A valid external or ignored persistent copy is authoritative, including an intentionally empty catalog.
+  for (const source of [EXT_CATALOG, PERSISTENT_CATALOG]) {
+    try {
+      if (!existsSync(source)) continue;
+      const saved = JSON.parse(readFileSync(source, 'utf8'));
+      if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+        return {
+          products: Array.isArray(saved.products) ? saved.products : [],
+          categories: Array.isArray(saved.categories) ? saved.categories : [],
+        };
+      }
+    } catch (_) {}
+  }
+
+  // First boot migration: merge legacy copies once, then seed only ignored/external storage.
   try { if (existsSync(BACKUP_CATALOG)) absorb(JSON.parse(readFileSync(BACKUP_CATALOG, 'utf8'))); } catch (_) {}
-  // 3. Standard catalog
   try { if (existsSync(CATALOG)) absorb(JSON.parse(readFileSync(CATALOG, 'utf8'))); } catch (_) {}
-  // 4. Persistent catalog (latest runtime edits take priority)
-  try { if (existsSync(PERSISTENT_CATALOG)) absorb(JSON.parse(readFileSync(PERSISTENT_CATALOG, 'utf8'))); } catch (_) {}
 
   const products = Array.from(prodMap.values());
   const categories = Array.from(catMap.values());
   const cat = { products, categories };
 
-  if (products.length > 0) {
-    try {
-      const jsonStr = JSON.stringify(cat, null, 2);
-      if (existsSync(dirname(EXT_CATALOG))) writeFileSync(EXT_CATALOG, jsonStr);
-      writeFileSync(PERSISTENT_CATALOG, jsonStr);
-      writeFileSync(CATALOG, jsonStr);
-      writeFileSync(BACKUP_CATALOG, jsonStr);
-    } catch (_) {}
-  }
+  if (products.length > 0 || categories.length > 0) writeSafe(EXT_CATALOG, PERSISTENT_CATALOG, CATALOG, cat, 'catalog', BACKUP_CATALOG);
   return cat;
 }
 
@@ -316,9 +307,15 @@ export function getOrders() {
   try {
     if (existsSync(EXT_ORDERS)) {
       const extList = JSON.parse(readFileSync(EXT_ORDERS, 'utf8'));
-      if (Array.isArray(extList) && extList.length > 0) {
+      if (Array.isArray(extList)) {
         return extList.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
       }
+    }
+  } catch (_) {}
+  try {
+    if (existsSync(PERSISTENT_ORDERS)) {
+      const persistentList = JSON.parse(readFileSync(PERSISTENT_ORDERS, 'utf8'));
+      if (Array.isArray(persistentList)) return persistentList.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
     }
   } catch (_) {}
 
@@ -369,13 +366,7 @@ export function getOrders() {
   const list = Array.from(map.values()).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
   if (list.length > 0) {
-    try {
-      const jsonStr = JSON.stringify(list, null, 2);
-      if (existsSync(dirname(EXT_ORDERS))) writeFileSync(EXT_ORDERS, jsonStr);
-      writeFileSync(PERSISTENT_ORDERS, jsonStr);
-      writeFileSync(ORDERS, jsonStr);
-      writeFileSync(BACKUP_ORDERS, jsonStr);
-    } catch (_) {}
+    writeSafe(EXT_ORDERS, PERSISTENT_ORDERS, ORDERS, list, 'orders', BACKUP_ORDERS);
   }
   return list;
 }
@@ -500,6 +491,14 @@ export function saveCoupons(c) {
 
 export function getReviews() {
   const r = readSafe(EXT_REVIEWS, PERSISTENT_REVIEWS, REVIEWS, {}, BACKUP_REVIEWS);
+  if (Array.isArray(r)) {
+    return r.reduce((grouped, review) => {
+      if (!review || typeof review !== 'object') return grouped;
+      const productId = String(review.productId || 'unassigned');
+      (grouped[productId] ||= []).push(review);
+      return grouped;
+    }, {});
+  }
   return typeof r === 'object' && r !== null ? r : {};
 }
 export function saveReviews(r) {
@@ -609,23 +608,22 @@ export function getLandings() {
       });
     }
   };
-  try { if (existsSync(EXT_LANDINGS)) absorb(JSON.parse(readFileSync(EXT_LANDINGS, 'utf8'))); } catch (_) {}
+  for (const source of [EXT_LANDINGS, PERSISTENT_LANDINGS]) {
+    try {
+      if (!existsSync(source)) continue;
+      const saved = JSON.parse(readFileSync(source, 'utf8'));
+      if (Array.isArray(saved)) return saved;
+    } catch (_) {}
+  }
   try { if (existsSync(BACKUP_LANDINGS)) absorb(JSON.parse(readFileSync(BACKUP_LANDINGS, 'utf8'))); } catch (_) {}
   try { if (existsSync(LANDINGS)) absorb(JSON.parse(readFileSync(LANDINGS, 'utf8'))); } catch (_) {}
-  try { if (existsSync(PERSISTENT_LANDINGS)) absorb(JSON.parse(readFileSync(PERSISTENT_LANDINGS, 'utf8'))); } catch (_) {}
 
   if (map.size === 0) {
     saveLandings([DEFAULT_LOVELOCK_LANDING]);
     return [DEFAULT_LOVELOCK_LANDING];
   }
   const list = Array.from(map.values());
-  try {
-    const jsonStr = JSON.stringify(list, null, 2);
-    if (existsSync(dirname(EXT_LANDINGS))) writeFileSync(EXT_LANDINGS, jsonStr);
-    writeFileSync(PERSISTENT_LANDINGS, jsonStr);
-    writeFileSync(LANDINGS, jsonStr);
-    writeFileSync(BACKUP_LANDINGS, jsonStr);
-  } catch (_) {}
+  if (list.length) writeSafe(EXT_LANDINGS, PERSISTENT_LANDINGS, LANDINGS, list, 'landings', BACKUP_LANDINGS);
   return list;
 }
 
@@ -673,11 +671,8 @@ export function deleteLanding(id) {
 
 export function getColors() {
   const list = readSafe(EXT_COLORS, PERSISTENT_COLORS, COLORS, null, BACKUP_COLORS);
-  if (!Array.isArray(list) || list.length === 0) {
-    saveColors(DEFAULT_COLORS);
-    return DEFAULT_COLORS;
-  }
-  return list;
+  // An empty library is intentional: never seed colors that an admin did not create.
+  return Array.isArray(list) ? list : [];
 }
 
 export function saveColors(colors) {
@@ -797,26 +792,22 @@ export function getCustomers() {
       });
     }
   };
-  // 1. External safe customers outside git
-  try { if (existsSync(EXT_CUSTOMERS)) absorb(JSON.parse(readFileSync(EXT_CUSTOMERS, 'utf8'))); } catch (_) {}
-  // 2. Immutable backup
+  for (const source of [EXT_CUSTOMERS, PERSISTENT_CUSTOMERS]) {
+    try {
+      if (!existsSync(source)) continue;
+      const saved = JSON.parse(readFileSync(source, 'utf8'));
+      if (Array.isArray(saved)) return saved;
+    } catch (_) {}
+  }
+  // First boot migration only: recover legacy customer entries and seed safe storage.
   try { if (existsSync(BACKUP_CUSTOMERS)) absorb(JSON.parse(readFileSync(BACKUP_CUSTOMERS, 'utf8'))); } catch (_) {}
-  // 3. Standard customers
   try { if (existsSync(CUSTOMERS)) absorb(JSON.parse(readFileSync(CUSTOMERS, 'utf8'))); } catch (_) {}
-  // 4. Persistent customers
-  try { if (existsSync(PERSISTENT_CUSTOMERS)) absorb(JSON.parse(readFileSync(PERSISTENT_CUSTOMERS, 'utf8'))); } catch (_) {}
 
   let list = Array.from(map.values());
   if (list.length === 0) {
     list = syncCustomersFromOrders();
   } else {
-    try {
-      const jsonStr = JSON.stringify(list, null, 2);
-      if (existsSync(dirname(EXT_CUSTOMERS))) writeFileSync(EXT_CUSTOMERS, jsonStr);
-      writeFileSync(PERSISTENT_CUSTOMERS, jsonStr);
-      writeFileSync(CUSTOMERS, jsonStr);
-      writeFileSync(BACKUP_CUSTOMERS, jsonStr);
-    } catch (_) {}
+    writeSafe(EXT_CUSTOMERS, PERSISTENT_CUSTOMERS, CUSTOMERS, list, 'customers', BACKUP_CUSTOMERS);
   }
   return list;
 }
