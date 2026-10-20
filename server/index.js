@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, lstatSync, unlinkSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { randomUUID, randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
@@ -29,7 +29,10 @@ app.use((req, res, next) => {
 });
 
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use((req, res, next) => {
+  if (req.method === 'POST' && req.path === '/api/admin/backup/restore') return next();
+  return express.json({ limit: '10mb' })(req, res, next);
+});
 app.use((err, req, res, next) => {
   if (err) {
     if (req.path.includes('webhook')) {
@@ -64,14 +67,81 @@ function collectBackupMedia() {
   return media;
 }
 
-function createStoreBackup() {
-  return {
-    format: 'metrroma-store-backup', version: '3.0', exportedAt: new Date().toISOString(),
+const FRONTEND_ROOT = join(__dir, '..', 'web');
+const FRONTEND_ROOT_FILES = new Set(['index.html', 'package.json', 'package-lock.json', 'tsconfig.json', 'vite.config.ts']);
+function isAllowedFrontendPath(relativePath) {
+  if (typeof relativePath !== 'string' || !relativePath || relativePath.includes('\\') || relativePath.startsWith('/')) return false;
+  const parts = relativePath.split('/');
+  if (parts.some((part) => !part || part === '.' || part === '..' || part.startsWith('.'))) return false;
+  return FRONTEND_ROOT_FILES.has(relativePath) || ['src/', 'public/', 'dist/'].some((prefix) => relativePath.startsWith(prefix));
+}
+function collectFrontendFiles() {
+  const files = [];
+  const addFile = (relativePath, absolutePath) => {
+    const info = lstatSync(absolutePath);
+    if (!info.isFile() || info.isSymbolicLink()) return;
+    files.push({ path: relativePath, data: readFileSync(absolutePath).toString('base64') });
+  };
+  for (const name of FRONTEND_ROOT_FILES) {
+    const path = join(FRONTEND_ROOT, name);
+    if (existsSync(path)) addFile(name, path);
+  }
+  const walk = (directory, prefix) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name.startsWith('.')) continue;
+      const relativePath = `${prefix}/${entry.name}`;
+      if (!isAllowedFrontendPath(relativePath)) continue;
+      const absolutePath = join(directory, entry.name);
+      if (entry.isDirectory() && !entry.isSymbolicLink()) walk(absolutePath, relativePath);
+      else if (entry.isFile()) addFile(relativePath, absolutePath);
+    }
+  };
+  for (const directory of ['src', 'public', 'dist']) {
+    const path = join(FRONTEND_ROOT, directory);
+    if (existsSync(path) && lstatSync(path).isDirectory()) walk(path, directory);
+  }
+  return files;
+}
+function getSafeFrontendTarget(relativePath) {
+  if (!isAllowedFrontendPath(relativePath)) throw new Error('Frontend backup contains a path outside the allowed frontend files.');
+  const parts = relativePath.split('/');
+  let parent = FRONTEND_ROOT;
+  for (const part of parts.slice(0, -1)) {
+    const next = join(parent, part);
+    if (existsSync(next)) {
+      const info = lstatSync(next);
+      if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('Frontend restore cannot write through a symbolic link.');
+    } else mkdirSync(next);
+    parent = next;
+  }
+  const target = join(parent, parts.at(-1));
+  if (existsSync(target) && lstatSync(target).isSymbolicLink()) throw new Error('Frontend restore cannot replace a symbolic link.');
+  return target;
+}
+
+function createStoreBackup(includeFrontend = false) {
+  const backup = {
+    format: 'metrroma-store-backup', version: '3.1', exportedAt: new Date().toISOString(),
     store: getSettings().storeName || 'Store', orders: getOrders(), customers: getCustomers(),
     catalog: getCatalog(), settings: getSettings(), integrations: getIntegrations(),
     landings: getLandings(), coupons: getCoupons(), reviews: getReviews(), colors: getColors(),
     users: getUsers(), media: collectBackupMedia(),
+    ...(includeFrontend ? { frontendFiles: collectFrontendFiles() } : {}),
   };
+  const digest = createHash('sha256').update(JSON.stringify(backup)).digest('hex');
+  backup.manifest = {
+    algorithm: 'SHA-256', digest,
+    counts: {
+      orders: backup.orders.length,
+      customers: backup.customers.length,
+      products: (backup.catalog.products || []).length,
+      categories: (backup.catalog.categories || []).length,
+      staff: backup.users.length,
+      media: backup.media.length,
+      frontendFiles: backup.frontendFiles?.length || 0,
+    },
+  };
+  return backup;
 }
 
 const staticUploadOptions = {
@@ -368,6 +438,39 @@ app.put('/api/settings', adminAuth, requireRole('owner', 'manager'), (req, res) 
       }));
     }
   }
+  const sectionKeys = ['hero', 'quickCategories', 'collections', 'intro', 'featured', 'benefits', 'faq', 'newsletter'];
+  const currentSiteContent = cur.siteContent || {};
+  const currentSections = currentSiteContent.sections || {};
+  const incomingSections = b.siteContent?.sections && typeof b.siteContent.sections === 'object' && !Array.isArray(b.siteContent.sections) ? b.siteContent.sections : {};
+  const sections = { ...currentSections };
+  for (const key of sectionKeys) if (typeof incomingSections[key] === 'boolean') sections[key] = incomingSections[key];
+  const textOverrides = { ...(currentSiteContent.textOverrides || {}) };
+  const incomingOverrides = b.siteContent?.textOverrides && typeof b.siteContent.textOverrides === 'object' && !Array.isArray(b.siteContent.textOverrides) ? b.siteContent.textOverrides : {};
+  for (const [key, value] of Object.entries(incomingOverrides).slice(0, 500)) {
+    if (!key || key.length > 500 || !value || typeof value !== 'object' || Array.isArray(value)) continue;
+    const en = typeof value.en === 'string' ? value.en.trim().slice(0, 1200) : '';
+    const bn = typeof value.bn === 'string' ? value.bn.trim().slice(0, 1200) : '';
+    if (en || bn) textOverrides[key] = { en, bn };
+    else delete textOverrides[key];
+  }
+  const siteContent = { sections, textOverrides };
+  siteContent.infoPages = { ...(currentSiteContent.infoPages || {}) };
+  const infoPageKeys = ['shipping', 'returns', 'contact', 'about', 'privacy', 'terms', 'journal'];
+  const incomingInfoPages = b.siteContent?.infoPages && typeof b.siteContent.infoPages === 'object' && !Array.isArray(b.siteContent.infoPages) ? b.siteContent.infoPages : {};
+  for (const slug of infoPageKeys) {
+    const incomingPage = incomingInfoPages[slug];
+    if (!incomingPage || typeof incomingPage !== 'object' || Array.isArray(incomingPage)) continue;
+    const page = { ...(siteContent.infoPages[slug] || {}) };
+    for (const lang of ['en', 'bn']) {
+      const incomingLang = incomingPage[lang];
+      if (!incomingLang || typeof incomingLang !== 'object' || Array.isArray(incomingLang)) continue;
+      const localized = { ...(page[lang] || {}) };
+      if (typeof incomingLang.title === 'string') localized.title = incomingLang.title.trim().slice(0, 180);
+      if (Array.isArray(incomingLang.body)) localized.body = incomingLang.body.slice(0, 6).map((p) => typeof p === 'string' ? p.trim().slice(0, 1500) : '');
+      page[lang] = localized;
+    }
+    siteContent.infoPages[slug] = page;
+  }
   const curFd = cur.fraudDetector || {};
   let fraudDetector = curFd;
   if (b.fraudDetector && typeof b.fraudDetector === 'object') {
@@ -410,6 +513,7 @@ app.put('/api/settings', adminAuth, requireRole('owner', 'manager'), (req, res) 
       };
     })(),
     homeContent,
+    siteContent,
     sliders: Array.isArray(b.sliders) ? b.sliders : (cur.sliders || []),
     fraudDetector,
   }));
@@ -1900,16 +2004,22 @@ app.post('/api/reviews', (req, res) => {
   res.status(201).json({ ok: true, status: 'pending' });
 });
 app.patch('/api/admin/reviews/:pid/:id', adminAuth, (req, res) => {
-  const status = String(req.body?.status || '');
-  if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'status must be approved or rejected' });
+  const body = req.body || {};
+  const hasStatus = Object.prototype.hasOwnProperty.call(body, 'status');
+  const hasReply = Object.prototype.hasOwnProperty.call(body, 'adminReply');
+  const status = String(body.status || '');
+  if (!hasStatus && !hasReply) return res.status(400).json({ error: 'status or adminReply required' });
+  if (hasStatus && !['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'status must be approved or rejected' });
+  if (hasReply && typeof body.adminReply !== 'string') return res.status(400).json({ error: 'adminReply must be text' });
   const all = getReviews();
   const list = all[req.params.pid] || [];
   const review = list.find((item) => item.id === req.params.id);
   if (!review) return res.status(404).json({ error: 'review not found' });
-  review.status = status;
+  if (hasStatus) review.status = status;
+  if (hasReply) review.adminReply = body.adminReply.trim().slice(0, 2000);
   all[req.params.pid] = list;
   saveReviews(all);
-  res.json({ ok: true, status });
+  res.json({ ok: true, ...(hasStatus ? { status } : {}), ...(hasReply ? { adminReply: review.adminReply } : {}) });
 });
 app.delete('/api/reviews/:pid/:id', adminAuth, (req, res) => {
   const all = getReviews(); all[req.params.pid] = (all[req.params.pid] || []).filter((r) => r.id !== req.params.id); saveReviews(all); res.json({ ok: true });
@@ -3530,7 +3640,7 @@ app.post('/api/admin/courier/bulk-book', adminAuth, async (req, res) => {
 // ==========================================
 app.get('/api/admin/backup/export', adminAuth, requireRole('owner'), (req, res) => {
   try {
-    const backupData = createStoreBackup();
+    const backupData = createStoreBackup(req.query.includeFrontend === 'true');
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename="store_backup_${new Date().toISOString().slice(0, 10)}.json"`);
     res.json(backupData);
@@ -3539,7 +3649,7 @@ app.get('/api/admin/backup/export', adminAuth, requireRole('owner'), (req, res) 
   }
 });
 
-app.post('/api/admin/backup/restore', adminAuth, requireRole('owner'), (req, res) => {
+app.post('/api/admin/backup/restore', adminAuth, requireRole('owner'), express.json({ limit: '100mb' }), (req, res) => {
   try {
     const payload = req.body;
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -3548,13 +3658,44 @@ app.post('/api/admin/backup/restore', adminAuth, requireRole('owner'), (req, res
     if (payload.format && payload.format !== 'metrroma-store-backup') {
       return res.status(400).json({ error: 'This backup belongs to a different application.' });
     }
+    const isObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+    const complete = Array.isArray(payload.orders) && Array.isArray(payload.customers) &&
+      isObject(payload.catalog) && Array.isArray(payload.catalog.products) && Array.isArray(payload.catalog.categories) &&
+      isObject(payload.settings) && isObject(payload.integrations) && Array.isArray(payload.landings) &&
+      Array.isArray(payload.coupons) && Array.isArray(payload.colors) && Array.isArray(payload.users) &&
+      isObject(payload.reviews) && Array.isArray(payload.media);
+    if (!complete) return res.status(400).json({ error: 'The backup is incomplete or missing required store sections.' });
+    if (payload.frontendFiles != null) {
+      if (!Array.isArray(payload.frontendFiles) || payload.frontendFiles.length > 5000) {
+        return res.status(400).json({ error: 'The frontend backup section is invalid.' });
+      }
+      const seenPaths = new Set();
+      let frontendBytes = 0;
+      for (const file of payload.frontendFiles) {
+        if (!file || !isAllowedFrontendPath(file.path) || seenPaths.has(file.path) || typeof file.data !== 'string' ||
+          !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(file.data)) {
+          return res.status(400).json({ error: 'The frontend backup contains an invalid file entry.' });
+        }
+        seenPaths.add(file.path);
+        frontendBytes += Buffer.from(file.data, 'base64').length;
+        if (frontendBytes > 70 * 1024 * 1024) return res.status(413).json({ error: 'The frontend backup exceeds the 70 MB restore limit.' });
+      }
+    }
+    if (payload.manifest) {
+      const { manifest, ...unsignedBackup } = payload;
+      const expectedDigest = String(manifest.digest || '');
+      const actualDigest = createHash('sha256').update(JSON.stringify(unsignedBackup)).digest('hex');
+      if (manifest.algorithm !== 'SHA-256' || !/^[a-f0-9]{64}$/i.test(expectedDigest) || actualDigest !== expectedDigest.toLowerCase()) {
+        return res.status(400).json({ error: 'Backup integrity check failed. The file may be damaged or modified.' });
+      }
+    }
     if (payload.media != null && (!Array.isArray(payload.media) || payload.media.some((m) => !m || !['app', 'persistent', 'root'].includes(m.location) || typeof m.name !== 'string' || m.name !== m.name.split(/[\\/]/).pop() || !/^[\w.-]+$/.test(m.name) || typeof m.data !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(m.data)))) {
       return res.status(400).json({ error: 'Backup contains an invalid media file entry.' });
     }
     // Preserve the exact current state before applying any part of a restore.
     const backupDir = join(getPersistentDataDirectory(), 'backups');
     mkdirSync(backupDir, { recursive: true });
-    const beforeRestore = createStoreBackup();
+    const beforeRestore = createStoreBackup(Array.isArray(payload.frontendFiles));
     const snapshotFile = join(backupDir, `pre-restore-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
     writeFileSync(snapshotFile, JSON.stringify(beforeRestore, null, 2), { flag: 'wx' });
     const counts = {};
@@ -3607,6 +3748,26 @@ app.post('/api/admin/backup/restore', adminAuth, requireRole('owner'), (req, res
         writeFileSync(target, bytes);
       }
       counts.media = payload.media.length;
+    }
+
+    if (Array.isArray(payload.frontendFiles)) {
+      const restoredPaths = new Set(payload.frontendFiles.map((file) => file.path));
+      for (const file of payload.frontendFiles) {
+        const target = getSafeFrontendTarget(file.path);
+        writeFileSync(target, Buffer.from(file.data, 'base64'));
+      }
+      const cleanUnlisted = (directory, prefix) => {
+        if (!existsSync(directory) || !lstatSync(directory).isDirectory()) return;
+        for (const entry of readdirSync(directory, { withFileTypes: true })) {
+          if (entry.name.startsWith('.')) continue;
+          const relativePath = `${prefix}/${entry.name}`;
+          const target = join(directory, entry.name);
+          if (entry.isDirectory() && !entry.isSymbolicLink()) cleanUnlisted(target, relativePath);
+          else if (entry.isFile() && isAllowedFrontendPath(relativePath) && !restoredPaths.has(relativePath)) unlinkSync(target);
+        }
+      };
+      for (const directory of ['src', 'public', 'dist']) cleanUnlisted(join(FRONTEND_ROOT, directory), directory);
+      counts.frontendFiles = payload.frontendFiles.length;
     }
 
     res.json({ ok: true, message: 'Store restored successfully', counts, preRestoreSnapshot: snapshotFile.split(/[\\/]/).pop() });
@@ -4400,4 +4561,5 @@ if (existsSync(dist)) {
 }
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`dot. api on http://localhost:${PORT}`));
+const HOST = process.env.HOST || '0.0.0.0';
+app.listen(PORT, HOST, () => console.log(`dot. api on http://${HOST}:${PORT}`));

@@ -72,19 +72,31 @@ export type Settings = {
   fbPixelId?: string;
   appearance?: { font?: string; accent?: string; desktopColumns?: number; mobileColumns?: number; imageFit?: 'contain' | 'cover' };
   homeContent?: Record<'en' | 'bn', Record<string, any>>;
+  siteContent?: { sections?: Record<string, boolean>; textOverrides?: Record<string, { en?: string; bn?: string }>; infoPages?: Record<string, Record<'en' | 'bn', { title?: string; body?: string[] }>> };
   fraudDetector?: FraudDetectorSettings;
 };
-export const getSettings = (): Promise<Settings> => fetch('/api/settings').then(j);
-
 const j = (r: Response) => {
   if (!r.ok) throw new Error('request failed');
   return r.json();
 };
 
-export const getCategories = (): Promise<Category[]> => fetch('/api/categories').then(j);
+// Share simultaneous storefront requests (header, home sections, and title effects often need the same data).
+const pendingJsonRequests = new Map<string, Promise<any>>();
+function getJsonOnce<T>(url: string): Promise<T> {
+  const pending = pendingJsonRequests.get(url);
+  if (pending) return pending as Promise<T>;
+  const request = fetch(url).then(j).finally(() => {
+    if (pendingJsonRequests.get(url) === request) pendingJsonRequests.delete(url);
+  });
+  pendingJsonRequests.set(url, request);
+  return request;
+}
+
+export const getSettings = (): Promise<Settings> => getJsonOnce('/api/settings');
+export const getCategories = (): Promise<Category[]> => getJsonOnce('/api/categories');
 export const getProducts = (category?: string): Promise<Product[]> =>
-  fetch('/api/products' + (category ? `?category=${encodeURIComponent(category)}` : '')).then(j);
-export const getProduct = (slug: string): Promise<Product> => fetch('/api/products/' + slug).then(j);
+  getJsonOnce('/api/products' + (category ? `?category=${encodeURIComponent(category)}` : ''));
+export const getProduct = (slug: string): Promise<Product> => getJsonOnce('/api/products/' + encodeURIComponent(slug));
 
 export type OrderPayload = {
   items: {
@@ -174,7 +186,7 @@ export async function validateCoupon(code: string, subtotal: number, phone?: str
   return d as { code: string; discount: number };
 }
 
-export type Review = { id: string; name: string; rating: number; text: string; at: string };
+export type Review = { id: string; name: string; rating: number; text: string; at: string; adminReply?: string };
 export const fetchReviews = (pid: string): Promise<{ count: number; avg: number; reviews: Review[] }> => fetch('/api/reviews/' + pid).then(j);
 export async function postReview(b: { productId: string; name: string; rating: number; text: string }) {
   const r = await fetch('/api/reviews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });

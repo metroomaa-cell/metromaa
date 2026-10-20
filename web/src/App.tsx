@@ -5,9 +5,23 @@ import { initGTM, initFB, dl, trackEngagement, initInteractionTracking } from '.
 import { Home, Shop, ProductPage, Checkout, Confirm, Track, SearchOverlay, InfoPage } from './pages';
 import { CustomerProvider, useCustomer, CustomerHeaderIcon, CustomerAccountPage } from './CustomerAccount';
 import { WhatsAppIcon } from './icons';
-import { setStoreLanguage, tr, useStoreLanguage } from './language';
+import { setStoreLanguage, setStoreCopyOverrides, tr, useStoreLanguage } from './language';
 const Admin = lazy(() => import('./admin').then((m) => ({ default: m.Admin })));
 const LoveLockLanding = lazy(() => import('./LoveLockLanding').then((m) => ({ default: m.LoveLockLanding })));
+
+function StoreLoading({ admin = false }: { admin?: boolean }) {
+  const brand = admin ? 'SECRATE ADMIN' : (isSkincareSite() ? 'SECRATE' : 'METRROMA');
+  return (
+    <div className="store-loading" role="status" aria-live="polite">
+      <div className="store-loading-card">
+        <div className="store-loading-brand">{brand}</div>
+        <p>{admin ? 'Preparing your dashboard…' : 'Your experience is getting ready…'}</p>
+        <div className="store-loading-track"><span /></div>
+        <span className="store-loading-note">A moment, please</span>
+      </div>
+    </div>
+  );
+}
 
 function Effects() {
   const route = useRoute();
@@ -19,6 +33,7 @@ function Effects() {
       initInteractionTracking();
     }
     getSettings().then((s) => {
+      setStoreCopyOverrides(s.siteContent?.textOverrides);
       if (!isAdmin && !isLocalPreview) {
         if (s.gtmId) initGTM(s.gtmId);
         if (s.fbPixelId) initFB(s.fbPixelId);
@@ -700,7 +715,7 @@ function Shell() {
       if (['contain', 'cover'].includes(appearance.imageFit)) root.style.setProperty('--store-image-fit', appearance.imageFit);
     }).catch(() => {});
   }, []);
-  if (route.name === 'admin') return <Suspense fallback={<div style={{ minHeight: '100vh' }} />}><Admin /></Suspense>;
+  if (route.name === 'admin') return <Suspense fallback={<StoreLoading admin />}><Admin /></Suspense>;
 
   // Dedicated Landing Page Funnel (Standalone high-converting page)
   const isLanding =
@@ -719,7 +734,7 @@ function Shell() {
       ? (route.param || 'lovelock')
       : route.name;
     return (
-      <Suspense fallback={<div style={{ minHeight: '100vh', background: '#0b0f19' }} />}>
+      <Suspense fallback={<StoreLoading />}>
         <Effects />
         <LoveLockLanding slug={landingSlug} />
         <Toast />

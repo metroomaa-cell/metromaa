@@ -441,6 +441,7 @@ function Reviews({ productId }: { productId: string }) {
             <div className="rev" key={r.id}>
               <div className="revh"><Stars n={r.rating} /><span className="dim">{r.name}</span></div>
               {r.text && <p>{r.text}</p>}
+              {r.adminReply && <div className="revreply"><strong>Store reply</strong><p>{r.adminReply}</p></div>}
             </div>
           ))}
         </div>
@@ -481,10 +482,16 @@ const INFO: Record<string, { title: string; body: string[] }> = {
 };
 export function InfoPage({ slug }: { slug: string }) {
   const language = useStoreLanguage();
-  const info = INFO[slug] || { title: 'page', body: ['coming soon.'] };
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const defaultInfo = INFO[slug] || { title: 'page', body: ['coming soon.'] };
+  const customInfo = settings?.siteContent?.infoPages?.[slug]?.[language];
+  const info = {
+    title: customInfo?.title?.trim() || tr(defaultInfo.title, language),
+    body: defaultInfo.body.map((paragraph, index) => customInfo?.body?.[index]?.trim() || tr(paragraph, language)),
+  };
   const [wa, setWa] = useState('');
   useEffect(() => {
-    getSettings().then((s) => { if (s.whatsapp) setWa(s.whatsapp); }).catch(() => {});
+    getSettings().then((s) => { setSettings(s); if (s.whatsapp) setWa(s.whatsapp); }).catch(() => {});
   }, []);
   return (
     <div className="page"><div className="wrap" style={{ maxWidth: 760 }}>
@@ -576,6 +583,9 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
                 ? '/uploads/banner_secrate_desktop.webp'
                 : '/uploads/img_mvcvyjixc2dpi.webp'}
               alt={isSkin ? 'Botanical Skincare & Essentials' : 'METRROMA Lifestyle & Gifts'}
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
               onError={(e: any) => {
                 if (isSkin) {
                   e.currentTarget.src = 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=1920&q=85';
@@ -629,6 +639,12 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
   }
 
   const s = activeSlides[cur] || activeSlides[0];
+  const isSkin = isSkincareSite();
+  const heroTitle = s.title || (isSkin ? 'Botanical care for everyday rituals' : 'Curated Modern Lifestyle');
+  const heroSubtitle = s.subtitle || (s.title ? '' : (isSkin ? 'Pure. Gentle. Thoughtful.' : 'Watches, Sunglasses & Gifts'));
+  const heroDescription = s.description || (isSkin
+    ? 'Discover considered skincare and self-care essentials made to bring a little more intention to your everyday routine.'
+    : 'Explore signature accessories and timeless pieces, thoughtfully selected for the way you live.');
 
   return (
     <section
@@ -650,6 +666,9 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
             key={s.image}
             src={s.image}
             alt={s.title || 'Hero Banner'}
+            loading="eager"
+            fetchPriority={cur === 0 ? 'high' : 'auto'}
+            decoding="async"
             style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.6s ease-in-out' }}
             onError={(e: any) => {
               const fallback = isSkincareSite()
@@ -725,20 +744,16 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
       <div className="wrap tabaya-hero-wrap">
         <div className="tabaya-hero-card" key={s.id || cur} style={{ animation: 'fadeIn 0.5s ease' }}>
           {s.badge && <span className="tabaya-hero-badge">{tr(s.badge, language)}</span>}
-          {s.title && (
-            <h1 className="tabaya-hero-title serif">
-              {tr(s.title, language)}
-              {s.subtitle && (
-                <>
-                  <br />
-                  <span className="it" style={{ color: '#b48e4c' }}>{tr(s.subtitle, language)}</span>
-                </>
-              )}
-            </h1>
-          )}
-          {s.description && (
-            <p className="tabaya-hero-desc">{tr(s.description, language)}</p>
-          )}
+          <h1 className="tabaya-hero-title serif">
+            {tr(heroTitle, language)}
+            {heroSubtitle && (
+              <>
+                <br />
+                <span className="it" style={{ color: '#b48e4c' }}>{tr(heroSubtitle, language)}</span>
+              </>
+            )}
+          </h1>
+          <p className="tabaya-hero-desc">{tr(heroDescription, language)}</p>
           <div className="tabaya-hero-btns">
             <button
               className="tabaya-btn primary"
@@ -818,6 +833,7 @@ export function Home() {
 
   const isSkin = isSkincareSite();
   const customHomeCopy = settings?.homeContent?.[language] || {};
+  const visibleSections = settings?.siteContent?.sections || {};
   const homeText = (key: string, fallback: string) => customHomeCopy[key]?.trim() || tr(fallback, language);
 
   const best = useMemo(() => {
@@ -901,10 +917,10 @@ export function Home() {
   return (
     <div className="tabaya-home">
       {/* 1. HERO BANNER / SLIDER */}
-      <HomeHeroSlider slides={sliders} />
+      {visibleSections.hero !== false && <HomeHeroSlider slides={sliders} />}
 
       {/* 1.5 QUICK CATEGORY PILLS BAR (Mobile-First / Curated Lifestyle Navigation) */}
-      {!isSkin && (
+      {visibleSections.quickCategories !== false && !isSkin && (
         <section style={{ background: '#FAF7F2', borderBottom: '1px solid #ECE7DE', padding: '12px 0' }}>
           <div className="wrap" style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
             {[
@@ -951,7 +967,7 @@ export function Home() {
       )}
 
       {/* 2. SHOP BY COLLECTION / CATEGORY (ara-section) */}
-      {cats.length > 0 && (
+      {visibleSections.collections !== false && cats.length > 0 && (
         <section className="ara-section">
           <div className="wrap">
             <div className="ara-header">
@@ -1008,7 +1024,7 @@ export function Home() {
       )}
 
       {/* 3. FRAMED INTRO BOX */}
-      <section className="tabaya-intro">
+      {visibleSections.intro !== false && <section className="tabaya-intro">
         <div className="tabaya-intro__frame">
           <h2 className="tabaya-intro__title">
             {homeText('introTitle', isSkin ? 'Pure Botanicals Meet Clinical Care' : 'Premium Craftsmanship Meets Modern Luxury')}
@@ -1019,10 +1035,10 @@ export function Home() {
               : 'Every item in our collection is curated with an unwavering commitment to craftsmanship, authentic premium quality, and timeless modern style. From iconic timepieces and designer sunglasses to unforgettable gift boxes delivered with cash on delivery across Bangladesh.')}
           </p>
         </div>
-      </section>
+      </section>}
 
       {/* 4. FEATURED PRODUCTS (pc-stage & pc-grid) */}
-      <section className="pc-stage">
+      {visibleSections.featured !== false && <section className="pc-stage">
         <div className="wrap">
           <div className="pc-section-header">
             <p className="pc-section-kicker">
@@ -1119,10 +1135,10 @@ export function Home() {
             </div>
           )}
         </div>
-      </section>
+      </section>}
 
       {/* 5. BRAND PILLARS (feature-section) */}
-      <section className="feature-section">
+      {visibleSections.benefits !== false && <section className="feature-section">
         <div className="wrap">
           <div className="feature-grid">
             <div className="feature-item">
@@ -1155,10 +1171,10 @@ export function Home() {
             </div>
           </div>
         </div>
-      </section>
+      </section>}
 
       {/* 6. FAQ SECTION (faq-section) */}
-      <section className="faq-section">
+      {visibleSections.faq !== false && <section className="faq-section">
         <div className="faq-wrapper">
           {/* Left Column: Rotated Vertical Text + Editorial Photo */}
           <div className="faq-left">
@@ -1199,10 +1215,10 @@ export function Home() {
             })}
           </div>
         </div>
-      </section>
+      </section>}
 
       {/* 7. VIP NEWSLETTER */}
-      <section className="tabaya-sec-newsletter">
+      {visibleSections.newsletter !== false && <section className="tabaya-sec-newsletter">
         <div className="wrap">
           <div className="tabaya-news-card">
             <span className="tabaya-sec-subtitle" style={{ color: '#b48e4c' }}>
@@ -1250,7 +1266,7 @@ export function Home() {
             )}
           </div>
         </div>
-      </section>
+      </section>}
     </div>
   );
 }
@@ -1500,7 +1516,21 @@ export function ProductPage({ slug }: { slug: string }) {
   }, [slug]);
 
   if (err) return <div className="page"><div className="wrap"><p className="empty">Product not found.</p></div></div>;
-  if (!p) return <div className="page"><div className="wrap"><p className="empty">Loading product details…</p></div></div>;
+  if (!p) return (
+    <div className="page">
+      <div className="wrap pd-loading-grid" role="status" aria-live="polite" aria-label="Loading product details">
+        <div className="skel pd-loading-image" />
+        <div className="pd-loading-copy">
+          <div className="skel skline" />
+          <div className="skel skline pd-loading-title" />
+          <div className="skel skline" />
+          <div className="skel skline sh" />
+          <div className="skel pd-loading-buy" />
+          <span>Preparing product details…</span>
+        </div>
+      </div>
+    </div>
+  );
   if (p.adult && !ok) return <div className="page"><AgeGate onConfirm={confirm} /></div>;
 
   const currentPrice = selVar?.price ?? p.price;

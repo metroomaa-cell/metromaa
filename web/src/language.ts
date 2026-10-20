@@ -3,6 +3,13 @@ import { useEffect, useState } from 'react';
 export type StoreLanguage = 'en' | 'bn';
 const KEY = 'metrroma-track-language';
 const EVENT = 'store-language-change';
+const COPY_EVENT = 'store-copy-change';
+let copyOverrides: Record<string, { en?: string; bn?: string }> = {};
+
+export function setStoreCopyOverrides(overrides: Record<string, { en?: string; bn?: string }> | undefined) {
+  copyOverrides = overrides && typeof overrides === 'object' ? overrides : {};
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(COPY_EVENT));
+}
 
 export function getStoreLanguage(): StoreLanguage {
   if (typeof window === 'undefined') return 'en';
@@ -17,6 +24,7 @@ export function setStoreLanguage(language: StoreLanguage) {
 
 export function useStoreLanguage(): StoreLanguage {
   const [language, setLanguage] = useState<StoreLanguage>(getStoreLanguage);
+  const [, setCopyRevision] = useState(0);
   useEffect(() => {
     document.documentElement.lang = language === 'bn' ? 'bn' : 'en';
   }, [language]);
@@ -25,10 +33,13 @@ export function useStoreLanguage(): StoreLanguage {
       const next = event instanceof CustomEvent ? event.detail : getStoreLanguage();
       setLanguage(next === 'bn' ? 'bn' : 'en');
     };
+    const updateCopy = () => setCopyRevision((revision) => revision + 1);
     window.addEventListener(EVENT, update);
+    window.addEventListener(COPY_EVENT, updateCopy);
     window.addEventListener('storage', update);
     return () => {
       window.removeEventListener(EVENT, update);
+      window.removeEventListener(COPY_EVENT, updateCopy);
       window.removeEventListener('storage', update);
     };
   }, []);
@@ -168,6 +179,10 @@ const BN: Record<string, string> = {
   'Delivery inside Dhaka is typically 24–48 hours (৳70). Delivery outside Dhaka takes 2–4 business days (৳130). Orders above ৳1,999 qualify for 100% Free Nationwide Delivery.': 'ঢাকার ভেতরে সাধারণত ২৪–৪৮ ঘণ্টায় (৳৭০) এবং ঢাকার বাইরে ২–৪ কর্মদিবসে (৳১৩০) পণ্য পৌঁছে যায়। ৳১,৯৯৯-এর বেশি অর্ডারে সারা দেশে ডেলিভারি ফ্রি।',
 };
 
+export const STORE_COPY_KEYS = Object.keys(BN).sort((a, b) => a.localeCompare(b));
+
 export function tr(text: string, language: StoreLanguage): string {
+  const override = copyOverrides[text]?.[language];
+  if (typeof override === 'string' && override.length) return override;
   return language === 'bn' ? (BN[text] || text) : text;
 }
