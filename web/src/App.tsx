@@ -490,18 +490,16 @@ function Footer() {
             <a onClick={() => go('info/shipping')}>{tr('Shipping & Delivery', language)}</a>
             <a onClick={() => go('info/returns')}>{tr('Returns & Exchanges', language)}</a>
             <a onClick={() => go('info/contact')}>{tr('Contact Customer Support', language)}</a>
-            {!isSkin && (
-              <a
-                href="/ShakilEcom.apk"
-                download="METROMA-Android-App-2.4.3.apk"
-                className="metrroma-app-download"
-                aria-label={tr('Download Android App', language) + ' version 2.4.3'}
-              >
-                <span aria-hidden="true">↓</span>
-                <span>{tr('Download Android App', language)}</span>
-                <small>2.4.3</small>
-              </a>
-            )}
+            <a
+              href="/shakilecom"
+              download="ShakilEcom.apk"
+              className="metrroma-app-download"
+              aria-label={tr('Download Android App', language) + ' version 2.4.4'}
+            >
+              <span aria-hidden="true">↓</span>
+              <span>{tr('Download Android App', language)}</span>
+              <small>2.4.4</small>
+            </a>
           </div>
           <div>
             <h4>{tr('Hotline & Inquiries', language)}</h4>
