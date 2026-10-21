@@ -7309,6 +7309,16 @@ function SettingsAdmin() {
     return { ...current, homeContent: { ...(current.homeContent || {}), [lang]: { ...(current.homeContent?.[lang] || {}), faqs } } };
   });
   const siteSections = f?.siteContent?.sections || {};
+  const sectionLabels: Record<string, string> = {
+    hero: 'Hero banner / slider',
+    quickCategories: 'Quick category links',
+    collections: 'Shop by collection',
+    intro: 'Brand introduction',
+    featured: 'Featured products',
+    benefits: 'Store benefits',
+    faq: 'FAQ section',
+    newsletter: 'Newsletter signup',
+  };
   const textOverrides = f?.siteContent?.textOverrides || {};
   const editTextOverride = (lang: 'en' | 'bn', value: string) => setF((current: any) => ({
     ...current,
