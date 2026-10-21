@@ -48,9 +48,11 @@ app.use((err, req, res, next) => {
 const UPLOADS = join(__dir, 'uploads');
 const PERSISTENT_UPLOADS = join(__dir, 'data', 'persistent_uploads');
 const ROOT_UPLOADS = join(__dir, '..', 'uploads');
+const PRIVATE_APK_DIR = join(__dir, 'data', 'private_apk');
 if (!existsSync(UPLOADS)) mkdirSync(UPLOADS, { recursive: true });
 if (!existsSync(PERSISTENT_UPLOADS)) mkdirSync(PERSISTENT_UPLOADS, { recursive: true });
 if (!existsSync(ROOT_UPLOADS)) mkdirSync(ROOT_UPLOADS, { recursive: true });
+if (!existsSync(PRIVATE_APK_DIR)) mkdirSync(PRIVATE_APK_DIR, { recursive: true });
 
 const UPLOAD_DIRS = { app: UPLOADS, persistent: PERSISTENT_UPLOADS, root: ROOT_UPLOADS };
 function collectBackupMedia() {
@@ -516,8 +518,40 @@ app.put('/api/settings', adminAuth, requireRole('owner', 'manager'), (req, res) 
     homeContent,
     siteContent,
     sliders: Array.isArray(b.sliders) ? b.sliders : (cur.sliders || []),
+    homepageSections: Array.isArray(b.homepageSections) ? b.homepageSections.slice(0, 30).map((section) => ({
+      id: String(section?.id || '').slice(0, 80),
+      title: String(section?.title || '').trim().slice(0, 80),
+      eyebrow: String(section?.eyebrow || '').trim().slice(0, 50),
+      buttonText: String(section?.buttonText || 'View the collection').trim().slice(0, 40),
+      category: String(section?.category || '').trim().slice(0, 100),
+      count: Math.max(1, Math.min(30, parseInt(section?.count, 10) || 5)),
+      active: section?.active !== false,
+      placement: ['after-brands', 'after-categories', 'after-promo', 'after-sale', 'after-story', 'before-newsletter', 'before-footer'].includes(section?.placement) ? section.placement : 'after-story',
+      productIds: Array.isArray(section?.productIds) ? [...new Set(section.productIds.map(String))].slice(0, 100) : [],
+    })).filter((section) => section.title && section.category) : (cur.homepageSections || []),
+    apkVersion: typeof b.apkVersion === 'string' ? b.apkVersion.trim().slice(0, 30) : (cur.apkVersion || ''),
     fraudDetector,
   }));
+});
+
+app.post('/api/app-apk', adminAuth, requireRole('owner', 'manager'), express.raw({ type: ['application/vnd.android.package-archive', 'application/octet-stream'], limit: '50mb' }), (req, res) => {
+  if (!Buffer.isBuffer(req.body) || req.body.length < 8 || req.body.length > 50 * 1024 * 1024) return res.status(400).json({ error: 'APK file is empty or too large.' });
+  const filename = String(req.query.filename || 'Metrroma-Admin.apk').replace(/[^a-zA-Z0-9._-]/g, '-').slice(-100);
+  if (!filename.toLowerCase().endsWith('.apk')) return res.status(400).json({ error: 'Please upload an .apk file.' });
+  const savedName = `admin-${Date.now()}-${filename}`;
+  writeFileSync(join(PRIVATE_APK_DIR, savedName), req.body, { mode: 0o600 });
+  const version = String(req.query.version || '').trim().slice(0, 30);
+  const settings = saveSettings({ apkStorageName: savedName, apkVersion: version || getSettings().apkVersion || '' });
+  res.json({ ok: true, name: filename, version: settings.apkVersion });
+});
+app.get('/api/admin/app-apk/download', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  const savedName = String(getSettings().apkStorageName || '');
+  if (!savedName || savedName.includes('..') || savedName.includes('/') || savedName.includes('\\')) return res.status(404).json({ error: 'No private admin APK has been uploaded.' });
+  const file = join(PRIVATE_APK_DIR, savedName);
+  if (!existsSync(file)) return res.status(404).json({ error: 'The saved APK file is missing.' });
+  res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+  res.setHeader('Content-Disposition', `attachment; filename="${savedName.replace(/"/g, '')}"`);
+  res.sendFile(file);
 });
 
 app.get('/api/products', (req, res) => {

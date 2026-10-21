@@ -7155,7 +7155,7 @@ function SettingsAdmin() {
   const [settingsLoadError, setSettingsLoadError] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState<'brand' | 'slider' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend'>('brand');
+  const [tab, setTab] = useState<'brand' | 'slider' | 'home' | 'app' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend'>('brand');
   const [copySearch, setCopySearch] = useState('');
   const [copyKey, setCopyKey] = useState('');
   const [infoSlug, setInfoSlug] = useState('shipping');
@@ -7174,10 +7174,21 @@ function SettingsAdmin() {
     active: true,
   });
   const [uploadingSlideImg, setUploadingSlideImg] = useState(false);
+  const [uploadingApk, setUploadingApk] = useState(false);
+  const [storeCategories, setStoreCategories] = useState<any[]>([]);
+  const storeCategoriesRef = useRef<any[]>([]);
+  const [availableProducts, setAvailableProducts] = useState<any[]>([]);
   const [editingSlideIdx, setEditingSlideIdx] = useState<number | null>(null);
   const [pickerTarget, setPickerTarget] = useState<{ title: string; currentImg: string; onSelect: (url: string) => void } | null>(null);
 
   useEffect(() => {
+    fetch('/api/categories').then((r) => r.ok ? r.json() : []).then((items) => {
+      const cats = Array.isArray(items) ? items : [];
+      storeCategoriesRef.current = cats;
+      setStoreCategories(cats);
+      setF((current: any) => current && (!Array.isArray(current.homepageSections) || !current.homepageSections.length) ? { ...current, homepageSections: cats.map((category: any, index: number) => ({ id: `home-${category.slug || index}`, title: category.name, eyebrow: 'SHOP THE COLLECTION', buttonText: 'View the collection', category: category.slug, count: 8, active: true, placement: 'after-story', productIds: [] })) } : current);
+    }).catch(() => {});
+    fetch('/api/products').then((r) => r.ok ? r.json() : []).then((items) => setAvailableProducts(Array.isArray(items) ? items : [])).catch(() => {});
     fetch('/api/settings').then(async (r) => {
       if (!r.ok) throw new Error(`Settings request failed (${r.status})`);
       return r.json();
@@ -7193,6 +7204,7 @@ function SettingsAdmin() {
         logo: s.logo || '',
         favicon: s.favicon || '',
         sliders: Array.isArray(s.sliders) ? s.sliders : [],
+        homepageSections: Array.isArray(s.homepageSections) && s.homepageSections.length ? s.homepageSections : storeCategoriesRef.current.map((category: any, index: number) => ({ id: `home-${category.slug || index}`, title: category.name, eyebrow: 'SHOP THE COLLECTION', buttonText: 'View the collection', category: category.slug, count: 8, active: true, placement: 'after-story', productIds: [] })),
         siteContent: {
           ...siteContent,
           sections: siteContent.sections && typeof siteContent.sections === 'object' && !Array.isArray(siteContent.sections) ? siteContent.sections : {},
@@ -7270,6 +7282,7 @@ function SettingsAdmin() {
   };
 
   const sliders: any[] = Array.isArray(f?.sliders) ? f.sliders : [];
+  const homepageSections: any[] = Array.isArray(f?.homepageSections) ? f.homepageSections : [];
   const homeCopyFields = [
     { key: 'collectionEyebrow', label: 'Collection section eyebrow', long: false },
     { key: 'collectionTitle', label: 'Collection section title', long: false },
@@ -7311,7 +7324,6 @@ function SettingsAdmin() {
     const localized = field === 'title' ? { ...oldPage, title: value } : { ...oldPage, body };
     return { ...current, siteContent: { ...(current.siteContent || {}), infoPages: { ...(current.siteContent?.infoPages || {}), [infoSlug]: { ...(current.siteContent?.infoPages?.[infoSlug] || {}), [lang]: localized } } } };
   });
-  const sectionLabels: Record<string, string> = { hero: 'Hero banner / slider', quickCategories: 'Quick category links', collections: 'Shop by collection', intro: 'Brand introduction', featured: 'Featured products', benefits: 'Store benefits', faq: 'FAQ section', newsletter: 'Newsletter signup' };
   const matchingCopyKeys = STORE_COPY_KEYS.filter((key) => !copySearch || key.toLowerCase().includes(copySearch.toLowerCase())).slice(0, 100);
   const infoPageLabels: Record<string, string> = { shipping: 'Shipping & Delivery', returns: 'Returns & Exchanges', contact: 'Contact', about: 'About', privacy: 'Privacy Policy', terms: 'Terms of Service', journal: 'Journal' };
 
@@ -7406,6 +7418,8 @@ function SettingsAdmin() {
             <span>🎠 Homepage Sliders & Banners</span>
             <span className="sa-filter-count">{sliders.length}</span>
           </button>
+          <button className={tab === 'home' ? 'on' : ''} onClick={() => setTab('home')}><span>🧩 Homepage Sections</span><span className="sa-filter-count">8</span></button>
+          <button className={tab === 'app' ? 'on' : ''} onClick={() => setTab('app')}><span>📱 Android App / APK</span></button>
           <button className={tab === 'store' ? 'on' : ''} onClick={() => setTab('store')}>
             <span>🏪 Store & Delivery</span>
           </button>
@@ -7801,6 +7815,29 @@ function SettingsAdmin() {
 
       {/* TAB 4: FRAUD DETECTOR */}
       {tab === 'fraud' && <FraudDetectorAdmin embedded={true} />}
+
+      {tab === 'home' && <div className="sa-card" style={{ padding: 24 }}>
+        <h2 style={{ margin: '0 0 6px', color: '#fff' }}>Homepage Sections</h2><p className="dim">Control the eight homepage blocks shown on your storefront. Save All Changes to publish.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }}>{Object.entries(sectionLabels).map(([key, label]) => <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: '#1c1830', borderRadius: 8 }}><input type="checkbox" checked={siteSections[key] !== false} onChange={(e) => setF((s: any) => ({ ...s, siteContent: { ...(s.siteContent || {}), sections: { ...(s.siteContent?.sections || {}), [key]: e.target.checked } } }))} />{label}</label>)}</div>
+        <h3 style={{ color: '#fff', margin: '24px 0 8px' }}>Homepage product collections</h3>
+        {homepageSections.map((section, index) => <div key={section.id || index} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 10, alignItems: 'end', padding: 12, marginTop: 10, border: '1px solid rgba(255,255,255,.1)', borderRadius: 10 }}>
+          <label>Heading<input value={section.title || ''} onChange={(e) => setF((s: any) => ({ ...s, homepageSections: s.homepageSections.map((x: any, i: number) => i === index ? { ...x, title: e.target.value } : x) }))} /></label>
+          <label>Category<select value={section.category || ''} onChange={(e) => setF((s: any) => ({ ...s, homepageSections: s.homepageSections.map((x: any, i: number) => i === index ? { ...x, category: e.target.value } : x) }))}><option value="">Choose category</option>{storeCategories.map((category) => <option key={category.slug} value={category.slug}>{category.name}</option>)}</select></label>
+          <label>Products to show<input type="number" min={1} max={30} value={section.count || 8} onChange={(e) => setF((s: any) => ({ ...s, homepageSections: s.homepageSections.map((x: any, i: number) => i === index ? { ...x, count: Number(e.target.value) || 1 } : x) }))} /></label>
+          <label>Position<select value={section.placement || 'after-story'} onChange={(e) => setF((s: any) => ({ ...s, homepageSections: s.homepageSections.map((x: any, i: number) => i === index ? { ...x, placement: e.target.value } : x) }))}><option value="after-categories">After categories</option><option value="after-story">After brand story</option><option value="after-sale">After featured products</option><option value="before-newsletter">Before newsletter</option><option value="before-footer">At bottom of homepage</option></select></label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7 }}><input type="checkbox" checked={section.active !== false} onChange={(e) => setF((s: any) => ({ ...s, homepageSections: s.homepageSections.map((x: any, i: number) => i === index ? { ...x, active: e.target.checked } : x) }))} />Show</label>
+          <button type="button" className="sa-btn ghost small" onClick={() => setF((s: any) => ({ ...s, homepageSections: s.homepageSections.filter((_: any, i: number) => i !== index) }))}>Remove</button>
+          <details style={{ gridColumn: '1 / -1' }}><summary style={{ cursor: 'pointer', color: '#cbd5e1' }}>Choose exact products ({(section.productIds || []).length} selected; empty uses category)</summary><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 7, maxHeight: 200, overflow: 'auto', marginTop: 10 }}>{availableProducts.filter((product) => !section.category || product.category === section.category).map((product) => { const ids = (section.productIds || []).map(String); return <label key={product.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 6, background: ids.includes(String(product.id)) ? 'rgba(180,142,76,.12)' : 'rgba(255,255,255,.03)' }}><input type="checkbox" checked={ids.includes(String(product.id))} onChange={(e) => setF((s: any) => ({ ...s, homepageSections: s.homepageSections.map((x: any, i: number) => i === index ? { ...x, productIds: e.target.checked ? [...new Set([...(x.productIds || []).map(String), String(product.id)])] : (x.productIds || []).map(String).filter((id: string) => id !== String(product.id)) } : x) }))} />{product.name}</label>; })}</div></details>
+        </div>)}
+        <button type="button" className="sa-btn ghost" style={{ marginTop: 12 }} onClick={() => setF((s: any) => ({ ...s, homepageSections: [...(s.homepageSections || []), { id: `home-${Date.now()}`, title: 'New Collection', category: storeCategories[0]?.slug || '', count: 8, active: true, placement: 'after-story', productIds: [] }] }))}>＋ Add product section</button>
+      </div>}
+
+      {tab === 'app' && <div className="sa-card" style={{ padding: 24, maxWidth: 850, display: 'grid', gap: 14 }}>
+        <h2 style={{ margin: 0, color: '#fff' }}>Private Admin APK</h2><p className="dim">This APK is only accessible to authorized store admins. It is not linked from the customer storefront.</p>
+        <label>App version<input value={f.apkVersion || ''} onChange={set('apkVersion')} placeholder="e.g. 2.4.4" /></label>
+        <label className="sa-btn" style={{ cursor: 'pointer', width: 'fit-content' }}>{uploadingApk ? 'Uploading…' : 'Upload private APK'}<input type="file" accept=".apk,application/vnd.android.package-archive" disabled={uploadingApk} style={{ display: 'none' }} onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; if (!file.name.toLowerCase().endsWith('.apk') || file.size > 50 * 1024 * 1024) { alert('Choose an APK file up to 50 MB.'); return; } setUploadingApk(true); try { const params = new URLSearchParams({ filename: file.name, version: f.apkVersion || '' }); const response = await fetch(`/api/app-apk?${params}`, { method: 'POST', headers: { 'x-admin-token': getTok(), 'Content-Type': 'application/vnd.android.package-archive' }, body: file }); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Upload failed'); setF((s: any) => ({ ...s, apkVersion: result.version, apkStorageName: result.name })); alert('Private APK uploaded successfully.'); } catch (err: any) { alert(err.message || 'APK upload failed'); } finally { setUploadingApk(false); e.target.value = ''; } }} /></label>
+        <button type="button" className="sa-btn ghost" onClick={async () => { try { const response = await aFetch('/admin/app-apk/download'); if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'No APK available'); const url = URL.createObjectURL(await response.blob()); const link = document.createElement('a'); link.href = url; link.download = 'Metrroma-Admin.apk'; link.click(); URL.revokeObjectURL(url); } catch (e: any) { alert(e.message || 'APK download failed'); } }}>Download current private APK</button>
+      </div>}
 
       {tab === 'appearance' && <div className="sa-card sa-appearance-panel">
         <div className="sa-appearance-heading"><div><span className="sa-appearance-eyebrow">STOREFRONT CONTROLS</span><h2>Appearance & Product Layout</h2><p>Choose the shared visual settings for this storefront. Changes apply after saving and refreshing the storefront.</p></div><span className="sa-appearance-chip">Store settings</span></div>

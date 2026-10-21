@@ -34,6 +34,17 @@ function Effects() {
     }
     getSettings().then((s) => {
       setStoreCopyOverrides(s.siteContent?.textOverrides);
+      if (s.appearance) {
+        const root = document.documentElement;
+        const accent = s.appearance.accent || '#b48e4c';
+        root.style.setProperty('--store-accent', accent);
+        root.style.setProperty('--glow', accent);
+        root.style.setProperty('--tabaya-accent', accent);
+        root.style.setProperty('--store-columns-desktop', String(s.appearance.desktopColumns || 4));
+        root.style.setProperty('--store-columns-mobile', String(s.appearance.mobileColumns || 2));
+        root.style.setProperty('--store-image-fit', s.appearance.imageFit || 'contain');
+        root.style.setProperty('--store-font', s.appearance.font || 'Inter');
+      }
       if (!isAdmin && !isLocalPreview) {
         if (s.gtmId) initGTM(s.gtmId);
         if (s.fbPixelId) initFB(s.fbPixelId);

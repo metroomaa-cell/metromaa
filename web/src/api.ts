@@ -72,6 +72,7 @@ export type Settings = {
   fbPixelId?: string;
   appearance?: { font?: string; accent?: string; desktopColumns?: number; mobileColumns?: number; imageFit?: 'contain' | 'cover' };
   homeContent?: Record<'en' | 'bn', Record<string, any>>;
+  homepageSections?: Array<{ id?: string; title: string; eyebrow?: string; buttonText?: string; category: string; count?: number; active?: boolean; placement?: string; productIds?: string[] }>;
   siteContent?: { sections?: Record<string, boolean>; textOverrides?: Record<string, { en?: string; bn?: string }>; infoPages?: Record<string, Record<'en' | 'bn', { title?: string; body?: string[] }>> };
   fraudDetector?: FraudDetectorSettings;
 };
