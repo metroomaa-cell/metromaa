@@ -53,6 +53,7 @@ const BN: Record<string, string> = {
   'VIP Sign In / Register (5% OFF)': 'ভিআইপি লগইন / নিবন্ধন (প্রথম অর্ডারে ৫% ছাড়)',
   'Track Your Order': 'অর্ডারের অবস্থা দেখুন', 'Shipping & Delivery': 'শিপিং ও ডেলিভারি',
   'Returns & Exchanges': 'রিটার্ন ও পণ্য বদল', 'Contact Customer Support': 'কাস্টমার সাপোর্টে যোগাযোগ',
+  'Download Android App': 'অ্যান্ড্রয়েড অ্যাপ ডাউনলোড',
   Collections: 'কালেকশন', 'Customer Care': 'কাস্টমার কেয়ার', 'Hotline & Inquiries': 'হটলাইন ও যোগাযোগ',
   'Need assistance? Call or WhatsApp our helpline:': 'সহায়তা দরকার? আমাদের হটলাইনে কল বা WhatsApp করুন:',
   'WhatsApp Support': 'WhatsApp সাপোর্ট', 'Your Bag is Empty': 'আপনার ব্যাগ খালি',

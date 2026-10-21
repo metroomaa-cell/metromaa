@@ -1563,6 +1563,28 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
 .tabaya-footer-grid a:hover {
   color: #b08968;
 }
+.tabaya-footer-grid a.metrroma-app-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border: 1px solid rgba(212, 175, 55, 0.38);
+  border-radius: 999px;
+  background: rgba(212, 175, 55, 0.08);
+  color: #f4dfad;
+  font-weight: 650;
+  text-decoration: none;
+}
+.tabaya-footer-grid a.metrroma-app-download:hover {
+  border-color: rgba(212, 175, 55, 0.7);
+  background: rgba(212, 175, 55, 0.14);
+  color: #fff2ca;
+}
+.metrroma-app-download small {
+  color: #d4af37;
+  font-size: 10px;
+}
 .tabaya-footer-bottom {
   border-top: 1px solid rgba(255,255,255,0.08);
   padding-top: 24px;
