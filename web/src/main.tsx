@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles.css';
 
+const Admin = React.lazy(() => import('./admin').then(({ Admin }) => ({ default: Admin })));
+const isAdmin = /^\/(?:wp-admin|admin)(?:\/|$)/i.test(window.location.pathname);
+
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; err: any }> {
   constructor(props: any) {
     super(props);
@@ -31,7 +34,11 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      {isAdmin ? (
+        <React.Suspense fallback={<main role="status">Loading admin…</main>}>
+          <Admin />
+        </React.Suspense>
+      ) : <App />}
     </ErrorBoundary>
   </React.StrictMode>
 );
