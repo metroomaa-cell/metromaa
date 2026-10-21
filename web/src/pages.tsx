@@ -2140,8 +2140,8 @@ export function ProductPage({ slug }: { slug: string }) {
                         <div className="tabaya-feature-card">
                           <span className="icon">💎</span>
                           <div>
-                            <h4>First-Grade Durable Frame</h4>
-                            <p>Crafted with reinforced lightweight alloy and ergonomic acetate temples for all-day comfort.</p>
+                            <h4>Classic Everyday Style</h4>
+                            <p>A clean, versatile frame design that pairs easily with everyday outfits.</p>
                           </div>
                         </div>
                         <div className="tabaya-feature-card">

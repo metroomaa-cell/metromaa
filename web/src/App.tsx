@@ -150,7 +150,12 @@ function AnnouncementBar() {
   useEffect(() => {
     getSettings().then((s) => {
       if (s.announce && s.announce.trim()) {
-        setAnnounce(s.announce.trim());
+        const threshold = s.freeShipThreshold ? taka(s.freeShipThreshold) : 'Tk 2,500';
+        const alignedAnnouncement = s.announce.trim().replace(
+          /(FREE (?:SHIPPING|DELIVERY)(?: ON ORDERS)? (?:OVER|ABOVE)\s*)(?:৳|Tk)?\s*[\d,]+/i,
+          `$1${threshold}`,
+        );
+        setAnnounce(alignedAnnouncement);
       } else {
         const threshold = s.freeShipThreshold ? taka(s.freeShipThreshold) : '৳2,500';
         setAnnounce(
@@ -470,7 +475,7 @@ function Footer() {
             <p className="tabaya-footer-desc">
               {tr(isSkin
                 ? 'Dermatologically-inspired botanical skincare, intimate wellness & everyday self-care rituals. Clean, gentle formulations crafted with active botanicals, delivered across Bangladesh with cash on delivery.'
-                : 'Contemporary modest fashion & lifestyle brand. Ethically crafted timeless modest attire, abayas, panjabis & essentials delivered across Bangladesh with cash on delivery.', language)}
+                : 'Watches, sunglasses and gift collections for everyday style. Cash on delivery across Bangladesh.', language)}
             </p>
             <div className="tabaya-trust-pill">
               <span>🚚 {tr('Cash on Delivery Nationwide', language)}</span>
@@ -490,16 +495,6 @@ function Footer() {
             <a onClick={() => go('info/shipping')}>{tr('Shipping & Delivery', language)}</a>
             <a onClick={() => go('info/returns')}>{tr('Returns & Exchanges', language)}</a>
             <a onClick={() => go('info/contact')}>{tr('Contact Customer Support', language)}</a>
-            <a
-              href="/shakilecom"
-              download="ShakilEcom.apk"
-              className="metrroma-app-download"
-              aria-label={tr('Download Android App', language) + ' version 2.4.4'}
-            >
-              <span aria-hidden="true">↓</span>
-              <span>{tr('Download Android App', language)}</span>
-              <small>2.4.4</small>
-            </a>
           </div>
           <div>
             <h4>{tr('Hotline & Inquiries', language)}</h4>

@@ -18,6 +18,7 @@ initStorageProtection();
 
 const app = express();
 app.disable('x-powered-by');
+app.use((req, res, next) => /\.apk$/i.test(req.path) ? res.sendStatus(404) : next());
 
 // Security Headers Middleware
 app.use((req, res, next) => {
@@ -4524,11 +4525,7 @@ app.get('/api/admin/customers', adminAuth, (req, res) => {
 // ---- serve built frontend in production ----
 const dist = join(__dir, '..', 'web', 'dist');
 if (existsSync(dist)) {
-  const apkPath = join(dist, 'ShakilEcom.apk');
-  app.get(['/shakilecom', '/shakilecom.apk'], (_req, res) => {
-    if (!existsSync(apkPath)) return res.status(404).send('APK not found');
-    res.download(apkPath, 'ShakilEcom.apk');
-  });
+  app.get(['/shakilecom', '/shakilecom.apk', '/ShakilEcom.apk'], (_req, res) => res.sendStatus(404));
   app.get(['/admin.html', '/admin'], (_req, res) => res.redirect(301, '/wp-admin'));
   app.use(express.static(dist, {
     setHeaders: (res, path) => {

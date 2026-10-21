@@ -155,7 +155,7 @@ const BN: Record<string, string> = {
   'For best results and longevity, we recommend dry cleaning or gentle hand-washing in cold water with mild detergent. Do not bleach or tumble dry in high heat. Steam iron on low setting.': 'দীর্ঘস্থায়ী ব্যবহারের জন্য ড্রাই ক্লিন করুন অথবা হালকা ডিটারজেন্ট দিয়ে ঠান্ডা পানিতে হাতে আলতো করে ধুয়ে নিন। ব্লিচ বা উচ্চ তাপে ড্রায়ার ব্যবহার করবেন না। কম তাপে স্টিম আয়রন করুন।',
   'What are the delivery charges and delivery times?': 'ডেলিভারি চার্জ কত এবং পণ্য পৌঁছাতে কত দিন লাগে?',
   'How do I place an order with Cash on Delivery?': 'ক্যাশ অন ডেলিভারিতে কীভাবে অর্ডার করব?',
-  'Contemporary modest fashion & lifestyle brand. Ethically crafted timeless modest attire, abayas, panjabis & essentials delivered across Bangladesh with cash on delivery.': 'আধুনিক ও মার্জিত পোশাক এবং লাইফস্টাইল পণ্যের ব্র্যান্ড। যত্নে তৈরি আবায়া, পাঞ্জাবি ও দৈনন্দিন প্রয়োজনীয় পণ্য ক্যাশ অন ডেলিভারিতে সারা বাংলাদেশে পৌঁছে দিই।',
+  'Watches, sunglasses and gift collections for everyday style. Cash on delivery across Bangladesh.': 'দৈনন্দিন ব্যবহারের ঘড়ি, সানগ্লাস ও উপহারের কালেকশন। সারা বাংলাদেশে ক্যাশ অন ডেলিভারি।',
   'Dermatologically-inspired botanical skincare, intimate wellness & everyday self-care rituals. Clean, gentle formulations crafted with active botanicals, delivered across Bangladesh with cash on delivery.': 'ত্বকের যত্ন, ব্যক্তিগত সুস্থতা ও দৈনন্দিন সেলফ-কেয়ারের জন্য বোটানিক্যাল পণ্য। কোমল ও কার্যকর উপাদানে তৈরি পণ্য ক্যাশ অন ডেলিভারিতে সারা বাংলাদেশে পৌঁছে দিই।',
   'Everyday: 10:00 AM – 10:00 PM': 'প্রতিদিন: সকাল ১০টা – রাত ১০টা',
   'Cash on Delivery · Steadfast Courier · 100% Authentic Quality Guaranteed': 'ক্যাশ অন ডেলিভারি · স্টেডফাস্ট কুরিয়ার · অরিজিনাল পণ্যের নিশ্চয়তা',
