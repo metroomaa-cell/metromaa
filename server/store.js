@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync, copyFileSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dir, 'data');
@@ -9,6 +10,7 @@ const BACKUPS_DIR = join(DATA_DIR, 'backups');
 
 // External safe storage sitting completely outside the git repository (Hostinger protected space)
 let EXTERNAL_DIR = process.env.PERSISTENT_DATA_DIR;
+if (EXTERNAL_DIR?.startsWith('~/')) EXTERNAL_DIR = join(homedir(), EXTERNAL_DIR.slice(2));
 if (!EXTERNAL_DIR) {
   const storeBaseName = existsSync('/var/www/secrate_persistent_data') || __dir.includes('secrate') ? 'secrate_persistent_data' : 'metrroma_persistent_data';
   const candidates = [

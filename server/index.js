@@ -981,10 +981,54 @@ app.get('/api/track', async (req, res) => {
 });
 
 // ---- admin auth: owner master key + staff accounts with roles ----
-const SESSION_TTL_MS = 72 * 60 * 60 * 1000; // 72 hours auto-logout
-const sessions = new Map(); // token -> { role, name, username, email, expiresAt }
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days; survives Node process restarts
+const ADMIN_SESSIONS_FILE = join(getPersistentDataDirectory(), 'admin_sessions.json');
+const sessions = new Map(); // SHA-256 token hash -> { role, name, username, email, expiresAt }
 const pendingOtps = new Map(); // tempToken -> { username, role, name, otp, email, expiresAt }
 const pendingPasswordResets = new Map(); // resetToken -> { username, email, otp, expiresAt }
+
+function sessionKey(token) {
+  return createHash('sha256').update(String(token || '')).digest('hex');
+}
+
+function persistAdminSessions() {
+  const tempFile = `${ADMIN_SESSIONS_FILE}.${process.pid}.tmp`;
+  try {
+    const persistentDir = getPersistentDataDirectory();
+    mkdirSync(persistentDir, { recursive: true });
+    writeFileSync(tempFile, JSON.stringify(Object.fromEntries(sessions)), { mode: 0o600 });
+    renameSync(tempFile, ADMIN_SESSIONS_FILE);
+    return true;
+  } catch (error) {
+    try { if (existsSync(tempFile)) unlinkSync(tempFile); } catch (_) {}
+    console.error('[Auth] Could not persist admin sessions:', error.message);
+    return false;
+  }
+}
+
+function loadAdminSessions() {
+  try {
+    if (!existsSync(ADMIN_SESSIONS_FILE)) return;
+    const saved = JSON.parse(readFileSync(ADMIN_SESSIONS_FILE, 'utf8'));
+    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return;
+    let changed = false;
+    for (const [hash, session] of Object.entries(saved)) {
+      if (!/^[a-f0-9]{64}$/i.test(hash) || !session || typeof session !== 'object' || !Number.isFinite(Number(session.expiresAt))) {
+        changed = true;
+        continue;
+      }
+      if (Number(session.expiresAt) <= Date.now()) {
+        changed = true;
+        continue;
+      }
+      sessions.set(hash, session);
+    }
+    if (changed) persistAdminSessions();
+    console.log(`[Auth] Restored ${sessions.size} persistent admin session(s).`);
+  } catch (error) {
+    console.error('[Auth] Could not load persisted admin sessions:', error.message);
+  }
+}
 
 const hashPw = (pw, salt) => scryptSync(pw, salt, 32).toString('hex');
 const makeHash = (pw) => { const salt = randomBytes(8).toString('hex'); return { salt, hash: hashPw(pw, salt) }; };
@@ -1014,7 +1058,8 @@ function maskEmail(em) {
 function resolveAuth(req) {
   const token = req.get('x-admin-token') || '';
   if (!token) return null;
-  const session = sessions.get(token);
+  const key = sessionKey(token);
+  const session = sessions.get(key);
   if (!session) {
     const masterToken = process.env.ADMIN_TOKEN || '';
     if (masterToken && token === masterToken) {
@@ -1023,19 +1068,22 @@ function resolveAuth(req) {
     return null;
   }
   if (session.expiresAt && Date.now() > session.expiresAt) {
-    sessions.delete(token); // 48-hour session expired!
+    sessions.delete(key);
+    persistAdminSessions();
     return null;
   }
   if (session.role !== 'owner') {
     const currentUser = getUsers().find((user) => user.username === session.username);
     if (!currentUser) {
-      sessions.delete(token);
+      sessions.delete(key);
+      persistAdminSessions();
       return null;
     }
     session.role = currentUser.role;
     session.name = currentUser.name;
     session.email = currentUser.email || '';
     session.allowedProducts = Array.isArray(currentUser.allowedProducts) ? currentUser.allowedProducts : [];
+    persistAdminSessions();
   }
   return session;
 }
@@ -1046,6 +1094,7 @@ function adminAuth(req, res, next) {
   req.admin = auth;
   next();
 }
+loadAdminSessions();
 function requireRole(...roles) {
   return (req, res, next) => { if (!req.admin || !roles.includes(req.admin.role)) return res.status(403).json({ error: 'your role cannot do this' }); next(); };
 }
@@ -1281,10 +1330,14 @@ app.post('/api/admin/login', async (req, res) => {
     });
   }
 
-  // Fallback: direct 72-hour session if email is disabled or skipOtp is enabled
+  // Fallback: direct 30-day session if email is disabled or skipOtp is enabled
   const token = 's_' + randomBytes(24).toString('hex');
   const expiresAt = Date.now() + SESSION_TTL_MS;
-  sessions.set(token, { role: user.role, name: user.name, username: user.username, email: user.email || getOwnerEmail(), allowedProducts: Array.isArray(user.allowedProducts) ? user.allowedProducts : [], expiresAt });
+  sessions.set(sessionKey(token), { role: user.role, name: user.name, username: user.username, email: user.email || getOwnerEmail(), allowedProducts: Array.isArray(user.allowedProducts) ? user.allowedProducts : [], expiresAt });
+  if (!persistAdminSessions()) {
+    sessions.delete(sessionKey(token));
+    return res.status(503).json({ error: 'Secure session storage is unavailable. Please contact the store administrator.' });
+  }
   res.json({ token, role: user.role, name: user.name, expiresAt });
 });
 
@@ -1307,10 +1360,10 @@ app.post('/api/admin/verify-otp', (req, res) => {
     return res.status(400).json({ error: `Invalid OTP code. Please check your email. (${5 - pending.attempts} attempts remaining)` });
   }
 
-  // Valid OTP! Issue 72-hour session
+  // Valid OTP! Issue 30-day session
   const token = 's_' + randomBytes(24).toString('hex');
   const expiresAt = Date.now() + SESSION_TTL_MS;
-  sessions.set(token, {
+  sessions.set(sessionKey(token), {
     role: pending.role,
     name: pending.name,
     username: pending.username,
@@ -1318,6 +1371,10 @@ app.post('/api/admin/verify-otp', (req, res) => {
     allowedProducts: Array.isArray(pending.allowedProducts) ? pending.allowedProducts : [],
     expiresAt
   });
+  if (!persistAdminSessions()) {
+    sessions.delete(sessionKey(token));
+    return res.status(503).json({ error: 'Secure session storage is unavailable. Please contact the store administrator.' });
+  }
   pendingOtps.delete(tempToken);
 
   res.json({
@@ -1470,7 +1527,8 @@ app.post('/api/admin/change-password', adminAuth, (req, res) => {
     const { salt, hash } = makeHash(String(newPassword));
     saveSettings({ ownerPassword: { salt, hash, updatedAt: new Date().toISOString() } });
     process.env.ADMIN_TOKEN = String(newPassword);
-    for (const [token, session] of sessions) if (session.role === 'owner') sessions.delete(token);
+    for (const [key, session] of sessions) if (session.role === 'owner') sessions.delete(key);
+    persistAdminSessions();
     return res.json({ ok: true, message: 'Owner master password updated successfully!' });
   }
   const users = getUsers();
@@ -1480,7 +1538,8 @@ app.post('/api/admin/change-password', adminAuth, (req, res) => {
   u.salt = salt;
   u.hash = hash;
   saveUsers(users);
-  for (const [token, session] of sessions) if (session.username === admin.username) sessions.delete(token);
+  for (const [key, session] of sessions) if (session.username === admin.username) sessions.delete(key);
+  persistAdminSessions();
   res.json({ ok: true, message: 'Password updated successfully!' });
 });
 
@@ -1497,7 +1556,8 @@ app.put('/api/admin/security-email', adminAuth, requireRole('owner'), (req, res)
 app.get('/api/admin/me', adminAuth, (req, res) => res.json(req.admin));
 app.post('/api/admin/logout', adminAuth, (req, res) => {
   const token = req.get('x-admin-token') || '';
-  sessions.delete(token);
+  sessions.delete(sessionKey(token));
+  persistAdminSessions();
   res.json({ ok: true });
 });
 
@@ -1536,7 +1596,7 @@ app.post('/api/admin/users', adminAuth, requireRole('owner'), async (req, res) =
           <div style="margin-bottom:8px;"><span style="color:#A99E8E;font-size:13px;">Username:</span><br><code style="background:rgba(0,0,0,0.4);padding:4px 8px;border-radius:6px;color:#ECE4D8;font-size:14px;">${username}</code></div>
           <div style="color:#A99E8E;font-size:13px;">For security, your temporary password is shared separately by the store owner. Never share your password or verification code.</div>
         </div>
-        <p style="color:#6F665A;font-size:12px;line-height:1.5;">🔒 Security Notice: Your session automatically expires every 72 hours. When signing in, you will be prompted for an email OTP verification.</p>
+        <p style="color:#6F665A;font-size:12px;line-height:1.5;">🔒 Security Notice: Your session automatically expires every 30 days. When signing in, you will be prompted for an email OTP verification.</p>
       </div>
       `
     ).catch(() => {});
@@ -1570,7 +1630,8 @@ app.delete('/api/admin/users/:id', adminAuth, requireRole('owner'), (req, res) =
   const removed = users.find((u) => u.id === req.params.id);
   saveUsers(users.filter((u) => u.id !== req.params.id));
   if (removed) {
-    for (const [token, session] of sessions) if (session.username === removed.username) sessions.delete(token);
+    for (const [key, session] of sessions) if (session.username === removed.username) sessions.delete(key);
+    persistAdminSessions();
   }
   res.json({ ok: true });
 });

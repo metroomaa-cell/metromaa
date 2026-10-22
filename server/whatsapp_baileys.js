@@ -2,11 +2,12 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { getWhatsAppSettings, saveWhatsAppSettings, formatWhatsAppMessage, registerBaileysSender } from './whatsapp_engine.js';
+import { getPersistentDataDirectory } from './store.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 
 // Persistent Auth storage sits in safe persistent folder
-let AUTH_DIR = process.env.PERSISTENT_DATA_DIR ? join(process.env.PERSISTENT_DATA_DIR, 'wa_auth_info') : null;
+let AUTH_DIR = join(getPersistentDataDirectory(), 'wa_auth_info');
 if (!AUTH_DIR) {
   if (existsSync('/var/www/secrate_persistent_data')) {
     AUTH_DIR = '/var/www/secrate_persistent_data/wa_auth_info';
