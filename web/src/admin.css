@@ -3457,3 +3457,14 @@
 @media(max-width:560px){.sa-backup-header{align-items:flex-start;flex-direction:column;gap:12px}.sa-backup-header h1{font-size:23px}.sa-backup-summary{grid-template-columns:1fr;gap:9px}.sa-backup-stat{padding:13px 15px}.sa-backup-action{padding:17px!important}.sa-backup-counts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 .sa-backup-include-frontend{display:flex;align-items:flex-start;gap:11px;margin:16px 0;padding:14px 16px;border:1px solid rgba(167,139,250,.22);border-radius:10px;background:linear-gradient(110deg,rgba(124,58,237,.08),rgba(255,255,255,.015));cursor:pointer}.sa-backup-include-frontend input{width:16px;height:16px;margin:2px 0 0;accent-color:#8b5cf6;flex:none}.sa-backup-include-frontend span{display:flex;flex-direction:column;gap:4px}.sa-backup-include-frontend strong{color:#e9e3f5;font-size:12px}.sa-backup-include-frontend small{color:#9692a3;font-size:10px;line-height:1.5}
+
+/* Shared order desk sizing: keep the order rows readable and consistent across stores. */
+.sa-card.ogwrap { max-width: 100%; overflow-x: auto !important; overflow-y: hidden; overscroll-behavior-x: contain; }
+.ogrid-head { font-size: 11px !important; line-height: 1.35; color: #94a3b8 !important; }
+.ogrid-row { min-height: 82px; padding: 13px 20px !important; font-size: 13.5px !important; line-height: 1.4; }
+.ogrid-row .origin-chip { font-size: 10px !important; }
+.traffic-attribution { margin-top: 3px; color: #94a3b8; font-size: 10px; line-height: 1.3; overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  .ogrid-row { min-height: 0; padding: 14px !important; font-size: 13px !important; row-gap: 10px !important; }
+  .traffic-attribution { font-size: 10px; }
+}
