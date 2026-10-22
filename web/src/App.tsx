@@ -651,19 +651,19 @@ function MobileTabs() {
   return (
     <nav className="tabbar">
       <button type="button" className={'tab' + (route.name === 'home' ? ' on' : '')} aria-current={route.name === 'home' ? 'page' : undefined} onClick={() => go('home')}>
-        <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10.5 12 4l9 6.5" /><path d="M5.5 9.5V20h13V9.5" /></svg><span>{tr('Home', language)}</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="m3.5 10.6 8.5-7 8.5 7" /><path d="M5.5 9.5V20h13V9.5" /><path d="M9.5 20v-6h5v6" /></svg><span>{tr('Home', language)}</span>
       </button>
       <button type="button" className={'tab' + (route.name === 'shop' ? ' on' : '')} aria-current={route.name === 'shop' ? 'page' : undefined} onClick={() => go('shop')}>
-        <svg viewBox="0 0 24 24"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v6H4zM14 15h6v6h-6z" /></svg><span>{tr('Shop', language)}</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="M4 10.5 5.4 5h13.2l1.4 5.5" /><path d="M4 10.5h16v9H4z" /><path d="M9 19.5v-5h6v5" /><path d="M4.2 10.5a2.2 2.2 0 0 0 4.4 0 2.2 2.2 0 0 0 4.4 0 2.2 2.2 0 0 0 4.4 0 2.2 2.2 0 0 0 2.4 0" /></svg><span>{tr('Shop', language)}</span>
       </button>
       <button type="button" className="tab" aria-label={`${tr('Bag', language)}${count > 0 ? `, ${count}` : ''}`} onClick={() => setOpen(true)}>
-        <span className="tabcart"><svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8h12l-.8 11.6a1 1 0 0 1-1 .9H7.8a1 1 0 0 1-1-.9L6 8z" /><path d="M9 8V7a3 3 0 0 1 6 0v1" /></svg>{count > 0 && <i className="badge" key={count}>{count}</i>}</span><span>{tr('Bag', language)}</span>
+        <span className="tabcart"><svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="M5.5 8h13l-.8 11.2a1.3 1.3 0 0 1-1.3 1.2H7.6a1.3 1.3 0 0 1-1.3-1.2L5.5 8Z" /><path d="M9 8V6.8a3 3 0 0 1 6 0V8" /></svg>{count > 0 && <i className="badge" key={count}>{count}</i>}</span><span>{tr('Bag', language)}</span>
       </button>
       <button type="button" className={'tab' + (route.name === 'track' ? ' on' : '')} aria-current={route.name === 'track' ? 'page' : undefined} onClick={() => go('track')}>
-        <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-6.5-5-6.5-10.5A6.5 6.5 0 0 1 18.5 10.5C18.5 16 12 21 12 21z" /><circle cx="12" cy="10.5" r="2.3" /></svg><span>{tr('Track Order', language)}</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z" /><circle cx="12" cy="10" r="2.4" /></svg><span>{tr('Track Order', language)}</span>
       </button>
       <button type="button" className={'tab' + (route.name === 'account' ? ' on' : '')} aria-current={route.name === 'account' ? 'page' : undefined} onClick={() => go('account')}>
-        <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg><span>{tr('Account', language)}</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 20a7.5 7.5 0 0 1 15 0" /></svg><span>{tr('Account', language)}</span>
       </button>
     </nav>
   );
