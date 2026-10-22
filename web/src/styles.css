@@ -370,45 +370,64 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
 @media(max-width:720px){
  .navbag{display:none}
  .tabbar{
-   display:flex;
+   display:grid;
+   grid-template-columns:repeat(5,minmax(0,1fr));
    position:fixed;
    left:0;
    right:0;
    bottom:0;
    z-index:50;
-   justify-content:space-around;
-   align-items:center;
-   padding:8px 6px calc(8px + env(safe-area-inset-bottom));
-   background:#ffffff;
+   align-items:stretch;
+   padding:5px 5px calc(5px + env(safe-area-inset-bottom));
+   background:rgba(255,255,255,.98);
    border-top:1px solid #EAE5DC;
-   box-shadow:0 -4px 16px rgba(0,0,0,0.06);
+   box-shadow:0 -5px 18px rgba(31,49,71,.07);
+   -webkit-backdrop-filter:blur(14px);
+   backdrop-filter:blur(14px);
  }
  main{padding-bottom:76px}
  .tab{
    display:flex;
+   appearance:none;
+   -webkit-appearance:none;
+   border:0;
+   background:transparent;
+   width:100%;
+   min-width:0;
+   min-height:54px;
    flex-direction:column;
    align-items:center;
-   gap:4px;
-   color:#6b645c;
-   font-family:'Inter', sans-serif;
-   font-size:10.5px;
+   justify-content:center;
+   gap:5px;
+   padding:4px 2px;
+   color:#716b63;
+   font-family:var(--font-sans);
+   font-size:11px;
    font-weight:500;
-   letter-spacing:0.04em;
+   line-height:1.15;
+   letter-spacing:0;
    cursor:pointer;
-   flex:1;
-   text-transform:uppercase;
-   transition:color .2s;
+   text-transform:none;
+   text-align:center;
+   -webkit-tap-highlight-color:transparent;
+   transition:color .18s ease;
  }
  .tab.on{
    color:#8B1E1E;
-   font-weight:700;
+   font-weight:600;
  }
  .tab svg{
-   width:21px;
-   height:21px;
+   flex:none;
+   width:20px;
+   height:20px;
    stroke:currentColor;
    fill:none;
-   stroke-width:1.7;
+   stroke-width:1.75;
+ }
+ .tab:focus-visible{
+   outline:2px solid #8B1E1E;
+   outline-offset:-2px;
+   border-radius:8px;
  }
  .tabcart{position:relative;display:inline-flex}
  .badge{
@@ -4705,6 +4724,8 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
 }
 
 @media (max-width: 360px) {
+  .tab{font-size:10.5px;gap:4px}
+  .tab svg{width:19px;height:19px}
   .ll-sticky-call, .ll-sticky-wa {
     padding: 0 8px;
     font-size: 11.5px;
