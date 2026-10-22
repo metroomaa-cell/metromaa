@@ -1660,17 +1660,6 @@ app.delete('/api/admin/users/:id', adminAuth, requireRole('owner'), (req, res) =
 
 app.get('/api/orders', adminAuth, (req, res) => {
   let list = getOrders();
-  const products = getCatalog().products || [];
-  list = list.map((order) => ({
-    ...order,
-    items: (order.items || []).map((item) => {
-      if (item.sku) return item;
-      const productId = String(item.productId || item.id || '');
-      const product = products.find((p) => String(p.id) === productId || String(p.slug || '') === productId);
-      const variant = product?.variations?.find((v) => String(v.id) === String(item.variantId || ''));
-      return { ...item, sku: variant?.sku || product?.sku || '' };
-    }),
-  }));
   if (req.admin.role === 'staff' && Array.isArray(req.admin.allowedProducts) && req.admin.allowedProducts.length > 0) {
     const allowed = req.admin.allowedProducts;
     list = list.filter((o) => (o.items || []).some((it) => allowed.includes(String(it.id)) || allowed.includes(String(it.slug))));
