@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, lstatSync, unlinkSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, lstatSync, unlinkSync, rmSync, copyFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { randomUUID, randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
@@ -45,16 +45,39 @@ app.use((err, req, res, next) => {
   next();
 });
 
-const UPLOADS = join(__dir, 'uploads');
-const PERSISTENT_UPLOADS = join(__dir, 'data', 'persistent_uploads');
-const ROOT_UPLOADS = join(__dir, '..', 'uploads');
-const PRIVATE_APK_DIR = join(__dir, 'data', 'private_apk');
-if (!existsSync(UPLOADS)) mkdirSync(UPLOADS, { recursive: true });
-if (!existsSync(PERSISTENT_UPLOADS)) mkdirSync(PERSISTENT_UPLOADS, { recursive: true });
-if (!existsSync(ROOT_UPLOADS)) mkdirSync(ROOT_UPLOADS, { recursive: true });
-if (!existsSync(PRIVATE_APK_DIR)) mkdirSync(PRIVATE_APK_DIR, { recursive: true });
+const UPLOADS = join(getPersistentDataDirectory(), 'uploads');
+const LEGACY_UPLOAD_DIRS = [join(__dir, 'uploads'), join(__dir, 'data', 'persistent_uploads'), join(__dir, '..', 'uploads')];
+const PRIVATE_APK_DIR = join(getPersistentDataDirectory(), 'private_apk');
+const LEGACY_PRIVATE_APK_DIR = join(__dir, 'data', 'private_apk');
+mkdirSync(UPLOADS, { recursive: true });
+mkdirSync(PRIVATE_APK_DIR, { recursive: true });
 
-const UPLOAD_DIRS = { app: UPLOADS, persistent: PERSISTENT_UPLOADS, root: ROOT_UPLOADS };
+// Move legacy app-local uploads into external storage without overwriting newer files.
+for (const legacyDir of LEGACY_UPLOAD_DIRS) {
+  try {
+    for (const name of readdirSync(legacyDir)) {
+      const source = join(legacyDir, name);
+      const target = join(UPLOADS, name);
+      if (!existsSync(target) && statSync(source).isFile()) copyFileSync(source, target);
+    }
+  } catch {}
+}
+try {
+  for (const name of readdirSync(LEGACY_PRIVATE_APK_DIR)) {
+    const source = join(LEGACY_PRIVATE_APK_DIR, name);
+    const target = join(PRIVATE_APK_DIR, name);
+    if (!existsSync(target) && statSync(source).isFile()) copyFileSync(source, target);
+  }
+} catch {}
+
+const UPLOAD_DIRS = { app: LEGACY_UPLOAD_DIRS[0], persistent: UPLOADS, root: LEGACY_UPLOAD_DIRS[2] };
+function removeUploadedFile(name) {
+  let removed = false;
+  for (const dir of [UPLOADS, ...LEGACY_UPLOAD_DIRS]) {
+    try { unlinkSync(join(dir, name)); removed = true; } catch {}
+  }
+  return removed;
+}
 function collectBackupMedia() {
   const media = [];
   for (const [location, dir] of Object.entries(UPLOAD_DIRS)) {
@@ -154,8 +177,7 @@ const staticUploadOptions = {
   }
 };
 app.use('/uploads', express.static(UPLOADS, staticUploadOptions));
-app.use('/uploads', express.static(PERSISTENT_UPLOADS, staticUploadOptions));
-app.use('/uploads', express.static(ROOT_UPLOADS, staticUploadOptions));
+for (const legacyDir of LEGACY_UPLOAD_DIRS) app.use('/uploads', express.static(legacyDir, staticUploadOptions));
 
 const withFlags = (p) => ({ ...p, soldOut: !!p.soldOut || (p.stock != null && p.stock <= 0) });
 
@@ -1866,9 +1888,8 @@ app.post('/api/upload', adminAuth, requireRole('owner', 'manager'), (req, res) =
   } catch {}
 
   const nm = 'img_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7) + '.' + ext;
-  writeFileSync(join(UPLOADS, nm), buf);
-  try { writeFileSync(join(PERSISTENT_UPLOADS, nm), buf); } catch (_) {}
-  try { writeFileSync(join(ROOT_UPLOADS, nm), buf); } catch (_) {}
+  try { writeFileSync(join(UPLOADS, nm), buf, { flag: 'wx' }); }
+  catch (error) { console.error('[Media] Persistent upload failed:', error.message); return res.status(503).json({ error: 'Could not save image to persistent storage.' }); }
   res.json({ url: '/uploads/' + nm });
 });
 
@@ -1969,7 +1990,7 @@ app.get('/api/admin/media', adminAuth, requireRole('owner', 'manager'), (_q, res
 app.delete('/api/admin/media/:name', adminAuth, requireRole('owner', 'manager'), (req, res) => {
   const name = String(req.params.name || '');
   if (!/^[\w.\-]+$/.test(name) || name.includes('..')) return res.status(400).json({ error: 'bad filename' });
-  try { unlinkSync(join(UPLOADS, name)); res.json({ ok: true }); } catch { res.status(404).json({ error: 'not found' }); }
+  if (removeUploadedFile(name)) res.json({ ok: true }); else res.status(404).json({ error: 'not found' });
 });
 
 app.post('/api/admin/media/bulk-delete', adminAuth, requireRole('owner', 'manager'), (req, res) => {
@@ -1978,7 +1999,7 @@ app.post('/api/admin/media/bulk-delete', adminAuth, requireRole('owner', 'manage
   for (const n of names) {
     const name = String(n || '').trim();
     if (/^[\w.\-]+$/.test(name) && !name.includes('..')) {
-      try { unlinkSync(join(UPLOADS, name)); deleted++; } catch {}
+      if (removeUploadedFile(name)) deleted++;
     }
   }
   res.json({ ok: true, deleted });
@@ -1999,7 +2020,7 @@ app.post('/api/admin/media/clean-duplicates', adminAuth, requireRole('owner', 'm
         if (hashGroups.has(hash)) {
           const used = usageMap.get('/uploads/' + f) || usageMap.get(f) || [];
           if (used.length === 0) {
-            unlinkSync(join(UPLOADS, f));
+            removeUploadedFile(f);
             deleted++;
             continue;
           }
@@ -2018,7 +2039,7 @@ app.post('/api/admin/media/clean-broken', adminAuth, requireRole('owner', 'manag
     for (const f of all) {
       try {
         const st = statSync(join(UPLOADS, f));
-        if (st.size === 0) { unlinkSync(join(UPLOADS, f)); deleted++; }
+        if (st.size === 0) { removeUploadedFile(f); deleted++; }
       } catch {}
     }
     res.json({ ok: true, deleted });
