@@ -6,11 +6,14 @@ import { homedir } from 'node:os';
 const __dir = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dir, 'data');
 const PERSISTENT_DIR = join(DATA_DIR, 'persistent');
-const BACKUPS_DIR = join(DATA_DIR, 'backups');
+const LEGACY_BACKUPS_DIR = join(DATA_DIR, 'backups');
 
 // External safe storage sitting completely outside the git repository (Hostinger protected space)
 let EXTERNAL_DIR = process.env.PERSISTENT_DATA_DIR;
 if (EXTERNAL_DIR?.startsWith('~/')) EXTERNAL_DIR = join(homedir(), EXTERNAL_DIR.slice(2));
+// Hostinger deploys each release under builds/versions/<id>. Never use a
+// release-relative directory as the default persistent store on Linux hosts.
+if (!EXTERNAL_DIR && process.platform !== 'win32') EXTERNAL_DIR = join(homedir(), 'metrroma-data');
 if (!EXTERNAL_DIR) {
   const storeBaseName = existsSync('/var/www/secrate_persistent_data') || __dir.includes('secrate') ? 'secrate_persistent_data' : 'metrroma_persistent_data';
   const candidates = [
@@ -30,11 +33,65 @@ if (!EXTERNAL_DIR) {
   }
 }
 if (!EXTERNAL_DIR) EXTERNAL_DIR = join(DATA_DIR, 'persistent');
+const BACKUPS_DIR = join(EXTERNAL_DIR, 'backups');
+
+function copyMissingTree(sourceDir, targetDir) {
+  if (!existsSync(sourceDir) || !statSync(sourceDir).isDirectory()) return 0;
+  let copied = 0;
+  mkdirSync(targetDir, { recursive: true });
+  for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) continue;
+    const source = join(sourceDir, entry.name);
+    const target = join(targetDir, entry.name);
+    if (entry.isDirectory()) copied += copyMissingTree(source, target);
+    else if (entry.isFile() && !existsSync(target)) {
+      try { copyFileSync(source, target); copied += 1; } catch (_) {}
+    }
+  }
+  return copied;
+}
+
+function migrateHostingerVersionData() {
+  if (process.platform === 'win32') return;
+  const marker = join(EXTERNAL_DIR, '.hostinger-version-data-migrated-v1');
+  if (existsSync(marker)) return;
+  const versionsDir = join(homedir(), 'domains', 'metrroma.com', 'builds', 'versions');
+  let versions = [];
+  try {
+    versions = readdirSync(versionsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => ({ name: entry.name, mtime: statSync(join(versionsDir, entry.name)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime);
+  } catch { return; }
+
+  const uploadsDir = join(EXTERNAL_DIR, 'uploads');
+  const privateApkDir = join(EXTERNAL_DIR, 'private_apk');
+  let copied = 0;
+  for (const version of versions) {
+    const root = join(versionsDir, version.name);
+    for (const source of [join(root, 'metrroma_persistent_data'), join(root, 'server', 'data', 'persistent')]) {
+      copied += copyMissingTree(source, EXTERNAL_DIR);
+    }
+    for (const source of [join(root, 'server', 'uploads'), join(root, 'server', 'data', 'persistent_uploads'), join(root, 'uploads')]) {
+      copied += copyMissingTree(source, uploadsDir);
+    }
+    for (const source of [join(root, 'server', 'data', 'private_apk'), join(root, 'data', 'private_apk')]) {
+      copied += copyMissingTree(source, privateApkDir);
+    }
+    copied += copyMissingTree(join(root, 'server', 'data', 'backups'), BACKUPS_DIR);
+  }
+  if (copied > 0) {
+    writeFileSync(marker, new Date().toISOString(), { mode: 0o600 });
+    console.log(`[Store] Migrated ${copied} legacy file(s) from Hostinger releases into stable storage.`);
+  }
+}
 
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 if (!existsSync(PERSISTENT_DIR)) mkdirSync(PERSISTENT_DIR, { recursive: true });
 if (!existsSync(BACKUPS_DIR)) mkdirSync(BACKUPS_DIR, { recursive: true });
 try { if (!existsSync(EXTERNAL_DIR)) mkdirSync(EXTERNAL_DIR, { recursive: true }); } catch (_) {}
+copyMissingTree(LEGACY_BACKUPS_DIR, BACKUPS_DIR);
+try { migrateHostingerVersionData(); } catch (error) { console.error('[Store] Legacy release migration failed:', error.message); }
 console.log('[Store] Isolated external database locked at:', EXTERNAL_DIR);
 
 // Primary file paths
