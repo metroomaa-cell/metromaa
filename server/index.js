@@ -1226,6 +1226,20 @@ function renderSecurityOtpHtml({ storeName, title, subtitle, otp, userName, user
   `;
 }
 
+function renderAdminVerificationHtml(otp) {
+  const code = String(otp || '').replace(/\D/g, '').slice(0, 6);
+  return `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:32px 16px;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;text-align:center;">
+  <div style="margin:0 auto;max-width:360px;">
+    <p style="margin:0 0 18px;font-size:30px;font-weight:700;letter-spacing:8px;">${code}</p>
+    <p style="margin:0;font-size:14px;line-height:1.5;">This code is valid for 10 minutes.</p>
+  </div>
+</body>
+</html>`;
+}
+
 function getClientIp(req) {
   const fwd = req.headers['x-forwarded-for'];
   if (fwd) {
@@ -1314,16 +1328,8 @@ app.post('/api/admin/login', async (req, res) => {
 
     const emailRes = await sendEmail(
       targetEmail,
-      `${storeName} — Admin Security Verification Code: ${otp}`,
-      renderSecurityOtpHtml({
-        storeName,
-        title: 'Admin Sign-In Verification',
-        subtitle: `A sign-in attempt was initiated for <strong>${user.name}</strong> (${user.username}). Enter this 6-digit passcode to authenticate:`,
-        otp,
-        userName: user.name,
-        userEmail: targetEmail,
-        expiresMin: 10
-      })
+      `${storeName} Admin Verification Code`,
+      renderAdminVerificationHtml(otp)
     );
 
     // If delivery to team member failed (e.g. Resend unverified domain restriction: only sends to owner's registered email)
@@ -1332,17 +1338,8 @@ app.post('/api/admin/login', async (req, res) => {
       if (targetEmail.toLowerCase() !== ownerEmail.toLowerCase()) {
         const fwdRes = await sendEmail(
           ownerEmail,
-          `${storeName} — [Team Member Login Code] ${user.name}: ${otp}`,
-          renderSecurityOtpHtml({
-            storeName,
-            title: `Team Member Login: ${user.name}`,
-            subtitle: `Team member <strong>${user.name}</strong> (${user.username}) is attempting to log in with email <code>${targetEmail}</code>.<br><br>⚠️ <em>Because your store domain is not yet verified in Resend, Resend restricted external delivery. Their 6-digit code has been delivered to your owner inbox:</em>`,
-            otp,
-            userName: `${user.name} (${user.username})`,
-            userEmail: targetEmail,
-            expiresMin: 10,
-            note: `Share this code with ${user.name} to allow them to sign in. To enable direct delivery to team members, verify your domain in Resend.com or configure SMTP in Settings.`
-          })
+          `${storeName} Admin Verification Code`,
+          renderAdminVerificationHtml(otp)
         );
         if (fwdRes.ok) {
           deliveredEmail = `${ownerEmail} (Forwarded to Owner)`;
@@ -1431,16 +1428,8 @@ app.post('/api/admin/resend-otp', async (req, res) => {
 
   let emailRes = await sendEmail(
     pending.email,
-    `${storeName} — New Admin Verification Code: ${otp}`,
-    renderSecurityOtpHtml({
-      storeName,
-      title: 'New Verification Code',
-      subtitle: `A new verification code was requested for your admin account. Use this 6-digit passcode to sign in:`,
-      otp,
-      userName: pending.name,
-      userEmail: pending.email,
-      expiresMin: 10
-    })
+    `${storeName} Admin Verification Code`,
+    renderAdminVerificationHtml(otp)
   );
 
   let deliveredEmail = pending.email;
@@ -1448,17 +1437,8 @@ app.post('/api/admin/resend-otp', async (req, res) => {
     console.warn(`[OTP Resend] Delivery to ${pending.email} failed. Forwarding to Store Owner: ${ownerEmail}`);
     const fwdRes = await sendEmail(
       ownerEmail,
-      `${storeName} — [Team Member Login Code] ${pending.name}: ${otp}`,
-      renderSecurityOtpHtml({
-        storeName,
-        title: `Team Member Login: ${pending.name}`,
-        subtitle: `Team member <strong>${pending.name}</strong> (${pending.username}) requested a new code. Their 6-digit code has been delivered to your owner inbox:`,
-        otp,
-        userName: `${pending.name} (${pending.username})`,
-        userEmail: pending.email,
-        expiresMin: 10,
-        note: `Share this code with ${pending.name} so they can complete sign in.`
-      })
+      `${storeName} Admin Verification Code`,
+      renderAdminVerificationHtml(otp)
     );
     if (fwdRes.ok) {
       deliveredEmail = `${ownerEmail} (Forwarded to Owner)`;
