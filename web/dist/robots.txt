@@ -1,0 +1,23 @@
+User-agent: *
+Allow: /
+Disallow: /wp-admin
+Disallow: /admin
+Disallow: /checkout
+Disallow: /confirm
+Disallow: /account
+Disallow: /api/
+
+# Allow search crawlers used by AI answer engines while keeping account/order areas private.
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /wp-admin
+Disallow: /admin
+Disallow: /checkout
+Disallow: /confirm
+Disallow: /account
+Disallow: /api/
+
+User-agent: GPTBot
+Disallow: /
+
+Sitemap: https://metrroma.com/sitemap.xml

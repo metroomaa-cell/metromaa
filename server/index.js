@@ -4657,6 +4657,40 @@ const dist = join(__dir, '..', 'web', 'dist');
 if (existsSync(dist)) {
   app.get(['/shakilecom', '/shakilecom.apk', '/ShakilEcom.apk'], (_req, res) => res.sendStatus(404));
   app.get(['/admin.html', '/admin'], (_req, res) => res.redirect(301, '/wp-admin'));
+  const SEO_ORIGIN = 'https://metrroma.com';
+  const xmlEscape = (value) => String(value ?? '').replace(/[<>&'\"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c]);
+  const htmlEscape = (value) => String(value ?? '').replace(/[&<>\"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const absoluteUrl = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return `${SEO_ORIGIN}/uploads/img_mvdpqsl1t81m6.webp`;
+    try { return new URL(raw, `${SEO_ORIGIN}/`).href; } catch { return `${SEO_ORIGIN}/`; }
+  };
+  app.get('/sitemap.xml', (_req, res) => {
+    const { products = [], categories = [] } = getCatalog();
+    const urls = new Map();
+    const addUrl = (path, lastmod = '') => {
+      const loc = new URL(path, `${SEO_ORIGIN}/`).href;
+      const date = lastmod && !Number.isNaN(Date.parse(lastmod)) ? new Date(lastmod).toISOString().slice(0, 10) : '';
+      urls.set(loc, date || urls.get(loc) || '');
+    };
+    addUrl('/');
+    addUrl('/shop');
+    for (const category of categories) {
+      if (category?.slug) addUrl(`/shop/${encodeURIComponent(category.slug)}`, category.updatedAt);
+    }
+    for (const product of products) {
+      const slug = String(product?.slug || product?.id || '').trim();
+      if (!slug || product.archived || product.status === 'draft' || product.published === false) continue;
+      addUrl(`/product/${encodeURIComponent(slug)}`, product.updatedAt || product.createdAt);
+    }
+    for (const landing of getLandings()) {
+      const slug = String(landing?.slug || '').trim();
+      if (slug && landing.status === 'live') addUrl(`/${encodeURIComponent(slug)}`, landing.updatedAt || landing.createdAt);
+    }
+    const body = [...urls.entries()].map(([loc, lastmod]) => `  <url><loc>${xmlEscape(loc)}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ''}</url>`).join('\n');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300');
+    res.type('application/xml; charset=utf-8').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>`);
+  });
   app.use(express.static(dist, {
     setHeaders: (res, path) => {
       if (path.endsWith('.html')) {
@@ -4683,6 +4717,7 @@ if (existsSync(dist)) {
       const cleanPath = path.replace(/^\/+|\/+$/g, '');
       const parts = cleanPath.split('/').filter(Boolean);
       let targetProduct = null;
+      let targetCategory = null;
 
       const catalog = getCatalog().products || [];
       if (parts[0] === 'product' && parts[1]) {
@@ -4693,22 +4728,37 @@ if (existsSync(dist)) {
         targetProduct = catalog.find((p) => p.slug?.toLowerCase() === slug || p.id === parts[0] || (slug === 'love-forever' && p.id === 'mm-29267') || (slug === 'love-forever-gift-box' && p.id === 'mm-29267'));
       }
 
+      if (parts[0] === 'shop' && parts[1]) {
+        targetCategory = (getCatalog().categories || []).find((category) => category.slug?.toLowerCase() === parts[1].toLowerCase()) || null;
+      }
+
       if (targetProduct) {
-        const pTitle = `${targetProduct.name} — METRROMA`;
-        const pDesc = (targetProduct.desc || targetProduct.shortDesc || targetProduct.name).slice(0, 200).replace(/["\n\r]/g, ' ');
-        let pImg = targetProduct.image || (targetProduct.images && targetProduct.images[0]) || '/uploads/img_mvdpqsl1t81m6.webp';
-        if (!pImg.startsWith('http')) pImg = `${baseUrl}${pImg.startsWith('/') ? '' : '/'}${pImg}`;
-        const pUrl = `${baseUrl}/product/${targetProduct.slug || targetProduct.id}`;
+        const pTitle = String(targetProduct.seoTitle || `${targetProduct.name} — METRROMA`).slice(0, 70);
+        const pDesc = String(targetProduct.seoDesc || targetProduct.shortDesc || targetProduct.desc || targetProduct.name).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+        const pImg = absoluteUrl(targetProduct.image || (targetProduct.images && targetProduct.images[0]));
+        const pUrl = `${baseUrl}/product/${encodeURIComponent(targetProduct.slug || targetProduct.id)}`;
         const pPrice = String(targetProduct.price || 0);
+        const productJsonLd = {
+          '@context': 'https://schema.org', '@type': 'Product',
+          name: targetProduct.name, description: pDesc, image: [pImg], url: pUrl,
+          sku: targetProduct.sku || undefined, brand: { '@type': 'Brand', name: 'METRROMA' },
+          offers: {
+            '@type': 'Offer', url: pUrl, priceCurrency: 'BDT', price: Number(targetProduct.price || 0),
+            availability: targetProduct.soldOut || Number(targetProduct.stock) === 0 ? 'https://schema.org/OutOfStock' : 'https://schema.org/InStock',
+            itemCondition: 'https://schema.org/NewCondition', seller: { '@type': 'Organization', name: 'METRROMA' },
+          },
+        };
 
         html = html
-          .replace(/<title>[\s\S]*?<\/title>/i, `<title>${pTitle}</title>`)
-          .replace(/<meta property="og:title" content="[^"]*"/i, `<meta property="og:title" content="${pTitle}"`)
-          .replace(/<meta property="og:description" content="[^"]*"/i, `<meta property="og:description" content="${pDesc}"`)
-          .replace(/<meta property="og:image" content="[^"]*"/i, `<meta property="og:image" content="${pImg}"`)
-          .replace(/<meta name="twitter:title" content="[^"]*"/i, `<meta name="twitter:title" content="${pTitle}"`)
-          .replace(/<meta name="twitter:description" content="[^"]*"/i, `<meta name="twitter:description" content="${pDesc}"`)
-          .replace(/<meta name="twitter:image" content="[^"]*"/i, `<meta name="twitter:image" content="${pImg}"`);
+          .replace(/<title>[\s\S]*?<\/title>/i, `<title>${htmlEscape(pTitle)}</title>`)
+          .replace(/<meta name="description" content="[^"]*"/i, `<meta name="description" content="${htmlEscape(pDesc)}"`)
+          .replace(/<meta property="og:title" content="[^"]*"/i, `<meta property="og:title" content="${htmlEscape(pTitle)}"`)
+          .replace(/<meta property="og:description" content="[^"]*"/i, `<meta property="og:description" content="${htmlEscape(pDesc)}"`)
+          .replace(/<meta property="og:image" content="[^"]*"/i, `<meta property="og:image" content="${htmlEscape(pImg)}"`)
+          .replace(/<meta property="og:image:secure_url" content="[^"]*"/i, `<meta property="og:image:secure_url" content="${htmlEscape(pImg)}"`)
+          .replace(/<meta name="twitter:title" content="[^"]*"/i, `<meta name="twitter:title" content="${htmlEscape(pTitle)}"`)
+          .replace(/<meta name="twitter:description" content="[^"]*"/i, `<meta name="twitter:description" content="${htmlEscape(pDesc)}"`)
+          .replace(/<meta name="twitter:image" content="[^"]*"/i, `<meta name="twitter:image" content="${htmlEscape(pImg)}"`);
 
         const extraTags = `
     <meta property="og:url" content="${pUrl}" />
@@ -4716,8 +4766,28 @@ if (existsSync(dist)) {
     <meta property="product:price:amount" content="${pPrice}" />
     <meta property="product:price:currency" content="BDT" />
     <meta property="og:image:secure_url" content="${pImg}" />
-    <link rel="canonical" href="${pUrl}" />`;
-        html = html.replace('</head>', `${extraTags}\n</head>`);
+    <script type="application/ld+json">${JSON.stringify(productJsonLd).replace(/</g, '\\u003c')}</script>`;
+        html = html
+          .replace(/<link rel="canonical" href="[^"]*"\s*\/?\s*>/i, `<link rel="canonical" href="${htmlEscape(pUrl)}" />`)
+          .replace('</head>', `${extraTags}\n</head>`);
+      } else if (targetCategory) {
+        const title = `${targetCategory.name} — METRROMA`;
+        const description = String(targetCategory.blurb || `Shop ${targetCategory.name} from METRROMA. Authentic products with delivery across Bangladesh.`).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+        const url = `${baseUrl}/shop/${encodeURIComponent(targetCategory.slug)}`;
+        const categoryProducts = (getCatalog().products || []).filter((product) => product.category === targetCategory.slug && !product.archived && product.status !== 'draft' && product.published !== false);
+        const listJsonLd = {
+          '@context': 'https://schema.org', '@type': 'CollectionPage', name: title, description, url,
+          mainEntity: { '@type': 'ItemList', itemListElement: categoryProducts.slice(0, 50).map((product, index) => ({ '@type': 'ListItem', position: index + 1, url: `${baseUrl}/product/${encodeURIComponent(product.slug || product.id)}`, name: product.name })) },
+        };
+        html = html
+          .replace(/<title>[\s\S]*?<\/title>/i, `<title>${htmlEscape(title)}</title>`)
+          .replace(/<meta name="description" content="[^"]*"/i, `<meta name="description" content="${htmlEscape(description)}"`)
+          .replace(/<meta property="og:title" content="[^"]*"/i, `<meta property="og:title" content="${htmlEscape(title)}"`)
+          .replace(/<meta property="og:description" content="[^"]*"/i, `<meta property="og:description" content="${htmlEscape(description)}"`)
+          .replace(/<meta property="og:image" content="[^"]*"/i, `<meta property="og:image" content="${htmlEscape(absoluteUrl(targetCategory.image))}"`)
+          .replace(/<meta property="og:image:secure_url" content="[^"]*"/i, `<meta property="og:image:secure_url" content="${htmlEscape(absoluteUrl(targetCategory.image))}"`)
+          .replace(/<link rel="canonical" href="[^"]*"\s*\/?\s*>/i, `<link rel="canonical" href="${htmlEscape(url)}" />`)
+          .replace('</head>', `\n    <meta property="og:url" content="${htmlEscape(url)}" /><meta property="og:type" content="website" /><script type="application/ld+json">${JSON.stringify(listJsonLd).replace(/</g, '\\u003c')}</script>\n</head>`);
       } else {
         html = html.replace(/<meta property="og:image" content="(\/[^"]+)"/i, `<meta property="og:image" content="${baseUrl}$1"`);
       }
