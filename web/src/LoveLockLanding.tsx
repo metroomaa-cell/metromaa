@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { placeOrder, getSettings, taka, getDeviceId, isSkincareSite } from './api';
 import { dl, ecView, ecAdd, ecBeginCheckout, ecPurchase } from './analytics';
 import { go } from './cart';
