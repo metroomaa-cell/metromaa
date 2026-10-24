@@ -4539,6 +4539,81 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   transition: all 0.2s ease;
 }
 
+.ll-phone-input-wrap {
+  display: flex;
+  align-items: center;
+  position: relative;
+  width: 100%;
+}
+
+.ll-phone-flag {
+  position: absolute;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #4b5563;
+  padding-right: 10px;
+  border-right: 1.5px solid rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+  user-select: none;
+  z-index: 2;
+}
+
+.ll-flag-icon {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.ll-country-code {
+  font-size: 13.5px;
+  letter-spacing: 0.3px;
+  color: #374151;
+}
+
+.ll-phone-input {
+  padding-left: 82px !important;
+  letter-spacing: 0.6px;
+  font-family: 'Hind Siliguri', -apple-system, monospace, sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ll-input.ll-input-valid {
+  border-color: #10B981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15) !important;
+}
+
+.ll-input.ll-input-invalid {
+  border-color: #EF4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+}
+
+.ll-phone-helper {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.ll-phone-helper.valid {
+  color: #059669;
+}
+
+.ll-phone-helper.error {
+  color: #DC2626;
+}
+
+.ll-phone-helper.info {
+  color: #6B7280;
+}
+
 .ll-input:focus {
   border-color: var(--ll-primary, #CB202D);
   background: #FFFFFF;

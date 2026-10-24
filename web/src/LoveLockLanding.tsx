@@ -100,6 +100,27 @@ function parseLandingVideo(rawUrl: string): {
   };
 }
 
+export function cleanAndValidateBDPhone(raw: string): { clean: string; isValid: boolean; error?: string } {
+  const banglaDigits: Record<string, string> = { '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9' };
+  let s = String(raw || '').replace(/[০-৯]/g, (d) => banglaDigits[d] || d);
+  s = s.replace(/\D/g, '');
+  if (s.startsWith('880')) s = s.slice(2);
+  else if (s.startsWith('88')) s = s.slice(2);
+  if (s.length === 10 && s.startsWith('1')) s = '0' + s;
+
+  if (!s) return { clean: '', isValid: false, error: 'অনুগ্রহ করে আপনার মোবাইল নম্বর দিন' };
+  if (s.length < 11) return { clean: s, isValid: false, error: `১১ ডিজিট প্রয়োজন (বাকি ${11 - s.length}টি)` };
+  if (s.length > 11) return { clean: s.slice(0, 11), isValid: false, error: 'মোবাইল নম্বর সর্বোচ্চ ১১ ডিজিট হতে হবে' };
+
+  const validPrefixes = ['013', '014', '015', '016', '017', '018', '019'];
+  const prefix = s.slice(0, 3);
+  if (!validPrefixes.includes(prefix)) {
+    return { clean: s, isValid: false, error: 'সঠিক অপারেটর কোড দিন (যেমন: 017, 018, 019, 016, 015, 013, 014)' };
+  }
+
+  return { clean: s, isValid: true };
+}
+
 export function LoveLockLanding({ slug = '' }: { slug?: string }) {
   const [cfg, setCfg] = useState<any>(null);
   const [pageLoading, setPageLoading] = useState(true);
@@ -276,11 +297,31 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
     }
   };
 
-  // 3. Draft Abandonment recovery: Ping incomplete checkout when 11-digit phone entered
+  const phoneValidation = useMemo(() => {
+    if (!phone) return { state: 'empty', message: '' };
+    const res = cleanAndValidateBDPhone(phone);
+    if (res.isValid) return { state: 'valid', message: '✓ সঠিক বাংলাদেশি মোবাইল নম্বর' };
+    if (phone.length < 11) return { state: 'incomplete', message: res.error || '' };
+    return { state: 'invalid', message: res.error || 'সঠিক মোবাইল নম্বর দিন' };
+  }, [phone]);
+
+  const handlePhoneChange = (val: string) => {
+    const banglaDigits: Record<string, string> = { '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9' };
+    let s = String(val || '').replace(/[০-৯]/g, (d) => banglaDigits[d] || d);
+    s = s.replace(/\D/g, '');
+    if (s.startsWith('880')) s = s.slice(2);
+    else if (s.startsWith('88')) s = s.slice(2);
+    if (s.length > 11) s = s.slice(0, 11);
+    setPhone(s);
+    if (error) setError('');
+  };
+
+  // 3. Draft Abandonment recovery: Ping incomplete checkout when valid BD phone entered
   useEffect(() => {
     if (!cfg || !currentItem) return;
-    const cleanPhone = phone.trim().replace(/[-+ ]/g, '');
-    if (!/^01[3-9]\d{8}$/.test(cleanPhone)) return;
+    const phoneCheck = cleanAndValidateBDPhone(phone);
+    if (!phoneCheck.isValid) return;
+    const cleanPhone = phoneCheck.clean;
     const t = setTimeout(() => {
       fetch('/api/checkout/ping', {
         method: 'POST',
@@ -332,11 +373,14 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
       setError('অনুগ্রহ করে আপনার সম্পূর্ণ ঠিকানা লিখুন');
       return;
     }
-    const cleanPhone = phone.trim().replace(/[-+ ]/g, '');
-    if (!cleanPhone || cleanPhone.length < 11) {
-      setError('অনুগ্রহ করে সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন');
+    const phoneCheck = cleanAndValidateBDPhone(phone);
+    if (!phoneCheck.isValid) {
+      setError(phoneCheck.error || 'অনুগ্রহ করে সঠিক ১১ ডিজিটের বাংলাদেশি মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)');
+      const el = document.getElementById('ll-phone-input');
+      if (el) el.focus();
       return;
     }
+    const cleanPhone = phoneCheck.clean;
 
     setLoading(true);
     try {
@@ -904,18 +948,33 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
                 </div>
 
                 <div className="ll-field-group">
-                  <label className="ll-label">
+                  <label className="ll-label" htmlFor="ll-phone-input">
                     আপনার ফোন নাম্বার <span className="ll-req">*</span>
                   </label>
-                  <input
-                    type="tel"
-                    required
-                    className="ll-input"
-                    placeholder="১১ ডিজিটের মোবাইল নম্বর দিন"
-                    value={phone}
-                    onFocus={triggerInitiateCheckout}
-                    onChange={(e) => setPhone(e.target.value)}
-                  />
+                  <div className="ll-phone-input-wrap">
+                    <div className="ll-phone-flag" aria-hidden="true">
+                      <span className="ll-flag-icon">🇧🇩</span>
+                      <span className="ll-country-code">+88</span>
+                    </div>
+                    <input
+                      id="ll-phone-input"
+                      type="tel"
+                      required
+                      inputMode="numeric"
+                      autoComplete="tel"
+                      maxLength={11}
+                      className={`ll-input ll-phone-input ${phoneValidation.state === 'valid' ? 'll-input-valid' : phoneValidation.state === 'invalid' ? 'll-input-invalid' : ''}`}
+                      placeholder="01XXXXXXXXX"
+                      value={phone}
+                      onFocus={triggerInitiateCheckout}
+                      onChange={(e) => handlePhoneChange(e.target.value)}
+                    />
+                  </div>
+                  {phoneValidation.state !== 'empty' && (
+                    <div className={`ll-phone-helper ${phoneValidation.state === 'valid' ? 'valid' : phoneValidation.state === 'invalid' ? 'error' : 'info'}`}>
+                      <span>{phoneValidation.message}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
