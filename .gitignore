@@ -19,3 +19,5 @@ server/data/integrations.json
 metrroma_persistent_data/
 server/persistent_storage/
 check_live.cjs
+server/data/backups.*/
+server/data/persistent.*/

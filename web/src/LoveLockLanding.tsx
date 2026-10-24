@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { placeOrder, getSettings, taka, getDeviceId } from './api';
-import { dl, ecView, ecAdd, ecBeginCheckout, ecPurchase, fbTrack } from './analytics';
+import { placeOrder, getSettings, taka, getDeviceId, isSkincareSite } from './api';
+import { dl, ecView, ecAdd, ecBeginCheckout, ecPurchase } from './analytics';
 import { go } from './cart';
 import { WhatsAppIcon } from './icons';
 
@@ -13,7 +13,7 @@ function CheckCircleIcon({ color = 'currentColor', size = 18 }: { color?: string
   );
 }
 
-function SolidCheckIcon({ color = '#CB202D', size = 20 }: { color?: string; size?: number }) {
+function SolidCheckIcon({ color = 'var(--ll-primary, #CB202D)', size = 20 }: { color?: string; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 512 512" fill={color} style={{ flexShrink: 0 }}>
       <path d="M504 256c0 136.967-111.033 248-248 248S8 392.967 8 256 119.033 8 256 8s248 111.033 248 248zM227.314 387.314l184-184c6.248-6.248 6.248-16.379 0-22.627l-22.627-22.627c-6.248-6.249-16.379-6.249-22.628 0L216 308.118l-70.059-70.059c-6.248-6.248-16.379-6.248-22.628 0l-22.627 22.627c-6.248 6.248-6.248 16.379 0 22.627l104 104c6.249 6.249 16.379 6.249 22.628.001z" />
@@ -37,67 +37,78 @@ function PhoneIcon({ size = 20 }: { size?: number }) {
   );
 }
 
-// Default Fallback Configuration for METRROMA Luxury Gift Box
-const DEFAULT_CONFIG = {
-  title: '“LOVE FOREVER” লাক্সারি গিফট বক্স — প্রিয়জনের সেরা উপহার',
-  badgeTop: '১০০% অরিজিনাল প্রিমিয়াম কোয়ালিটি নিশ্চিত',
-  badgeGuarantee: 'একমাত্র আমরাই দিচ্ছি পণ্য দেখে মূল্য পরিশোধের সুবিধা',
-  headline: '“LOVE FOREVER” লাক্সারি গিফট বক্স',
-  subtitle: 'ভালোবাসার দিনে প্রিয়জনের মুখে হাসি ফোটান। ১২টি সুবাসিত লাল গোলাপ, প্রিমিয়াম নেকলেস ও গিফট ব্যাগ সহ আকর্ষণীয় প্যাকেজ।',
-  videoUrl: '',
-  videoBadge: '',
-  productTitle: '“LOVE FOREVER” Gift Box',
-  productTagline: '১২টি সুবাসিত রয়্যাল রেড সিল্ক রোজ + প্রিমিয়াম গলার হার + ফ্রি গিফট ক্যারিয়ার ব্যাগ + গ্রিটিংস কার্ড',
-  heroImage: '/uploads/img_mvcvyjixc2dpi.webp',
-  packageTitle: '“LOVE FOREVER” লাক্সারি গিফট বক্স কম্বো',
-  offerPriceText: 'অফার মূল্য মাত্র ৫৯০ টাকা',
-  freeDeliveryText: '(ক্যাশ অন ডেলিভারিতে সারা বাংলাদেশে দ্রুত হোম ডেলিভারি)',
-  benefitsHeading: 'কেন এই গিফট বক্সটি সেরা উপহার?',
-  benefits: [
-    '🌹 ১২টি আকর্ষণীয় লাল গোলাপ: প্রিমিয়াম রয়্যাল রেড ফিনিশ ও দেখতে একদম তাজা গোলাপের মতো।',
-    '💎 Premium Necklace: চকচকে প্রিমিয়াম ডিজাইনের গলার হার যা যেকোনো পোশাকে মানিয়ে যায়।',
-    '🛍️ Free Gift Bag: আকর্ষণীয় গিফট ক্যারিয়ার ব্যাগ সহ পরিপাটি প্রেজেন্টেশন।',
-    '💌 Greeting Card: মনের না-বলা ভালোবাসার অনুভূতি লিখে জানানোর স্পেশাল কার্ড।',
-    '✨ সিক্রেট ড্রয়ার স্পেস: জুয়েলারি বা সারপ্রাইজ গিফট লুকিয়ে রাখার এক্সক্লুসিভ কম্পার্টমেন্ট।',
-    '💰 নিশ্চিন্ত ক্যাশ অন ডেলিভারি: কোনো অগ্রিম টাকা ছাড়া ঘরে বসে পণ্য দেখে মূল্য পরিশোধ করুন।'
-  ],
-  usageHeading: 'উপহার দেয়ার উপযুক্ত উপলক্ষ্যসমূহ:',
-  usageSteps: [
-    'ওয়াইফ বা প্রিয়তমার জন্মদিনের শুভেচ্ছা জানাতে।',
-    'বিবাহবার্ষিকী বা রিলেশনশিপ অ্যানিভার্সারিতে বিশেষ চমক দিতে।',
-    'প্রপোজাল মুহূর্ত বা ভালোবাসার বিশেষ দিনকে স্মরণীয় করতে।',
-    'প্রিয় মানুষকে অনাবিল আনন্দ ও সারপ্রাইজ উপহার দিতে।'
-  ],
-  usageImage: '/uploads/img_mvcvyqa8tgqa6.webp',
-  usageCaption: 'ভালোবাসার শ্রেষ্ঠ উপহার — পরিপাটি রয়্যাল ফিনিশ',
-  reviews: [
-    '/uploads/img_mvcvyqj4ab8xt.webp',
-    '/uploads/img_mvcvywji3jv5e.webp',
-    '/uploads/img_mvcvyjixc2dpi.webp'
-  ],
-  reviewsBadge: 'ভেরিফায়েড ক্রেতার সন্তুষ্টি',
-  reviewsTitle: 'বাস্তব কাস্টমার অভিজ্ঞতা ও ছবি',
-  guaranteeBadge: '১০০% সন্তুষ্টি ও নিশ্চিন্ত ক্রয়ের অঙ্গীকার',
-  guaranteeText: 'আমাদের প্রদর্শিত পণ্যের সাথে প্রাপ্ত পণ্যের মিল না থাকলে এক টাকাও দিতে হবে না, সরাসরি পার্সেল রিটার্ন করতে পারবেন। যেকোনো প্রশ্ন বা বিস্তারিত জানতে কল করুন।',
-  phone: '01633617136',
-  whatsapp: '8801633617136',
-  packages: [
-    {
-      id: 'mm-29267',
-      title: '“LOVE FOREVER” Gift Box (Black / Red)',
-      price: 590,
-      originalPrice: 1200,
-      image: '/uploads/img_mvcvyjixc2dpi.webp',
-      popular: true
-    }
-  ]
-};
+// Color manipulation helpers for dynamic theme variables
+function hexToRgbTuple(hex: string, fallback = '203, 32, 45'): [number, number, number, string] {
+  const clean = String(hex || '').trim().replace(/^#/, '');
+  if (/^[0-9a-fA-F]{6}$/.test(clean)) {
+    const r = parseInt(clean.slice(0, 2), 16);
+    const g = parseInt(clean.slice(2, 4), 16);
+    const b = parseInt(clean.slice(4, 6), 16);
+    return [r, g, b, `${r}, ${g}, ${b}`];
+  }
+  return [203, 32, 45, fallback];
+}
 
-export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
-  const [cfg, setCfg] = useState<any>(DEFAULT_CONFIG);
-  const [selectedProduct, setSelectedProduct] = useState(DEFAULT_CONFIG.packages[0].id);
-  const [selectedColor, setSelectedColor] = useState('Black');
+function darkenHex(hex: string, factor = 0.78): string {
+  const [r, g, b] = hexToRgbTuple(hex);
+  const dr = Math.max(0, Math.min(255, Math.round(r * factor)));
+  const dg = Math.max(0, Math.min(255, Math.round(g * factor)));
+  const db = Math.max(0, Math.min(255, Math.round(b * factor)));
+  return `#${dr.toString(16).padStart(2, '0')}${dg.toString(16).padStart(2, '0')}${db.toString(16).padStart(2, '0')}`;
+}
+
+// Universal Video URL Parser (YouTube, YouTube Shorts, Facebook Video, or Direct MP4/WebM)
+function parseLandingVideo(rawUrl: string): {
+  type: 'youtube' | 'youtube-shorts' | 'facebook' | 'mp4';
+  embedUrl: string;
+} {
+  const url = String(rawUrl || '').trim();
+  if (!url) return { type: 'mp4', embedUrl: '' };
+
+  // 1. YouTube Shorts: youtube.com/shorts/VIDEO_ID
+  const shortsMatch = url.match(/(?:youtube\.com|youtu\.be)\/shorts\/([a-zA-Z0-9_-]{11})/i);
+  if (shortsMatch && shortsMatch[1]) {
+    return {
+      type: 'youtube-shorts',
+      embedUrl: `https://www.youtube.com/embed/${shortsMatch[1]}?rel=0&modestbranding=1&playsinline=1`,
+    };
+  }
+
+  // 2. Standard YouTube: youtube.com/watch?v=VIDEO_ID, youtu.be/VIDEO_ID, youtube.com/embed/VIDEO_ID
+  const ytMatch = url.match(
+    /(?:youtube\.com\/(?:watch\?.*v=|embed\/|v\/|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i
+  );
+  if (ytMatch && ytMatch[1]) {
+    return {
+      type: 'youtube',
+      embedUrl: `https://www.youtube.com/embed/${ytMatch[1]}?rel=0&modestbranding=1&playsinline=1`,
+    };
+  }
+
+  // 3. Facebook Video / Reel
+  if (/facebook\.com\/.*(?:videos|reel|watch)|fb\.watch\//i.test(url)) {
+    return {
+      type: 'facebook',
+      embedUrl: `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&width=680`,
+    };
+  }
+
+  // 4. Direct MP4 / WebM video file
+  return {
+    type: 'mp4',
+    embedUrl: url.includes('#') ? url : `${url}#t=0.001`,
+  };
+}
+
+export function LoveLockLanding({ slug = '' }: { slug?: string }) {
+  const [cfg, setCfg] = useState<any>(null);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+
+  const [selectedProduct, setSelectedProduct] = useState('');
+  const [selectedColor, setSelectedColor] = useState('');
   const [qty, setQty] = useState<Record<string, number>>({});
+  const [shippingZone, setShippingZone] = useState<'inside' | 'outside'>('inside');
 
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
@@ -106,31 +117,67 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
   const [error, setError] = useState('');
   const [reviewIdx, setReviewIdx] = useState(0);
 
-  // Phone and WhatsApp
-  const [phoneNum, setPhoneNum] = useState(DEFAULT_CONFIG.phone);
-  const [waNum, setWaNum] = useState(DEFAULT_CONFIG.whatsapp);
+  // Store-level defaults
+  const [phoneNum, setPhoneNum] = useState('');
+  const [waNum, setWaNum] = useState('');
+  const [storeDelInside, setStoreDelInside] = useState(80);
+  const [storeDelOutside, setStoreDelOutside] = useState(130);
 
-  // Load landing config from server
+  // Load landing config strictly by slug from server
   useEffect(() => {
-    const fetchSlug = slug || 'lovelock';
-    fetch(`/api/landings/${fetchSlug}`)
+    const fetchSlug = String(slug || '').trim();
+    if (!fetchSlug) {
+      setNotFound(true);
+      setPageLoading(false);
+      return;
+    }
+    setPageLoading(true);
+    setNotFound(false);
+
+    fetch(`/api/landings/${encodeURIComponent(fetchSlug)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data) {
-          setCfg((prev: any) => ({ ...prev, ...data }));
-          if (data.phone) setPhoneNum(data.phone);
-          if (data.whatsapp) setWaNum(data.whatsapp.replace(/[^0-9]/g, ''));
-          if (Array.isArray(data.packages) && data.packages.length > 0) {
-            setSelectedProduct(data.packages[0].id);
-          }
+        if (!data || data.status === 'draft') {
+          setNotFound(true);
+          setPageLoading(false);
+          return;
         }
+        setCfg(data);
+        if (data.phone) setPhoneNum(data.phone);
+        if (data.whatsapp) setWaNum(String(data.whatsapp).replace(/[^0-9]/g, ''));
+        if (Array.isArray(data.packages) && data.packages.length > 0) {
+          setSelectedProduct(data.packages[0].id);
+        }
+        if (Array.isArray(data.colors) && data.colors.length > 0) {
+          const firstColor = typeof data.colors[0] === 'string' ? data.colors[0] : data.colors[0]?.name || '';
+          setSelectedColor(firstColor);
+        } else {
+          setSelectedColor('');
+        }
+        setPageLoading(false);
       })
-      .catch(() => {});
+      .catch(() => {
+        setNotFound(true);
+        setPageLoading(false);
+      });
   }, [slug]);
 
   // General settings fallback
   useEffect(() => {
-    const lTitle = `${cfg.headline || cfg.title} — METRROMA`;
+    getSettings()
+      .then((s) => {
+        if (s.deliveryInside != null) setStoreDelInside(Number(s.deliveryInside) || 80);
+        if (s.deliveryOutside != null) setStoreDelOutside(Number(s.deliveryOutside) || 130);
+        if (s.phone) setPhoneNum((prev) => prev || s.phone);
+        if (s.whatsapp) setWaNum((prev) => prev || String(s.whatsapp).replace(/[^0-9]/g, ''));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!cfg) return;
+    const brand = isSkincareSite() ? 'SECRATE' : 'METRROMA';
+    const lTitle = `${cfg.headline || cfg.title} — ${brand}`;
     document.title = lTitle;
     const q = new URLSearchParams(location.search);
     dl({
@@ -142,14 +189,10 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
       campaign_medium: q.get('utm_medium') || (q.get('fbclid') ? 'paid' : undefined),
       campaign_name: q.get('utm_campaign') || undefined,
     });
-    getSettings().then((s) => {
-      if (!cfg.phone && s.phone) setPhoneNum(s.phone);
-      if (!cfg.whatsapp && s.whatsapp) setWaNum(s.whatsapp.replace(/[^0-9]/g, ''));
-    }).catch(() => {});
-  }, [cfg.title, cfg.headline, cfg.phone, cfg.whatsapp]);
+  }, [cfg]);
 
   // Auto scroll reviews carousel
-  const reviewsList = Array.isArray(cfg.reviews) && cfg.reviews.length > 0 ? cfg.reviews : DEFAULT_CONFIG.reviews;
+  const reviewsList = Array.isArray(cfg?.reviews) ? cfg.reviews.filter(Boolean) : [];
   useEffect(() => {
     if (reviewsList.length <= 1) return;
     const timer = setInterval(() => {
@@ -158,29 +201,48 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
     return () => clearInterval(timer);
   }, [reviewsList.length]);
 
-  const packagesList = Array.isArray(cfg.packages) && cfg.packages.length > 0 ? cfg.packages : DEFAULT_CONFIG.packages;
+  const packagesList =
+    Array.isArray(cfg?.packages) && cfg.packages.length > 0
+      ? cfg.packages
+      : [
+          {
+            id: cfg?.id || 'pkg_default',
+            title: cfg?.productTitle || cfg?.headline || cfg?.title || 'Product Package',
+            price: Number(cfg?.offerPrice) || 999,
+            originalPrice: 1500,
+            image: cfg?.heroImage || '',
+            popular: true,
+          },
+        ];
+
   const currentItem = packagesList.find((p: any) => p.id === selectedProduct) || packagesList[0];
   const currentQty = qty[currentItem.id] || 1;
-  const subtotal = currentItem.price * currentQty;
-  const total = subtotal; // Free shipping
+  const subtotal = Number(currentItem.price || 0) * currentQty;
+
+  // Dynamic Delivery Charge Calculation
+  const isFreeDelivery = cfg ? cfg.freeDelivery !== false : true;
+  const delInside = Number(cfg?.deliveryInside ?? cfg?.customDeliveryInside ?? storeDelInside ?? 80);
+  const delOutside = Number(cfg?.deliveryOutside ?? cfg?.customDeliveryOutside ?? storeDelOutside ?? 130);
+  const shippingCost = isFreeDelivery ? 0 : shippingZone === 'inside' ? delInside : delOutside;
+  const total = subtotal + shippingCost;
 
   // Ref to ensure InitiateCheckout is fired smoothly
   const checkoutTrackedRef = useRef(false);
 
   // 1. Pixel: Track ViewContent on load and package change
   useEffect(() => {
-    if (currentItem && currentItem.price) {
+    if (cfg && currentItem && currentItem.price) {
       ecView({
         id: currentItem.id,
-        name: `${cfg.headline || cfg.title || 'LoveLock'} - ${currentItem.title}`,
+        name: `${cfg.headline || cfg.title} - ${currentItem.title}`,
         price: currentItem.price,
       });
     }
-  }, [selectedProduct, cfg.title, cfg.headline]);
+  }, [cfg, selectedProduct, currentItem]);
 
   // 2. Pixel: Track InitiateCheckout when user scrolls or focuses on checkout
   const triggerInitiateCheckout = () => {
-    if (checkoutTrackedRef.current) return;
+    if (checkoutTrackedRef.current || !currentItem) return;
     checkoutTrackedRef.current = true;
     ecBeginCheckout(total, [
       { id: currentItem.id, name: currentItem.title, price: currentItem.price, qty: currentQty },
@@ -216,6 +278,7 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
 
   // 3. Draft Abandonment recovery: Ping incomplete checkout when 11-digit phone entered
   useEffect(() => {
+    if (!cfg || !currentItem) return;
     const cleanPhone = phone.trim().replace(/[-+ ]/g, '');
     if (!/^01[3-9]\d{8}$/.test(cleanPhone)) return;
     const t = setTimeout(() => {
@@ -226,29 +289,36 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
           'x-device-id': getDeviceId(),
         },
         body: JSON.stringify({
-          items: [{
-            id: currentItem.id,
-            qty: currentQty,
-            name: currentItem.title,
-            price: currentItem.price,
-            image: currentItem.image || cfg.heroImage,
-            color: selectedColor,
-            variantTitle: selectedColor ? `রং: ${selectedColor}` : currentItem.title,
-          }],
+          items: [
+            {
+              id: currentItem.id,
+              qty: currentQty,
+              name: currentItem.title,
+              price: currentItem.price,
+              image: currentItem.image || cfg.heroImage,
+              color: selectedColor || '',
+              variantTitle: selectedColor ? `রং: ${selectedColor}` : currentItem.title,
+            },
+          ],
           customer: {
             name: name.trim() || 'Customer',
             phone: cleanPhone,
             address: address.trim(),
-            landing: slug || 'love-forever',
-            source: `landing_${slug || 'love-forever'}`,
-            freeDelivery: true,
-            shippingCost: 0,
+            area: shippingZone,
+            landing: cfg.slug || slug,
+            source: `landing_${cfg.slug || slug}`,
+            freeDelivery: isFreeDelivery,
+            shippingCost,
+          },
+          shipping: {
+            cost: shippingCost,
+            method: isFreeDelivery ? 'free' : shippingZone,
           },
         }),
       }).catch(() => {});
     }, 1000);
     return () => clearTimeout(t);
-  }, [name, phone, address, currentItem, currentQty, slug, selectedColor, cfg.heroImage]);
+  }, [name, phone, address, currentItem, currentQty, slug, selectedColor, cfg, shippingZone, isFreeDelivery, shippingCost]);
 
   const handleOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -277,8 +347,8 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
             name: currentItem.title,
             price: currentItem.price,
             qty: currentQty,
-            image: currentItem.image || cfg.heroImage,
-            color: selectedColor,
+            image: currentItem.image || cfg?.heroImage,
+            color: selectedColor || '',
             variantTitle: selectedColor ? `রং: ${selectedColor}` : currentItem.title,
           },
         ],
@@ -286,14 +356,15 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
           name: name.trim(),
           phone: cleanPhone,
           address: address.trim(),
-          landing: slug || 'love-forever',
-          source: `landing_${slug || 'love-forever'}`,
-          freeDelivery: true,
-          shippingCost: 0,
+          area: shippingZone,
+          landing: cfg?.slug || slug,
+          source: `landing_${cfg?.slug || slug}`,
+          freeDelivery: isFreeDelivery,
+          shippingCost,
         },
         shipping: {
-          cost: 0,
-          method: 'free',
+          cost: shippingCost,
+          method: isFreeDelivery ? 'free' : shippingZone,
         },
       });
 
@@ -302,7 +373,7 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
         res.id,
         res.total ?? total,
         [{ id: currentItem.id, name: currentItem.title, price: currentItem.price, qty: currentQty }],
-        `landing_${slug || 'lovelock'}`
+        `landing_${cfg?.slug || slug}`
       );
 
       // Navigate to order confirmation
@@ -313,11 +384,76 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
     }
   };
 
-  const benefitsList = Array.isArray(cfg.benefits) && cfg.benefits.length > 0 ? cfg.benefits : DEFAULT_CONFIG.benefits;
-  const usageStepsList = Array.isArray(cfg.usageSteps) && cfg.usageSteps.length > 0 ? cfg.usageSteps : DEFAULT_CONFIG.usageSteps;
+  if (pageLoading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FAF7F8', fontFamily: "'Hind Siliguri', sans-serif" }}>
+        <div style={{ textAlign: 'center', padding: 32 }}>
+          <div style={{ width: 42, height: 42, border: '3px solid #e5e7eb', borderTopColor: '#CB202D', borderRadius: '50%', margin: '0 auto 14px', animation: 'spin 0.8s linear infinite' }} />
+          <div style={{ fontSize: 16, fontWeight: 600, color: '#374151' }}>পেজ লোড হচ্ছে...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (notFound || !cfg) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FAF7F8', fontFamily: "'Hind Siliguri', sans-serif", padding: 20 }}>
+        <div style={{ maxWidth: 440, width: '100%', background: '#fff', borderRadius: 20, padding: '36px 28px', textAlign: 'center', boxShadow: '0 16px 40px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9' }}>
+          <div style={{ fontSize: 44, marginBottom: 12 }}>🔍</div>
+          <h1 style={{ fontSize: 24, fontWeight: 800, color: '#111827', margin: '0 0 8px' }}>এই ল্যান্ডিং পেইজটি পাওয়া যায়নি</h1>
+          <p style={{ fontSize: 15, color: '#6b7280', margin: '0 0 24px', lineHeight: 1.6 }}>
+            আপনি যে লিংকটি ওপেন করেছেন তা পরিবর্তন হয়েছে অথবা বর্তমানে বন্ধ রয়েছে।
+          </p>
+          <button
+            onClick={() => go('home')}
+            style={{ background: '#111827', color: '#fff', border: 'none', padding: '12px 28px', borderRadius: 999, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
+          >
+            মেইন স্টোরে ফিরে যান →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const benefitsList = Array.isArray(cfg.benefits) ? cfg.benefits.filter(Boolean) : [];
+  const usageStepsList = Array.isArray(cfg.usageSteps) ? cfg.usageSteps.filter(Boolean) : [];
+  const colorOptions: string[] = Array.isArray(cfg.colors)
+    ? cfg.colors.map((c: any) => (typeof c === 'string' ? c.trim() : String(c?.name || '').trim())).filter(Boolean)
+    : [];
+
+  // Dynamic Theme Colors
+  const primaryHex = cfg.themeColor && /^#[0-9a-fA-F]{6}$/.test(cfg.themeColor.trim()) ? cfg.themeColor.trim() : '#CB202D';
+  const primaryDarkHex = darkenHex(primaryHex, 0.78);
+  const [, , , primaryRgb] = hexToRgbTuple(primaryHex);
+
+  const btnHex = cfg.buttonColor && /^#[0-9a-fA-F]{6}$/.test(cfg.buttonColor.trim()) ? cfg.buttonColor.trim() : primaryHex;
+  const btnDarkHex = darkenHex(btnHex, 0.8);
+  const [, , , btnRgb] = hexToRgbTuple(btnHex);
+
+  const pageBgHex = cfg.pageBgColor && /^#[0-9a-fA-F]{6}$/.test(cfg.pageBgColor.trim()) ? cfg.pageBgColor.trim() : '#FAF7F8';
+
+  const themeVars = {
+    '--ll-primary': primaryHex,
+    '--ll-primary-dark': primaryDarkHex,
+    '--ll-primary-rgb': primaryRgb,
+    '--ll-btn': btnHex,
+    '--ll-btn-dark': btnDarkHex,
+    '--ll-btn-rgb': btnRgb,
+    '--ll-page-bg': pageBgHex,
+  } as React.CSSProperties;
+
+  const parsedVideo = parseLandingVideo(cfg.videoUrl || '');
+  const waMessage =
+    cfg.whatsappText ||
+    `আসসালামু আলাইকুম, আমি "${cfg.productTitle || cfg.headline || cfg.title}" অর্ডার করতে চাই।`;
+  const deliveryBannerLabel =
+    cfg.deliveryBannerText ||
+    (isFreeDelivery
+      ? '🚚 আজকের অর্ডারে সারা বাংলাদেশে ডেলিভারি সম্পূর্ণ ফ্রি!'
+      : `🚚 সারা বাংলাদেশে দ্রুত ক্যাশ অন হোম ডেলিভারি! (ঢাকায় ৳${delInside}, ঢাকার বাইরে ৳${delOutside})`);
 
   return (
-    <div className="lovelock-landing">
+    <div className="lovelock-landing" style={themeVars}>
       {/* iOS Ambient Glow Orbs for Glass Refraction */}
       <div className="ll-ambient-mesh" aria-hidden="true">
         <span className="ll-orb ll-orb-1" />
@@ -330,7 +466,7 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
         <div className="ll-inner">
           {cfg.badgeTop && (
             <div className="ll-pill-badge ll-pill-badge-red">
-              <CheckCircleIcon color="#CB202D" size={16} />
+              <CheckCircleIcon color={primaryHex} size={16} />
               <span>{cfg.badgeTop}</span>
             </div>
           )}
@@ -356,17 +492,29 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
             <span>অর্ডার করতে ক্লিক করুন</span>
           </button>
 
-          {cfg.videoUrl && (
-            <div className="ll-video-wrap">
-              <video
-                key={cfg.videoUrl}
-                className="ll-video"
-                src={cfg.videoUrl}
-                controls
-                playsInline
-                preload="none"
-                controlsList="nodownload"
-              />
+          {cfg.videoUrl && parsedVideo.embedUrl && (
+            <div className={`ll-video-wrap ${parsedVideo.type === 'youtube-shorts' ? 'll-video-shorts' : ''}`}>
+              {parsedVideo.type === 'youtube' || parsedVideo.type === 'youtube-shorts' || parsedVideo.type === 'facebook' ? (
+                <iframe
+                  key={parsedVideo.embedUrl}
+                  className={`ll-video-iframe ${parsedVideo.type === 'youtube-shorts' ? 'll-iframe-shorts' : ''}`}
+                  src={parsedVideo.embedUrl}
+                  title={cfg.headline || cfg.title || 'Product Video'}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              ) : (
+                <video
+                  key={parsedVideo.embedUrl}
+                  className="ll-video"
+                  src={parsedVideo.embedUrl}
+                  poster={cfg.videoPoster || (cfg.videoUrl.includes('lovelock-video.mp4') ? '/landing/lovelock-poster.jpg' : undefined)}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  controlsList="nodownload"
+                />
+              )}
             </div>
           )}
 
@@ -416,145 +564,163 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
             <span>অর্ডার করতে ক্লিক করুন</span>
           </button>
 
-          <div className="ll-pill-badge ll-pill-badge-subcrimson" style={{ marginTop: '20px' }}>
-            <span>বিশেষ সুবিধা ও কার্যকারিতা</span>
-          </div>
-
-          <h2 className="ll-white-heading">{cfg.benefitsHeading}</h2>
-
-          <div className="ll-cards-grid">
-            {benefitsList.map((item: string, i: number) => (
-              <div key={i} className="ll-benefit-card">
-                <SolidCheckIcon color="#05D352" size={24} />
-                <span>{item}</span>
+          {benefitsList.length > 0 && (
+            <>
+              <div className="ll-pill-badge ll-pill-badge-subcrimson" style={{ marginTop: '20px' }}>
+                <span>বিশেষ সুবিধা ও কার্যকারিতা</span>
               </div>
-            ))}
-          </div>
+
+              <h2 className="ll-white-heading">{cfg.benefitsHeading}</h2>
+
+              <div className="ll-cards-grid">
+                {benefitsList.map((item: string, i: number) => (
+                  <div key={i} className="ll-benefit-card">
+                    <SolidCheckIcon color="#05D352" size={24} />
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
           {/* Usage Guide */}
-          <div className="ll-pill-badge ll-pill-badge-subcrimson" style={{ marginTop: '35px' }}>
-            <span>সহজ নির্দেশিকা</span>
-          </div>
+          {(usageStepsList.length > 0 || cfg.usageImage) && (
+            <>
+              <div className="ll-pill-badge ll-pill-badge-subcrimson" style={{ marginTop: '35px' }}>
+                <span>সহজ নির্দেশিকা</span>
+              </div>
 
-          <h2 className="ll-white-heading">{cfg.usageHeading}</h2>
+              <h2 className="ll-white-heading">{cfg.usageHeading}</h2>
 
-          <div className="ll-usage-wrap">
-            <div className="ll-usage-card">
-              {usageStepsList.map((step: string, i: number) => (
-                <div key={i} className="ll-usage-item">
-                  <SolidCheckIcon color="#CB202D" size={22} />
-                  <span>{step}</span>
-                </div>
-              ))}
-            </div>
+              <div className="ll-usage-wrap">
+                {usageStepsList.length > 0 && (
+                  <div className="ll-usage-card">
+                    {usageStepsList.map((step: string, i: number) => (
+                      <div key={i} className="ll-usage-item">
+                        <SolidCheckIcon color={primaryHex} size={22} />
+                        <span>{step}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-            {cfg.usageImage && (
-              <div className="ll-usage-img-box">
-                <img
-                  src={cfg.usageImage}
-                  alt={cfg.usageHeading}
-                  className="ll-usage-img"
-                  loading="lazy"
-                  decoding="async"
-                />
-                {cfg.usageCaption && (
-                  <div className="ll-usage-caption">{cfg.usageCaption}</div>
+                {cfg.usageImage && (
+                  <div className="ll-usage-img-box">
+                    <img
+                      src={cfg.usageImage}
+                      alt={cfg.usageHeading}
+                      className="ll-usage-img"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                    {cfg.usageCaption && <div className="ll-usage-caption">{cfg.usageCaption}</div>}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
       </section>
 
       {/* SECTION 5: CUSTOMER REVIEWS HEADER */}
-      <section className="ll-sec ll-sec-light">
-        <div className="ll-inner">
-          <button onClick={scrollToOrder} className="ll-pulse-btn" id="pulse-button">
-            <CartIcon size={24} />
-            <span>অর্ডার করতে ক্লিক করুন</span>
-          </button>
+      {reviewsList.length > 0 && (
+        <section className="ll-sec ll-sec-light">
+          <div className="ll-inner">
+            <button onClick={scrollToOrder} className="ll-pulse-btn" id="pulse-button">
+              <CartIcon size={24} />
+              <span>অর্ডার করতে ক্লিক করুন</span>
+            </button>
 
-          <h2 className="ll-reviews-main-title">
-            অর্ডার করার পূর্বে <span className="ll-red-underlined">কাস্টমারদের মতামত</span> দেখে নিন
-          </h2>
-        </div>
-      </section>
+            <h2 className="ll-reviews-main-title">
+              অর্ডার করার পূর্বে <span className="ll-red-underlined">কাস্টমারদের মতামত</span> দেখে নিন
+            </h2>
+          </div>
+        </section>
+      )}
 
       {/* SECTION 6: REVIEWS GALLERY & GUARANTEE */}
-      <section className="ll-sec ll-sec-light" style={{ paddingTop: '0px' }}>
+      <section className="ll-sec ll-sec-light" style={{ paddingTop: reviewsList.length > 0 ? '0px' : undefined }}>
         <div className="ll-inner">
-          <div className="ll-pill-badge ll-pill-badge-pink">
-            <span>{cfg.reviewsBadge}</span>
-          </div>
-
-          <h2 className="ll-reviews-sub-title">{cfg.reviewsTitle}</h2>
-
-          {/* Carousel */}
           {reviewsList.length > 0 && (
-            <div className="ll-carousel-wrap">
-              <div className="ll-carousel-track">
-                <div className="ll-carousel-slide">
-                  <img
-                    src={reviewsList[reviewIdx]}
-                    alt={`কাস্টমার রিভিউ ${reviewIdx + 1}`}
-                    className="ll-review-img"
-                    loading="lazy"
-                    decoding="async"
-                  />
+            <>
+              {cfg.reviewsBadge && (
+                <div className="ll-pill-badge ll-pill-badge-pink">
+                  <span>{cfg.reviewsBadge}</span>
                 </div>
-                {reviewsList.length > 1 && (
-                  <div className="ll-carousel-slide ll-carousel-desktop-second">
+              )}
+
+              {cfg.reviewsTitle && <h2 className="ll-reviews-sub-title">{cfg.reviewsTitle}</h2>}
+
+              {/* Carousel */}
+              <div className="ll-carousel-wrap">
+                <div className="ll-carousel-track">
+                  <div className="ll-carousel-slide">
                     <img
-                      src={reviewsList[(reviewIdx + 1) % reviewsList.length]}
-                      alt={`কাস্টমার রিভিউ ${((reviewIdx + 1) % reviewsList.length) + 1}`}
+                      src={reviewsList[reviewIdx]}
+                      alt={`কাস্টমার রিভিউ ${reviewIdx + 1}`}
                       className="ll-review-img"
                       loading="lazy"
                       decoding="async"
                     />
                   </div>
+                  {reviewsList.length > 1 && (
+                    <div className="ll-carousel-slide ll-carousel-desktop-second">
+                      <img
+                        src={reviewsList[(reviewIdx + 1) % reviewsList.length]}
+                        alt={`কাস্টমার রিভিউ ${((reviewIdx + 1) % reviewsList.length) + 1}`}
+                        className="ll-review-img"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {reviewsList.length > 1 && (
+                  <>
+                    <button
+                      className="ll-carousel-nav ll-nav-prev"
+                      onClick={() => setReviewIdx((prev) => (prev - 1 + reviewsList.length) % reviewsList.length)}
+                      aria-label="Previous review"
+                    >
+                      &#10094;
+                    </button>
+                    <button
+                      className="ll-carousel-nav ll-nav-next"
+                      onClick={() => setReviewIdx((prev) => (prev + 1) % reviewsList.length)}
+                      aria-label="Next review"
+                    >
+                      &#10095;
+                    </button>
+
+                    <div className="ll-carousel-dots">
+                      {reviewsList.map((_: any, i: number) => (
+                        <span
+                          key={i}
+                          className={`ll-dot ${i === reviewIdx ? 'active' : ''}`}
+                          onClick={() => setReviewIdx(i)}
+                        />
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
-
-              {reviewsList.length > 1 && (
-                <>
-                  <button
-                    className="ll-carousel-nav ll-nav-prev"
-                    onClick={() => setReviewIdx((prev) => (prev - 1 + reviewsList.length) % reviewsList.length)}
-                    aria-label="Previous review"
-                  >
-                    &#10094;
-                  </button>
-                  <button
-                    className="ll-carousel-nav ll-nav-next"
-                    onClick={() => setReviewIdx((prev) => (prev + 1) % reviewsList.length)}
-                    aria-label="Next review"
-                  >
-                    &#10095;
-                  </button>
-
-                  <div className="ll-carousel-dots">
-                    {reviewsList.map((_: any, i: number) => (
-                      <span
-                        key={i}
-                        className={`ll-dot ${i === reviewIdx ? 'active' : ''}`}
-                        onClick={() => setReviewIdx(i)}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+            </>
           )}
 
           {/* Guarantee Box */}
-          <div className="ll-guarantee-box">
-            <div className="ll-pill-badge ll-pill-badge-green" style={{ display: 'inline-flex', marginBottom: '14px' }}>
-              <CheckCircleIcon color="#065F46" size={16} />
-              <span>{cfg.guaranteeBadge}</span>
-            </div>
+          {(cfg.guaranteeBadge || cfg.guaranteeText) && (
+            <div className="ll-guarantee-box">
+              {cfg.guaranteeBadge && (
+                <div className="ll-pill-badge ll-pill-badge-green" style={{ display: 'inline-flex', marginBottom: '14px' }}>
+                  <CheckCircleIcon color="#065F46" size={16} />
+                  <span>{cfg.guaranteeBadge}</span>
+                </div>
+              )}
 
-            <p className="ll-guarantee-text">{cfg.guaranteeText}</p>
-          </div>
+              {cfg.guaranteeText && <p className="ll-guarantee-text">{cfg.guaranteeText}</p>}
+            </div>
+          )}
         </div>
       </section>
 
@@ -563,23 +729,27 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
         <div className="ll-inner">
           <div className="ll-banner-buttons">
             <button onClick={scrollToOrder} className="ll-banner-btn ll-btn-delivery">
-              🚚 আজকের অর্ডারে সারা বাংলাদেশে ডেলিভারি সম্পূর্ণ ফ্রি!
+              {deliveryBannerLabel}
             </button>
 
-            <a href={`tel:${phoneNum}`} className="ll-banner-btn ll-btn-phone">
-              <PhoneIcon size={20} />
-              <span>কল করুনঃ {phoneNum}</span>
-            </a>
+            {phoneNum && (
+              <a href={`tel:${phoneNum}`} className="ll-banner-btn ll-btn-phone">
+                <PhoneIcon size={20} />
+                <span>কল করুনঃ {phoneNum}</span>
+              </a>
+            )}
 
-            <a
-              href={`https://wa.me/${waNum}?text=${encodeURIComponent('আসসালামু আলাইকুম, আমি লাভ লক ম্যাজিক কনডম অর্ডার করতে চাই।')}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ll-banner-btn ll-btn-whatsapp"
-            >
-              <WhatsAppIcon size={24} variant="official" />
-              <span>সরাসরি হোয়াটসঅ্যাপ</span>
-            </a>
+            {waNum && (
+              <a
+                href={`https://wa.me/${waNum}?text=${encodeURIComponent(waMessage)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ll-banner-btn ll-btn-whatsapp"
+              >
+                <WhatsAppIcon size={24} variant="official" />
+                <span>সরাসরি হোয়াটসঅ্যাপ</span>
+              </a>
+            )}
           </div>
         </div>
       </section>
@@ -648,6 +818,11 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
                               </div>
 
                               <div className="ll-card-price">
+                                {prod.originalPrice && Number(prod.originalPrice) > Number(prod.price) && (
+                                  <span style={{ textDecoration: 'line-through', color: '#9ca3af', fontSize: 13, marginRight: 8, fontWeight: 500 }}>
+                                    {taka(Number(prod.originalPrice) * q)}
+                                  </span>
+                                )}
                                 <span className="ll-price-num">{taka(prod.price * q)}</span>
                               </div>
                             </div>
@@ -657,6 +832,41 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
                     );
                   })}
                 </div>
+
+                {/* Optional Color / Variant Selector */}
+                {colorOptions.length > 0 && (
+                  <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid rgba(229,231,235,0.7)' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1F2937', marginBottom: 10 }}>
+                      পছন্দের কালার / ভ্যারিয়েন্ট নির্বাচন করুন:
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {colorOptions.map((cName) => {
+                        const active = selectedColor === cName;
+                        return (
+                          <button
+                            key={cName}
+                            type="button"
+                            onClick={() => setSelectedColor(cName)}
+                            style={{
+                              padding: '8px 18px',
+                              borderRadius: 999,
+                              fontSize: 14,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              border: active ? `2px solid ${primaryHex}` : '1.5px solid #d1d5db',
+                              background: active ? primaryHex : '#ffffff',
+                              color: active ? '#ffffff' : '#374151',
+                              boxShadow: active ? `0 4px 12px rgba(${primaryRgb}, 0.25)` : 'none',
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            {active ? `✓ ${cName}` : cName}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Billing Details */}
@@ -711,11 +921,75 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
 
               {/* Shipping */}
               <div className="ll-card ll-shipping-wrap">
-                <h3 className="ll-checkout-heading">Shipping</h3>
-                <div className="ll-shipping-option">
-                  <input type="radio" checked readOnly id="free-ship" />
-                  <label htmlFor="free-ship">Free shipping</label>
-                </div>
+                <h3 className="ll-checkout-heading">Shipping (ডেলিভারি এলাকা)</h3>
+                {isFreeDelivery ? (
+                  <div className="ll-shipping-option">
+                    <input type="radio" checked readOnly id="free-ship" />
+                    <label htmlFor="free-ship" style={{ fontWeight: 700, color: '#047857' }}>
+                      সম্পূর্ণ ফ্রি ডেলিভারি (Free Shipping — ৳0)
+                    </label>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <label
+                      htmlFor="ship-inside"
+                      onClick={() => setShippingZone('inside')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 16px',
+                        borderRadius: 12,
+                        border: shippingZone === 'inside' ? `2px solid ${primaryHex}` : '1.5px solid #e5e7eb',
+                        background: shippingZone === 'inside' ? `rgba(${primaryRgb}, 0.06)` : '#ffffff',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 700, color: '#111827', fontSize: 15 }}>
+                        <input
+                          type="radio"
+                          id="ship-inside"
+                          name="ll-shipping-zone"
+                          checked={shippingZone === 'inside'}
+                          onChange={() => setShippingZone('inside')}
+                          style={{ accentColor: primaryHex, width: 18, height: 18 }}
+                        />
+                        <span>ঢাকার ভেতরে (Inside Dhaka)</span>
+                      </span>
+                      <strong style={{ fontSize: 16, color: primaryHex }}>{taka(delInside)}</strong>
+                    </label>
+
+                    <label
+                      htmlFor="ship-outside"
+                      onClick={() => setShippingZone('outside')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 16px',
+                        borderRadius: 12,
+                        border: shippingZone === 'outside' ? `2px solid ${primaryHex}` : '1.5px solid #e5e7eb',
+                        background: shippingZone === 'outside' ? `rgba(${primaryRgb}, 0.06)` : '#ffffff',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 700, color: '#111827', fontSize: 15 }}>
+                        <input
+                          type="radio"
+                          id="ship-outside"
+                          name="ll-shipping-zone"
+                          checked={shippingZone === 'outside'}
+                          onChange={() => setShippingZone('outside')}
+                          style={{ accentColor: primaryHex, width: 18, height: 18 }}
+                        />
+                        <span>ঢাকার বাইরে (Outside Dhaka)</span>
+                      </span>
+                      <strong style={{ fontSize: 16, color: primaryHex }}>{taka(delOutside)}</strong>
+                    </label>
+                  </div>
+                )}
               </div>
 
               {/* Order Review Table */}
@@ -732,7 +1006,8 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
                   <tbody>
                     <tr>
                       <td>
-                        {currentItem.title} <strong>&times; {currentQty}</strong>
+                        {currentItem.title}
+                        {selectedColor ? ` (${selectedColor})` : ''} <strong>&times; {currentQty}</strong>
                       </td>
                       <td style={{ textAlign: 'right' }}>{taka(subtotal)}</td>
                     </tr>
@@ -744,7 +1019,11 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
                     </tr>
                     <tr>
                       <th>Shipment</th>
-                      <td style={{ textAlign: 'right' }}>Free shipping</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {isFreeDelivery
+                          ? 'Free shipping (৳0)'
+                          : `${shippingZone === 'inside' ? 'ঢাকার ভেতরে' : 'ঢাকার বাইরে'}: ${taka(shippingCost)}`}
+                      </td>
                     </tr>
                     <tr className="ll-total-row">
                       <th>Total</th>
@@ -761,9 +1040,7 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
                     <input type="radio" checked readOnly id="pay-cod" />
                     <label htmlFor="pay-cod">ক্যাশ অন ডেলিভারি</label>
                   </div>
-                  <div className="ll-payment-desc">
-                    পন্য হাতে পেয়ে মূল্য পরিশোধ করুন।
-                  </div>
+                  <div className="ll-payment-desc">পন্য হাতে পেয়ে মূল্য পরিশোধ করুন।</div>
                 </div>
 
                 {/* Privacy disclaimer */}
@@ -792,46 +1069,54 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
       <footer className="ll-sec ll-footer-sec">
         <div className="ll-inner ll-footer-inner">
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center' }}>
-            <a href={`tel:${phoneNum}`} className="ll-footer-call-btn">
-              <PhoneIcon size={18} />
-              <span>কল করুনঃ {phoneNum}</span>
-            </a>
-            <a
-              href={`https://wa.me/${waNum}?text=${encodeURIComponent('আসসালামু আলাইকুম, আমি লাভ লক ম্যাজিক কনডম অর্ডার করতে চাই।')}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ll-footer-call-btn"
-              style={{ background: '#25D366', color: '#fff', border: '1px solid rgba(255,255,255,0.4)', gap: 8 }}
-            >
-              <WhatsAppIcon size={20} variant="official" />
-              <span>হোয়াটসঅ্যাপে মেসেজ দিন</span>
-            </a>
+            {phoneNum && (
+              <a href={`tel:${phoneNum}`} className="ll-footer-call-btn">
+                <PhoneIcon size={18} />
+                <span>কল করুনঃ {phoneNum}</span>
+              </a>
+            )}
+            {waNum && (
+              <a
+                href={`https://wa.me/${waNum}?text=${encodeURIComponent(waMessage)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ll-footer-call-btn"
+                style={{ background: '#25D366', color: '#fff', border: '1px solid rgba(255,255,255,0.4)', gap: 8 }}
+              >
+                <WhatsAppIcon size={20} variant="official" />
+                <span>হোয়াটসঅ্যাপে মেসেজ দিন</span>
+              </a>
+            )}
           </div>
 
           <div className="ll-footer-links">
-            <a href="/page/privacy" onClick={(e) => { e.preventDefault(); go('info/privacy'); }}>Privacy policy</a>
+            <a href="/info/privacy" onClick={(e) => { e.preventDefault(); go('info/privacy'); }}>Privacy policy</a>
             <span style={{ color: '#aaa' }}>|</span>
-            <a href="/page/terms" onClick={(e) => { e.preventDefault(); go('info/terms'); }}>Terms & Conditions</a>
+            <a href="/info/terms" onClick={(e) => { e.preventDefault(); go('info/terms'); }}>Terms & Conditions</a>
           </div>
         </div>
       </footer>
 
       {/* Sticky Bottom Order Bar for Mobile */}
       <div className="ll-mobile-sticky-bar">
-        <a href={`tel:${phoneNum}`} className="ll-sticky-call" title="কল করুন">
-          <PhoneIcon size={15} />
-          <span>কল</span>
-        </a>
-        <a
-          href={`https://wa.me/${waNum}?text=${encodeURIComponent('আসসালামু আলাইকুম, আমি লাভ লক ম্যাজিক কনডম অর্ডার করতে চাই।')}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="ll-sticky-wa"
-          title="হোয়াটসঅ্যাপে অর্ডার করুন"
-        >
-          <WhatsAppIcon size={16} variant="official" />
-          <span>WhatsApp</span>
-        </a>
+        {phoneNum && (
+          <a href={`tel:${phoneNum}`} className="ll-sticky-call" title="কল করুন">
+            <PhoneIcon size={15} />
+            <span>কল</span>
+          </a>
+        )}
+        {waNum && (
+          <a
+            href={`https://wa.me/${waNum}?text=${encodeURIComponent(waMessage)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ll-sticky-wa"
+            title="হোয়াটসঅ্যাপে অর্ডার করুন"
+          >
+            <WhatsAppIcon size={16} variant="official" />
+            <span>WhatsApp</span>
+          </a>
+        )}
         <button onClick={scrollToOrder} className="ll-sticky-order">
           <CartIcon size={17} />
           <span>অর্ডার করুন • {taka(total)}</span>
@@ -839,16 +1124,18 @@ export function LoveLockLanding({ slug = 'lovelock' }: { slug?: string }) {
       </div>
 
       {/* Floating WhatsApp Action Button */}
-      <a
-        className="ll-wafloat"
-        href={`https://wa.me/${waNum}?text=${encodeURIComponent('আসসালামু আলাইকুম, আমি লাভ লক ম্যাজিক কনডম অর্ডার করতে চাই।')}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Chat with us on WhatsApp"
-        title="WhatsApp Chat"
-      >
-        <WhatsAppIcon size={34} variant="official" />
-      </a>
+      {waNum && (
+        <a
+          className="ll-wafloat"
+          href={`https://wa.me/${waNum}?text=${encodeURIComponent(waMessage)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Chat with us on WhatsApp"
+          title="WhatsApp Chat"
+        >
+          <WhatsAppIcon size={34} variant="official" />
+        </a>
+      )}
     </div>
   );
 }

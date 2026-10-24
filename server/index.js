@@ -303,13 +303,11 @@ function buildDraftOrder(data) {
   let delOutside = settings.deliveryOutside;
   let isFreeDelivery = itemsTotal >= settings.freeShipThreshold;
   if (landingPage) {
-    if (landingPage.freeDelivery !== false || landingPage.freeDeliveryText) isFreeDelivery = true;
-    if (landingPage.customDeliveryInside != null && landingPage.customDeliveryInside !== '') {
-      delInside = Number(landingPage.customDeliveryInside);
-    }
-    if (landingPage.customDeliveryOutside != null && landingPage.customDeliveryOutside !== '') {
-      delOutside = Number(landingPage.customDeliveryOutside);
-    }
+    isFreeDelivery = landingPage.freeDelivery !== false;
+    const insideCharge = landingPage.deliveryInside != null && landingPage.deliveryInside !== '' ? landingPage.deliveryInside : landingPage.customDeliveryInside;
+    const outsideCharge = landingPage.deliveryOutside != null && landingPage.deliveryOutside !== '' ? landingPage.deliveryOutside : landingPage.customDeliveryOutside;
+    if (insideCharge != null && insideCharge !== '') delInside = Number(insideCharge);
+    if (outsideCharge != null && outsideCharge !== '') delOutside = Number(outsideCharge);
   }
   if (c.freeDelivery === true || c.shippingCost === 0 || (data.shipping && data.shipping.cost === 0)) {
     isFreeDelivery = true;
@@ -830,13 +828,11 @@ app.post('/api/orders', (req, res) => {
   let delOutside = settings.deliveryOutside;
   let isFreeDelivery = itemsTotal >= settings.freeShipThreshold;
   if (landingPage) {
-    if (landingPage.freeDelivery !== false || landingPage.freeDeliveryText) isFreeDelivery = true;
-    if (landingPage.customDeliveryInside != null && landingPage.customDeliveryInside !== '') {
-      delInside = Number(landingPage.customDeliveryInside);
-    }
-    if (landingPage.customDeliveryOutside != null && landingPage.customDeliveryOutside !== '') {
-      delOutside = Number(landingPage.customDeliveryOutside);
-    }
+    isFreeDelivery = landingPage.freeDelivery !== false;
+    const insideCharge = landingPage.deliveryInside != null && landingPage.deliveryInside !== '' ? landingPage.deliveryInside : landingPage.customDeliveryInside;
+    const outsideCharge = landingPage.deliveryOutside != null && landingPage.deliveryOutside !== '' ? landingPage.deliveryOutside : landingPage.customDeliveryOutside;
+    if (insideCharge != null && insideCharge !== '') delInside = Number(insideCharge);
+    if (outsideCharge != null && outsideCharge !== '') delOutside = Number(outsideCharge);
   }
   if (c.freeDelivery === true || c.shippingCost === 0 || req.body?.shipping?.cost === 0) {
     isFreeDelivery = true;

@@ -1,4 +1,74 @@
-export type Category = { slug: string; name: string; adult: boolean; blurb: string; image: string };
+export type Category = {
+  slug: string;
+  name: string;
+  parentSlug?: string;
+  adult: boolean;
+  blurb: string;
+  image: string;
+  noIndex?: boolean;
+  seoExclude?: boolean;
+  seoTitle?: string;
+  seoDesc?: string;
+  seoKeywords?: string;
+};
+
+export function isWellnessOrExcludedCategory(slugOrName?: string | null): boolean {
+  const s = String(slugOrName || '').toLowerCase().trim();
+  return s === 'wellness-corner' || s === 'warless-corner' || s === 'warlase-corner' || s.includes('wellness-corner') || s === 'adult' || s === 'intimate';
+}
+
+export function isWellnessOrExcludedProduct(p?: Partial<Product> | null): boolean {
+  if (!p) return false;
+  if (p.noIndex || p.seoExclude || p.adult) return true;
+  if (isWellnessOrExcludedCategory(p.category) || isWellnessOrExcludedCategory(p.subCategory)) return true;
+  return false;
+}
+
+export function autoDetectCategoryAndSub(name: string, currentMainCat = ''): { category: string; subCategory: string } {
+  const n = String(name || '').toLowerCase();
+  let cat = currentMainCat;
+  if (!cat) {
+    if (n.includes('baby') || n.includes('aveeno baby')) cat = 'baby-care';
+    else if (n.includes('shampoo') || n.includes('conditioner') || n.includes('hair ') || n.includes('scalp') || n.includes('fino')) cat = 'hair-care';
+    else if (n.includes('foundation') || n.includes('primer') || n.includes('concealer') || n.includes('lip tint') || n.includes('lipstick') || n.includes('mascara') || n.includes('eyeliner') || n.includes('blush') || n.includes('sheglam')) cat = 'makeup';
+    else if (n.includes('deodorant') || n.includes('intimate') || n.includes('feminine') || n.includes('facial shaving') || n.includes('razor')) cat = 'femenine-care';
+    else if (n.includes('beard') || n.includes('for men') || n.includes("men's")) cat = 'mens-care';
+    else if (n.includes('supplement') || n.includes('tablet') || n.includes('omega') || n.includes('multivitamin')) cat = 'health-care';
+    else if (n.includes('serum') || n.includes('sunscreen') || n.includes('spf') || n.includes('cleanser') || n.includes('face wash') || n.includes('toner') || n.includes('cream') || n.includes('ampoule') || n.includes('lotion') || n.includes('gel')) cat = 'beauty-care';
+  }
+  let sub = '';
+  if (cat === 'beauty-care') {
+    if (n.includes('body lotion') || n.includes('body milk')) sub = 'body-lotion-care';
+    else if (n.includes('sunscreen') || n.includes('sun ') || n.includes('spf') || n.includes('uv ')) sub = 'sunscreen-sun-care';
+    else if (n.includes('cleanser') || n.includes('cleansing') || n.includes('face wash') || n.includes('facewash') || n.includes('foam')) sub = 'cleanser-facewash';
+    else if (n.includes('toner')) sub = 'toner-essence';
+    else if (n.includes('eye cream')) sub = 'eye-care';
+    else if (n.includes('mask') && !n.includes('hair')) sub = 'face-mask-pack';
+    else if (n.includes('serum') || n.includes('ampoule') || n.includes('booster shot') || n.includes('essence')) sub = 'serum-ampoule';
+    else if (n.includes('cream') || n.includes('gel') || n.includes('moistur')) sub = 'moisturizer-cream';
+  } else if (cat === 'makeup') {
+    if (n.includes('lip') || n.includes('tint') || n.includes('vaseline') || n.includes('balm')) sub = 'lip-makeup';
+    else if (n.includes('mascara') || n.includes('liner') || n.includes('brow') || n.includes('eyeshadow')) sub = 'eye-makeup';
+    else if (n.includes('foundation') || n.includes('primer') || n.includes('concealer') || n.includes('powder') || n.includes('blush')) sub = 'face-makeup';
+  } else if (cat === 'hair-care') {
+    if (n.includes('conditioner') || n.includes('shampoo')) sub = 'shampoo-conditioner';
+    else if (n.includes('oil') || n.includes('tonic') || n.includes('serum')) sub = 'hair-oil-serum';
+    else if (n.includes('mask') || n.includes('treatment')) sub = 'hair-mask-treatment';
+  } else if (cat === 'baby-care') {
+    if (n.includes('spf') || n.includes('sun') || n.includes('wash') || n.includes('shampoo')) sub = 'baby-sun-wash';
+    else if (n.includes('lotion') || n.includes('cream')) sub = 'baby-lotion-cream';
+  } else if (cat === 'femenine-care') {
+    if (n.includes('razor') || n.includes('shav')) sub = 'womens-grooming-razor';
+    else if (n.includes('deodorant') || n.includes('wash') || n.includes('hygiene')) sub = 'intimate-deodorant-hygiene';
+  } else if (cat === 'mens-care') {
+    if (n.includes('beard') || n.includes('shav')) sub = 'mens-grooming-beard';
+    else sub = 'mens-facewash-skincare';
+  } else if (cat === 'health-care') {
+    if (n.includes('collagen') || n.includes('glutathione')) sub = 'collagen-beauty-supplements';
+    else sub = 'daily-vitamins-wellness';
+  }
+  return { category: cat, subCategory: sub };
+}
 
 export type ProductColor = {
   name: string;
@@ -20,12 +90,13 @@ export type ProductVariation = {
 };
 
 export type Product = {
-  id: string; slug: string; name: string; price: number; category: string;
+  id: string; slug: string; name: string; price: number; category: string; subCategory?: string;
   adult: boolean; tag: string; desc: string; size: string; image: string;
   images?: string[]; stock?: number | null; compareAt?: number; soldOut?: boolean;
   sku?: string; shortDesc?: string; longDesc?: string; weight?: string;
   customDeliveryInside?: number | null; customDeliveryOutside?: number | null;
-  seoTitle?: string; seoDesc?: string;
+  seoTitle?: string; seoDesc?: string; seoKeywords?: string;
+  noIndex?: boolean; seoExclude?: boolean;
   colors?: (string | ProductColor)[];
   sizes?: string[];
   variations?: ProductVariation[];
@@ -72,7 +143,6 @@ export type Settings = {
   fbPixelId?: string;
   appearance?: { font?: string; accent?: string; desktopColumns?: number; mobileColumns?: number; imageFit?: 'contain' | 'cover' };
   homeContent?: Record<'en' | 'bn', Record<string, any>>;
-  homepageSections?: Array<{ id?: string; title: string; eyebrow?: string; buttonText?: string; category: string; count?: number; active?: boolean; placement?: string; productIds?: string[] }>;
   siteContent?: { sections?: Record<string, boolean>; textOverrides?: Record<string, { en?: string; bn?: string }>; infoPages?: Record<string, Record<'en' | 'bn', { title?: string; body?: string[] }>> };
   fraudDetector?: FraudDetectorSettings;
 };
@@ -141,34 +211,6 @@ export function getSource(): string {
   } catch { return 'direct'; }
 }
 
-export type OrderAttribution = { channel: string; source: string; medium: string; campaign: string; referrer: string };
-export function getOrderAttribution(): OrderAttribution {
-  const key = 'dot_order_attribution_v1';
-  try {
-    const saved = localStorage.getItem(key);
-    if (saved) return JSON.parse(saved) as OrderAttribution;
-    const params = new URLSearchParams(location.search);
-    let referrer = '';
-    try { referrer = document.referrer ? new URL(document.referrer).hostname.replace(/^www\./, '') : ''; } catch {}
-    const source = (params.get('utm_source') || params.get('ref') || params.get('source') || (params.get('fbclid') ? 'facebook' : '') || (params.get('ttclid') ? 'tiktok' : '') || (params.get('gclid') ? 'google' : '') || referrer).trim().toLowerCase().slice(0, 100);
-    const medium = (params.get('utm_medium') || '').trim().toLowerCase().slice(0, 100);
-    const campaign = (params.get('utm_campaign') || '').trim().slice(0, 120);
-    let channel = 'Direct';
-    if (/facebook|fb\.com|fb\.me/.test(source)) channel = 'Facebook';
-    else if (/instagram/.test(source)) channel = 'Instagram';
-    else if (/tiktok/.test(source)) channel = 'TikTok';
-    else if (/youtube/.test(source)) channel = 'YouTube';
-    else if (/google/.test(source)) channel = 'Google';
-    else if (/whatsapp/.test(source)) channel = 'WhatsApp';
-    else if (source) channel = source;
-    if (medium && /paid|cpc|ppc|ads|paid_social/.test(medium)) channel += ' Ads';
-    const result = { channel: channel.slice(0, 100), source, medium, campaign, referrer: referrer.slice(0, 100) };
-    localStorage.setItem(key, JSON.stringify(result));
-    return result;
-  } catch { return { channel: 'Direct', source: '', medium: '', campaign: '', referrer: '' }; }
-}
-getOrderAttribution();
-
 export function getDeviceId(): string {
   try {
     let id = localStorage.getItem('dot_did');
@@ -195,7 +237,7 @@ export async function placeOrder(p: OrderPayload) {
       'Content-Type': 'application/json',
       'x-device-id': did,
     },
-    body: JSON.stringify({ ...p, deviceId: did, attribution: getOrderAttribution() }),
+    body: JSON.stringify({ ...p, deviceId: did }),
   });
   const data = await r.json();
   if (!r.ok) throw new Error(data.error || 'could not place order');
