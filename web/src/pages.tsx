@@ -1027,7 +1027,7 @@ export function Home() {
                       <div className="ara-card-frame" />
                       <div className="ara-card-corners" />
                       <div className="ara-card-content">
-                        <span className="ara-card-kicker">{tr(isSkin ? 'BOTANICAL CARE' : 'COLLECTION', language)}</span>
+                        <span className="ara-card-kicker">{tr(isSkin ? 'SKINCARE & BEAUTY' : 'COLLECTION', language)}</span>
                         <h3 className="ara-card-label">{tr(c.name, language)}</h3>
                         <span className="ara-card-cta">{tr('EXPLORE →', language)}</span>
                       </div>
@@ -1629,7 +1629,7 @@ export function ProductPage({ slug }: { slug: string }) {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span className="pc-eyebrow">
-                {p.category ? p.category.replace(/-/g, ' ').toUpperCase() : 'BOTANICAL CARE & ESSENTIALS'}
+                {p.category ? p.category.replace(/-/g, ' ').toUpperCase() : 'SKINCARE & SELF-CARE'}
               </span>
               {p.sku && <span style={{ fontSize: 11, color: '#9a7030', letterSpacing: '1px' }}>SKU: {p.sku}</span>}
             </div>
@@ -1670,7 +1670,7 @@ export function ProductPage({ slug }: { slug: string }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 6, marginBottom: 14 }}>
                 <span style={{ fontSize: 16 }}>⚡</span>
                 <div style={{ fontSize: 12.5, color: '#065f46', fontWeight: 600 }}>
-                  {tr('Instant Digital Product · 100% Free Instant Delivery (৳0 Courier Fee)', language)}
+                  {tr('Digital product · Delivery details in listing', language)}
                 </div>
               </div>
             )}
@@ -2021,10 +2021,10 @@ export function ProductPage({ slug }: { slug: string }) {
           {/* Section Heading */}
           <div style={{ textAlign: 'center', padding: '36px 20px 22px', borderBottom: '1px solid #EAE5DC' }}>
             <span className="pc-eyebrow" style={{ display: 'block', marginBottom: 8, letterSpacing: '3px' }}>
-              {p.category ? p.category.toUpperCase().replace('-', ' ') : (isSkin ? 'SECRATE BOTANICALS' : 'METRROMA ARCHIVE')} • PRODUCT SPECIFICATIONS
+              {p.category ? p.category.toUpperCase().replace('-', ' ') : (isSkin ? 'SECRATE SKINCARE & SELF-CARE' : 'METRROMA LIFESTYLE & GIFTS')} • PRODUCT DETAILS
             </span>
             <h2 className="serif" style={{ fontSize: 'clamp(22px, 2.5vw, 32px)', color: '#1f3147', margin: 0, fontWeight: 500 }}>
-              {isSkin ? 'Product Information & Botanical Specifications' : 'Product Information, Sizing & Specifications'}
+              {isSkin ? 'Product Information & Details' : 'Product Information & Specifications'}
             </h2>
           </div>
 
@@ -2091,29 +2091,29 @@ export function ProductPage({ slug }: { slug: string }) {
                         <div className="tabaya-feature-card">
                           <span className="icon">💎</span>
                           <div>
-                            <h4>Breathable Luxury Comfort</h4>
-                            <p>Engineered with soft, ultra-breathable stretch fibers for all-day comfort and seamless support.</p>
+                            <h4>Product & Fit Details</h4>
+                            <p>Check the product listing for materials, sizing, and fit information.</p>
                           </div>
                         </div>
                         <div className="tabaya-feature-card">
                           <span className="icon">🛡️</span>
                           <div>
                             <h4>Discreet & Hygienic Packaging</h4>
-                            <p>Every order is shipped in 100% opaque, unmarked, tamper-evident protective outer packaging.</p>
+                            <p>Check the product listing or contact customer support for packaging information.</p>
                           </div>
                         </div>
                         <div className="tabaya-feature-card">
                           <span className="icon">✨</span>
                           <div>
-                            <h4>Durable Shape Retention</h4>
-                            <p>High-elasticity weave maintains flexibility and supportive hold through repeated washes.</p>
+                            <h4>Care Information</h4>
+                            <p>Follow the care instructions provided with the item.</p>
                           </div>
                         </div>
                         <div className="tabaya-feature-card">
                           <span className="icon">🚚</span>
                           <div>
                             <h4>Doorstep Cash on Delivery</h4>
-                            <p>Pay cash when your parcel arrives with full right of inspection in front of the courier rider.</p>
+                            <p>Pay cash when your parcel arrives, subject to the courier's delivery process.</p>
                           </div>
                         </div>
                       </>
@@ -2144,7 +2144,7 @@ export function ProductPage({ slug }: { slug: string }) {
                           <span className="icon">🚚</span>
                           <div>
                             <h4>Doorstep Cash on Delivery</h4>
-                            <p>Pay cash when your parcel arrives with full right of inspection in front of the courier rider.</p>
+                            <p>Pay cash when your parcel arrives, subject to the courier's delivery process.</p>
                           </div>
                         </div>
                       </>
@@ -2153,29 +2153,29 @@ export function ProductPage({ slug }: { slug: string }) {
                         <div className="tabaya-feature-card">
                           <span className="icon">🕶️</span>
                           <div>
-                            <h4>UV400 Polarized Eye Protection</h4>
-                            <p>100% protection against harmful UVA & UVB rays with superior anti-glare high-definition optics.</p>
+                            <h4>Lens Information</h4>
+                            <p>Check the product listing for lens type and UV protection details.</p>
                           </div>
                         </div>
                         <div className="tabaya-feature-card">
                           <span className="icon">💎</span>
                           <div>
                             <h4>Classic Everyday Style</h4>
-                            <p>A clean, versatile frame design that pairs easily with everyday outfits.</p>
+                            <p>Review the listing for frame style and product details.</p>
                           </div>
                         </div>
                         <div className="tabaya-feature-card">
                           <span className="icon">🛡️</span>
                           <div>
-                            <h4>Protective Hard Case & Cloth</h4>
-                            <p>Every sunglass includes a protective hard case and microfiber cleaning cloth.</p>
+                            <h4>Package Contents</h4>
+                            <p>Check the product listing for included accessories.</p>
                           </div>
                         </div>
                         <div className="tabaya-feature-card">
                           <span className="icon">🚚</span>
                           <div>
                             <h4>Doorstep Cash on Delivery</h4>
-                            <p>Pay cash when your parcel arrives with full right of inspection in front of the courier rider.</p>
+                            <p>Pay cash when your parcel arrives, subject to the courier's delivery process.</p>
                           </div>
                         </div>
                       </>
@@ -2184,29 +2184,29 @@ export function ProductPage({ slug }: { slug: string }) {
                         <div className="tabaya-feature-card">
                           <span className="icon">🎁</span>
                           <div>
-                            <h4>Luxury Keepsake Presentation</h4>
-                            <p>Bespoke packaging, satin ribbon finish, and complimentary gift carrier bag for unforgettable surprises.</p>
+                            <h4>Gift Set Details</h4>
+                            <p>Check the product listing for included items and packaging.</p>
                           </div>
                         </div>
                         <div className="tabaya-feature-card">
                           <span className="icon">🌹</span>
                           <div>
-                            <h4>Long-Lasting Silk Flora</h4>
-                            <p>Artisanal scented decorative roses that remain vibrant and never fade over time.</p>
+                            <h4>Product Details</h4>
+                            <p>Review the listing for materials and care information.</p>
                           </div>
                         </div>
                         <div className="tabaya-feature-card">
                           <span className="icon">💌</span>
                           <div>
-                            <h4>Complimentary Greeting Card</h4>
-                            <p>Express your heartfelt feelings with our customized greeting card included in every box.</p>
+                            <h4>Gift Options</h4>
+                            <p>Check the product listing for available gift options.</p>
                           </div>
                         </div>
                         <div className="tabaya-feature-card">
                           <span className="icon">🚚</span>
                           <div>
                             <h4>Doorstep Cash on Delivery</h4>
-                            <p>Pay cash when your parcel arrives with full right of inspection in front of the courier rider.</p>
+                            <p>Pay cash when your parcel arrives, subject to the courier's delivery process.</p>
                           </div>
                         </div>
                       </>
@@ -2216,14 +2216,14 @@ export function ProductPage({ slug }: { slug: string }) {
                           <span className="icon">💎</span>
                           <div>
                             <h4>Product Details Available</h4>
-                            <p>Carefully curated and strictly quality-inspected to ensure premium customer satisfaction.</p>
+                            <p>Refer to the product listing for item-specific details. Contact customer support if you have a question.</p>
                           </div>
                         </div>
                         <div className="tabaya-feature-card">
                           <span className="icon">🛡️</span>
                           <div>
-                            <h4>Secure Protective Packaging</h4>
-                            <p>Every parcel is packed with heavy-duty protection for zero damage during courier transit.</p>
+                            <h4>Packaging Information</h4>
+                            <p>Contact customer support if you need information about packaging.</p>
                           </div>
                         </div>
                         <div className="tabaya-feature-card">
@@ -2237,7 +2237,7 @@ export function ProductPage({ slug }: { slug: string }) {
                           <span className="icon">🚚</span>
                           <div>
                             <h4>Doorstep Cash on Delivery</h4>
-                            <p>Pay cash when your parcel arrives with full right of inspection in front of the courier rider.</p>
+                            <p>Pay cash when your parcel arrives, subject to the courier's delivery process.</p>
                           </div>
                         </div>
                       </>
@@ -2263,25 +2263,25 @@ export function ProductPage({ slug }: { slug: string }) {
                       </tr>
                       <tr>
                         <th>Collection / Category</th>
-                        <td style={{ textTransform: 'capitalize' }}>{p.category ? p.category.replace(/-/g, ' ') : (isApparel ? 'Intimate Care' : 'Skincare & Self-Care')}</td>
+                        <td style={{ textTransform: 'capitalize' }}>{p.category ? p.category.replace(/-/g, ' ') : (isSkin ? 'Skincare & Self-Care' : 'Lifestyle & Gifts')}</td>
                       </tr>
                       {p.isDigital ? (
                         <>
                           <tr>
                             <th>Fulfillment Method</th>
-                            <td>Instant Digital Access / Download via Email & WhatsApp (৳0 Delivery)</td>
+                            <td>See the product listing for delivery and access details</td>
                           </tr>
                           <tr>
                             <th>License & Access</th>
-                            <td>Lifetime Access with Free Ongoing Updates</td>
+                            <td>See the product listing for license and update details</td>
                           </tr>
                           <tr>
                             <th>Compatibility</th>
-                            <td>Multi-Device Compatible (Android, iOS, Windows, Mac)</td>
+                            <td>See the product listing for compatibility information</td>
                           </tr>
                           <tr>
                             <th>Support & Setup</th>
-                            <td>Dedicated WhatsApp Support with Setup Guide Included</td>
+                            <td>See the product listing for support and setup information</td>
                           </tr>
                         </>
                       ) : p.category === 'watch' ? (
@@ -2294,23 +2294,23 @@ export function ProductPage({ slug }: { slug: string }) {
                           )}
                           <tr>
                             <th>Movement Type</th>
-                            <td>High-Precision Japanese Quartz / Chronograph Movement</td>
+                            <td>Check the product listing for movement details</td>
                           </tr>
                           <tr>
                             <th>Dial & Crystal</th>
-                            <td>Scratch-Resistant Hardened Mineral Crystal Glass</td>
+                            <td>Check the product listing for dial and crystal details</td>
                           </tr>
                           <tr>
                             <th>Band & Clasp</th>
-                            <td>Genuine Leather / Stainless Steel with Secure Deployant Clasp</td>
+                            <td>Check the product listing for band and clasp materials</td>
                           </tr>
                           <tr>
                             <th>Water Resistance</th>
-                            <td>Daily Splash Resistant (3 ATM / Rain & Hand Wash Proof)</td>
+                            <td>Check the product listing for water-resistance information</td>
                           </tr>
                           <tr>
                             <th>Package Includes</th>
-                            <td>1x Luxury Watch + Premium Cushion Presentation Box + Warranty Card</td>
+                            <td>Check the product listing for package contents and warranty details</td>
                           </tr>
                         </>
                       ) : p.category === 'sunglass' ? (
@@ -2323,38 +2323,38 @@ export function ProductPage({ slug }: { slug: string }) {
                           )}
                           <tr>
                             <th>UV Optical Protection</th>
-                            <td>UV400 Certified (Blocks 100% Harmful UVA & UVB Rays)</td>
+                            <td>Check the product listing for UV protection information</td>
                           </tr>
                           <tr>
                             <th>Lens Technology</th>
-                            <td>Polarized Anti-Glare High-Definition Glass / Resin Lens</td>
+                            <td>Check the product listing for lens details</td>
                           </tr>
                           <tr>
                             <th>Frame Construction</th>
-                            <td>Lightweight Reinforced Alloy / Acetate with Flexible Hinges</td>
+                            <td>Check the product listing for frame material and construction</td>
                           </tr>
                           <tr>
                             <th>Package Includes</th>
-                            <td>1x Sunglasses + 1x Protective Hard Case + 1x Microfiber Cleaning Cloth</td>
+                            <td>Check the product listing for package contents</td>
                           </tr>
                         </>
                       ) : p.category === 'gift' ? (
                         <>
                           <tr>
                             <th>Gift Set Nature</th>
-                            <td>Curated Luxury Presentation Combo & Keepsake Box</td>
+                            <td>Check the product listing for gift-set contents</td>
                           </tr>
                           <tr>
                             <th>Complimentary Note</th>
-                            <td>Free Custom Greeting Card (Hand-written or Premium Printed)</td>
+                            <td>Check the product listing for included card or gift options</td>
                           </tr>
                           <tr>
                             <th>Presentation Standard</th>
-                            <td>Rigid Keepsake Gift Box with Satin Ribbon + Safe Courier Outer Carton</td>
+                            <td>Check the product listing for packaging details</td>
                           </tr>
                           <tr>
                             <th>Suitable Occasions</th>
-                            <td>Birthdays, Anniversaries, Corporate Gifting, Eid & Surprise Celebrations</td>
+                            <td>See the product listing for suggested occasions</td>
                           </tr>
                         </>
                       ) : p.category === 'accessories' ? (
@@ -2367,15 +2367,15 @@ export function ProductPage({ slug }: { slug: string }) {
                           )}
                           <tr>
                             <th>Material</th>
-                            <td>100% Genuine Top-Grain Leather / High-Density Alloy Hardware</td>
+                            <td>Check the product listing for material details</td>
                           </tr>
                           <tr>
                             <th>Interior Features</th>
-                            <td>Multiple Card Slots, Currency Compartments & RFID Blocking Shield</td>
+                            <td>Check the product listing for features and compartments</td>
                           </tr>
                           <tr>
                             <th>Package Includes</th>
-                            <td>1x Signature Accessory + Protective Dust Pouch & Gift Box</td>
+                            <td>Check the product listing for package contents</td>
                           </tr>
                         </>
                       ) : isApparel || p.category === 'cloth' ? (
@@ -2394,15 +2394,15 @@ export function ProductPage({ slug }: { slug: string }) {
                           )}
                           <tr>
                             <th>Fabric & Weave</th>
-                            <td>Premium Breathable Cotton / Luxury Modal Stretch Blend</td>
+                            <td>Check the product listing for fabric and material details</td>
                           </tr>
                           <tr>
                             <th>Fit Standard</th>
-                            <td>Comfort Tailored Fit with Reinforced Seam Stitching</td>
+                            <td>Check the product listing for fit and construction details</td>
                           </tr>
                           <tr>
                             <th>Package Includes</th>
-                            <td>1x Authentically Packaged Garment in Protective Bag</td>
+                            <td>Check the product listing for package contents</td>
                           </tr>
                         </>
                       ) : (
@@ -3295,7 +3295,7 @@ export function Checkout() {
             </button>
 
             <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: '#6b645c', textAlign: 'center' }}>
-              <div>🔒 100% Secure Checkout · No Advance Payment Required</div>
+              <div>🔒 Secure Checkout · No Advance Payment Required</div>
               <div>📦 Inspect your parcel upon doorstep delivery</div>
             </div>
           </div>

@@ -1,8 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import qrcode from 'qrcode-generator';
-import JsBarcode from 'jsbarcode';
 import './admin.css';
-import { taka, getCategories, fetchMasterColors, createMasterColor, deleteMasterColor, type MasterColor } from './api';
+import { taka, getCategories, fetchMasterColors, createMasterColor, deleteMasterColor, autoDetectCategoryAndSub, isWellnessOrExcludedCategory, type MasterColor } from './api';
 import { WhatsAppIcon } from './icons';
 import { STORE_COPY_KEYS } from './language';
 
@@ -11,15 +10,6 @@ const getTok = () => localStorage.getItem(KEY) || '';
 function qrSvg(text: string) {
   try { const qr = qrcode(0, 'M'); qr.addData(text); qr.make(); return qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); }
   catch { return ''; }
-}
-function barcodeSvg(text: string) {
-  const value = String(text || '').trim();
-  if (!value) return '';
-  try {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    JsBarcode(svg, value, { format: 'CODE128', displayValue: false, margin: 0, width: 1, height: 28, lineColor: '#111111', background: '#ffffff' });
-    return svg.outerHTML;
-  } catch { return ''; }
 }
 const slugify = (s: string) => String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 async function aFetch(path: string, opts: any = {}) {
@@ -714,11 +704,10 @@ export function MediaPickerModal({
   );
 }
 
-let PRINT_BRANDING = { storeName: 'Store', logo: '' };
 const PRINT_CSS = `*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .pg{width:210mm;padding:18mm 16mm;margin:0 auto}.pg+.pg{border-top:1px dashed #ccc}
 .doc-top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1a1a1a;padding-bottom:16px}
-.brand{font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1}.brand span{color:#c08a5e}.brand-logo{display:block;max-width:190px;max-height:64px;object-fit:contain;object-position:left center}
+.brand{font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1}.brand span{color:#c08a5e}
 .brand-sub{font-size:10px;color:#999;letter-spacing:.16em;text-transform:uppercase;margin-top:6px}
 .doc-meta{text-align:right}.doc-title{font-size:20px;font-weight:800;letter-spacing:.08em}
 .doc-id{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;color:#444;margin-top:5px}
@@ -744,47 +733,26 @@ td.chk,th.chk{width:26px}td.chk i{display:inline-block;width:15px;height:15px;bo
 .qrline{display:flex;align-items:center;gap:7px;justify-content:flex-end;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#bbb;margin-bottom:5px}
 @media print{.pg{page-break-after:always;padding:14mm}.pg:last-child{page-break-after:auto}@page{size:A4;margin:0}}`;
 
-const THERMAL_SLIP_CSS = `*{box-sizing:border-box}html,body{width:50mm;margin:0;padding:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.pg{width:50mm;height:75mm;padding:2.4mm;margin:0 auto;overflow:hidden;page-break-after:always;break-after:page;display:flex;flex-direction:column;gap:1.2mm}
-.pg:last-child{page-break-after:auto;break-after:auto}.doc-top{display:flex;justify-content:space-between;align-items:center;border-bottom:.3mm solid #111;padding:0 0 1.2mm;min-height:9mm}
-.brand{font-size:11px;font-weight:800;line-height:1}.brand span{color:#555}.brand-logo{display:block;max-width:18mm;max-height:7mm;object-fit:contain;object-position:left center}
-.brand-sub{font-size:5px;color:#555;letter-spacing:.08em;text-transform:uppercase;margin-top:.6mm}.doc-date{font-size:5.5px;color:#555;margin-top:.8mm}.qrbox{text-align:center;flex:none}.qrbox svg{display:block;width:13mm;height:13mm;margin:0 0 0 auto}.qrbox .qid{font-family:monospace;font-size:5px;color:#222;margin-top:.3mm;letter-spacing:0}
-.qrline{font-size:4px;letter-spacing:.03em;text-transform:uppercase;color:#555;margin-bottom:.2mm}.slip-to{border:.25mm solid #333;border-radius:1mm;padding:1.3mm 1.6mm;margin:0;min-width:0}
-.lbl{font-size:5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#555;margin-bottom:.4mm}.slip-to .nm{font-size:9px;font-weight:800;line-height:1.12;overflow-wrap:anywhere}.slip-to p{margin:.35mm 0 0;font-size:7px;line-height:1.15;color:#222;overflow-wrap:anywhere}
-.courier-info{font-size:6px;line-height:1.1;overflow-wrap:anywhere}.courier-info .lbl{display:inline;margin:0 .8mm 0 0}.courier-info b{font-size:6px}.consignment{font-family:monospace;font-size:5.5px}
-.cols{display:flex;gap:2mm;margin:0}.col{flex:1;min-width:0}.col p{margin:0;font-size:6px;line-height:1.15;color:#222}.col .nm{font-size:7px;font-weight:700;overflow-wrap:anywhere}
-.cod{display:flex;justify-content:space-between;align-items:center;background:#111;color:#fff;border-radius:1mm;padding:1.2mm 1.6mm;margin:0;min-height:6mm}.cod .k{font-size:5px;letter-spacing:.04em;text-transform:uppercase}.cod .v{font-size:10px;font-weight:800}
-table{width:100%;border-collapse:collapse;margin:0}thead th{font-size:5px;font-weight:700;text-transform:uppercase;color:#555;text-align:left;padding:0 0 .6mm;border-bottom:.2mm solid #555}tbody td{font-size:6px;padding:.5mm 0;border-bottom:.15mm solid #ddd;color:#222;line-height:1.1}th.r,td.r{text-align:right}td.chk,th.chk{width:3mm}td.chk i{display:inline-block;width:2mm;height:2mm;border:.2mm solid #777;border-radius:.3mm}
-.courier-barcode-wrap{margin-top:auto;text-align:center;border-top:.2mm solid #bbb;padding-top:.8mm;min-height:11mm}.courier-barcode-label{font-size:5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#333}.courier-barcode{display:block;width:100%;height:7mm;margin:.5mm auto 0}.courier-barcode-id{font-family:monospace;font-size:5px;line-height:1;color:#222;margin-top:.3mm;letter-spacing:.02em}.foot{margin:0;border:0;padding:0;font-size:4.5px;color:#555;text-align:center;line-height:1.1}
-@page{size:50mm 75mm;margin:0}@media print{html,body{width:50mm;height:auto}.pg{width:50mm;height:75mm;padding:2.4mm;overflow:hidden}}`;
-
 function invoiceBody(o: any) {
-  const brand = PRINT_BRANDING.logo ? `<img class="brand-logo" src="${PRINT_BRANDING.logo}" alt="${PRINT_BRANDING.storeName}"/>` : `<div class="brand">${PRINT_BRANDING.storeName}</div>`;
   const rows = o.items.map((it: any, i: number) => `<tr><td class="c">${i + 1}</td><td><div style="display:flex;align-items:center;gap:8px">${it.image ? `<img src="${it.image}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;border:1px solid #eee;flex:none"/>` : ''}<span>${it.name}</span></div></td><td class="c">${it.qty}</td><td class="r">৳${it.price ?? Math.round(it.subtotal / it.qty)}</td><td class="r">৳${it.subtotal}</td></tr>`).join('');
   const cour = o.courier && o.courier.name ? `<div class="col"><div class="lbl">Courier</div><p class="nm">${o.courier.name}</p>${o.courier.consignment ? `<p>Tracking: ${o.courier.consignment}</p>` : ''}</div>` : '';
   const disc = o.discount ? `<div class="totrow"><span>Discount${o.coupon ? ' (' + o.coupon + ')' : ''}</span><span>&minus;৳${o.discount}</span></div>` : '';
-  return `<div class="pg"><div class="doc-top"><div>${brand}<div class="brand-sub">${PRINT_BRANDING.storeName}</div></div><div class="doc-meta"><div class="doc-title">INVOICE</div><div class="doc-id">${o.id}</div><div class="doc-date">${new Date(o.createdAt).toLocaleString()}</div></div></div><div class="cols"><div class="col"><div class="lbl">Deliver to</div><p class="nm">${o.customer.name}</p><p>${o.customer.phone}</p><p>${o.customer.address}${o.customer.area ? ' (' + o.customer.area + ' dhaka)' : ''}</p></div><div class="col"><div class="lbl">Payment</div><span class="pay">${o.paymentStatus === 'paid' ? 'Paid' : 'Cash on delivery · unpaid'}</span></div>${cour}</div><table><thead><tr><th class="c">#</th><th>Item</th><th class="c">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody></table><div class="totbox"><div class="totrow"><span>Subtotal</span><span>৳${o.itemsTotal ?? o.total}</span></div><div class="totrow"><span>Delivery</span><span>${o.delivery ? '৳' + o.delivery : 'Free'}</span></div>${disc}<div class="totrow grand"><span>Order total</span><span>৳${o.total}</span></div><div class="totrow"><span>Amount due</span><span>৳${o.paymentStatus === 'paid' ? 0 : o.total}</span></div></div><div class="foot">Thank you for shopping with ${PRINT_BRANDING.storeName}.<br>This is a computer-generated invoice and needs no signature.</div></div>`;
+  return `<div class="pg"><div class="doc-top"><div><div class="brand">dot<span>.</span></div><div class="brand-sub">intimate self-care</div></div><div class="doc-meta"><div class="doc-title">INVOICE</div><div class="doc-id">${o.id}</div><div class="doc-date">${new Date(o.createdAt).toLocaleString()}</div></div></div><div class="cols"><div class="col"><div class="lbl">Deliver to</div><p class="nm">${o.customer.name}</p><p>${o.customer.phone}</p><p>${o.customer.address}${o.customer.area ? ' (' + o.customer.area + ' dhaka)' : ''}</p></div><div class="col"><div class="lbl">Payment</div><span class="pay">Cash on delivery</span></div>${cour}</div><table><thead><tr><th class="c">#</th><th>Item</th><th class="c">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody></table><div class="totbox"><div class="totrow"><span>Subtotal</span><span>৳${o.itemsTotal ?? o.total}</span></div><div class="totrow"><span>Delivery</span><span>${o.delivery ? '৳' + o.delivery : 'Free'}</span></div>${disc}<div class="totrow grand"><span>Total (COD)</span><span>৳${o.total}</span></div></div><div class="foot">Thank you for shopping with dot. &middot; Every order ships in plain, unbranded packaging.<br>This is a computer-generated invoice and needs no signature.</div></div>`;
 }
 function slipBody(o: any) {
-  const brand = PRINT_BRANDING.logo ? `<img class="brand-logo" src="${PRINT_BRANDING.logo}" alt="${PRINT_BRANDING.storeName}"/>` : `<div class="brand">${PRINT_BRANDING.storeName}</div>`;
-  const collectableAmount = o.paymentStatus === 'paid' ? 0 : Number(o.total || 0);
-  const rows = o.items.map((it: any) => `<tr><td><b>${it.name}</b></td><td class="r">&times; ${it.qty}</td></tr>`).join('');
-  const cour = o.courier?.name ? `<div class="courier-info"><span class="lbl">Courier</span><b>${o.courier.name}</b>${o.courier.consignment ? `<span class="consignment"> · ${o.courier.consignment}</span>` : ''}</div>` : '';
-  const qr = `<div class="qrbox"><div class="qrline">order scan</div>${qrSvg(o.id)}<div class="qid">${o.id}</div></div>`;
-  const courierCode = String(o.courier?.consignment || o.id || '').trim();
-  const barcode = barcodeSvg(courierCode);
-  const barcodeLabel = o.courier?.consignment ? `${o.courier.name || 'Courier'} tracking` : 'Store order reference';
-  return `<div class="pg"><div class="doc-top"><div>${brand}<div class="brand-sub">packing slip · ${PRINT_BRANDING.storeName}</div><div class="doc-date">${new Date(o.createdAt).toLocaleDateString()}</div></div>${qr}</div><div class="slip-to"><div class="lbl">Ship to</div><div class="nm">${o.customer.name}</div><p>${o.customer.phone}</p><p>${o.customer.address}${o.customer.area ? ' (' + o.customer.area + ' dhaka)' : ''}</p></div>${cour}<div class="cod"><span class="k">${o.paymentStatus === 'paid' ? 'Paid · do not collect' : 'Collect on delivery'}</span><span class="v">৳${collectableAmount}</span></div><table><thead><tr><th>Item</th><th class="r">Qty</th></tr></thead><tbody>${rows}</tbody></table><div class="courier-barcode-wrap"><div class="courier-barcode-label">${barcodeLabel}</div>${barcode}<div class="courier-barcode-id">${courierCode}</div></div><div class="foot">${PRINT_BRANDING.storeName} · Thank you</div></div>`;
+  const rows = o.items.map((it: any) => `<tr><td class="chk"><i></i></td><td><div style="display:flex;align-items:center;gap:8px">${it.image ? `<img src="${it.image}" style="width:32px;height:32px;border-radius:4px;object-fit:cover;border:1px solid #ccc;flex:none"/>` : ''}<b>${it.name}</b></div></td><td class="r" style="font-size:16px;font-weight:700">&times; ${it.qty}</td></tr>`).join('');
+  const cour = o.courier && o.courier.name ? `<div class="cols" style="margin-top:14px"><div class="col"><div class="lbl">Courier</div><p class="nm">${o.courier.name}</p></div>${o.courier.consignment ? `<div class="col"><div class="lbl">Tracking no.</div><p class="nm">${o.courier.consignment}</p></div>` : ''}</div>` : '';
+  const qr = `<div class="qrbox"><div class="qrline">scan &middot; pack &middot; return</div>${qrSvg(o.id)}<div class="qid">${o.id}</div></div>`;
+  return `<div class="pg"><div class="doc-top"><div><div class="brand">dot<span>.</span></div><div class="brand-sub">packing slip</div><div class="doc-date" style="margin-top:8px">${new Date(o.createdAt).toLocaleDateString()}</div></div>${qr}</div><div class="slip-to"><div class="lbl">Ship to</div><div class="nm">${o.customer.name}</div><p>${o.customer.phone}</p><p>${o.customer.address}${o.customer.area ? ' (' + o.customer.area + ' dhaka)' : ''}</p></div>${cour}<div class="cod"><span class="k">Collect on delivery</span><span class="v">৳${o.total}</span></div><table><thead><tr><th class="chk"></th><th>Item</th><th class="r">Qty</th></tr></thead><tbody>${rows}</tbody></table>${o.customer.note ? `<p style="margin-top:16px;font-size:12px;color:#777">Customer note: ${o.customer.note}</p>` : ''}<div class="foot">Scan the QR to receive or return this order &middot; plain, unbranded packaging &middot; dot.</div></div>`;
 }
-function printDoc(title: string, inner: string, format: 'A4' | 'label' = 'A4') {
-  const printCss = format === 'label' ? THERMAL_SLIP_CSS : PRINT_CSS;
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${printCss}</style></head><body>${inner}<script>window.onload=function(){window.print()}<\/script></body></html>`;
+function printDoc(title: string, inner: string) {
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${PRINT_CSS}</style></head><body>${inner}<script>window.onload=function(){window.print()}<\/script></body></html>`;
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
 }
 function printInvoice(o: any) { printDoc(o.id, invoiceBody(o)); }
 function printInvoices(list: any[]) { if (list.length) printDoc('invoices', list.map(invoiceBody).join('')); }
-function printSlips(list: any[]) { if (list.length) printDoc('packing slips', list.map(slipBody).join(''), 'label'); }
+function printSlips(list: any[]) { if (list.length) printDoc('packing slips', list.map(slipBody).join('')); }
 const fmt = (d: string) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const Badge = ({ s }: { s: string }) => <span className={'sa-badge b-' + s}>{s}</span>;
 function useCountUp(target: number, ms = 850) {
@@ -833,7 +801,7 @@ export function Admin() {
   }, []);
   useEffect(() => {
     if (!authed) return;
-    fetch('/api/settings').then((r) => r.json()).then((s) => { const storeName = s.storeName || 'Store'; PRINT_BRANDING = { storeName, logo: s.logo || '' }; setStore(storeName); }).catch(() => {});
+    fetch('/api/settings').then((r) => r.json()).then((s) => setStore(s.storeName || 'dot.')).catch(() => {});
     aFetch('/admin/me').then((r) => (r.ok ? r.json() : null)).then((m) => { if (m) setMe(m); else { localStorage.removeItem(KEY); setAuthed(false); } }).catch(() => {});
   }, [authed]);
   useEffect(() => {
@@ -854,7 +822,7 @@ export function Admin() {
   if (!authed) return <Login onDone={() => setAuthed(true)} />;
   const role = me?.role || 'owner';
   const allowed = role === 'staff' ? ['dashboard', 'orders', 'scanner', 'customers']
-    : role === 'manager' ? ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'customers', 'products', 'categories', 'landings', 'media', 'coupons', 'fraud', 'integrations', 'settings']
+    : role === 'manager' ? ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings']
       : ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'backup', 'customers', 'products', 'categories', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings'];
   if (role === 'manager' && !allowed.includes('reviews')) allowed.push('reviews');
   const cur = allowed.includes(nav) ? nav : 'dashboard';
@@ -1572,15 +1540,14 @@ function Login({ onDone }: { onDone: () => void }) {
               />
               <input
                 type="password"
-                placeholder="New password (min 8 characters)"
+                placeholder="New password (min 4 characters)"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submitReset()}
-                minLength={8}
                 style={{ marginBottom: 14 }}
               />
               {err && <div className="err2" style={{ marginBottom: 12 }}>{err}</div>}
-              <button className="sa-btn full" disabled={busy || otp.length !== 6 || newPassword.length < 8} onClick={submitReset} style={{ marginBottom: 10 }}>{busy ? 'Updating…' : 'Update Password'}</button>
+              <button className="sa-btn full" disabled={busy || otp.length !== 6 || newPassword.length < 4} onClick={submitReset} style={{ marginBottom: 10 }}>{busy ? 'Updating…' : 'Update Password'}</button>
               <div style={{ marginTop: 12, fontSize: 12.5 }}>
                 <a style={{ color: '#94a3b8', cursor: 'pointer' }} onClick={() => { setMode('login'); setErr(''); }}>← Back to login</a>
               </div>
@@ -2104,7 +2071,7 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
                   <b>{o.customer.name}</b>
                   <div className="dim small">{o.customer.phone}</div>
                 </td>
-                <td><span className="sa-tag-source">🌐 {originLabel(o.source)}</span><div className="dim small" style={{ marginTop: 4 }}>Channel: {o.attribution?.channel || 'Untracked'}</div>{o.attribution?.medium && <div className="dim small">Medium: {o.attribution.medium}</div>}</td>
+                <td><span className="sa-tag-source">🌐 {originLabel(o.source)}</span></td>
                 <td>
                   {o.courier?.name ? (
                     <span>{o.courier.name}{o.courier.consignment ? ` #${o.courier.consignment}` : ''}</span>
@@ -3095,7 +3062,6 @@ function OrdersAdmin() {
                 </div>
                 <div style={{ marginTop: 2 }}>
                   <OriginBadge source={o.source} style={{ fontSize: 10, padding: '2px 6px' }} />
-                  <div className="traffic-attribution">Channel · {o.attribution?.channel || 'Untracked'}{o.attribution?.medium ? ` / ${o.attribution.medium}` : ''}</div>
                 </div>
               </div>
 
@@ -3624,7 +3590,6 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
   // Editable pricing
   const [delivery, setDelivery] = useState<number>(o.delivery != null ? o.delivery : (o.customer?.area === 'inside' ? 60 : 120));
   const [discount, setDiscount] = useState<number>(o.discount || 0);
-  const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid'>(o.paymentStatus === 'paid' ? 'paid' : 'unpaid');
 
   // Catalog products for "Add Product"
   const [allProducts, setAllProducts] = useState<any[]>([]);
@@ -3761,7 +3726,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
     setBusy(true);
     setSaveMsg('');
     try {
-      const response = await aFetch('/orders/' + o.id, {
+      await aFetch('/orders/' + o.id, {
         method: 'PATCH',
         body: JSON.stringify({
           status,
@@ -3782,13 +3747,8 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
           delivery: Number(delivery || 0),
           discount: Number(discount || 0),
           total: grandTotal,
-          paymentStatus,
         }),
       });
-      if (!response.ok) {
-        const result = await response.json().catch(() => ({}));
-        throw new Error(result.error || 'Could not save order changes');
-      }
       setSaveMsg('Saved successfully! ✓');
       setIsEditing(false);
       window.dispatchEvent(new CustomEvent('admin-orders-updated', { detail: { id: o.id, status } }));
@@ -4210,12 +4170,6 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                 <span className="sa-om-k">Origin / Source</span>
                 <span className="sa-om-v"><span className="sa-tag-source">🌐 {originLabel(o.source)}</span></span>
               </div>
-              <div className="sa-om-kv"><span className="sa-om-k">Marketing channel</span><span className="sa-om-v">{o.attribution?.channel || 'Untracked'}{o.attribution?.medium ? ` · ${o.attribution.medium}` : ''}</span></div>
-              {o.attribution?.campaign && <div className="sa-om-kv"><span className="sa-om-k">Campaign</span><span className="sa-om-v">{o.attribution.campaign}</span></div>}
-              {o.attribution?.referrer && <div className="sa-om-kv"><span className="sa-om-k">Referrer</span><span className="sa-om-v">{o.attribution.referrer}</span></div>}
-              <div className="sa-om-kv"><span className="sa-om-k">Marketing channel</span><span className="sa-om-v">{o.attribution?.channel || 'Untracked'}{o.attribution?.medium ? ` · ${o.attribution.medium}` : ''}</span></div>
-              {o.attribution?.campaign && <div className="sa-om-kv"><span className="sa-om-k">Campaign</span><span className="sa-om-v">{o.attribution.campaign}</span></div>}
-              {o.attribution?.referrer && <div className="sa-om-kv"><span className="sa-om-k">Referrer</span><span className="sa-om-v">{o.attribution.referrer}</span></div>}
               <div className="sa-om-kv">
                 <span className="sa-om-k">Customer Note</span>
                 {isEditing ? (
@@ -4428,21 +4382,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
 
               <div className="sa-om-calc-row" style={{ paddingTop: 6 }}>
                 <span className="dim">Payment Method</span>
-                {isEditing ? (
-                  <select
-                    value={paymentStatus}
-                    onChange={(e) => setPaymentStatus(e.target.value === 'paid' ? 'paid' : 'unpaid')}
-                    aria-label="Customer payment status"
-                    style={{ minWidth: 140, padding: '7px 10px', borderRadius: 8, border: '1px solid rgba(148,163,184,.35)', background: '#171421', color: '#f8fafc' }}
-                  >
-                    <option value="unpaid">Cash on Delivery · Unpaid</option>
-                    <option value="paid">Cash on Delivery · Paid</option>
-                  </select>
-                ) : (
-                  <span className={'sa-badge ' + (paymentStatus === 'paid' ? 'b-delivered' : 'b-pending')}>
-                    Cash on Delivery · {paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}
-                  </span>
-                )}
+                <span className="sa-badge b-pending">Cash on Delivery · Unpaid</span>
               </div>
             </div>
           </div>
@@ -4454,7 +4394,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
             <button className="sa-btn ghost" onClick={() => printInvoice({ ...o, customer: { ...o.customer, name: custName, phone: custPhone, address: custAddress }, items, delivery, discount, total: grandTotal })}>
               Print Invoice
             </button>
-            <button className="sa-btn ghost" onClick={() => printSlips([{ ...o, paymentStatus, customer: { ...o.customer, name: custName, phone: custPhone, address: custAddress }, items, delivery, discount, total: grandTotal }])}>
+            <button className="sa-btn ghost" onClick={() => printSlips([{ ...o, customer: { ...o.customer, name: custName, phone: custPhone, address: custAddress }, items, delivery, discount, total: grandTotal }])}>
               Print Packing Slip
             </button>
           </div>
@@ -5222,7 +5162,14 @@ function ProductsAdmin() {
 function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: any[]; onClose: () => void; onSaved: () => void }) {
   const isNew = !product.id;
   const [tab, setTab] = useState<'general' | 'media' | 'variations' | 'desc' | 'inventory' | 'seo'>('general');
+  const [localCats, setLocalCats] = useState<any[]>(cats || []);
+  useEffect(() => { setLocalCats(cats || []); }, [cats]);
+  const [newSubOpen, setNewSubOpen] = useState(false);
+  const [newSubName, setNewSubName] = useState('');
+  const [newSubBusy, setNewSubBusy] = useState(false);
+  const mainCatsList = useMemo(() => localCats.filter((c: any) => !c.parentSlug), [localCats]);
   const [f, setF] = useState<any>(() => {
+    const firstMain = (cats || []).find((c: any) => !c.parentSlug)?.slug || cats[0]?.slug || '';
     const base: any = {
       name: '',
       slug: '',
@@ -5231,7 +5178,8 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
       compareAt: '',
       stock: '',
       lowStockThreshold: 5,
-      category: cats[0]?.slug || '',
+      category: firstMain,
+      subCategory: '',
       adult: false,
       soldOut: false,
       tag: '',
@@ -5502,8 +5450,24 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
     const val = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     setF((s: any) => {
       const updated = { ...s, [k]: val };
-      if (k === 'name' && isNew && !s.slugManuallyEdited) {
-        updated.slug = slugify(val);
+      if (k === 'name') {
+        if (isNew && !s.slugManuallyEdited) {
+          updated.slug = slugify(val);
+        }
+        if (isNew && !s.categoryManuallySet) {
+          const detected = autoDetectCategoryAndSub(val, '');
+          if (detected.category && localCats.some((c: any) => c.slug === detected.category)) {
+            updated.category = detected.category;
+          }
+          if (detected.subCategory && localCats.some((c: any) => c.slug === detected.subCategory)) {
+            updated.subCategory = detected.subCategory;
+          }
+        } else if (!s.subCategoryManuallySet) {
+          const detected = autoDetectCategoryAndSub(val, s.category);
+          if (detected.subCategory && localCats.some((c: any) => c.slug === detected.subCategory)) {
+            updated.subCategory = detected.subCategory;
+          }
+        }
       }
       return updated;
     });
@@ -5611,7 +5575,7 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
 
   const save = async () => {
     setErr('');
-    if (!f.category || !cats.some((c: any) => c.slug === f.category)) {
+    if (!f.category || !localCats.some((c: any) => c.slug === f.category)) {
       setErr('Create/select a category in Category Management before saving this product.');
       return;
     }
@@ -5958,22 +5922,142 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
                 )}
               </div>
 
-              {/* Category & Badge Selector */}
-              <div className="sa-frow">
-                <div>
-                  <label style={{ display: 'block', marginBottom: 6 }}>Store Category *</label>
-                  <select value={f.category} onChange={set('category')} style={{ fontSize: 14 }}>
-                    {!cats.length && <option value="">Create a category first</option>}
-                    {cats.length > 0 && !cats.some((c: any) => c.slug === f.category) && <option value="">Select a category</option>}
-                    {product.category && !cats.some((c: any) => c.slug === product.category) && <option value={product.category}>Existing: {product.category}</option>}
-                    {cats.map((c) => (
-                      <option key={c.slug} value={c.slug}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+              {/* Smart Main Category, Sub-Category & Badge Selector */}
+              <div style={{ background: '#171429', padding: 16, borderRadius: 12, border: '1px solid rgba(139, 92, 246, 0.28)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#c4b5fd', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>🗂️</span> Smart Category &amp; Sub-Category Assignment
+                    {isWellnessOrExcludedCategory(f.category) && (
+                      <span style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', fontSize: 11, padding: '2px 8px', borderRadius: 99, border: '1px solid rgba(239, 68, 68, 0.4)' }}>
+                        🔒 Private (Auto SEO Blocked)
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const det = autoDetectCategoryAndSub(f.name, '');
+                      setF((s: any) => ({
+                        ...s,
+                        category: det.category || s.category,
+                        subCategory: det.subCategory || s.subCategory,
+                      }));
+                    }}
+                    style={{
+                      background: 'rgba(139, 92, 246, 0.18)',
+                      border: '1px solid rgba(139, 92, 246, 0.45)',
+                      color: '#ddd6fe',
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      padding: '4px 10px',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ✨ Smart Auto-Detect from Title
+                  </button>
                 </div>
-                <div>
+
+                <div className="sa-frow">
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>1. Main Category *</label>
+                    <select
+                      value={f.category}
+                      onChange={(e) => {
+                        const nextMain = e.target.value;
+                        const det = autoDetectCategoryAndSub(f.name, nextMain);
+                        setF((s: any) => ({
+                          ...s,
+                          category: nextMain,
+                          categoryManuallySet: true,
+                          subCategory: det.subCategory || '',
+                        }));
+                      }}
+                      style={{ fontSize: 14 }}
+                    >
+                      {!mainCatsList.length && <option value="">Create a category first</option>}
+                      {mainCatsList.length > 0 && !mainCatsList.some((c: any) => c.slug === f.category) && <option value="">Select Main Category</option>}
+                      {product.category && !mainCatsList.some((c: any) => c.slug === product.category) && <option value={product.category}>Existing: {product.category}</option>}
+                      {mainCatsList.map((c: any) => (
+                        <option key={c.slug} value={c.slug}>
+                          {c.name} {isWellnessOrExcludedCategory(c.slug) ? ' (🔒 No-SEO)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <label style={{ margin: 0, fontWeight: 600 }}>2. Sub-Category</label>
+                      <button
+                        type="button"
+                        onClick={() => setNewSubOpen((v) => !v)}
+                        style={{ background: 'none', border: 'none', color: '#34d399', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                      >
+                        {newSubOpen ? '× Cancel' : '+ New Sub-Category'}
+                      </button>
+                    </div>
+                    <select
+                      value={f.subCategory || ''}
+                      onChange={(e) => setF((s: any) => ({ ...s, subCategory: e.target.value, subCategoryManuallySet: true }))}
+                      style={{ fontSize: 14 }}
+                    >
+                      <option value="">— All / General ({mainCatsList.find((c: any) => c.slug === f.category)?.name || 'Main'}) —</option>
+                      {localCats
+                        .filter((c: any) => c.parentSlug === f.category)
+                        .map((sc: any) => (
+                          <option key={sc.slug} value={sc.slug}>
+                            ↳ {sc.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+
+                {newSubOpen && (
+                  <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', background: 'rgba(16, 185, 129, 0.08)', padding: 10, borderRadius: 8, border: '1px dashed rgba(16, 185, 129, 0.35)' }}>
+                    <input
+                      placeholder={`New Sub-Category under "${mainCatsList.find((c: any) => c.slug === f.category)?.name || f.category}"...`}
+                      value={newSubName}
+                      onChange={(e) => setNewSubName(e.target.value)}
+                      style={{ flex: 1, fontSize: 13 }}
+                    />
+                    <button
+                      type="button"
+                      className="sa-btn primary"
+                      disabled={newSubBusy || !newSubName.trim()}
+                      onClick={async () => {
+                        if (!newSubName.trim() || !f.category) return;
+                        setNewSubBusy(true);
+                        try {
+                          const r = await aFetch('/categories', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                              name: newSubName.trim(),
+                              parentSlug: f.category,
+                              adult: isWellnessOrExcludedCategory(f.category),
+                            }),
+                          });
+                          const d = await r.json();
+                          if (!r.ok) throw new Error(d.error || 'Could not create sub-category');
+                          setLocalCats((prev) => [...prev, d]);
+                          setF((s: any) => ({ ...s, subCategory: d.slug, subCategoryManuallySet: true }));
+                          setNewSubName('');
+                          setNewSubOpen(false);
+                        } catch (e: any) {
+                          setErr(e.message || 'Could not create sub-category');
+                        } finally {
+                          setNewSubBusy(false);
+                        }
+                      }}
+                      style={{ background: '#10b981', borderColor: '#10b981', padding: '8px 14px', fontSize: 12.5, whiteSpace: 'nowrap' }}
+                    >
+                      {newSubBusy ? 'Adding…' : '+ Create & Select'}
+                    </button>
+                  </div>
+                )}
+
+                <div style={{ marginTop: 12 }}>
                   <label style={{ display: 'block', marginBottom: 6 }}>Product Highlight Badge</label>
                   <input value={f.tag} onChange={set('tag')} placeholder="e.g. Bestseller, New, -25% Sale" />
                 </div>
@@ -7214,7 +7298,7 @@ function SettingsAdmin() {
   const [settingsLoadError, setSettingsLoadError] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState<'brand' | 'slider' | 'home' | 'app' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend'>('brand');
+  const [tab, setTab] = useState<'brand' | 'slider' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend'>('brand');
   const [copySearch, setCopySearch] = useState('');
   const [copyKey, setCopyKey] = useState('');
   const [infoSlug, setInfoSlug] = useState('shipping');
@@ -7233,21 +7317,10 @@ function SettingsAdmin() {
     active: true,
   });
   const [uploadingSlideImg, setUploadingSlideImg] = useState(false);
-  const [uploadingApk, setUploadingApk] = useState(false);
-  const [storeCategories, setStoreCategories] = useState<any[]>([]);
-  const storeCategoriesRef = useRef<any[]>([]);
-  const [availableProducts, setAvailableProducts] = useState<any[]>([]);
   const [editingSlideIdx, setEditingSlideIdx] = useState<number | null>(null);
   const [pickerTarget, setPickerTarget] = useState<{ title: string; currentImg: string; onSelect: (url: string) => void } | null>(null);
 
   useEffect(() => {
-    fetch('/api/categories').then((r) => r.ok ? r.json() : []).then((items) => {
-      const cats = Array.isArray(items) ? items : [];
-      storeCategoriesRef.current = cats;
-      setStoreCategories(cats);
-      setF((current: any) => current && (!Array.isArray(current.homepageSections) || !current.homepageSections.length) ? { ...current, homepageSections: cats.map((category: any, index: number) => ({ id: `home-${category.slug || index}`, title: category.name, eyebrow: 'SHOP THE COLLECTION', buttonText: 'View the collection', category: category.slug, count: 8, active: true, placement: 'after-story', productIds: [] })) } : current);
-    }).catch(() => {});
-    fetch('/api/products').then((r) => r.ok ? r.json() : []).then((items) => setAvailableProducts(Array.isArray(items) ? items : [])).catch(() => {});
     fetch('/api/settings').then(async (r) => {
       if (!r.ok) throw new Error(`Settings request failed (${r.status})`);
       return r.json();
@@ -7263,7 +7336,6 @@ function SettingsAdmin() {
         logo: s.logo || '',
         favicon: s.favicon || '',
         sliders: Array.isArray(s.sliders) ? s.sliders : [],
-        homepageSections: Array.isArray(s.homepageSections) && s.homepageSections.length ? s.homepageSections : storeCategoriesRef.current.map((category: any, index: number) => ({ id: `home-${category.slug || index}`, title: category.name, eyebrow: 'SHOP THE COLLECTION', buttonText: 'View the collection', category: category.slug, count: 8, active: true, placement: 'after-story', productIds: [] })),
         siteContent: {
           ...siteContent,
           sections: siteContent.sections && typeof siteContent.sections === 'object' && !Array.isArray(siteContent.sections) ? siteContent.sections : {},
@@ -7341,7 +7413,6 @@ function SettingsAdmin() {
   };
 
   const sliders: any[] = Array.isArray(f?.sliders) ? f.sliders : [];
-  const homepageSections: any[] = Array.isArray(f?.homepageSections) ? f.homepageSections : [];
   const homeCopyFields = [
     { key: 'collectionEyebrow', label: 'Collection section eyebrow', long: false },
     { key: 'collectionTitle', label: 'Collection section title', long: false },
@@ -7368,16 +7439,6 @@ function SettingsAdmin() {
     return { ...current, homeContent: { ...(current.homeContent || {}), [lang]: { ...(current.homeContent?.[lang] || {}), faqs } } };
   });
   const siteSections = f?.siteContent?.sections || {};
-  const sectionLabels: Record<string, string> = {
-    hero: 'Hero banner / slider',
-    quickCategories: 'Quick category links',
-    collections: 'Shop by collection',
-    intro: 'Brand introduction',
-    featured: 'Featured products',
-    benefits: 'Store benefits',
-    faq: 'FAQ section',
-    newsletter: 'Newsletter signup',
-  };
   const textOverrides = f?.siteContent?.textOverrides || {};
   const editTextOverride = (lang: 'en' | 'bn', value: string) => setF((current: any) => ({
     ...current,
@@ -7393,6 +7454,7 @@ function SettingsAdmin() {
     const localized = field === 'title' ? { ...oldPage, title: value } : { ...oldPage, body };
     return { ...current, siteContent: { ...(current.siteContent || {}), infoPages: { ...(current.siteContent?.infoPages || {}), [infoSlug]: { ...(current.siteContent?.infoPages?.[infoSlug] || {}), [lang]: localized } } } };
   });
+  const sectionLabels: Record<string, string> = { hero: 'Hero banner / slider', quickCategories: 'Quick category links', collections: 'Shop by collection', intro: 'Brand introduction', featured: 'Featured products', benefits: 'Store benefits', faq: 'FAQ section', newsletter: 'Newsletter signup' };
   const matchingCopyKeys = STORE_COPY_KEYS.filter((key) => !copySearch || key.toLowerCase().includes(copySearch.toLowerCase())).slice(0, 100);
   const infoPageLabels: Record<string, string> = { shipping: 'Shipping & Delivery', returns: 'Returns & Exchanges', contact: 'Contact', about: 'About', privacy: 'Privacy Policy', terms: 'Terms of Service', journal: 'Journal' };
 
@@ -7487,8 +7549,6 @@ function SettingsAdmin() {
             <span>🎠 Homepage Sliders & Banners</span>
             <span className="sa-filter-count">{sliders.length}</span>
           </button>
-          <button className={tab === 'home' ? 'on' : ''} onClick={() => setTab('home')}><span>🧩 Homepage Sections</span><span className="sa-filter-count">8</span></button>
-          <button className={tab === 'app' ? 'on' : ''} onClick={() => setTab('app')}><span>📱 Android App / APK</span></button>
           <button className={tab === 'store' ? 'on' : ''} onClick={() => setTab('store')}>
             <span>🏪 Store & Delivery</span>
           </button>
@@ -7884,29 +7944,6 @@ function SettingsAdmin() {
 
       {/* TAB 4: FRAUD DETECTOR */}
       {tab === 'fraud' && <FraudDetectorAdmin embedded={true} />}
-
-      {tab === 'home' && <div className="sa-card" style={{ padding: 24 }}>
-        <h2 style={{ margin: '0 0 6px', color: '#fff' }}>Homepage Sections</h2><p className="dim">Control the eight homepage blocks shown on your storefront. Save All Changes to publish.</p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }}>{Object.entries(sectionLabels).map(([key, label]) => <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: '#1c1830', borderRadius: 8 }}><input type="checkbox" checked={siteSections[key] !== false} onChange={(e) => setF((s: any) => ({ ...s, siteContent: { ...(s.siteContent || {}), sections: { ...(s.siteContent?.sections || {}), [key]: e.target.checked } } }))} />{label}</label>)}</div>
-        <h3 style={{ color: '#fff', margin: '24px 0 8px' }}>Homepage product collections</h3>
-        {homepageSections.map((section, index) => <div key={section.id || index} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 10, alignItems: 'end', padding: 12, marginTop: 10, border: '1px solid rgba(255,255,255,.1)', borderRadius: 10 }}>
-          <label>Heading<input value={section.title || ''} onChange={(e) => setF((s: any) => ({ ...s, homepageSections: s.homepageSections.map((x: any, i: number) => i === index ? { ...x, title: e.target.value } : x) }))} /></label>
-          <label>Category<select value={section.category || ''} onChange={(e) => setF((s: any) => ({ ...s, homepageSections: s.homepageSections.map((x: any, i: number) => i === index ? { ...x, category: e.target.value } : x) }))}><option value="">Choose category</option>{storeCategories.map((category) => <option key={category.slug} value={category.slug}>{category.name}</option>)}</select></label>
-          <label>Products to show<input type="number" min={1} max={30} value={section.count || 8} onChange={(e) => setF((s: any) => ({ ...s, homepageSections: s.homepageSections.map((x: any, i: number) => i === index ? { ...x, count: Number(e.target.value) || 1 } : x) }))} /></label>
-          <label>Position<select value={section.placement || 'after-story'} onChange={(e) => setF((s: any) => ({ ...s, homepageSections: s.homepageSections.map((x: any, i: number) => i === index ? { ...x, placement: e.target.value } : x) }))}><option value="after-categories">After categories</option><option value="after-story">After brand story</option><option value="after-sale">After featured products</option><option value="before-newsletter">Before newsletter</option><option value="before-footer">At bottom of homepage</option></select></label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 7 }}><input type="checkbox" checked={section.active !== false} onChange={(e) => setF((s: any) => ({ ...s, homepageSections: s.homepageSections.map((x: any, i: number) => i === index ? { ...x, active: e.target.checked } : x) }))} />Show</label>
-          <button type="button" className="sa-btn ghost small" onClick={() => setF((s: any) => ({ ...s, homepageSections: s.homepageSections.filter((_: any, i: number) => i !== index) }))}>Remove</button>
-          <details style={{ gridColumn: '1 / -1' }}><summary style={{ cursor: 'pointer', color: '#cbd5e1' }}>Choose exact products ({(section.productIds || []).length} selected; empty uses category)</summary><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 7, maxHeight: 200, overflow: 'auto', marginTop: 10 }}>{availableProducts.filter((product) => !section.category || product.category === section.category).map((product) => { const ids = (section.productIds || []).map(String); return <label key={product.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 6, background: ids.includes(String(product.id)) ? 'rgba(180,142,76,.12)' : 'rgba(255,255,255,.03)' }}><input type="checkbox" checked={ids.includes(String(product.id))} onChange={(e) => setF((s: any) => ({ ...s, homepageSections: s.homepageSections.map((x: any, i: number) => i === index ? { ...x, productIds: e.target.checked ? [...new Set([...(x.productIds || []).map(String), String(product.id)])] : (x.productIds || []).map(String).filter((id: string) => id !== String(product.id)) } : x) }))} />{product.name}</label>; })}</div></details>
-        </div>)}
-        <button type="button" className="sa-btn ghost" style={{ marginTop: 12 }} onClick={() => setF((s: any) => ({ ...s, homepageSections: [...(s.homepageSections || []), { id: `home-${Date.now()}`, title: 'New Collection', category: storeCategories[0]?.slug || '', count: 8, active: true, placement: 'after-story', productIds: [] }] }))}>＋ Add product section</button>
-      </div>}
-
-      {tab === 'app' && <div className="sa-card" style={{ padding: 24, maxWidth: 850, display: 'grid', gap: 14 }}>
-        <h2 style={{ margin: 0, color: '#fff' }}>Private Admin APK</h2><p className="dim">This APK is only accessible to authorized store admins. It is not linked from the customer storefront.</p>
-        <label>App version<input value={f.apkVersion || ''} onChange={set('apkVersion')} placeholder="e.g. 2.4.4" /></label>
-        <label className="sa-btn" style={{ cursor: 'pointer', width: 'fit-content' }}>{uploadingApk ? 'Uploading…' : 'Upload private APK'}<input type="file" accept=".apk,application/vnd.android.package-archive" disabled={uploadingApk} style={{ display: 'none' }} onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; if (!file.name.toLowerCase().endsWith('.apk') || file.size > 50 * 1024 * 1024) { alert('Choose an APK file up to 50 MB.'); return; } setUploadingApk(true); try { const params = new URLSearchParams({ filename: file.name, version: f.apkVersion || '' }); const response = await fetch(`/api/app-apk?${params}`, { method: 'POST', headers: { 'x-admin-token': getTok(), 'Content-Type': 'application/vnd.android.package-archive' }, body: file }); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Upload failed'); setF((s: any) => ({ ...s, apkVersion: result.version, apkStorageName: result.name })); alert('Private APK uploaded successfully.'); } catch (err: any) { alert(err.message || 'APK upload failed'); } finally { setUploadingApk(false); e.target.value = ''; } }} /></label>
-        <button type="button" className="sa-btn ghost" onClick={async () => { try { const response = await aFetch('/admin/app-apk/download'); if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'No APK available'); const url = URL.createObjectURL(await response.blob()); const link = document.createElement('a'); link.href = url; link.download = 'Metrroma-Admin.apk'; link.click(); URL.revokeObjectURL(url); } catch (e: any) { alert(e.message || 'APK download failed'); } }}>Download current private APK</button>
-      </div>}
 
       {tab === 'appearance' && <div className="sa-card sa-appearance-panel">
         <div className="sa-appearance-heading"><div><span className="sa-appearance-eyebrow">STOREFRONT CONTROLS</span><h2>Appearance & Product Layout</h2><p>Choose the shared visual settings for this storefront. Changes apply after saving and refreshing the storefront.</p></div><span className="sa-appearance-chip">Store settings</span></div>
@@ -10726,33 +10763,181 @@ function ColorsAdmin() {
 
 function CategoriesAdmin() {
   const [list, setList] = useState<any[]>([]);
-  const [f, setF] = useState<any>({ name: '', blurb: '', image: '', adult: false });
+  const [products, setProducts] = useState<any[]>([]);
+  const [f, setF] = useState<any>({ name: '', parentSlug: '', blurb: '', image: '', adult: false });
   const [editSlug, setEditSlug] = useState('');
   const [err, setErr] = useState('');
+  const [msg, setMsg] = useState('');
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
-  const load = () => fetch('/api/categories').then((r) => r.json()).then(setList).catch(() => {});
+  const [quickSubInputs, setQuickSubInputs] = useState<Record<string, string>>({});
+  const [quickSubBusy, setQuickSubBusy] = useState<string | null>(null);
+  const [assignModalCat, setAssignModalCat] = useState<any | null>(null);
+  const [assignSelectedIds, setAssignSelectedIds] = useState<string[]>([]);
+  const [assignSearch, setAssignSearch] = useState('');
+  const [assignBusy, setAssignBusy] = useState(false);
+
+  const load = () => {
+    fetch('/api/categories').then((r) => r.json()).then(setList).catch(() => {});
+    fetch('/api/products').then((r) => r.json()).then(setProducts).catch(() => {});
+  };
   useEffect(() => { load(); }, []);
-  const reset = () => { setF({ name: '', blurb: '', image: '', adult: false }); setEditSlug(''); };
+
+  const mainCategories = useMemo(() => list.filter((c) => !c.parentSlug), [list]);
+
+  const reset = () => {
+    setF({ name: '', parentSlug: '', blurb: '', image: '', adult: false });
+    setEditSlug('');
+  };
+
   const save = async () => {
     setErr('');
+    setMsg('');
     try {
       const r = editSlug
         ? await aFetch('/categories/' + editSlug, { method: 'PUT', body: JSON.stringify(f) })
         : await aFetch('/categories', { method: 'POST', body: JSON.stringify(f) });
-      const d = await r.json(); if (!r.ok) throw new Error(d.error); reset(); load();
-    } catch (e: any) { setErr(e.message); }
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      setMsg(editSlug ? `Updated "${d.name}" ✓` : `Created "${d.name}" ✓`);
+      reset();
+      load();
+    } catch (e: any) {
+      setErr(e.message);
+    }
   };
-  const edit = (c: any) => { setEditSlug(c.slug); setF({ name: c.name, blurb: c.blurb || '', image: c.image || '', adult: !!c.adult }); window.scrollTo(0, 0); };
-  const del = async (slug: string) => { if (!confirm('Delete category? Products keep their tag.')) return; await aFetch('/categories/' + slug, { method: 'DELETE' }); if (editSlug === slug) reset(); load(); };
+
+  const handleQuickAddSub = async (parentSlug: string) => {
+    const rawName = (quickSubInputs[parentSlug] || '').trim();
+    if (!rawName) return;
+    setErr('');
+    setMsg('');
+    setQuickSubBusy(parentSlug);
+    try {
+      const r = await aFetch('/categories', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: rawName,
+          parentSlug,
+          adult: isWellnessOrExcludedCategory(parentSlug),
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Could not create sub-category');
+      setQuickSubInputs((prev) => ({ ...prev, [parentSlug]: '' }));
+      setMsg(`Sub-Category "${d.name}" added ✓`);
+      load();
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setQuickSubBusy(null);
+    }
+  };
+
+  const edit = (c: any) => {
+    setEditSlug(c.slug);
+    setF({
+      name: c.name,
+      parentSlug: c.parentSlug || '',
+      blurb: c.blurb || '',
+      image: c.image || '',
+      adult: !!c.adult,
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const del = async (slug: string, name: string) => {
+    if (!confirm(`Delete "${name}" (${slug})?`)) return;
+    await aFetch('/categories/' + slug, { method: 'DELETE' });
+    if (editSlug === slug) reset();
+    load();
+  };
+
+  const openAssignModal = (cat: any) => {
+    const isSub = !!cat.parentSlug;
+    const preselected = products
+      .filter((p) => (isSub ? p.subCategory === cat.slug : p.category === cat.slug))
+      .map((p) => String(p.id));
+    setAssignSelectedIds(preselected);
+    setAssignSearch('');
+    setAssignModalCat(cat);
+  };
+
+  const saveAssignedProducts = async () => {
+    if (!assignModalCat) return;
+    setAssignBusy(true);
+    setErr('');
+    try {
+      const r = await aFetch(`/categories/${assignModalCat.slug}/assign-products`, {
+        method: 'POST',
+        body: JSON.stringify({ productIds: assignSelectedIds }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Could not assign products');
+      setMsg(`Assigned ${assignSelectedIds.length} products to "${assignModalCat.name}" ✓`);
+      setAssignModalCat(null);
+      load();
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setAssignBusy(false);
+    }
+  };
+
   return (
     <>
-      <div className="sa-top"><h1>Categories</h1></div>
-      <div className="sa-card" style={{ padding: 18, marginBottom: 16 }}>
-        {editSlug && <div className="dim small" style={{ marginBottom: 8 }}>Editing <b>{editSlug}</b> · <span className="sa-link" onClick={reset}>cancel</span></div>}
+      <div className="sa-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <h1 style={{ margin: 0 }}>Smart Categories &amp; Sub-Categories</h1>
+          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 4 }}>
+            {mainCategories.length} Main Categories · {list.length - mainCategories.length} Sub-Categories · {products.length} Total Products
+          </div>
+        </div>
+      </div>
+
+      {/* Top Editor / Creator Card */}
+      <div className="sa-card" style={{ padding: 18, marginBottom: 20, border: editSlug ? '1.5px solid #8b5cf6' : undefined }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: '#e2e8f0' }}>
+            {editSlug ? (
+              <>✏️ Editing Category: <span style={{ color: '#a78bfa' }}>{editSlug}</span></>
+            ) : (
+              <>✨ Create Main Category or Sub-Category</>
+            )}
+          </div>
+          {editSlug && (
+            <button type="button" className="sa-btn ghost sa-mini" onClick={reset}>
+              × Cancel Edit
+            </button>
+          )}
+        </div>
+
         <div className="sa-frow" style={{ alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <input placeholder="Category name" value={f.name} onChange={(e) => setF((s: any) => ({ ...s, name: e.target.value }))} style={{ flex: 1.2, minWidth: 160 }} />
-          <input placeholder="blurb (optional)" value={f.blurb} onChange={(e) => setF((s: any) => ({ ...s, blurb: e.target.value }))} style={{ flex: 1, minWidth: 150 }} />
-          <input placeholder="image url" value={f.image} onChange={(e) => setF((s: any) => ({ ...s, image: e.target.value }))} style={{ flex: 1.2, minWidth: 160 }} />
+          <select
+            value={f.parentSlug || ''}
+            onChange={(e) => setF((s: any) => ({ ...s, parentSlug: e.target.value }))}
+            style={{ flex: 1, minWidth: 190, fontWeight: 600 }}
+          >
+            <option value="">🌟 Main Category (Top Level)</option>
+            {mainCategories
+              .filter((mc) => mc.slug !== editSlug)
+              .map((mc) => (
+                <option key={mc.slug} value={mc.slug}>
+                  ↳ Sub-Category under: {mc.name}
+                </option>
+              ))}
+          </select>
+          <input
+            placeholder={f.parentSlug ? 'Sub-Category Name (e.g. Sunscreen & Sun Care)' : 'Main Category Name (e.g. Beauty Care)'}
+            value={f.name}
+            onChange={(e) => setF((s: any) => ({ ...s, name: e.target.value }))}
+            style={{ flex: 1.3, minWidth: 180 }}
+          />
+          <input
+            placeholder="Short description / blurb (optional)"
+            value={f.blurb}
+            onChange={(e) => setF((s: any) => ({ ...s, blurb: e.target.value }))}
+            style={{ flex: 1.2, minWidth: 160 }}
+          />
           <button
             type="button"
             className="sa-btn primary"
@@ -10760,11 +10945,16 @@ function CategoriesAdmin() {
             onClick={() => setMediaPickerOpen(true)}
           >
             <span>🖼️</span>
-            <span>{f.image ? 'Change Photo' : 'Select Photo (Media Library)'}</span>
+            <span>{f.image ? 'Change Photo' : 'Photo'}</span>
           </button>
-          <label className="sa-chk" style={{ whiteSpace: 'nowrap' }}><input type="checkbox" checked={f.adult} onChange={(e) => setF((s: any) => ({ ...s, adult: e.target.checked }))} /> 18+</label>
-          <button className="sa-btn" onClick={save} style={{ padding: '9px 18px' }}>{editSlug ? 'Update' : 'Add'}</button>
+          <label className="sa-chk" style={{ whiteSpace: 'nowrap' }} title="18+ or Private No-SEO Category">
+            <input type="checkbox" checked={f.adult} onChange={(e) => setF((s: any) => ({ ...s, adult: e.target.checked }))} /> 18+ / No-SEO
+          </label>
+          <button className="sa-btn" onClick={save} style={{ padding: '9px 20px', fontWeight: 700 }}>
+            {editSlug ? 'Update Category' : '+ Add Category'}
+          </button>
         </div>
+
         {f.image && (
           <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
             <img src={f.image} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }} />
@@ -10777,6 +10967,7 @@ function CategoriesAdmin() {
           </div>
         )}
         {err && <div className="err2" style={{ marginTop: 8 }}>{err}</div>}
+        {msg && <div style={{ marginTop: 8, color: '#34d399', fontSize: 13, fontWeight: 600 }}>{msg}</div>}
       </div>
 
       {mediaPickerOpen && (
@@ -10790,10 +10981,243 @@ function CategoriesAdmin() {
           onClose={() => setMediaPickerOpen(false)}
         />
       )}
-      <div className="sa-card">
-        <table className="sa-table"><thead><tr><th>Category</th><th>Slug</th><th>Type</th><th className="r">Actions</th></tr></thead>
-          <tbody>{list.map((c) => <tr key={c.slug}><td className="pcell">{c.image ? <img src={c.image} alt="" style={{ width: 34, height: 34, objectFit: 'cover', borderRadius: 6 }} /> : null}<span className="pn">{c.name}</span></td><td className="dim">{c.slug}</td><td>{c.adult ? <span className="sa-badge b-adult">18+</span> : <span className="sa-badge b-ok">normal</span>}</td><td className="r"><button className="sa-link" onClick={() => edit(c)}>Edit</button><button className="sa-link danger" onClick={() => del(c.slug)}>Delete</button></td></tr>)}</tbody></table>
+
+      {/* Smart Visual Tree Cards: Each Main Category + Its Sub-Categories */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {mainCategories.map((mc) => {
+          const subCats = list.filter((sc) => sc.parentSlug === mc.slug);
+          const mainProds = products.filter((p) => p.category === mc.slug);
+          const isLocked = isWellnessOrExcludedCategory(mc.slug) || mc.noIndex || mc.seoExclude || mc.adult;
+          return (
+            <div
+              key={mc.slug}
+              className="sa-card"
+              style={{
+                padding: 18,
+                border: isLocked ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
+              }}
+            >
+              {/* Main Category Header Row */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, paddingBottom: 14, borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {mc.image ? (
+                    <img src={mc.image} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)' }} />
+                  ) : (
+                    <div style={{ width: 46, height: 46, borderRadius: 10, background: 'rgba(139,92,246,0.15)', display: 'grid', placeItems: 'center', fontSize: 20 }}>🗂️</div>
+                  )}
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{mc.name}</span>
+                      <span style={{ fontSize: 11.5, color: '#94a3b8', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: 6 }}>/{mc.slug}</span>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#c4b5fd', background: 'rgba(139, 92, 246, 0.18)', padding: '2px 9px', borderRadius: 99 }}>
+                        {mainProds.length} Products
+                      </span>
+                      <span style={{ fontSize: 11.5, fontWeight: 600, color: '#93c5fd', background: 'rgba(59, 130, 246, 0.15)', padding: '2px 9px', borderRadius: 99 }}>
+                        {subCats.length} Sub-Categories
+                      </span>
+                      {isLocked ? (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#fca5a5', background: 'rgba(239, 68, 68, 0.18)', padding: '2px 9px', borderRadius: 99, border: '1px solid rgba(239,68,68,0.35)' }}>
+                          🔒 Private · SEO Blocked
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#6ee7b7', background: 'rgba(16, 185, 129, 0.15)', padding: '2px 9px', borderRadius: 99 }}>
+                          🟢 SEO &amp; AI Indexed
+                        </span>
+                      )}
+                    </div>
+                    {mc.blurb && <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 4 }}>{mc.blurb}</div>}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <button
+                    type="button"
+                    className="sa-btn ghost sa-mini"
+                    onClick={() => openAssignModal(mc)}
+                    style={{ fontSize: 12, padding: '6px 11px' }}
+                  >
+                    📦 Assign Products
+                  </button>
+                  <button className="sa-link" onClick={() => edit(mc)}>Edit Main</button>
+                  <button className="sa-link danger" onClick={() => del(mc.slug, mc.name)}>Delete</button>
+                </div>
+              </div>
+
+              {/* Sub-Categories List + Instant Quick-Add Bar */}
+              <div style={{ marginTop: 14 }}>
+                {subCats.length > 0 ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 10, marginBottom: 12 }}>
+                    {subCats.map((sc) => {
+                      const subCount = products.filter((p) => p.subCategory === sc.slug).length;
+                      return (
+                        <div
+                          key={sc.slug}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: 10,
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            border: '1px solid rgba(255, 255, 255, 0.07)',
+                            borderRadius: 10,
+                            padding: '10px 12px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                            {sc.image ? (
+                              <img src={sc.image} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
+                            ) : (
+                              <span style={{ color: '#a78bfa', fontWeight: 700, fontSize: 14 }}>↳</span>
+                            )}
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 13.5, fontWeight: 600, color: '#f1f5f9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {sc.name}
+                              </div>
+                              <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                                <span style={{ color: '#34d399', fontWeight: 700 }}>{subCount} items</span> · /{sc.slug}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                            <button
+                              type="button"
+                              onClick={() => openAssignModal(sc)}
+                              title="Select products for this Sub-Category"
+                              style={{
+                                background: 'rgba(139, 92, 246, 0.16)',
+                                border: '1px solid rgba(139, 92, 246, 0.35)',
+                                color: '#ddd6fe',
+                                fontSize: 11,
+                                fontWeight: 600,
+                                padding: '4px 8px',
+                                borderRadius: 6,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              📦 Assign ({subCount})
+                            </button>
+                            <button className="sa-link" style={{ fontSize: 12 }} onClick={() => edit(sc)}>Edit</button>
+                            <button className="sa-link danger" style={{ fontSize: 12 }} onClick={() => del(sc.slug, sc.name)}>×</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 10 }}>
+                    No sub-categories yet under <b>{mc.name}</b>. Add one below in 1 click:
+                  </div>
+                )}
+
+                {/* Instant 1-Click Sub-Category Creator */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', maxWidth: 480 }}>
+                  <input
+                    placeholder={`+ Quick add sub-category under ${mc.name} (press Enter)...`}
+                    value={quickSubInputs[mc.slug] || ''}
+                    onChange={(e) => setQuickSubInputs((prev) => ({ ...prev, [mc.slug]: e.target.value }))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleQuickAddSub(mc.slug);
+                      }
+                    }}
+                    style={{ flex: 1, fontSize: 12.5, padding: '7px 12px', background: 'rgba(0,0,0,0.25)' }}
+                  />
+                  <button
+                    type="button"
+                    className="sa-btn ghost sa-mini"
+                    disabled={quickSubBusy === mc.slug || !(quickSubInputs[mc.slug] || '').trim()}
+                    onClick={() => handleQuickAddSub(mc.slug)}
+                    style={{ whiteSpace: 'nowrap', padding: '7px 14px', fontSize: 12, fontWeight: 600, color: '#34d399', borderColor: 'rgba(52, 211, 153, 0.35)' }}
+                  >
+                    {quickSubBusy === mc.slug ? 'Adding…' : '+ Add Sub'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
+
+      {/* Smart Bulk Product Assign Modal */}
+      {assignModalCat && (
+        <div className="sa-modal-wrap" onClick={() => setAssignModalCat(null)}>
+          <div className="sa-modal" style={{ width: 'min(680px, 96%)', maxHeight: '88vh' }} onClick={(e) => e.stopPropagation()}>
+            <div className="sa-modal-h" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: '#120f21' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16 }}>
+                  📦 Assign Products to: <span style={{ color: '#a78bfa' }}>{assignModalCat.name}</span>
+                </h3>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
+                  Tick products below to place them inside <b>{assignModalCat.name}</b> ({assignSelectedIds.length} selected)
+                </div>
+              </div>
+              <button className="x" onClick={() => setAssignModalCat(null)} style={{ background: 'none', border: 'none', color: '#cbd5e1', fontSize: 22, cursor: 'pointer' }}>×</button>
+            </div>
+
+            <div className="sa-modal-b" style={{ padding: 18, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <input
+                placeholder="🔍 Search products by name..."
+                value={assignSearch}
+                onChange={(e) => setAssignSearch(e.target.value)}
+                style={{ fontSize: 13.5 }}
+              />
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '52vh', overflowY: 'auto', paddingRight: 4 }}>
+                {products
+                  .filter((p) => {
+                    if (assignModalCat.parentSlug && p.category !== assignModalCat.parentSlug && !assignSearch.trim()) {
+                      return false;
+                    }
+                    if (!assignSearch.trim()) return true;
+                    return (p.name || '').toLowerCase().includes(assignSearch.trim().toLowerCase());
+                  })
+                  .map((p) => {
+                    const checked = assignSelectedIds.includes(String(p.id));
+                    return (
+                      <label
+                        key={p.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          padding: '8px 12px',
+                          borderRadius: 8,
+                          background: checked ? 'rgba(139, 92, 246, 0.16)' : 'rgba(255,255,255,0.03)',
+                          border: checked ? '1px solid rgba(139, 92, 246, 0.45)' : '1px solid rgba(255,255,255,0.06)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            const pid = String(p.id);
+                            setAssignSelectedIds((prev) =>
+                              e.target.checked ? [...prev, pid] : prev.filter((id) => id !== pid)
+                            );
+                          }}
+                        />
+                        {p.image && <img src={p.image} alt="" style={{ width: 34, height: 34, borderRadius: 6, objectFit: 'cover' }} />}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                          <div style={{ fontSize: 11, color: '#94a3b8' }}>৳{p.price} · Main: {p.category} {p.subCategory ? `· Sub: ${p.subCategory}` : ''}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                <button type="button" className="sa-btn ghost" onClick={() => setAssignModalCat(null)}>Cancel</button>
+                <button type="button" className="sa-btn primary" disabled={assignBusy} onClick={saveAssignedProducts} style={{ background: '#8b5cf6', borderColor: '#8b5cf6', fontWeight: 700 }}>
+                  {assignBusy ? 'Saving…' : `✓ Save (${assignSelectedIds.length} Products)`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -10917,6 +11341,13 @@ function LandingsAdmin() {
       aliases: [],
       status: 'live',
       freeDelivery: true,
+      deliveryInside: 70,
+      deliveryOutside: 120,
+      deliveryBannerText: '',
+      themeColor: '#CB202D',
+      buttonColor: '#E02836',
+      pageBgColor: '#FAF7F8',
+      colors: [],
       badgeTop: '১০০% অরিজিনাল প্রিমিয়াম কোয়ালিটি নিশ্চিত',
       badgeGuarantee: 'একমাত্র আমরাই দিচ্ছি ৩ দিনের রিপ্লেসমেন্ট গ্যারান্টি',
       headline: 'ম্যাজিক লাভ লক কনডম',
@@ -11055,8 +11486,8 @@ function LandingsAdmin() {
                 </span>
               </h1>
               <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
-                Slug: <code>/step/{f.slug}</code> &nbsp;·&nbsp;
-                <a href={`/step/${f.slug}`} target="_blank" rel="noreferrer" style={{ color: '#a78bfa', textDecoration: 'none' }}>
+                URL: <code>/page/{f.slug}</code> &nbsp;·&nbsp;
+                <a href={`/page/${f.slug}`} target="_blank" rel="noreferrer" style={{ color: '#a78bfa', textDecoration: 'none' }}>
                   Open live preview ↗
                 </a>
               </div>
@@ -11150,7 +11581,7 @@ function LandingsAdmin() {
                   URL slug
                 </label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 13, color: '#94a3b8' }}>/step/</span>
+                  <span style={{ fontSize: 13, color: '#94a3b8' }}>/page/</span>
                   <input
                     value={f.slug || ''}
                     onChange={(e) => setF((s: any) => ({ ...s, slug: slugify(e.target.value) }))}
@@ -11159,7 +11590,7 @@ function LandingsAdmin() {
                   />
                 </div>
                 <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-                  This page will be available at <code>/step/{f.slug || 'lovelock'}</code> and <code>/page/{f.slug || 'lovelock'}</code>.
+                  This landing page will open exclusively at <code>/page/{f.slug || 'lovelock'}</code>.
                 </div>
               </div>
 
@@ -11222,6 +11653,128 @@ function LandingsAdmin() {
                   placeholder="3-day replacement guarantee"
                   style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                 />
+              </div>
+            </div>
+
+            <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.08)', margin: '24px 0' }} />
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>🎨</span>
+                  <span>Landing Page Color &amp; Theme Customizer</span>
+                </h3>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
+                  Pick a 1-click preset or choose custom colors for banners, headlines, buttons, and background.
+                </div>
+              </div>
+              <button
+                type="button"
+                className="sa-btn ghost"
+                style={{ fontSize: 12, padding: '6px 12px' }}
+                onClick={() => setF((s: any) => ({ ...s, themeColor: '#CB202D', buttonColor: '#E02836', pageBgColor: '#FAF7F8' }))}
+              >
+                ↺ Reset Default Colors
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
+              {[
+                { name: 'Crimson Red', theme: '#CB202D', btn: '#E02836', bg: '#FAF7F8' },
+                { name: 'Royal Purple', theme: '#6D28D9', btn: '#7C3AED', bg: '#F8F7FC' },
+                { name: 'Emerald Green', theme: '#047857', btn: '#059669', bg: '#F4FBF8' },
+                { name: 'Midnight Blue', theme: '#1E40AF', btn: '#2563EB', bg: '#F5F8FF' },
+                { name: 'Rose Pink', theme: '#BE185D', btn: '#DB2777', bg: '#FDF6F9' },
+                { name: 'Luxury Gold', theme: '#B45309', btn: '#D97706', bg: '#FCF9F3' },
+                { name: 'Modern Teal', theme: '#0F766E', btn: '#0D9488', bg: '#F3FAF9' },
+                { name: 'Obsidian Black', theme: '#18181B', btn: '#DC2626', bg: '#F8FAFC' }
+              ].map((preset) => {
+                const isActive = (f.themeColor || '#CB202D').toLowerCase() === preset.theme.toLowerCase();
+                return (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => setF((s: any) => ({ ...s, themeColor: preset.theme, buttonColor: preset.btn, pageBgColor: preset.bg }))}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '7px 13px',
+                      borderRadius: 999,
+                      background: isActive ? 'rgba(139, 92, 246, 0.2)' : '#13111f',
+                      border: isActive ? '1.5px solid #a855f7' : '1px solid rgba(255,255,255,0.12)',
+                      color: '#f8fafc',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <span style={{ width: 14, height: 14, borderRadius: '50%', background: preset.theme, border: '1px solid rgba(255,255,255,0.5)' }} />
+                    <span>{preset.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+              <div style={{ background: '#13111f', padding: 14, borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)' }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 8 }}>
+                  Primary Theme &amp; Banner Color
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input
+                    type="color"
+                    value={f.themeColor || '#CB202D'}
+                    onChange={(e) => setF((s: any) => ({ ...s, themeColor: e.target.value }))}
+                    style={{ width: 42, height: 38, padding: 0, border: 'none', borderRadius: 6, background: 'transparent', cursor: 'pointer' }}
+                  />
+                  <input
+                    value={f.themeColor || '#CB202D'}
+                    onChange={(e) => setF((s: any) => ({ ...s, themeColor: e.target.value }))}
+                    placeholder="#CB202D"
+                    style={{ flex: 1, padding: '8px 10px', background: '#0b0914', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, fontSize: 13 }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ background: '#13111f', padding: 14, borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)' }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 8 }}>
+                  Order CTA Button Color
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input
+                    type="color"
+                    value={f.buttonColor || f.themeColor || '#E02836'}
+                    onChange={(e) => setF((s: any) => ({ ...s, buttonColor: e.target.value }))}
+                    style={{ width: 42, height: 38, padding: 0, border: 'none', borderRadius: 6, background: 'transparent', cursor: 'pointer' }}
+                  />
+                  <input
+                    value={f.buttonColor || f.themeColor || '#E02836'}
+                    onChange={(e) => setF((s: any) => ({ ...s, buttonColor: e.target.value }))}
+                    placeholder="#E02836"
+                    style={{ flex: 1, padding: '8px 10px', background: '#0b0914', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, fontSize: 13 }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ background: '#13111f', padding: 14, borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)' }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 8 }}>
+                  Page Background Color
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input
+                    type="color"
+                    value={f.pageBgColor || '#FAF7F8'}
+                    onChange={(e) => setF((s: any) => ({ ...s, pageBgColor: e.target.value }))}
+                    style={{ width: 42, height: 38, padding: 0, border: 'none', borderRadius: 6, background: 'transparent', cursor: 'pointer' }}
+                  />
+                  <input
+                    value={f.pageBgColor || '#FAF7F8'}
+                    onChange={(e) => setF((s: any) => ({ ...s, pageBgColor: e.target.value }))}
+                    placeholder="#FAF7F8"
+                    style={{ flex: 1, padding: '8px 10px', background: '#0b0914', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, fontSize: 13 }}
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -11341,16 +11894,16 @@ function LandingsAdmin() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>
-                  Video file URL (MP4 or web link)
+                  Video URL (MP4 file, YouTube, YouTube Shorts, or Facebook Video)
                 </label>
                 <input
                   value={f.videoUrl || ''}
                   onChange={(e) => setF((s: any) => ({ ...s, videoUrl: e.target.value }))}
-                  placeholder="/landing/lovelock-video.mp4"
+                  placeholder="/landing/lovelock-video.mp4 or https://youtube.com/shorts/..."
                   style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                 />
                 <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-                  Use a local file such as <code>/landing/lovelock-video.mp4</code> or a direct video URL.
+                  Supports direct MP4 (<code>/landing/lovelock-video.mp4</code>), YouTube Watch/Share links, <strong>YouTube Shorts</strong> (<code>https://youtube.com/shorts/...</code>), and Facebook videos.
                 </div>
               </div>
 
@@ -11408,18 +11961,60 @@ function LandingsAdmin() {
                 </div>
               </div>
 
-              <div style={{ marginTop: 10, padding: 14, background: '#151224', borderRadius: 8, border: '1px solid rgba(139, 92, 246, 0.25)' }}>
+              <div style={{ marginTop: 10, padding: 16, background: '#151224', borderRadius: 10, border: '1px solid rgba(139, 92, 246, 0.25)' }}>
                 <label className="sa-chk" style={{ cursor: 'pointer', color: '#f8fafc', fontSize: 14, display: 'inline-flex', alignItems: 'center' }}>
                   <input
                     type="checkbox"
                     checked={f.freeDelivery !== false}
                     onChange={(e) => setF((s: any) => ({ ...s, freeDelivery: e.target.checked }))}
                   />
-                  &nbsp; <strong>Enable free nationwide delivery (৳0 delivery charge)</strong>
+                  &nbsp; <strong>Enable Free Nationwide Delivery (৳0 delivery charge)</strong>
                 </label>
                 <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4, paddingLeft: 22 }}>
-                  Orders from this landing page will have a ৳0 delivery charge when this option is enabled.
+                  {f.freeDelivery !== false
+                    ? 'Orders from this landing page will have ৳0 delivery charge across Bangladesh.'
+                    : 'Free delivery is OFF. Customers will choose Inside Dhaka or Outside Dhaka delivery charge at checkout.'}
                 </div>
+
+                {f.freeDelivery === false && (
+                  <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
+                        🚚 Inside Dhaka Delivery Charge (৳)
+                      </label>
+                      <input
+                        type="number"
+                        value={f.deliveryInside ?? 70}
+                        onChange={(e) => setF((s: any) => ({ ...s, deliveryInside: Math.max(0, parseInt(e.target.value, 10) || 0) }))}
+                        placeholder="70"
+                        style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6 }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
+                        🚚 Outside Dhaka Delivery Charge (৳)
+                      </label>
+                      <input
+                        type="number"
+                        value={f.deliveryOutside ?? 120}
+                        onChange={(e) => setF((s: any) => ({ ...s, deliveryOutside: Math.max(0, parseInt(e.target.value, 10) || 0) }))}
+                        placeholder="120"
+                        style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6 }}
+                      />
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
+                        Delivery CTA Banner Text (Optional)
+                      </label>
+                      <input
+                        value={f.deliveryBannerText || ''}
+                        onChange={(e) => setF((s: any) => ({ ...s, deliveryBannerText: e.target.value }))}
+                        placeholder={`সারা বাংলাদেশে ক্যাশ অন ডেলিভারি (ঢাকায় ৳${f.deliveryInside ?? 70}, ঢাকার বাইরে ৳${f.deliveryOutside ?? 120})`}
+                        style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6 }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -11667,6 +12262,24 @@ function LandingsAdmin() {
               {(!f.packages || f.packages.length === 0) && (
                 <div className="sa-empty">No packages have been added yet.</div>
               )}
+            </div>
+
+            <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.08)', margin: '24px 0' }} />
+
+            <div>
+              <h4 style={{ margin: '0 0 6px', fontSize: 15, color: '#f8fafc' }}>Product Color / Variant Selector (Optional)</h4>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 10 }}>
+                If customers need to choose a product color or variant on the checkout card, enter comma-separated options below (leave blank to hide).
+              </div>
+              <input
+                value={Array.isArray(f.colors) ? f.colors.join(', ') : (f.colors || '')}
+                onChange={(e) => setF((s: any) => ({
+                  ...s,
+                  colors: e.target.value.split(',').map((x: string) => x.trim()).filter(Boolean)
+                }))}
+                placeholder="e.g. Black, Red, Rose Gold, Transparent"
+                style={{ width: '100%', padding: '10px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
+              />
             </div>
           </div>
         )}
@@ -12324,27 +12937,10 @@ function LandingsAdmin() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <a
-                          href={`/step/${item.slug}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{ fontSize: 12, color: '#38bdf8', textDecoration: 'none' }}
-                        >
-                          /step/{item.slug} ↗
-                        </a>
-                        <button
-                          className="sa-link"
-                          style={{ fontSize: 11 }}
-                          onClick={() => copyUrl(`/step/${item.slug}`)}
-                        >
-                          Copy
-                        </button>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <a
                           href={`/page/${item.slug}`}
                           target="_blank"
                           rel="noreferrer"
-                          style={{ fontSize: 12, color: '#94a3b8', textDecoration: 'none' }}
+                          style={{ fontSize: 12, color: '#38bdf8', textDecoration: 'none', fontWeight: 600 }}
                         >
                           /page/{item.slug} ↗
                         </a>
@@ -13718,8 +14314,8 @@ function StaffAdmin() {
               <input type="email" autoComplete="new-password" name="staff_email" placeholder="e.g. tanvir@gmail.com" value={f.email} onChange={(e) => setF((s: any) => ({ ...s, email: e.target.value }))} />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#cbd5e1' }}>
-              Password (min. 8 chars) *
-              <input type="password" autoComplete="new-password" name="staff_pwd" placeholder="Create temporary password" minLength={8} value={f.password} onChange={(e) => setF((s: any) => ({ ...s, password: e.target.value }))} required />
+              Password (min. 4 chars) *
+              <input type="password" autoComplete="new-password" name="staff_pwd" placeholder="Create temporary password" value={f.password} onChange={(e) => setF((s: any) => ({ ...s, password: e.target.value }))} required />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#cbd5e1' }}>
               Role &amp; Permissions *
@@ -13896,7 +14492,7 @@ function StaffAdmin() {
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13, color: '#cbd5e1' }}>
                 Update Password <span className="dim">(leave blank to keep current)</span>
-                <input type="password" value={editUser.password || ''} onChange={(e) => setEditUser((s: any) => ({ ...s, password: e.target.value }))} placeholder="New password (min 8 characters)" minLength={8} />
+                <input type="password" value={editUser.password || ''} onChange={(e) => setEditUser((s: any) => ({ ...s, password: e.target.value }))} placeholder="New password" />
               </label>
 
               {/* Product permissions in edit modal */}
@@ -13960,12 +14556,12 @@ function StaffAdmin() {
                 <input type="password" value={curPw} onChange={(e) => setCurPw(e.target.value)} placeholder="Enter current master password" />
               </label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#cbd5e1' }}>
-                New Password (min 8 chars)
-                <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="Enter new password" minLength={8} />
+                New Password (min 4 chars)
+                <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="Enter new password" />
               </label>
               {pwErr && <div className="err2">{pwErr}</div>}
               {pwMsg && <div style={{ color: '#4ade80', fontSize: 13 }}>{pwMsg}</div>}
-              <button className="sa-btn full" disabled={pwBusy || !curPw || newPw.length < 8} onClick={changePw} style={{ marginTop: 8 }}>
+              <button className="sa-btn full" disabled={pwBusy || !curPw || newPw.length < 4} onClick={changePw} style={{ marginTop: 8 }}>
                 {pwBusy ? 'Updating…' : 'Update Password'}
               </button>
             </div>

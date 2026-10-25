@@ -104,20 +104,10 @@ function parseRoute() {
     } catch {}
   }
 
-  // 2. Parse FIRST from pathname: e.g. /product/item, /shop/category, /checkout, /track, /wp-admin
+  // 2. Parse FIRST from pathname: e.g. /product/item, /shop/category, /page/slug, /checkout, /track, /wp-admin
   const pathParts = location.pathname.split('/').filter(Boolean);
   if (pathParts.length > 0) {
     const n = normalize(pathParts[0]);
-    // Direct product slug shortcuts & campaign links (e.g. from Facebook Ads)
-    if (n === 'love-forever' || n === 'love-forever-gift-box' || n === 'gift-box') {
-      return { name: 'product', param: 'love-forever-gift-box' };
-    }
-    if (n === 'double-poly-sunglass' || n === 'double-poly-polarized-sunglass' || n === 'sunglass-poly') {
-      return { name: 'product', param: 'double-poly-polarized-sunglass' };
-    }
-    if (n === 'landing' && (pathParts[1] === 'love-forever' || pathParts[1] === 'love-forever-gift-box')) {
-      return { name: 'product', param: 'love-forever-gift-box' };
-    }
     return { name: n, param: pathParts.slice(1).join('/') };
   }
 

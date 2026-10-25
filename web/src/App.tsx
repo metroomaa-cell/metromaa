@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { CartProvider, useCart, useRoute, go } from './cart';
-import { taka, getSettings, isSkincareSite, getCategories } from './api';
+import { taka, getSettings, isSkincareSite, getCategories, isWellnessOrExcludedCategory } from './api';
 import { initGTM, initFB, dl, trackEngagement, initInteractionTracking } from './analytics';
 import { Home, Shop, ProductPage, Checkout, Confirm, Track, SearchOverlay, InfoPage } from './pages';
 import { CustomerProvider, useCustomer, CustomerHeaderIcon, CustomerAccountPage } from './CustomerAccount';
@@ -34,17 +34,6 @@ function Effects() {
     }
     getSettings().then((s) => {
       setStoreCopyOverrides(s.siteContent?.textOverrides);
-      if (s.appearance) {
-        const root = document.documentElement;
-        const accent = s.appearance.accent || '#b48e4c';
-        root.style.setProperty('--store-accent', accent);
-        root.style.setProperty('--glow', accent);
-        root.style.setProperty('--tabaya-accent', accent);
-        root.style.setProperty('--store-columns-desktop', String(s.appearance.desktopColumns || 4));
-        root.style.setProperty('--store-columns-mobile', String(s.appearance.mobileColumns || 2));
-        root.style.setProperty('--store-image-fit', s.appearance.imageFit || 'contain');
-        root.style.setProperty('--store-font', s.appearance.font || 'Inter');
-      }
       if (!isAdmin && !isLocalPreview) {
         if (s.gtmId) initGTM(s.gtmId);
         if (s.fbPixelId) initFB(s.fbPixelId);
@@ -88,12 +77,46 @@ function Effects() {
     let active = true;
     const isSkin = isSkincareSite();
     const defaultBrand = isSkin ? 'SECRATE' : 'METRROMA';
+
+    const setMetaName = (name: string, val: string) => {
+      let m = document.head.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
+      if (!m) {
+        m = document.createElement('meta');
+        m.setAttribute('name', name);
+        document.head.appendChild(m);
+      }
+      m.setAttribute('content', val);
+    };
+    const setCanonical = (href: string) => {
+      let c = document.head.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+      if (!c) {
+        c = document.createElement('link');
+        c.setAttribute('rel', 'canonical');
+        document.head.appendChild(c);
+      }
+      c.setAttribute('href', href);
+    };
+
+    const isNoIndexRoute =
+      ['admin', 'checkout', 'confirm', 'track', 'account'].includes(route.name) ||
+      (route.name === 'shop' && isWellnessOrExcludedCategory(route.param));
+
+    if (route.name !== 'product') {
+      if (isNoIndexRoute) {
+        setMetaName('robots', 'noindex, nofollow, noarchive, nosnippet, noimageindex');
+        setMetaName('googlebot', 'noindex, nofollow, noarchive, nosnippet, noimageindex');
+      } else {
+        setMetaName('robots', 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');
+        setMetaName('googlebot', 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');
+      }
+    }
+
     getSettings().then((s) => {
       const brand = s.storeName && s.storeName !== 'dot.' ? s.storeName : defaultBrand;
       const t: any = isSkin
         ? {
-            home: `${brand} | Skincare & Self-Care Essentials`,
-            shop: `All Skincare & Beauty — ${brand}`,
+            home: `${brand} Bangladesh | Skincare, Beauty & Self-Care Products`,
+            shop: `Shop Skincare, Makeup, Hair Care & Personal Care in Bangladesh | ${brand}`,
             track: `Track Your Order — ${brand}`,
             checkout: `Checkout (Cash on Delivery) — ${brand}`,
             confirm: `Order Placed Successfully — ${brand}`,
@@ -113,26 +136,49 @@ function Effects() {
         getCategories().then((categories) => {
           if (!active) return;
           const category = categories.find((item) => item.slug === route.param);
-          document.title = `${category?.name || (isSkin ? 'Shop Skincare' : 'Collection')} — ${brand}`;
+          if (isWellnessOrExcludedCategory(route.param) || category?.noIndex || category?.seoExclude || category?.adult) {
+            document.title = brand;
+            setMetaName('robots', 'noindex, nofollow, noarchive, nosnippet, noimageindex');
+            setMetaName('googlebot', 'noindex, nofollow, noarchive, nosnippet, noimageindex');
+            setMetaName('description', brand);
+            setMetaName('keywords', '');
+          } else {
+            document.title = category?.seoTitle || `Shop ${category?.name || 'Skincare'} Online in Bangladesh | ${brand}`;
+            setMetaName('description', category?.seoDesc || `Browse ${category?.name || 'Skincare'} products in Bangladesh at ${brand}. Cash on Delivery across Bangladesh.`);
+            setMetaName('keywords', category?.seoKeywords || `${(category?.name || 'skincare').toLowerCase()} bangladesh, ${(category?.name || 'skincare').toLowerCase()} price in bd, ${brand.toLowerCase()}`);
+            setCanonical(`${window.location.origin}/shop/${route.param}`);
+          }
         }).catch(() => {
           if (active) document.title = `${isSkin ? 'Shop Skincare' : 'Collection'} — ${brand}`;
         });
       } else if (route.name !== 'product') {
         document.title = t[route.name] || brand;
+        if (!isNoIndexRoute) {
+          setCanonical(`${window.location.origin}${route.name === 'home' ? '/' : '/' + route.name}`);
+        }
       }
     }).catch(() => {
       if (route.name === 'shop' && route.param) {
         if (active) document.title = `${isSkin ? 'Shop Skincare' : 'Collection'} — ${defaultBrand}`;
       } else if (route.name !== 'product') {
-        document.title = isSkin ? 'SECRATE | Skincare & Self-Care' : 'METRROMA | Modern Lifestyle, Watches & Gifts';
+        document.title = isSkin ? 'SECRATE Bangladesh | Skincare & Self-Care' : 'METRROMA | Modern Lifestyle, Watches & Gifts';
       }
     });
 
-    let md = document.querySelector('meta[name="description"]') as HTMLMetaElement | null;
-    if (!md) { md = document.createElement('meta'); md.name = 'description'; document.head.appendChild(md); }
-    md.content = isSkin
-      ? 'Skincare, beauty and self-care products from a range of brands, delivered across Bangladesh with cash on delivery.'
-      : 'Premium sunglasses, authentic watches, handcrafted gift boxes & curated lifestyle essentials delivered across Bangladesh with cash on delivery.';
+    if (route.name !== 'product' && !(route.name === 'shop' && route.param)) {
+      setMetaName(
+        'description',
+        isSkin
+          ? 'Skincare, beauty and self-care products from a range of brands, delivered across Bangladesh with cash on delivery.'
+          : 'Watches, sunglasses, and gift collections delivered across Bangladesh with cash on delivery.'
+      );
+      setMetaName(
+        'keywords',
+        isSkin
+          ? 'skincare bangladesh, beauty products bd, self-care products, secrate bangladesh'
+          : 'metrroma bangladesh, watches bd, sunglasses bd'
+      );
+    }
     return () => { active = false; };
   }, [route.name, route.param]);
   useEffect(() => {
@@ -161,12 +207,7 @@ function AnnouncementBar() {
   useEffect(() => {
     getSettings().then((s) => {
       if (s.announce && s.announce.trim()) {
-        const threshold = s.freeShipThreshold ? taka(s.freeShipThreshold) : 'Tk 2,500';
-        const alignedAnnouncement = s.announce.trim().replace(
-          /(FREE (?:SHIPPING|DELIVERY)(?: ON ORDERS)? (?:OVER|ABOVE)\s*)(?:৳|Tk)?\s*[\d,]+/i,
-          `$1${threshold}`,
-        );
-        setAnnounce(alignedAnnouncement.replace(/100%\s+AUTHENTIC[^·]*/i, isSkin ? 'PRODUCT DETAILS AVAILABLE' : 'CURATED LIFESTYLE & GIFTS'));
+        setAnnounce(s.announce.trim().replace(/100%\s+AUTHENTIC[^·]*/gi, isSkin ? 'PRODUCT DETAILS AVAILABLE' : 'CURATED LIFESTYLE & GIFTS'));
       } else {
         const threshold = s.freeShipThreshold ? taka(s.freeShipThreshold) : '৳2,500';
         setAnnounce(
@@ -201,15 +242,17 @@ function Header({ onSearch }: { onSearch: () => void }) {
   const isSkin = isSkincareSite();
   const [storeName, setStoreName] = useState(isSkin ? 'SECRATE' : 'METRROMA');
   const [logo, setLogo] = useState('');
-  const [cats, setCats] = useState<{ slug: string; name: string }[]>([]);
+  const [cats, setCats] = useState<{ slug: string; name: string; parentSlug?: string }[]>([]);
+  const [expandedMobileCat, setExpandedMobileCat] = useState<string | null>(null);
+  const [hoveredMainCat, setHoveredMainCat] = useState<string | null>(null);
   const route = useRoute();
-  const nav = (p: string) => { go(p); setMenu(false); };
+  const nav = (p: string) => { go(p); setMenu(false); setHoveredMainCat(null); };
 
   useEffect(() => {
     getSettings().then((s) => {
       if (s.storeName && s.storeName !== 'dot.') setStoreName(s.storeName);
       else if (s.storeName === 'dot.' && isSkin) setStoreName('SECRATE');
-      if (s.logo) setLogo(s.logo);
+      setLogo(s.logo || '');
     }).catch(() => {});
     getCategories().then((cs) => {
       if (Array.isArray(cs)) setCats(cs);
@@ -229,15 +272,9 @@ function Header({ onSearch }: { onSearch: () => void }) {
     return () => document.removeEventListener('click', onDocClick);
   }, []);
 
-  const visibleCats = cats.slice(0, 2);
-  const dropdownCats = cats.slice(2);
-
-  const navLinks = [
-    { label: 'Home', path: 'home' },
-    { label: isSkin ? 'All Skincare' : 'All Collections', path: 'shop' },
-    ...cats.map((c) => ({ label: c.name, path: 'shop/' + c.slug })),
-    { label: 'Track Order', path: 'track' },
-  ];
+  const mainCats = cats.filter((c) => !c.parentSlug);
+  const visibleCats = mainCats.slice(0, 3);
+  const dropdownCats = mainCats.slice(3);
 
   return (
     <>
@@ -251,19 +288,23 @@ function Header({ onSearch }: { onSearch: () => void }) {
               onClick={() => setMenu(true)}
               aria-label="Open Navigation Menu"
             >
-              <svg width="18" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-                <path d="M1 3.5H13" />
-                <path d="M1 10.5H13" />
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <path d="M4 7h16" />
+                <path d="M4 12h12" />
+                <path d="M4 17h16" />
               </svg>
             </button>
             <div className="tabaya-header-logo" onClick={() => nav('home')} style={{ display: 'inline-flex', alignItems: 'center' }}>
               {logo ? (
                 <img
+                  className="tabaya-header-logo-img"
                   src={logo}
                   alt={storeName}
-                  style={{ maxHeight: 40, width: 'auto', objectFit: 'contain', display: 'block' }}
+                  onError={() => setLogo('')}
                 />
-              ) : null}
+              ) : (
+                <span>{storeName}</span>
+              )}
             </div>
           </div>
 
@@ -287,7 +328,51 @@ function Header({ onSearch }: { onSearch: () => void }) {
                 </a>
               </li>
               {visibleCats.map((c) => {
-                const isActive = route.name === 'shop' && route.param === c.slug;
+                const subCats = cats.filter((sc) => sc.parentSlug === c.slug);
+                const isActive = route.name === 'shop' && (route.param === c.slug || subCats.some((sc) => route.param === sc.slug));
+                if (subCats.length > 0) {
+                  const isOpen = hoveredMainCat === c.slug;
+                  return (
+                    <li
+                      key={c.slug}
+                      className={`tabaya-nav-dropdown ${isOpen ? 'open' : ''} ${isActive ? 'active' : ''}`}
+                      onMouseEnter={() => setHoveredMainCat(c.slug)}
+                      onMouseLeave={() => setHoveredMainCat(null)}
+                    >
+                      <button
+                        type="button"
+                        className="tabaya-nav-dropdown-btn"
+                        onClick={() => nav('shop/' + c.slug)}
+                      >
+                        <span>{tr(c.name, language)}</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </button>
+                      <ul className="tabaya-nav-dropdown-menu">
+                        <li>
+                          <a
+                            className={`tabaya-nav-dropdown-item ${route.name === 'shop' && route.param === c.slug ? 'active' : ''}`}
+                            style={{ fontWeight: 700, borderBottom: '1px solid rgba(180,142,76,0.18)' }}
+                            onClick={() => nav('shop/' + c.slug)}
+                          >
+                            All {tr(c.name, language)}
+                          </a>
+                        </li>
+                        {subCats.map((sc) => (
+                          <li key={sc.slug}>
+                            <a
+                              className={`tabaya-nav-dropdown-item ${route.name === 'shop' && route.param === sc.slug ? 'active' : ''}`}
+                              onClick={() => nav('shop/' + sc.slug)}
+                            >
+                              ↳ {tr(sc.name, language)}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  );
+                }
                 return (
                   <li key={c.slug}>
                     <a
@@ -317,20 +402,37 @@ function Header({ onSearch }: { onSearch: () => void }) {
                       <polyline points="6 9 12 15 18 9" />
                     </svg>
                   </button>
-                  <ul className="tabaya-nav-dropdown-menu">
-                    {dropdownCats.map((c) => (
-                      <li key={c.slug}>
-                        <a
-                          className={`tabaya-nav-dropdown-item ${route.name === 'shop' && route.param === c.slug ? 'active' : ''}`}
-                          onClick={() => {
-                            nav('shop/' + c.slug);
-                            setCatDropdownOpen(false);
-                          }}
-                        >
-                          {tr(c.name, language)}
-                        </a>
-                      </li>
-                    ))}
+                  <ul className="tabaya-nav-dropdown-menu" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                    {dropdownCats.map((c) => {
+                      const subCats = cats.filter((sc) => sc.parentSlug === c.slug);
+                      return (
+                        <li key={c.slug}>
+                          <a
+                            className={`tabaya-nav-dropdown-item ${route.name === 'shop' && route.param === c.slug ? 'active' : ''}`}
+                            style={{ fontWeight: 600 }}
+                            onClick={() => {
+                              nav('shop/' + c.slug);
+                              setCatDropdownOpen(false);
+                            }}
+                          >
+                            {tr(c.name, language)}
+                          </a>
+                          {subCats.map((sc) => (
+                            <a
+                              key={sc.slug}
+                              className={`tabaya-nav-dropdown-item ${route.name === 'shop' && route.param === sc.slug ? 'active' : ''}`}
+                              style={{ paddingLeft: 26, fontSize: 12, opacity: 0.88 }}
+                              onClick={() => {
+                                nav('shop/' + sc.slug);
+                                setCatDropdownOpen(false);
+                              }}
+                            >
+                              ↳ {tr(sc.name, language)}
+                            </a>
+                          ))}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </li>
               )}
@@ -360,9 +462,9 @@ function Header({ onSearch }: { onSearch: () => void }) {
               aria-label={tr('Search collections', language)}
               title="Search"
             >
-              <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="9" cy="9" r="5.5" />
-                <path d="m13 13 4 4" />
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="6.5" />
+                <path d="m16 16 4.2 4.2" />
               </svg>
             </button>
 
@@ -374,9 +476,9 @@ function Header({ onSearch }: { onSearch: () => void }) {
               aria-label="Shopping Cart"
               title="Cart"
             >
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3.5 6.8h13v8.2a1.8 1.8 0 0 1-1.8 1.8H5.3a1.8 1.8 0 0 1-1.8-1.8V6.8z" />
-                <path d="M7 6.8V5.2a3 3 0 0 1 6 0v1.6" />
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5.5 8h13l-.9 10.5a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8L5.5 8Z" />
+                <path d="M8.5 8V6.5a3.5 3.5 0 0 1 7 0V8" />
               </svg>
               {count > 0 && <span className="tabaya-h-cart-badge">{count}</span>}
             </button>
@@ -393,9 +495,12 @@ function Header({ onSearch }: { onSearch: () => void }) {
               <img
                 src={logo}
                 alt={storeName}
-                style={{ maxHeight: 34, width: 'auto', objectFit: 'contain', display: 'block' }}
+                style={{ maxHeight: 36, width: 'auto', objectFit: 'contain', display: 'block' }}
+                onError={() => setLogo('')}
               />
-            ) : null}
+            ) : (
+              <span>{storeName}</span>
+            )}
           </span>
           <button
             className="tabaya-mmenu-close"
@@ -421,15 +526,65 @@ function Header({ onSearch }: { onSearch: () => void }) {
             </svg>
             <span>{customer ? `${tr('Account', language)} (${customer.name || customer.phone})` : tr('VIP Sign In / Register (5% OFF)', language)}</span>
           </a>
-          {navLinks.map((item) => (
-            <a
-              key={item.path}
-              onClick={() => nav(item.path)}
-              className="tabaya-mmenu-link"
-            >
-              {tr(item.label, language)}
-            </a>
-          ))}
+          <a onClick={() => nav('home')} className="tabaya-mmenu-link">{tr('Home', language)}</a>
+          <a onClick={() => nav('shop')} className="tabaya-mmenu-link">{tr(isSkin ? 'All Skincare' : 'All Collections', language)}</a>
+          {mainCats.map((mc) => {
+            const subCats = cats.filter((sc) => sc.parentSlug === mc.slug);
+            const isExp = expandedMobileCat === mc.slug;
+            return (
+              <div key={mc.slug} style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <a
+                    onClick={() => nav('shop/' + mc.slug)}
+                    className="tabaya-mmenu-link"
+                    style={{ flex: 1 }}
+                  >
+                    {tr(mc.name, language)}
+                  </a>
+                  {subCats.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedMobileCat(isExp ? null : mc.slug);
+                      }}
+                      aria-label={`Toggle ${mc.name} sub-categories`}
+                      style={{
+                        background: 'rgba(180, 142, 76, 0.12)',
+                        border: '1px solid rgba(180, 142, 76, 0.3)',
+                        borderRadius: 6,
+                        width: 28,
+                        height: 28,
+                        display: 'grid',
+                        placeItems: 'center',
+                        fontSize: 15,
+                        fontWeight: 700,
+                        color: '#1f3147',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {isExp ? '−' : '+'}
+                    </button>
+                  )}
+                </div>
+                {isExp && subCats.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', paddingLeft: 14, marginBottom: 6, borderLeft: '2px solid rgba(180, 142, 76, 0.35)', marginLeft: 6 }}>
+                    {subCats.map((sc) => (
+                      <a
+                        key={sc.slug}
+                        onClick={() => nav('shop/' + sc.slug)}
+                        className="tabaya-mmenu-link"
+                        style={{ fontSize: 13.5, padding: '7px 0', color: '#475569' }}
+                      >
+                        ↳ {tr(sc.name, language)}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <a onClick={() => nav('track')} className="tabaya-mmenu-link">{tr('Track Order', language)}</a>
           <a
             onClick={() => { setOpen(true); setMenu(false); }}
             className="tabaya-mmenu-link"
@@ -496,7 +651,7 @@ function Footer() {
           <div>
             <h4>{tr('Collections', language)}</h4>
             <a onClick={() => go('shop')}>{tr(isSkin ? 'All Skincare & Essentials' : 'All Collections', language)}</a>
-            {cats.filter((c) => !c.adult).slice(0, 5).map((c) => (
+            {cats.filter((c: any) => !c.parentSlug && !c.adult && !isWellnessOrExcludedCategory(c.slug)).slice(0, 6).map((c) => (
             <a key={c.slug} onClick={() => go('shop/' + c.slug)}>{tr(c.name, language)}</a>
             ))}
           </div>
@@ -649,22 +804,56 @@ function MobileTabs() {
   const route = useRoute();
   const { count, setOpen } = useCart();
   return (
-    <nav className="tabbar">
-      <button type="button" className={'tab' + (route.name === 'home' ? ' on' : '')} aria-current={route.name === 'home' ? 'page' : undefined} onClick={() => go('home')}>
-        <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="m3.5 10.6 8.5-7 8.5 7" /><path d="M5.5 9.5V20h13V9.5" /><path d="M9.5 20v-6h5v6" /></svg><span>{tr('Home', language)}</span>
-      </button>
-      <button type="button" className={'tab' + (route.name === 'shop' ? ' on' : '')} aria-current={route.name === 'shop' ? 'page' : undefined} onClick={() => go('shop')}>
-        <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="M4 10.5 5.4 5h13.2l1.4 5.5" /><path d="M4 10.5h16v9H4z" /><path d="M9 19.5v-5h6v5" /><path d="M4.2 10.5a2.2 2.2 0 0 0 4.4 0 2.2 2.2 0 0 0 4.4 0 2.2 2.2 0 0 0 4.4 0 2.2 2.2 0 0 0 2.4 0" /></svg><span>{tr('Shop', language)}</span>
-      </button>
-      <button type="button" className="tab" aria-label={`${tr('Bag', language)}${count > 0 ? `, ${count}` : ''}`} onClick={() => setOpen(true)}>
-        <span className="tabcart"><svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="M5.5 8h13l-.8 11.2a1.3 1.3 0 0 1-1.3 1.2H7.6a1.3 1.3 0 0 1-1.3-1.2L5.5 8Z" /><path d="M9 8V6.8a3 3 0 0 1 6 0V8" /></svg>{count > 0 && <i className="badge" key={count}>{count}</i>}</span><span>{tr('Bag', language)}</span>
-      </button>
-      <button type="button" className={'tab' + (route.name === 'track' ? ' on' : '')} aria-current={route.name === 'track' ? 'page' : undefined} onClick={() => go('track')}>
-        <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z" /><circle cx="12" cy="10" r="2.4" /></svg><span>{tr('Track Order', language)}</span>
-      </button>
-      <button type="button" className={'tab' + (route.name === 'account' ? ' on' : '')} aria-current={route.name === 'account' ? 'page' : undefined} onClick={() => go('account')}>
-        <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 20a7.5 7.5 0 0 1 15 0" /></svg><span>{tr('Account', language)}</span>
-      </button>
+    <nav className="tabbar" aria-label="Mobile Navigation">
+      <a className={'tab' + (route.name === 'home' ? ' on' : '')} onClick={() => go('home')}>
+        <span className="tab-icon-wrap">
+          <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3.8 10.2 12 3.8l8.2 6.4" />
+            <path d="M6.2 9.5v9.2a1.3 1.3 0 0 0 1.3 1.3h9a1.3 1.3 0 0 0 1.3-1.3V9.5" />
+            <path d="M10 20v-5.2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V20" />
+          </svg>
+        </span>
+        <span className="tab-label">{tr('Home', language)}</span>
+      </a>
+      <a className={'tab' + (route.name === 'shop' ? ' on' : '')} onClick={() => go('shop')}>
+        <span className="tab-icon-wrap">
+          <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="4" y="4" width="6.5" height="6.5" rx="1.6" />
+            <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6" />
+            <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6" />
+            <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6" />
+          </svg>
+        </span>
+        <span className="tab-label">{tr('Shop', language)}</span>
+      </a>
+      <a className="tab" onClick={() => setOpen(true)}>
+        <span className="tab-icon-wrap tabcart">
+          <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5.5 8.2h13l-.85 10.2a1.8 1.8 0 0 1-1.8 1.6H8.15a1.8 1.8 0 0 1-1.8-1.6L5.5 8.2Z" />
+            <path d="M8.8 8.2V6.6a3.2 3.2 0 0 1 6.4 0v1.6" />
+          </svg>
+          {count > 0 && <i className="badge" key={count}>{count}</i>}
+        </span>
+        <span className="tab-label">{tr('Bag', language)}</span>
+      </a>
+      <a className={'tab' + (route.name === 'track' ? ' on' : '')} onClick={() => go('track')}>
+        <span className="tab-icon-wrap">
+          <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 20.5s-6-4.6-6-9.8a6 6 0 0 1 12 0c0 5.2-6 9.8-6 9.8Z" />
+            <circle cx="12" cy="10.5" r="2.2" />
+          </svg>
+        </span>
+        <span className="tab-label">{language === 'bn' ? 'ট্র্যাক' : 'Track'}</span>
+      </a>
+      <a className={'tab' + (route.name === 'account' ? ' on' : '')} onClick={() => go('account')}>
+        <span className="tab-icon-wrap">
+          <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="8.2" r="3.6" />
+            <path d="M5.5 19.8a6.5 6.5 0 0 1 13 0" />
+          </svg>
+        </span>
+        <span className="tab-label">{tr('Account', language)}</span>
+      </a>
     </nav>
   );
 }
@@ -733,26 +922,15 @@ function Shell() {
   }, []);
   if (route.name === 'admin') return <Suspense fallback={<StoreLoading admin />}><Admin /></Suspense>;
 
-  // Dedicated Landing Page Funnel (Standalone high-converting page)
-  const isLanding =
-    route.name === 'page' ||
-    route.name === 'pages' ||
-    route.name === 'lp' ||
-    route.name === 'landing' ||
-    route.name === 'step' ||
-    route.name === 'funnel' ||
-    route.name === 'lovelock' ||
-    route.name === 'love-lock' ||
-    route.name === 'magic-condom';
+  // Dedicated Landing Page Funnel — strictly ONLY /page/<slug>
+  const infoSlugs = ['privacy', 'terms', 'about', 'shipping', 'returns', 'contact', 'journal'];
+  const isLanding = route.name === 'page' && !!route.param && !infoSlugs.includes(route.param.toLowerCase());
 
   if (isLanding) {
-    const landingSlug = (route.name === 'page' || route.name === 'pages' || route.name === 'lp' || route.name === 'landing' || route.name === 'step' || route.name === 'funnel')
-      ? (route.param || 'lovelock')
-      : route.name;
     return (
       <Suspense fallback={<StoreLoading />}>
         <Effects />
-        <LoveLockLanding slug={landingSlug} />
+        <LoveLockLanding slug={route.param} />
         <Toast />
       </Suspense>
     );
@@ -764,7 +942,7 @@ function Shell() {
   else if (route.name === 'checkout') page = <Checkout />;
   else if (route.name === 'track') page = <Track />;
   else if (route.name === 'account') page = <CustomerAccountPage onNavigate={go} />;
-  else if (route.name === 'info') page = <InfoPage slug={route.param} />;
+  else if (route.name === 'info' || (route.name === 'page' && infoSlugs.includes((route.param || '').toLowerCase()))) page = <InfoPage slug={route.param} />;
   else if (route.name === 'confirm') page = <Confirm id={route.param} />;
   else page = <Home />;
   return (
