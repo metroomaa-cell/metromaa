@@ -303,13 +303,11 @@ function buildDraftOrder(data) {
   let delOutside = settings.deliveryOutside;
   let isFreeDelivery = itemsTotal >= settings.freeShipThreshold;
   if (landingPage) {
-    if (landingPage.freeDelivery !== false || landingPage.freeDeliveryText) isFreeDelivery = true;
-    if (landingPage.customDeliveryInside != null && landingPage.customDeliveryInside !== '') {
-      delInside = Number(landingPage.customDeliveryInside);
-    }
-    if (landingPage.customDeliveryOutside != null && landingPage.customDeliveryOutside !== '') {
-      delOutside = Number(landingPage.customDeliveryOutside);
-    }
+    isFreeDelivery = landingPage.freeDelivery !== false;
+    const insideCharge = landingPage.deliveryInside != null && landingPage.deliveryInside !== '' ? landingPage.deliveryInside : landingPage.customDeliveryInside;
+    const outsideCharge = landingPage.deliveryOutside != null && landingPage.deliveryOutside !== '' ? landingPage.deliveryOutside : landingPage.customDeliveryOutside;
+    if (insideCharge != null && insideCharge !== '') delInside = Number(insideCharge);
+    if (outsideCharge != null && outsideCharge !== '') delOutside = Number(outsideCharge);
   }
   if (c.freeDelivery === true || c.shippingCost === 0 || (data.shipping && data.shipping.cost === 0)) {
     isFreeDelivery = true;
@@ -760,6 +758,9 @@ app.post('/api/orders', (req, res) => {
   const deviceId = String(rawDid).trim();
   const clientIp = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
   const phoneClean = cleanBDPhone(c.phone);
+  if (!/^01[3-9]\d{8}$/.test(phoneClean)) {
+    return res.status(400).json({ error: 'অনুগ্রহ করে সঠিক ১১ ডিজিটের বাংলাদেশি মোবাইল নম্বর প্রদান করুন (যেমন: 017XXXXXXXX)' });
+  }
 
   if (fd.enabled !== false) {
     const nowMs = Date.now();
@@ -830,13 +831,11 @@ app.post('/api/orders', (req, res) => {
   let delOutside = settings.deliveryOutside;
   let isFreeDelivery = itemsTotal >= settings.freeShipThreshold;
   if (landingPage) {
-    if (landingPage.freeDelivery !== false || landingPage.freeDeliveryText) isFreeDelivery = true;
-    if (landingPage.customDeliveryInside != null && landingPage.customDeliveryInside !== '') {
-      delInside = Number(landingPage.customDeliveryInside);
-    }
-    if (landingPage.customDeliveryOutside != null && landingPage.customDeliveryOutside !== '') {
-      delOutside = Number(landingPage.customDeliveryOutside);
-    }
+    isFreeDelivery = landingPage.freeDelivery !== false;
+    const insideCharge = landingPage.deliveryInside != null && landingPage.deliveryInside !== '' ? landingPage.deliveryInside : landingPage.customDeliveryInside;
+    const outsideCharge = landingPage.deliveryOutside != null && landingPage.deliveryOutside !== '' ? landingPage.deliveryOutside : landingPage.customDeliveryOutside;
+    if (insideCharge != null && insideCharge !== '') delInside = Number(insideCharge);
+    if (outsideCharge != null && outsideCharge !== '') delOutside = Number(outsideCharge);
   }
   if (c.freeDelivery === true || c.shippingCost === 0 || req.body?.shipping?.cost === 0) {
     isFreeDelivery = true;
@@ -2344,10 +2343,11 @@ async function getPathaoToken(acc) {
 }
 
 function cleanBDPhone(phone) {
-  let p = String(phone || '').replace(/[^0-9]/g, '');
+  const banglaDigits = { '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9' };
+  let p = String(phone || '').replace(/[০-৯]/g, (d) => banglaDigits[d] || d).replace(/[^0-9]/g, '');
   if (p.startsWith('880')) p = p.slice(2);
   else if (p.startsWith('88')) p = p.slice(2);
-  if (!p.startsWith('0') && p.length === 10) p = '0' + p;
+  if (!p.startsWith('0') && p.length === 10 && p.startsWith('1')) p = '0' + p;
   return p;
 }
 

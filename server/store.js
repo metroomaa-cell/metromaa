@@ -610,7 +610,14 @@ export const DEFAULT_LOVELOCK_LANDING = {
   id: 'landing_love_forever',
   title: '“LOVE FOREVER” লাক্সারি গিফট বক্স — প্রিয়জনের সেরা উপহার',
   slug: 'love-forever',
-  aliases: ['love-forever', 'love-forever-gift-box', 'gift-box', 'lovelock', 'love-lock'],
+  aliases: [],
+  status: 'live',
+  freeDelivery: false,
+  deliveryInside: 80,
+  deliveryOutside: 130,
+  themeColor: '#CB202D',
+  buttonColor: '#E02836',
+  pageBgColor: '#FAF7F8',
   status: 'live',
   freeDelivery: false,
   badgeTop: '১০০% অরিজিনাল প্রিমিয়াম কোয়ালিটি নিশ্চিত',
@@ -703,15 +710,14 @@ export function saveLandings(list) {
 
 export function getLandingBySlug(slug) {
   const s = String(slug || '').toLowerCase().trim();
+  if (!s) return null;
   const list = getLandings();
-  const found = list.find((L) =>
-    (L.slug && L.slug.toLowerCase() === s) ||
-    (Array.isArray(L.aliases) && L.aliases.some((a) => a.toLowerCase() === s))
+  const exact = list.find((L) => L && L.slug && L.slug.toLowerCase() === s);
+  if (exact) return exact;
+  const byAlias = list.find((L) =>
+    L && Array.isArray(L.aliases) && L.aliases.some((a) => String(a || '').toLowerCase().trim() === s)
   );
-  if (found) return found;
-  if (!s || s === 'lovelock' || s === 'love-lock' || s === 'magic-condom') {
-    return list[0] || DEFAULT_LOVELOCK_LANDING;
-  }
+  if (byAlias) return byAlias;
   return null;
 }
 
