@@ -475,7 +475,7 @@ const INFO: Record<string, { title: string; body: string[] }> = {
   shipping: { title: 'shipping & delivery', body: ['We deliver nationwide across Bangladesh through trusted express couriers. Inside Dhaka usually arrives in 24–48 hours, outside Dhaka in 2–3 business days.', 'You pay cash on delivery when your order reaches your doorstep. You can inspect the parcel before acceptance.'] },
   returns: { title: 'returns & exchanges', body: ['We offer a 7-day hassle-free exchange policy. If the size, color, or fit is not ideal, message our support team with your order ID.', 'We will immediately arrange a replacement sent to your doorstep.'] },
   contact: { title: 'contact customer support', body: ['Questions about an order or a product? Our customer care team is here to assist you 7 days a week, 10:00 AM – 10:00 PM.', 'Call our helpline or message us directly on WhatsApp using the button below.'] },
-  about: { title: 'about SECRATE', body: ['SECRATE is a premium botanical skincare and personal wellness brand dedicated to pure, clinical-grade formulations.', 'From gentle hydrating cleansers and concentrated antioxidant serums to intimate wellness care and daily self-care essentials — we deliver authentic, dermatologically tested care across Bangladesh with doorstep cash on delivery.'] },
+  about: { title: 'about SECRATE', body: ['SECRATE offers skincare, beauty, and personal care products from a range of brands.', 'Product and ingredient details are provided on individual listings and packaging. Orders are delivered across Bangladesh with cash on delivery.'] },
   privacy: { title: 'privacy policy', body: ['Your details are used strictly to process and deliver your order. We never sell or share your personal information with third parties.'] },
   terms: { title: 'terms of service', body: ['By placing an order you confirm that your shipping details and contact number are accurate.', 'All prices are in BDT and payable via Cash on Delivery upon receiving your package.'] },
   journal: { title: 'the journal', body: ['Style guides, fabric care notes & lifestyle stories — coming soon.'] },
@@ -582,7 +582,7 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
               src={isSkin
                 ? '/uploads/banner_secrate_desktop.webp'
                 : '/uploads/img_mvcvyjixc2dpi.webp'}
-              alt={isSkin ? 'Botanical Skincare & Essentials' : 'METRROMA Lifestyle & Gifts'}
+              alt={isSkin ? 'Skincare & Self-Care Products' : 'METRROMA Lifestyle & Gifts'}
               loading="eager"
               fetchPriority="high"
               decoding="async"
@@ -600,12 +600,12 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
         <div className="wrap tabaya-hero-wrap">
           <div className="tabaya-hero-card">
             <span className="tabaya-hero-badge">
-              {tr(isSkin ? '🌿 DERMATOLOGICALLY CRAFTED · BOTANICAL CARE' : '✨ EXCLUSIVE 2026 COLLECTION · PREMIUM LIFESTYLE', language)}
+              {tr(isSkin ? '🌿 SKINCARE & SELF-CARE · CAREFULLY CURATED' : '✨ EXCLUSIVE 2026 COLLECTION · PREMIUM LIFESTYLE', language)}
             </span>
             <h1 className="tabaya-hero-title serif">
               {isSkin ? (
                 <>
-                  {tr('Pure Botanical Radiance', language)}<br />
+                {tr('Skincare & Self-Care', language)}<br />
                   <span className="it" style={{ color: '#d4af37' }}>{tr('Elevated Everyday Skincare', language)}</span>
                 </>
               ) : (
@@ -617,8 +617,8 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
             </h1>
             <p className="tabaya-hero-desc">
               {tr(isSkin
-                ? 'Nourish your skin barrier with clinically-inspired botanical cleansers, hydrating serums, and restorative moisture balms. Cash on delivery nationwide.'
-                : 'Discover signature sunglasses, authentic timepieces, and bespoke gift boxes crafted for timeless elegance. Cash on delivery nationwide.', language)}
+                ? 'Explore skincare, beauty, and personal care products from a range of brands. Check each listing for ingredients and directions. Cash on delivery nationwide.'
+                : 'Explore watches, sunglasses, and gift boxes selected for everyday style. Cash on delivery nationwide.', language)}
             </p>
             <div className="tabaya-hero-btns">
               <button className="tabaya-btn primary" onClick={() => go(isSkin ? 'shop/skincare' : 'shop')}>
@@ -630,7 +630,7 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
             </div>
             <div className="tabaya-hero-micro">
               <span>🚚 {tr('Cash on Delivery Nationwide', language)}</span>
-              <span>{isSkin ? `🌿 ${tr('100% Authentic Quality Guaranteed', language)}` : `⭐ ${tr('100% Satisfaction Guarantee', language)}`}</span>
+              <span>{isSkin ? `🌿 ${tr('Product Details & Ingredient Information', language)}` : `📦 ${tr('Inspect Before Payment', language)}`}</span>
             </div>
           </div>
         </div>
@@ -640,8 +640,8 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
 
   const s = activeSlides[cur] || activeSlides[0];
   const isSkin = isSkincareSite();
-  const heroTitle = s.title || (isSkin ? 'Botanical care for everyday rituals' : 'Curated Modern Lifestyle');
-  const heroSubtitle = s.subtitle || (s.title ? '' : (isSkin ? 'Pure. Gentle. Thoughtful.' : 'Watches, Sunglasses & Gifts'));
+  const heroTitle = s.title || (isSkin ? 'Skincare & self-care for everyday routines' : 'Curated Modern Lifestyle');
+  const heroSubtitle = s.subtitle || (s.title ? '' : (isSkin ? 'Skincare, beauty & personal care' : 'Watches, Sunglasses & Gifts'));
   const heroDescription = s.description || (isSkin
     ? 'Discover considered skincare and self-care essentials made to bring a little more intention to your everyday routine.'
     : 'Explore signature accessories and timeless pieces, thoughtfully selected for the way you live.');
@@ -767,7 +767,7 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
           </div>
           <div className="tabaya-hero-micro">
             <span>🚚 {tr('Cash on Delivery Nationwide', language)}</span>
-            <span>🔒 {tr('100% Satisfaction Guarantee', language)}</span>
+            <span>🔒 {tr('Inspect Before Payment', language)}</span>
           </div>
         </div>
       </div>
@@ -863,23 +863,33 @@ export function Home() {
     });
   }, [best, activeTabCat]);
 
+  const deliveryInside = Number(settings?.deliveryInside ?? 80);
+  const deliveryOutside = Number(settings?.deliveryOutside ?? 130);
+  const freeShipThreshold = Number(settings?.freeShipThreshold ?? (isSkin ? 2500 : 3000));
+  const formatFaqFee = (amount: number) => language === 'bn'
+    ? `৳${amount.toLocaleString('bn-BD')}`
+    : taka(amount);
+  const deliveryFaqAnswer = language === 'bn'
+    ? `ঢাকার ভেতরে সাধারণত ২৪–৪৮ ঘণ্টায় ডেলিভারি হয় (${formatFaqFee(deliveryInside)})। ঢাকার বাইরে ২–৪ কর্মদিবস লাগে (${formatFaqFee(deliveryOutside)})। ${formatFaqFee(freeShipThreshold)}-এর বেশি অর্ডারে সারা দেশে ডেলিভারি ফ্রি।`
+    : `Delivery inside Dhaka is typically 24–48 hours (${formatFaqFee(deliveryInside)}). Delivery outside Dhaka takes 2–4 business days (${formatFaqFee(deliveryOutside)}). Orders above ${formatFaqFee(freeShipThreshold)} qualify for free nationwide delivery.`;
+
   const defaultFaqs = isSkin
     ? [
         {
           q: 'How do I choose the right skincare routine for my skin type?',
-          a: 'Our Silk Cleansing Gel and Daily Moisturiser are gentle and universal for all skin types, including sensitive skin. For deep hydration and visible radiance, pair them with our Hydrating Serum in the morning and Glow Night Oil before bed.',
+          a: 'Start with products suited to your skin and follow each product label. Introduce one new product at a time and patch test before regular use. For persistent or concerning skin issues, consult a qualified dermatologist.',
         },
         {
           q: 'Can I open and inspect the parcel before paying?',
-          a: 'Yes, absolutely! We encourage all our valued customers to inspect the outer packaging and bottle seals in front of the courier delivery agent before making cash on delivery payment.',
+          a: 'Inspection depends on the courier’s rules. If inspection is available, check the outer packaging and product seals in front of the delivery agent before paying.',
         },
         {
           q: 'What are the delivery charges and delivery times?',
-          a: `Delivery inside Dhaka is typically 24–48 hours (${settings ? taka(settings.deliveryInside) : '৳80'}). Delivery outside Dhaka takes 2–4 business days (${settings ? taka(settings.deliveryOutside) : '৳130'}). Orders above ${settings ? taka(settings.freeShipThreshold) : '৳2,500'} qualify for 100% Free Nationwide Delivery.`,
+          a: deliveryFaqAnswer,
         },
         {
           q: 'Are these products safe for sensitive and acne-prone skin?',
-          a: 'Yes. Every formulation is crafted with gentle botanical extracts and non-comedogenic ingredients without harsh parabens or heavy synthetic fragrances. We recommend doing a patch test before regular use.',
+          a: 'Product suitability varies by person. Review each product’s ingredient list and directions, patch test before first use, and stop using it if irritation occurs. Consult a qualified dermatologist about persistent skin concerns.',
         },
         {
           q: 'How should I store serums and botanical oils for freshness?',
@@ -889,23 +899,23 @@ export function Home() {
     : [
         {
           q: 'How do I place an order with Cash on Delivery?',
-          a: 'Simply choose your desired items, select your size, and click "ADD TO CART" or proceed to Checkout. Enter your name, delivery address, and phone number. No advance payment is needed — you only pay when your parcel is handed to you.',
+          a: 'Choose a product and any available options, then click "ADD TO CART" or proceed to Checkout. Enter your name, delivery address, and phone number. No advance payment is needed — you pay when your parcel is handed to you.',
         },
         {
           q: 'Can I open and inspect the parcel before paying?',
-          a: 'Yes, absolutely! We encourage all our valued customers to check the parcel contents and fabric quality in front of the courier delivery agent before making payment.',
+          a: 'Yes. You may inspect the parcel contents and item condition in front of the courier delivery agent before paying, subject to the courier’s inspection rules.',
         },
         {
           q: 'What are the delivery charges and delivery times?',
-          a: 'Delivery inside Dhaka is typically 24–48 hours (৳70). Delivery outside Dhaka takes 2–4 business days (৳130). Orders above ৳1,999 qualify for 100% Free Nationwide Delivery.',
+          a: deliveryFaqAnswer,
         },
         {
-          q: 'What if the size does not fit me properly?',
-          a: 'We offer a hassle-free 7-day exchange guarantee. Simply contact our support team via WhatsApp or call our helpline, and we will arrange an exchange for your correct size immediately.',
+          q: 'What if I have an issue with my order?',
+          a: 'Contact customer support using the phone or WhatsApp links on this site and include your order number so the team can help.',
         },
         {
-          q: 'How should I care for and wash delicate fabrics?',
-          a: 'For best results and longevity, we recommend dry cleaning or gentle hand-washing in cold water with mild detergent. Do not bleach or tumble dry in high heat. Steam iron on low setting.',
+          q: 'How can I contact customer support?',
+          a: 'Use the phone or WhatsApp links in the Customer Support section. Please include your order number when asking about an existing order.',
         },
       ];
   const customFaqs = customHomeCopy.faqs;
@@ -982,8 +992,8 @@ export function Home() {
               <h2 className="ara-title">{homeText('collectionTitle', isSkin ? 'Shop by Category' : 'Shop by Collection')}</h2>
               <p className="ara-subtitle">
                 {homeText('collectionDescription', isSkin
-                  ? 'Formulated with clean, nutrient-rich botanicals to balance, hydrate, and protect your skin everyday.'
-                  : 'Explore our handpicked curation of designer sunglasses, signature timepieces, and bespoke gift boxes.')}
+                  ? 'Browse skincare and personal care by category. Product details are listed on individual product pages.'
+                  : 'Browse watches, sunglasses, and gift boxes selected for everyday style.')}
               </p>
             </div>
 
@@ -1035,12 +1045,12 @@ export function Home() {
       {visibleSections.intro !== false && <section className="tabaya-intro">
         <div className="tabaya-intro__frame">
           <h2 className="tabaya-intro__title">
-            {homeText('introTitle', isSkin ? 'Pure Botanicals Meet Clinical Care' : 'Premium Craftsmanship Meets Modern Luxury')}
+            {homeText('introTitle', isSkin ? 'Skincare & Self-Care, Carefully Curated' : 'Lifestyle Watches, Sunglasses & Gifts')}
           </h2>
           <p className="tabaya-intro__desc">
             {homeText('introDescription', isSkin
-              ? 'Every product in our skincare and self-care collection is thoughtfully formulated with nutrient-dense botanical extracts to strengthen your skin barrier, balance hydration, and reveal a natural, healthy glow. Cash on delivery with doorstep inspection across Bangladesh.'
-              : 'Every item in our collection is curated with an unwavering commitment to craftsmanship, authentic premium quality, and timeless modern style. From iconic timepieces and designer sunglasses to unforgettable gift boxes delivered with cash on delivery across Bangladesh.')}
+              ? 'Explore skincare, beauty, and self-care products from a range of brands. Review each product listing and package for ingredients and directions. Cash on delivery across Bangladesh.'
+              : 'Browse watches, sunglasses, and gift boxes selected for everyday use and gifting. Check each product listing for available details. Cash on delivery across Bangladesh.')}
           </p>
         </div>
       </section>}
@@ -1051,15 +1061,15 @@ export function Home() {
         <div className="wrap">
           <div className="pc-section-header">
             <p className="pc-section-kicker">
-              {homeText('featuredEyebrow', isSkin ? 'CLINICAL BOTANICAL FORMULATIONS' : 'CURATED LIFESTYLE & GIFTS')}
+              {homeText('featuredEyebrow', isSkin ? 'CURATED SKINCARE & BEAUTY' : 'CURATED LIFESTYLE & GIFTS')}
             </p>
             <h2 className="pc-section-title">
-              {homeText('featuredTitle', isSkin ? 'Signature Skincare Essentials' : 'Trending & Best Sellers')}
+              {homeText('featuredTitle', isSkin ? 'Skincare & Beauty Picks' : 'Trending & Best Sellers')}
             </h2>
             <p className="pc-section-subtitle">
-              {homeText('featuredDescription', isSkin
-                ? 'Explore our most coveted cleansers, serums, and restorative moisture balms delivered with cash on delivery across Bangladesh.'
-                : 'Explore premium watches, apparel, curated gift boxes, and lifestyle essentials with nationwide doorstep delivery.')}
+          {homeText('featuredDescription', isSkin
+            ? 'Explore skincare, beauty, and personal care products from a range of brands. Check each listing for product details, ingredients, and directions. Cash on delivery across Bangladesh.'
+            : 'Explore watches, sunglasses, gift boxes, and lifestyle essentials with nationwide doorstep delivery.')}
             </p>
 
             {!isSkin && (
@@ -1158,11 +1168,11 @@ export function Home() {
             </div>
             <div className="feature-item">
               <div className="feature-icon">{isSkin ? '🌿' : '🛡️'}</div>
-              <h3>{tr(isSkin ? '100% Dermatologist-Safe & Authentic' : '100% Authentic Fabrics', language)}</h3>
+              <h3>{tr(isSkin ? 'Ingredients & Product Information' : 'Curated Lifestyle Essentials', language)}</h3>
               <p>
                 {tr(isSkin
-                  ? 'Clean botanical formulations gentle on sensitive skin. Zero harsh parabens.'
-                  : 'Hand-picked breathable fabrics crafted with meticulous stitching and finishing.', language)}
+                  ? 'Review ingredients and directions on each product page. Patch test before first use.'
+                  : 'Carefully selected watches, sunglasses, and gifts for everyday style.', language)}
               </p>
             </div>
             <div className="feature-item">
@@ -1171,12 +1181,10 @@ export function Home() {
               <p>{tr('Every order is wrapped with utmost care to ensure pristine arrival.', language)}</p>
             </div>
             <div className="feature-item">
-              <div className="feature-icon">{isSkin ? '💬' : '🔄'}</div>
-              <h3>{tr(isSkin ? 'Skincare Consultation Helpline' : '7-Day Easy Exchange', language)}</h3>
+              <div className="feature-icon">💬</div>
+              <h3>{tr('Product Help & Customer Support', language)}</h3>
               <p>
-                {tr(isSkin
-                  ? 'Have questions about your skin? Message our skincare support on WhatsApp anytime.'
-                  : "Simple and hassle-free sizing exchange if the fit isn't absolutely perfect.", language)}
+                {tr('Questions about a product listing or order? Contact our customer support on WhatsApp.', language)}
               </p>
             </div>
           </div>
@@ -1196,7 +1204,7 @@ export function Home() {
                 src={isSkin
                   ? 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=800&q=80'
                   : 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?auto=format&fit=crop&w=800&q=80'}
-                alt={isSkin ? 'Botanical Skincare FAQs' : 'Modest Attire FAQs'}
+                alt={isSkin ? 'Skincare FAQs' : 'Lifestyle & Gift FAQs'}
               />
             </div>
           </div>
@@ -1240,7 +1248,7 @@ export function Home() {
             </h2>
             <p style={{ color: '#9ca3af', maxWidth: 480, margin: '0 auto 20px', fontSize: 14 }}>
               {homeText('newsletterDescription', isSkin
-                ? 'Join our exclusive VIP circle to receive personalized skincare guides, early access to new botanical drops, and special member discounts.'
+                ? 'Join our VIP circle for store updates, new arrivals, and special member discounts.'
                 : 'Join our exclusive VIP circle to receive private sale previews, early access to new arrivals, and special member discounts.')}
             </p>
             {subbed ? (
@@ -1305,15 +1313,15 @@ export function Shop({ category }: { category: string }) {
       <div className="wrap" style={{ maxWidth: 1300 }}>
         <div className="phead" style={{ textAlign: 'center', padding: '30px 0 20px' }}>
           <p className="pc-section-kicker">
-            {tr(isSkin ? 'PURE BOTANICAL FORMULATIONS' : 'METRROMA CURATED LINEUP', language)}
+            {tr(isSkin ? 'SKINCARE & SELF-CARE PICKS' : 'METRROMA CURATED LINEUP', language)}
           </p>
           <h1 className="pc-section-title">
             {activeCat ? tr(activeCat.name, language) : tr(isSkin ? 'All Skincare & Essentials' : 'All Collections', language)}
           </h1>
           <p className="pc-section-subtitle">
             {activeCat ? activeCat.blurb : tr(isSkin
-              ? 'Discover nutrient-dense botanical formulations crafted to nourish, balance, and restore your skin naturally.'
-              : 'Discover premium sunglasses, authentic timepieces, and curated gift boxes crafted for modern lifestyle.', language)}
+              ? 'Browse skincare and personal care products by category. Check product pages for ingredients and usage directions.'
+              : 'Explore watches, sunglasses, and gift boxes selected for modern everyday life.', language)}
           </p>
         </div>
 
@@ -1650,7 +1658,7 @@ export function ProductPage({ slug }: { slug: string }) {
                 </div>
               ) : (
                 <span style={{ fontSize: 12.5, fontWeight: 500, color: '#6b645c' }}>
-                  {tr(isSkin ? '🌿 100% Authentic Botanical' : '✨ Verified Authentic Item', language)}
+                  {tr('Product Details Available', language)}
                 </span>
               )}
               <span style={{ color: p.soldOut ? '#dc2626' : '#15803d', fontSize: 11, fontWeight: 600, background: p.soldOut ? 'rgba(220,38,38,0.08)' : 'rgba(21,128,61,0.08)', padding: '2px 8px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
@@ -1909,7 +1917,7 @@ export function ProductPage({ slug }: { slug: string }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 26, padding: '18px', background: '#f3f0ec', border: '1px solid rgba(180, 150, 100, 0.25)', fontSize: 12, color: '#6b645c' }}>
               <div>{tr('🚚 Express Delivery Nationwide', language)}</div>
               <div>{tr('💵 Cash on Delivery at Doorstep', language)}</div>
-              <div>{tr('🛡️ 100% Authentic Quality', language)}</div>
+              <div>{tr('Product Details Available', language)}</div>
               <div>{tr('🔄 7-Day Easy Exchange Policy', language)}</div>
             </div>
 
@@ -1930,9 +1938,9 @@ export function ProductPage({ slug }: { slug: string }) {
                     <ul style={{ paddingLeft: 20, marginTop: 14 }}>
                       {isSkin ? (
                         <>
-                          <li>Pure botanical extracts gentle on sensitive skin</li>
-                          <li>Fast-absorbing lightweight texture, zero greasy residue</li>
-                          <li>Dermatologist tested, paraben-free & cruelty-free</li>
+                          <li>Review the product listing and package for ingredients</li>
+                          <li>Follow the usage directions provided by the product brand</li>
+                          <li>Individual skin suitability can vary</li>
                         </>
                       ) : isApparel ? (
                         <>
@@ -1942,7 +1950,7 @@ export function ProductPage({ slug }: { slug: string }) {
                         </>
                       ) : (
                         <>
-                          <li>100% Authentic & Premium Quality Guaranteed</li>
+                          <li>Product information is shown on each item page</li>
                           <li>Fast nationwide home delivery with cash on delivery</li>
                           <li>Check parcel upon delivery before making payment</li>
                         </>
@@ -2114,22 +2122,22 @@ export function ProductPage({ slug }: { slug: string }) {
                         <div className="tabaya-feature-card">
                           <span className="icon">🌿</span>
                           <div>
-                            <h4>100% Dermatologist-Safe & Authentic</h4>
-                            <p>Pure botanical actives formulated gentle on sensitive skin. Zero harsh parabens or heavy synthetic fragrances.</p>
+                            <h4>Ingredient Details on Product Pages</h4>
+                            <p>Review ingredients and directions on each product page. Patch test before first use.</p>
                           </div>
                         </div>
                         <div className="tabaya-feature-card">
                           <span className="icon">✨</span>
                           <div>
-                            <h4>Radiant Nourishing Care</h4>
-                            <p>Fast-absorbing lightweight texture deeply replenishes hydration and restores youthful skin elasticity.</p>
+                            <h4>Product Information</h4>
+                            <p>Check the product page and package for ingredients, size, and usage directions.</p>
                           </div>
                         </div>
                         <div className="tabaya-feature-card">
                           <span className="icon">🛡️</span>
                           <div>
-                            <h4>Factory Sealed & Fresh</h4>
-                            <p>Every product is hygienically sealed directly at the lab to ensure maximum active potency upon arrival.</p>
+                            <h4>Packaging Details</h4>
+                            <p>Refer to the product listing and package for packaging and storage information.</p>
                           </div>
                         </div>
                         <div className="tabaya-feature-card">
@@ -2207,7 +2215,7 @@ export function ProductPage({ slug }: { slug: string }) {
                         <div className="tabaya-feature-card">
                           <span className="icon">💎</span>
                           <div>
-                            <h4>100% Authentic Quality Guaranteed</h4>
+                            <h4>Product Details Available</h4>
                             <p>Carefully curated and strictly quality-inspected to ensure premium customer satisfaction.</p>
                           </div>
                         </div>
@@ -2255,7 +2263,7 @@ export function ProductPage({ slug }: { slug: string }) {
                       </tr>
                       <tr>
                         <th>Collection / Category</th>
-                        <td style={{ textTransform: 'capitalize' }}>{p.category ? p.category.replace(/-/g, ' ') : (isApparel ? 'Intimate Care' : 'Botanical Skincare')}</td>
+                        <td style={{ textTransform: 'capitalize' }}>{p.category ? p.category.replace(/-/g, ' ') : (isApparel ? 'Intimate Care' : 'Skincare & Self-Care')}</td>
                       </tr>
                       {p.isDigital ? (
                         <>
@@ -2407,15 +2415,15 @@ export function ProductPage({ slug }: { slug: string }) {
                           )}
                           <tr>
                             <th>Skin Compatibility</th>
-                            <td>Formulated for All Skin Types, including Sensitive & Acne-Prone</td>
+                            <td>Review the product label; suitability varies by person</td>
                           </tr>
                           <tr>
                             <th>Formulation Standard</th>
-                            <td>Dermatologist Tested, Non-Comedogenic, Paraben-Free</td>
+                            <td>See product listing or package for ingredient and usage details</td>
                           </tr>
                           <tr>
                             <th>Package Includes</th>
-                            <td>1x Authentically Sealed Product + Protective Outer Packaging</td>
+                            <td>See the product listing for package contents</td>
                           </tr>
                         </>
                       )}
@@ -2978,8 +2986,8 @@ export function Checkout() {
             <h2 className="serif" style={{ fontSize: 26, color: '#1f3147', margin: '0 0 10px', fontWeight: 500 }}>Your Bag is Empty</h2>
             <p style={{ color: '#6b645c', fontSize: 14, margin: '0 0 24px', lineHeight: 1.6 }}>
               {isSkin
-                ? 'Discover nutrient-dense botanical formulations crafted to nourish and restore your natural glow.'
-                : 'Explore our curated collections of timeless silhouettes tailored for effortless elegance.'}
+                ? 'Explore skincare, beauty, and self-care products from a range of brands.'
+                : 'Explore our watches, sunglasses, and gift collections.'}
             </p>
             <button
               className="pc-cta"

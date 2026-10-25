@@ -92,7 +92,7 @@ function Effects() {
       const brand = s.storeName && s.storeName !== 'dot.' ? s.storeName : defaultBrand;
       const t: any = isSkin
         ? {
-            home: `${brand} | Pure Botanical Skincare & Self-Care Essentials`,
+            home: `${brand} | Skincare & Self-Care Essentials`,
             shop: `All Skincare & Beauty — ${brand}`,
             track: `Track Your Order — ${brand}`,
             checkout: `Checkout (Cash on Delivery) — ${brand}`,
@@ -124,14 +124,14 @@ function Effects() {
       if (route.name === 'shop' && route.param) {
         if (active) document.title = `${isSkin ? 'Shop Skincare' : 'Collection'} — ${defaultBrand}`;
       } else if (route.name !== 'product') {
-        document.title = isSkin ? 'SECRATE | Botanical Skincare' : 'METRROMA | Modern Lifestyle, Watches & Gifts';
+        document.title = isSkin ? 'SECRATE | Skincare & Self-Care' : 'METRROMA | Modern Lifestyle, Watches & Gifts';
       }
     });
 
     let md = document.querySelector('meta[name="description"]') as HTMLMetaElement | null;
     if (!md) { md = document.createElement('meta'); md.name = 'description'; document.head.appendChild(md); }
     md.content = isSkin
-      ? 'Premium botanical skincare, hydrating serums, gentle cleansers & self-care essentials delivered across Bangladesh with cash on delivery.'
+      ? 'Skincare, beauty and self-care products from a range of brands, delivered across Bangladesh with cash on delivery.'
       : 'Premium sunglasses, authentic watches, handcrafted gift boxes & curated lifestyle essentials delivered across Bangladesh with cash on delivery.';
     return () => { active = false; };
   }, [route.name, route.param]);
@@ -166,20 +166,20 @@ function AnnouncementBar() {
           /(FREE (?:SHIPPING|DELIVERY)(?: ON ORDERS)? (?:OVER|ABOVE)\s*)(?:৳|Tk)?\s*[\d,]+/i,
           `$1${threshold}`,
         );
-        setAnnounce(alignedAnnouncement);
+        setAnnounce(alignedAnnouncement.replace(/100%\s+AUTHENTIC[^·]*/i, isSkin ? 'PRODUCT DETAILS AVAILABLE' : 'CURATED LIFESTYLE & GIFTS'));
       } else {
         const threshold = s.freeShipThreshold ? taka(s.freeShipThreshold) : '৳2,500';
         setAnnounce(
           isSkin
-            ? `✨ Pure Botanical Skincare · Cash on Delivery Nationwide · Free Shipping Over ${threshold}`
-            : `✨ Cash on Delivery Nationwide · 100% Authentic Watches, Sunglasses & Curated Gifts · Free Delivery Over ${threshold}`
+            ? `✨ Skincare & Self-Care · Cash on Delivery Nationwide · Free Shipping Over ${threshold}`
+            : `✨ Carefully Curated Watches, Sunglasses & Gifts · Cash on Delivery Nationwide · Free Delivery Over ${threshold}`
         );
       }
     }).catch(() => {
       setAnnounce(
         isSkin
-          ? '✨ Pure Botanical Skincare · Cash on Delivery Nationwide · 100% Authentic Quality'
-          : '✨ 100% Authentic Watches, Sunglasses & Curated Gifts · Cash on Delivery Nationwide'
+          ? '✨ Skincare & Self-Care · Cash on Delivery Nationwide · Product Details Available'
+          : '✨ Carefully Curated Watches, Sunglasses & Gifts · Cash on Delivery Nationwide'
       );
     });
   }, [isSkin]);
@@ -452,7 +452,7 @@ function Footer() {
   const [phone, setPhone] = useState('+880 1878-374762');
   const [whatsapp, setWhatsapp] = useState('');
   const isSkin = isSkincareSite();
-  const [name, setName] = useState(isSkin ? 'SECRATE' : 'METROMAA');
+  const [name, setName] = useState(isSkin ? 'SECRATE' : 'METRROMA');
   const [logo, setLogo] = useState('');
   const [cats, setCats] = useState<{ slug: string; name: string; adult?: boolean }[]>([]);
   useEffect(() => {
@@ -485,12 +485,12 @@ function Footer() {
             </div>
             <p className="tabaya-footer-desc">
               {tr(isSkin
-                ? 'Dermatologically-inspired botanical skincare, intimate wellness & everyday self-care rituals. Clean, gentle formulations crafted with active botanicals, delivered across Bangladesh with cash on delivery.'
+                ? 'Skincare, beauty and self-care products from a range of brands, delivered across Bangladesh with cash on delivery. Check each listing for product and ingredient details.'
                 : 'Watches, sunglasses and gift collections for everyday style. Cash on delivery across Bangladesh.', language)}
             </p>
             <div className="tabaya-trust-pill">
               <span>🚚 {tr('Cash on Delivery Nationwide', language)}</span>
-              <span>{isSkin ? `🌿 ${tr('100% Authentic Quality Guaranteed', language)}` : `🔄 ${tr('7-Day Easy Exchange Policy', language)}`}</span>
+              <span>{isSkin ? `🌿 ${tr('Product Details & Ingredient Information', language)}` : `🔄 ${tr('7-Day Easy Exchange Policy', language)}`}</span>
             </div>
           </div>
           <div>
@@ -543,7 +543,7 @@ function Footer() {
         </div>
         <div className="tabaya-footer-bottom">
           <span>{language === 'bn' ? `© ২০২৬ ${name}. সর্বস্বত্ব সংরক্ষিত।` : `© 2026 ${name}. All Rights Reserved.`}</span>
-          <span>{tr('Cash on Delivery · Steadfast Courier · 100% Authentic Quality Guaranteed', language)}</span>
+          <span>{tr('Cash on Delivery · Steadfast Courier · Customer Support Available', language)}</span>
         </div>
       </div>
     </footer>
@@ -593,7 +593,7 @@ function CartDrawer() {
               <div style={{ fontSize: 40, marginBottom: 12 }}>🛍️</div>
               <h4 style={{ fontFamily: 'Playfair Display, Georgia, serif', fontSize: 20, margin: '0 0 6px', color: '#1f3147' }}>{tr('Your Bag is Empty', language)}</h4>
               <p style={{ fontSize: 13, color: '#6b645c', margin: '0 0 18px', maxWidth: 260, lineHeight: 1.5 }}>
-                {tr(isSkin ? 'Discover our botanical skincare & self-care essentials to find your daily favorites.' : 'Explore our curated gifts, accessories, and lifestyle essentials.', language)}
+                {tr(isSkin ? 'Explore skincare, beauty, and self-care products from a range of brands.' : 'Explore our curated gifts, accessories, and lifestyle essentials.', language)}
               </p>
               <button className="pc-checkout-btn" style={{ maxWidth: 220 }} onClick={() => { setOpen(false); go('shop'); }}>
                 {tr('EXPLORE SHOP', language)}
