@@ -630,7 +630,7 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
             </div>
             <div className="tabaya-hero-micro">
               <span>🚚 {tr('Cash on Delivery Nationwide', language)}</span>
-              <span>{isSkin ? `🌿 ${tr('Product Details & Ingredient Information', language)}` : `📦 ${tr('Inspect Before Payment', language)}`}</span>
+              <span>{isSkin ? `🌿 ${tr('Product Details & Ingredient Information', language)}` : `📦 ${tr('Courier Inspection Policy Applies', language)}`}</span>
             </div>
           </div>
         </div>
@@ -767,7 +767,7 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
           </div>
           <div className="tabaya-hero-micro">
             <span>🚚 {tr('Cash on Delivery Nationwide', language)}</span>
-            <span>🔒 {tr('Inspect Before Payment', language)}</span>
+            <span>🔒 {tr('Courier Inspection Policy Applies', language)}</span>
           </div>
         </div>
       </div>
@@ -1164,7 +1164,7 @@ export function Home() {
             <div className="feature-item">
               <div className="feature-icon">🚚</div>
               <h3>{tr('Cash on Delivery Nationwide', language)}</h3>
-              <p>{tr('Inspect your parcel upon arrival before making payment at your doorstep.', language)}</p>
+              <p>{tr('Parcel inspection depends on the courier’s policy. Contact us before ordering if inspection is important to you.', language)}</p>
             </div>
             <div className="feature-item">
               <div className="feature-icon">{isSkin ? '🌿' : '🛡️'}</div>
@@ -1994,7 +1994,7 @@ export function ProductPage({ slug }: { slug: string }) {
                   <div style={{ paddingBottom: 16, fontSize: 13.5, color: '#4b5563', lineHeight: 1.6 }}>
                     <p><b>Inside Dhaka:</b> Delivered in 1–2 business days. Delivery fee {settings ? taka(settings.deliveryInside) : '৳80'}.</p>
                     <p style={{ marginTop: 4 }}><b>Outside Dhaka:</b> Delivered in 2–3 business days. Delivery fee {settings ? taka(settings.deliveryOutside) : '৳130'}.</p>
-                    <p style={{ marginTop: 6 }}>Inspect your parcel in the presence of the delivery rider before payment. Instant return or exchange if damaged in transit or unsatisfactory.</p>
+                    <p style={{ marginTop: 6 }}>{tr('Parcel inspection follows the courier policy. Report transit damage to customer support promptly; requests are handled under the published returns policy.', language)}</p>
                   </div>
                 )}
               </div>
@@ -2590,7 +2590,7 @@ export function ProductPage({ slug }: { slug: string }) {
                   <span className="icon">💵</span>
                   <div>
                     <h4>Cash on Delivery at Your Doorstep</h4>
-                    <p>Pay cash directly to the delivery courier when your parcel arrives. You have the right to inspect the parcel outer packaging before payment.</p>
+                    <p>{tr('Pay cash to the delivery courier when your parcel arrives. Parcel opening before payment depends on the courier’s policy.', language)}</p>
                   </div>
                 </div>
                 <div className="tabaya-feature-card">
@@ -3022,7 +3022,7 @@ export function Checkout() {
             {tr('Finalize Your Order', language)}
           </h1>
           <p style={{ color: '#6b645c', fontSize: 14, maxWidth: 520, margin: '0 auto' }}>
-            {tr('Pay with Cash on Delivery at your doorstep. Inspect your parcel before completing payment.', language)}
+            {tr('Cash on delivery is available. Parcel inspection depends on the courier’s policy; contact us before ordering if inspection is important to you.', language)}
           </p>
         </div>
 
@@ -3296,7 +3296,7 @@ export function Checkout() {
 
             <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: '#6b645c', textAlign: 'center' }}>
               <div>🔒 Secure Checkout · No Advance Payment Required</div>
-              <div>📦 Inspect your parcel upon doorstep delivery</div>
+              <div>📦 {tr('Courier inspection policy applies', language)}</div>
             </div>
           </div>
         </div>

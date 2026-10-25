@@ -790,7 +790,7 @@ function CartDrawer() {
               {tr('PROCEED TO CHECKOUT →', language)}
             </button>
             <div style={{ textAlign: 'center', fontSize: 11, color: '#888', marginTop: 10, letterSpacing: '0.04em' }}>
-              {tr('🔒 Cash on Delivery · Inspect Before Payment', language)}
+              {tr('🔒 Cash on Delivery · Courier Inspection Policy Applies', language)}
             </div>
           </div>
         )}
