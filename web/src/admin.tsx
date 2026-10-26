@@ -756,29 +756,40 @@ function code128Svg(text: string, height = 30): string {
   for (let i = 0; i < bars.length; i++) {
     if (bars[i] === '1') rects += `<rect x="${i}" y="0" width="1" height="${height}" fill="#000000" />`;
   }
-  return `<svg viewBox="0 0 ${bars.length} ${height}" style="height:${height}px; max-width:155px; width:100%; display:block;" shape-rendering="crispEdges">${rects}</svg>`;
+  return `<svg viewBox="0 0 ${bars.length} ${height}" style="height:${height}px; max-width:125px; width:100%; display:block;" shape-rendering="crispEdges">${rects}</svg>`;
 }
 
 const SLIP_PRINT_CSS = `@page {
-  size: 100mm 150mm;
+  size: 75mm 100mm;
   margin: 0;
 }
 @media print {
   html, body {
-    width: 100mm !important;
+    width: 75mm !important;
+    height: 100mm !important;
     margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
+    overflow: hidden !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
   .slip-page {
-    page-break-after: always;
-    break-after: page;
+    width: 75mm !important;
+    height: 100mm !important;
+    max-height: 100mm !important;
+    box-sizing: border-box !important;
+    page-break-before: auto !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    overflow: hidden !important;
   }
-  .slip-page:last-child {
-    page-break-after: auto;
-    break-after: auto;
+  .slip-page:last-child,
+  .slip-page:last-of-type {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
   }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -788,101 +799,126 @@ body {
   color: #000000;
   margin: 0;
   padding: 0;
+  -webkit-font-smoothing: antialiased;
 }
 .slip-page {
-  width: 100mm;
+  width: 75mm;
+  height: 100mm;
+  max-height: 100mm;
   background: #ffffff;
+  overflow: hidden;
+  box-sizing: border-box;
+  page-break-after: always;
+  break-after: page;
+}
+.slip-page:last-child,
+.slip-page:last-of-type {
+  page-break-after: avoid;
+  break-after: auto;
 }
 .slip-card {
-  width: 100mm;
+  width: 75mm;
+  height: 100mm;
+  max-height: 100mm;
   background: #ffffff;
-  padding: 14px 14px 10px 14px;
+  padding: 6px 8px 4px 8px;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
 }
 .header-row {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 6px;
 }
 .brand-logo {
-  max-height: 28px;
-  max-width: 130px;
+  max-height: 22px;
+  max-width: 95px;
   object-fit: contain;
 }
 .brand-name {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 800;
   color: #000000;
   line-height: 1.1;
   letter-spacing: -0.2px;
 }
 .invoice-block {
   text-align: right;
-  font-size: 11.5px;
-  line-height: 1.25;
+  font-size: 9.5px;
+  line-height: 1.2;
 }
 .inv-title {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
   color: #000000;
-  margin-bottom: 2px;
-}
-.inv-no-label {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: #111111;
-  line-height: 1.2;
-}
-.inv-no-val {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: #111111;
-  line-height: 1.2;
   margin-bottom: 1px;
 }
-.inv-date {
-  font-size: 11.5px;
+.inv-no-label {
+  font-size: 9.5px;
   font-weight: 600;
   color: #111111;
-  line-height: 1.2;
+  line-height: 1.15;
+}
+.inv-no-val {
+  font-size: 10px;
+  font-weight: 700;
+  color: #000000;
+  line-height: 1.15;
+}
+.inv-date {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #111111;
+  line-height: 1.15;
 }
 .shipto-section {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  margin-top: 12px;
-  gap: 12px;
+  margin-top: 4px;
+  gap: 8px;
 }
 .shipto-block {
   flex: 1;
   min-width: 0;
 }
 .section-title {
-  font-size: 10.5px;
-  font-weight: 700;
-  color: #333333;
+  font-size: 9px;
+  font-weight: 800;
+  color: #111111;
   text-transform: uppercase;
   letter-spacing: 0.3px;
-  margin-bottom: 2.5px;
+  margin-bottom: 1.5px;
 }
 .customer-name {
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   color: #000000;
-  margin-bottom: 1.5px;
+  margin-bottom: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .customer-phone {
-  font-size: 11.5px;
-  font-weight: 500;
+  font-size: 10px;
+  font-weight: 700;
   color: #000000;
-  margin-bottom: 1.5px;
+  margin-bottom: 1px;
 }
 .customer-address {
-  font-size: 11.5px;
-  font-weight: 400;
+  font-size: 9.5px;
+  font-weight: 500;
   color: #111111;
-  line-height: 1.35;
+  line-height: 1.25;
   word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .cod-block {
   flex-shrink: 0;
@@ -891,79 +927,87 @@ body {
   padding-bottom: 1px;
 }
 .cod-amount {
-  font-size: 15.5px;
-  font-weight: 800;
+  font-size: 13.5px;
+  font-weight: 900;
   color: #000000;
   letter-spacing: -0.2px;
   white-space: nowrap;
 }
 .divider-line {
   border-top: 1px solid #000000;
-  margin: 8px 0;
+  margin: 3px 0;
   width: 100%;
 }
 .items-section {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 10px;
-  min-height: 60px;
+  gap: 6px;
+  flex: 1;
+  min-height: 42px;
+  max-height: 72px;
+  overflow: hidden;
 }
 .items-list {
   flex: 1;
   min-width: 0;
-  padding-right: 8px;
+  padding-right: 4px;
 }
 .items-title {
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   color: #000000;
-  margin-bottom: 3px;
+  margin-bottom: 1.5px;
 }
 .item-line {
-  font-size: 11.5px;
-  font-weight: 400;
+  font-size: 9px;
+  font-weight: 500;
   color: #000000;
-  line-height: 1.4;
-  margin-bottom: 2px;
+  line-height: 1.25;
+  margin-bottom: 1px;
+  word-break: break-word;
 }
 .qr-container {
-  width: 76px;
-  height: 76px;
+  width: 50px;
+  height: 50px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
 }
 .qr-container svg {
-  width: 72px;
-  height: 72px;
+  width: 48px;
+  height: 48px;
   display: block;
 }
 .footer-section {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  margin-top: 2px;
+  align-items: flex-end;
+  gap: 6px;
+  margin-top: 1px;
 }
 .note-block {
   flex: 1;
   min-width: 0;
-  padding-right: 8px;
+  padding-right: 4px;
 }
 .note-title {
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: 9.5px;
+  font-weight: 700;
   color: #000000;
-  margin-bottom: 2px;
+  margin-bottom: 1px;
 }
 .note-text {
-  font-size: 11px;
-  font-weight: 400;
+  font-size: 9px;
+  font-weight: 500;
   color: #222222;
-  line-height: 1.3;
+  line-height: 1.2;
   word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .barcode-block {
   text-align: right;
@@ -973,18 +1017,18 @@ body {
   flex-shrink: 0;
 }
 .parcel-id-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 9px;
+  font-weight: 700;
   color: #000000;
-  line-height: 1.2;
+  line-height: 1.15;
 }
 .parcel-id-val {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 9px;
+  font-weight: 700;
   color: #000000;
-  line-height: 1.2;
+  line-height: 1.15;
   margin-top: 1px;
-  margin-bottom: 3px;
+  margin-bottom: 1px;
 }`;
 
 const PRINT_CSS = `*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -1099,7 +1143,7 @@ function slipBody(o: any) {
           <div class="barcode-block">
             <div class="parcel-id-label">${parcelLabel}</div>
             <div class="parcel-id-val">${displayParcelId}</div>
-            ${code128Svg(barcodeValue, 30)}
+            ${code128Svg(barcodeValue, 22)}
           </div>
         </div>
       </div>
