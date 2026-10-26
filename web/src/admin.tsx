@@ -756,7 +756,7 @@ function code128Svg(text: string, height = 30): string {
   for (let i = 0; i < bars.length; i++) {
     if (bars[i] === '1') rects += `<rect x="${i}" y="0" width="1" height="${height}" fill="#000000" />`;
   }
-  return `<svg viewBox="0 0 ${bars.length} ${height}" style="height:${height}px; max-width:125px; width:100%; display:block;" shape-rendering="crispEdges">${rects}</svg>`;
+  return `<svg viewBox="0 0 ${bars.length} ${height}" style="height:${height}px; max-width:110px; width:100%; display:block;" shape-rendering="crispEdges">${rects}</svg>`;
 }
 
 const SLIP_PRINT_CSS = `@page {
@@ -764,22 +764,24 @@ const SLIP_PRINT_CSS = `@page {
   margin: 0;
 }
 @media print {
+  @page {
+    size: 75mm 100mm;
+    margin: 0;
+  }
   html, body {
     width: 75mm !important;
-    height: 100mm !important;
+    height: auto !important;
     margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
-    overflow: hidden !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
   .slip-page {
     width: 75mm !important;
-    height: 100mm !important;
-    max-height: 100mm !important;
+    max-height: 96mm !important;
     box-sizing: border-box !important;
-    page-break-before: auto !important;
+    page-break-before: avoid !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
     page-break-after: always !important;
@@ -803,8 +805,8 @@ body {
 }
 .slip-page {
   width: 75mm;
-  height: 100mm;
-  max-height: 100mm;
+  max-width: 75mm;
+  max-height: 96mm;
   background: #ffffff;
   overflow: hidden;
   box-sizing: border-box;
@@ -818,29 +820,25 @@ body {
 }
 .slip-card {
   width: 75mm;
-  height: 100mm;
-  max-height: 100mm;
+  max-width: 75mm;
   background: #ffffff;
-  padding: 6px 8px 4px 8px;
+  padding: 5px 7px 4px 7px;
   box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
   overflow: hidden;
 }
 .header-row {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 6px;
+  gap: 4px;
 }
 .brand-logo {
-  max-height: 22px;
-  max-width: 95px;
+  max-height: 20px;
+  max-width:110px;
   object-fit: contain;
 }
 .brand-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   color: #000000;
   line-height: 1.1;
@@ -848,72 +846,75 @@ body {
 }
 .invoice-block {
   text-align: right;
-  font-size: 9.5px;
-  line-height: 1.2;
+  font-size: 8.5px;
+  line-height: 1.15;
 }
 .inv-title {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   color: #000000;
+  line-height: 1;
   margin-bottom: 1px;
 }
 .inv-no-label {
-  font-size: 9.5px;
+  font-size: 8.5px;
   font-weight: 600;
-  color: #111111;
-  line-height: 1.15;
+  color: #222222;
+  line-height: 1.1;
 }
 .inv-no-val {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   color: #000000;
-  line-height: 1.15;
+  line-height: 1.1;
 }
 .inv-date {
-  font-size: 9.5px;
+  font-size: 8.5px;
   font-weight: 600;
-  color: #111111;
-  line-height: 1.15;
+  color: #222222;
+  line-height: 1.1;
 }
 .shipto-section {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  margin-top: 4px;
-  gap: 8px;
+  margin-top: 3px;
+  gap: 6px;
 }
 .shipto-block {
   flex: 1;
   min-width: 0;
 }
 .section-title {
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 800;
   color: #111111;
   text-transform: uppercase;
   letter-spacing: 0.3px;
-  margin-bottom: 1.5px;
+  margin-bottom: 1px;
 }
 .customer-name {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: #000000;
+  line-height: 1.15;
   margin-bottom: 1px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .customer-phone {
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 700;
   color: #000000;
+  line-height: 1.15;
   margin-bottom: 1px;
 }
 .customer-address {
-  font-size: 9.5px;
+  font-size: 8.5px;
   font-weight: 500;
   color: #111111;
-  line-height: 1.25;
+  line-height: 1.15;
   word-break: break-word;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -927,11 +928,12 @@ body {
   padding-bottom: 1px;
 }
 .cod-amount {
-  font-size: 13.5px;
+  font-size: 12.5px;
   font-weight: 900;
   color: #000000;
   letter-spacing: -0.2px;
   white-space: nowrap;
+  line-height: 1;
 }
 .divider-line {
   border-top: 1px solid #000000;
@@ -943,10 +945,7 @@ body {
   justify-content: space-between;
   align-items: flex-start;
   gap: 6px;
-  flex: 1;
-  min-height: 42px;
-  max-height: 72px;
-  overflow: hidden;
+  min-height: 36px;
 }
 .items-list {
   flex: 1;
@@ -954,30 +953,30 @@ body {
   padding-right: 4px;
 }
 .items-title {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   color: #000000;
-  margin-bottom: 1.5px;
+  margin-bottom: 1px;
 }
 .item-line {
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 500;
   color: #000000;
-  line-height: 1.25;
+  line-height: 1.15;
   margin-bottom: 1px;
   word-break: break-word;
 }
 .qr-container {
-  width: 50px;
-  height: 50px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
 }
 .qr-container svg {
-  width: 48px;
-  height: 48px;
+  width: 42px;
+  height: 42px;
   display: block;
 }
 .footer-section {
@@ -985,7 +984,7 @@ body {
   justify-content: space-between;
   align-items: flex-end;
   gap: 6px;
-  margin-top: 1px;
+  margin-top: 2px;
 }
 .note-block {
   flex: 1;
@@ -993,16 +992,16 @@ body {
   padding-right: 4px;
 }
 .note-title {
-  font-size: 9.5px;
+  font-size: 8.5px;
   font-weight: 700;
   color: #000000;
   margin-bottom: 1px;
 }
 .note-text {
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 500;
   color: #222222;
-  line-height: 1.2;
+  line-height: 1.15;
   word-break: break-word;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1017,16 +1016,16 @@ body {
   flex-shrink: 0;
 }
 .parcel-id-label {
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 700;
   color: #000000;
-  line-height: 1.15;
+  line-height: 1.1;
 }
 .parcel-id-val {
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 700;
   color: #000000;
-  line-height: 1.15;
+  line-height: 1.1;
   margin-top: 1px;
   margin-bottom: 1px;
 }`;
@@ -1143,7 +1142,7 @@ function slipBody(o: any) {
           <div class="barcode-block">
             <div class="parcel-id-label">${parcelLabel}</div>
             <div class="parcel-id-val">${displayParcelId}</div>
-            ${code128Svg(barcodeValue, 22)}
+            ${code128Svg(barcodeValue, 18)}
           </div>
         </div>
       </div>
