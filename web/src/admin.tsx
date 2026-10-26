@@ -761,35 +761,34 @@ function code128Svg(text: string, height = 30): string {
 
 const SLIP_PRINT_CSS = `@page {
   size: 75mm 100mm;
-  margin: 0 !important;
+  margin: 0;
 }
 @media print {
   @page {
     size: 75mm 100mm;
-    margin: 0 !important;
+    margin: 0;
   }
   html, body {
     width: 75mm !important;
     margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
-    overflow: hidden !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
   .slip-page {
     width: 75mm !important;
-    max-height: 98mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
     box-sizing: border-box !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    page-break-after: avoid !important;
-    break-after: avoid !important;
-    overflow: hidden !important;
+    page-break-after: always !important;
+    break-after: page !important;
   }
-  .slip-page + .slip-page {
-    page-break-before: always !important;
-    break-before: page !important;
+  .slip-page:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
   }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -804,46 +803,43 @@ body {
 .slip-page {
   width: 75mm;
   max-width: 75mm;
-  max-height: 98mm;
   background: #ffffff;
-  overflow: hidden;
   box-sizing: border-box;
+  page-break-after: always;
+  break-after: page;
 }
-.slip-page + .slip-page {
-  page-break-before: always;
-  break-before: page;
+.slip-page:last-child {
+  page-break-after: auto;
+  break-after: auto;
 }
 .slip-card {
   width: 75mm;
   max-width: 75mm;
   background: #ffffff;
-  padding: 3mm 3.5mm 2mm 3.5mm;
+  padding: 3mm 4mm 2mm 4mm;
   box-sizing: border-box;
-  overflow: hidden;
 }
 .header-row {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 6px;
-  margin: 0 0 4px 0;
+  margin: 0 0 3px 0;
   padding: 0;
 }
-.brand-logo {
-  max-height: 26px;
-  max-width:130px;
-  object-fit: contain;
-}
 .brand-name {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 900;
   color: #000000;
   line-height: 1.1;
-  letter-spacing: -0.2px;
+  letter-spacing: -0.3px;
+}
+.brand-logo {
+  max-height: 26px;
+  max-width: 110px;
+  object-fit: contain;
 }
 .invoice-block {
   text-align: right;
-  font-size: 10px;
   line-height: 1.25;
 }
 .inv-title {
@@ -854,33 +850,37 @@ body {
   margin-bottom: 2px;
 }
 .inv-meta {
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 700;
   color: #000000;
   line-height: 1.25;
   white-space: nowrap;
 }
 .shipto-section {
+  margin-top: 3px;
+}
+.shipto-header-row {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-top: 4px;
-  gap: 8px;
-}
-.shipto-block {
-  flex: 1;
-  min-width: 0;
+  align-items: center;
+  margin-bottom: 3px;
 }
 .section-title {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 900;
   color: #000000;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 2px;
+}
+.cod-amount {
+  font-size: 15.5px;
+  font-weight: 900;
+  color: #000000;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
 }
 .customer-name {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   color: #000000;
   line-height: 1.35;
@@ -889,7 +889,7 @@ body {
   overflow-wrap: break-word;
 }
 .customer-phone {
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 800;
   color: #000000;
   line-height: 1.25;
@@ -897,30 +897,16 @@ body {
   letter-spacing: 0.3px;
 }
 .customer-address {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   color: #000000;
   line-height: 1.4;
   word-break: normal;
   overflow-wrap: break-word;
 }
-.cod-block {
-  flex-shrink: 0;
-  text-align: right;
-  align-self: flex-start;
-  padding-top: 2px;
-}
-.cod-amount {
-  font-size: 14.5px;
-  font-weight: 900;
-  color: #000000;
-  letter-spacing: -0.2px;
-  white-space: nowrap;
-  line-height: 1.1;
-}
 .divider-line {
   border-top: 1.5px solid #000000;
-  margin: 5px 0;
+  margin: 4.5px 0;
   width: 100%;
 }
 .items-section {
@@ -928,15 +914,14 @@ body {
   justify-content: space-between;
   align-items: flex-start;
   gap: 8px;
-  margin: 3px 0;
+  margin: 2px 0;
 }
 .items-list {
   flex: 1;
   min-width: 0;
-  padding-right: 4px;
 }
 .items-title {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 900;
   color: #000000;
   text-transform: uppercase;
@@ -944,7 +929,7 @@ body {
   margin-bottom: 2px;
 }
 .item-line {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   color: #000000;
   line-height: 1.35;
@@ -975,7 +960,6 @@ body {
 .note-block {
   flex: 1;
   min-width: 0;
-  padding-right: 4px;
 }
 .note-title {
   font-size: 10px;
@@ -986,7 +970,7 @@ body {
   margin-bottom: 1px;
 }
 .note-text {
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 700;
   color: #000000;
   line-height: 1.3;
@@ -1001,7 +985,7 @@ body {
   flex-shrink: 0;
 }
 .parcel-id-line {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 800;
   color: #000000;
   line-height: 1.25;
@@ -1068,63 +1052,11 @@ function slipBody(o: any) {
 
   const qrData = trackingNo ? `https://merchant.pathao.com/tracking?consignment_id=${trackingNo}` : `ORD:${o.id}|TEL:${o.customer.phone}|COD:${totalPayable}`;
 
-  return `
-    <div class="slip-page">
-      <div class="slip-card">
-        <!-- Header Row -->
-        <div class="header-row">
-          <div class="brand-block">
-            ${brandBlockHtml}
-          </div>
-          <div class="invoice-block">
-            <div class="inv-title">Invoice</div>
-            <div class="inv-meta">No: <strong>#${o.id}</strong></div>
-            <div class="inv-meta">Date: ${dateStr}</div>
-          </div>
-        </div>
+  const rawAddress = o.customer.address || '';
+  const areaStr = o.customer.area ? ', ' + o.customer.area : '';
+  const cleanAddress = (rawAddress + areaStr).trim();
 
-        <!-- Ship To & COD Section -->
-        <div class="shipto-section">
-          <div class="shipto-block">
-            <div class="section-title">SHIP TO</div>
-            <div class="customer-name">${o.customer.name || 'N/A'}</div>
-            <div class="customer-phone">${o.customer.phone || ''}</div>
-            <div class="customer-address">${o.customer.address || ''}${o.customer.area ? ', ' + o.customer.area : ''}</div>
-          </div>
-          <div class="cod-block">
-            <div class="cod-amount">COD: ${totalPayable} TK</div>
-          </div>
-        </div>
-
-        <div class="divider-line"></div>
-
-        <!-- Items Section & QR Code -->
-        <div class="items-section">
-          <div class="items-list">
-            <div class="items-title">Items</div>
-            ${itemsHtml}
-          </div>
-          <div class="qr-container">
-            ${qrSvg(qrData)}
-          </div>
-        </div>
-
-        <div class="divider-line"></div>
-
-        <!-- Footer Section (Note & Barcode) -->
-        <div class="footer-section">
-          <div class="note-block">
-            <div class="note-title">Note:</div>
-            ${o.customer.note ? `<div class="note-text">${o.customer.note}</div>` : '<div class="note-text">-</div>'}
-          </div>
-          <div class="barcode-block">
-            <div class="parcel-id-line">${parcelLabel} <strong>${displayParcelId}</strong></div>
-            ${code128Svg(barcodeValue, 24)}
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
+  return `<div class="slip-page"><div class="slip-card"><div class="header-row"><div class="brand-block">${brandBlockHtml}</div><div class="invoice-block"><div class="inv-title">Invoice</div><div class="inv-meta">No: <strong>#${o.id}</strong></div><div class="inv-meta">Date: ${dateStr}</div></div></div><div class="shipto-section"><div class="shipto-header-row"><div class="section-title">SHIP TO</div><div class="cod-amount">COD: ${totalPayable} TK</div></div><div class="customer-name">${o.customer.name || 'N/A'}</div><div class="customer-phone">${o.customer.phone || ''}</div><div class="customer-address">${cleanAddress}</div></div><div class="divider-line"></div><div class="items-section"><div class="items-list"><div class="items-title">Items</div>${itemsHtml}</div><div class="qr-container">${qrSvg(qrData)}</div></div><div class="divider-line"></div><div class="footer-section"><div class="note-block"><div class="note-title">Note:</div>${o.customer.note ? `<div class="note-text">${o.customer.note}</div>` : '<div class="note-text">-</div>'}</div><div class="barcode-block"><div class="parcel-id-line">${parcelLabel} <strong>${displayParcelId}</strong></div>${code128Svg(barcodeValue, 24)}</div></div></div></div>`;
 }
 function printDoc(title: string, inner: string) {
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${PRINT_CSS}</style></head><body>${inner}<script>window.onload=function(){window.print()}<\/script></body></html>`;
@@ -1136,7 +1068,7 @@ function printInvoices(list: any[]) { if (list.length) printDoc('invoices', list
 function printSlips(list: any[]) {
   if (!list.length) return;
   updateLiveSettingsCache();
-  const slipsHtml = list.map(slipBody).join('');
+  const slipsHtml = list.map(slipBody).map(s => s.trim()).join('');
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Delivery Slips (${list.length})</title><style>${SLIP_PRINT_CSS}</style><script>window.onload=function(){window.print()}</script></head><body>${slipsHtml}</body></html>`;
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
