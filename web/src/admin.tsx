@@ -756,7 +756,7 @@ function code128Svg(text: string, height = 30): string {
   for (let i = 0; i < bars.length; i++) {
     if (bars[i] === '1') rects += `<rect x="${i}" y="0" width="1" height="${height}" fill="#000000" />`;
   }
-  return `<svg viewBox="0 0 ${bars.length} ${height}" style="height:${height}px; max-width:110px; width:100%; display:block;" shape-rendering="crispEdges">${rects}</svg>`;
+  return `<svg viewBox="0 0 ${bars.length} ${height}" style="height:${height}px; max-width:130px; width:100%; display:block;" shape-rendering="crispEdges">${rects}</svg>`;
 }
 
 const SLIP_PRINT_CSS = `@page {
@@ -770,28 +770,26 @@ const SLIP_PRINT_CSS = `@page {
   }
   html, body {
     width: 75mm !important;
-    height: auto !important;
     margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
+    overflow: hidden !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
   .slip-page {
     width: 75mm !important;
-    max-height: 96mm !important;
+    max-height: 98mm !important;
     box-sizing: border-box !important;
-    page-break-before: avoid !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    page-break-after: always !important;
-    break-after: page !important;
-    overflow: hidden !important;
-  }
-  .slip-page:last-child,
-  .slip-page:last-of-type {
     page-break-after: avoid !important;
     break-after: avoid !important;
+    overflow: hidden !important;
+  }
+  .slip-page + .slip-page {
+    page-break-before: always !important;
+    break-before: page !important;
   }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -806,23 +804,20 @@ body {
 .slip-page {
   width: 75mm;
   max-width: 75mm;
-  max-height: 96mm;
+  max-height: 98mm;
   background: #ffffff;
   overflow: hidden;
   box-sizing: border-box;
-  page-break-after: always;
-  break-after: page;
 }
-.slip-page:last-child,
-.slip-page:last-of-type {
-  page-break-after: avoid;
-  break-after: auto;
+.slip-page + .slip-page {
+  page-break-before: always;
+  break-before: page;
 }
 .slip-card {
   width: 75mm;
   max-width: 75mm;
   background: #ffffff;
-  padding: 2.5mm 3.5mm 2mm 3.5mm;
+  padding: 3mm 3.5mm 2mm 3.5mm;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -831,38 +826,38 @@ body {
   justify-content: space-between;
   align-items: flex-start;
   gap: 6px;
-  margin: 0;
+  margin: 0 0 4px 0;
   padding: 0;
 }
 .brand-logo {
-  max-height: 22px;
-  max-width: 95px;
+  max-height: 26px;
+  max-width:130px;
   object-fit: contain;
 }
 .brand-name {
-  font-size: 15px;
-  font-weight: 800;
+  font-size: 17px;
+  font-weight: 900;
   color: #000000;
   line-height: 1.1;
   letter-spacing: -0.2px;
 }
 .invoice-block {
   text-align: right;
-  font-size: 9px;
-  line-height: 1.2;
+  font-size: 10px;
+  line-height: 1.25;
 }
 .inv-title {
-  font-size: 11.5px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 900;
   color: #000000;
   line-height: 1.1;
-  margin-bottom: 1px;
+  margin-bottom: 2px;
 }
 .inv-meta {
-  font-size: 8.5px;
-  font-weight: 600;
-  color: #222222;
-  line-height: 1.2;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #000000;
+  line-height: 1.25;
   white-space: nowrap;
 }
 .shipto-section {
@@ -870,23 +865,23 @@ body {
   justify-content: space-between;
   align-items: flex-start;
   margin-top: 4px;
-  gap: 6px;
+  gap: 8px;
 }
 .shipto-block {
   flex: 1;
   min-width: 0;
 }
 .section-title {
-  font-size: 9px;
-  font-weight: 800;
+  font-size: 10px;
+  font-weight: 900;
   color: #000000;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.5px;
   margin-bottom: 2px;
 }
 .customer-name {
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
   color: #000000;
   line-height: 1.35;
   margin-bottom: 2px;
@@ -894,18 +889,18 @@ body {
   overflow-wrap: break-word;
 }
 .customer-phone {
-  font-size: 10.5px;
-  font-weight: 700;
+  font-size: 11.5px;
+  font-weight: 800;
   color: #000000;
   line-height: 1.25;
   margin-bottom: 2px;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.3px;
 }
 .customer-address {
-  font-size: 9.5px;
-  font-weight: 500;
-  color: #111111;
-  line-height: 1.35;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #000000;
+  line-height: 1.4;
   word-break: normal;
   overflow-wrap: break-word;
 }
@@ -916,24 +911,24 @@ body {
   padding-top: 2px;
 }
 .cod-amount {
-  font-size: 13.5px;
+  font-size: 14.5px;
   font-weight: 900;
   color: #000000;
   letter-spacing: -0.2px;
   white-space: nowrap;
-  line-height: 1;
+  line-height: 1.1;
 }
 .divider-line {
-  border-top: 1px solid #000000;
-  margin: 3.5px 0;
+  border-top: 1.5px solid #000000;
+  margin: 5px 0;
   width: 100%;
 }
 .items-section {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 6px;
-  margin: 2px 0;
+  gap: 8px;
+  margin: 3px 0;
 }
 .items-list {
   flex: 1;
@@ -941,41 +936,41 @@ body {
   padding-right: 4px;
 }
 .items-title {
-  font-size: 9px;
-  font-weight: 800;
+  font-size: 10px;
+  font-weight: 900;
   color: #000000;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.5px;
   margin-bottom: 2px;
 }
 .item-line {
-  font-size: 9.5px;
-  font-weight: 600;
+  font-size: 10.5px;
+  font-weight: 700;
   color: #000000;
-  line-height: 1.3;
+  line-height: 1.35;
   margin-bottom: 2px;
   word-break: normal;
   overflow-wrap: break-word;
 }
 .qr-container {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
 }
 .qr-container svg {
-  width: 42px;
-  height: 42px;
+  width: 46px;
+  height: 46px;
   display: block;
 }
 .footer-section {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  gap: 6px;
-  margin-top: 3px;
+  gap: 8px;
+  margin-top: 4px;
 }
 .note-block {
   flex: 1;
@@ -983,18 +978,18 @@ body {
   padding-right: 4px;
 }
 .note-title {
-  font-size: 9px;
-  font-weight: 800;
+  font-size: 10px;
+  font-weight: 900;
   color: #000000;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.4px;
   margin-bottom: 1px;
 }
 .note-text {
-  font-size: 8.5px;
-  font-weight: 500;
-  color: #222222;
-  line-height: 1.25;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #000000;
+  line-height: 1.3;
   word-break: normal;
   overflow-wrap: break-word;
 }
@@ -1006,10 +1001,10 @@ body {
   flex-shrink: 0;
 }
 .parcel-id-line {
-  font-size: 9px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 800;
   color: #000000;
-  line-height: 1.2;
+  line-height: 1.25;
   margin-bottom: 2px;
   white-space: nowrap;
 }`;
@@ -1124,7 +1119,7 @@ function slipBody(o: any) {
           </div>
           <div class="barcode-block">
             <div class="parcel-id-line">${parcelLabel} <strong>${displayParcelId}</strong></div>
-            ${code128Svg(barcodeValue, 20)}
+            ${code128Svg(barcodeValue, 24)}
           </div>
         </div>
       </div>
@@ -1141,7 +1136,8 @@ function printInvoices(list: any[]) { if (list.length) printDoc('invoices', list
 function printSlips(list: any[]) {
   if (!list.length) return;
   updateLiveSettingsCache();
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Delivery Slips (${list.length})</title><style>${SLIP_PRINT_CSS}</style></head><body>${list.map(slipBody).join('')}<script>window.onload=function(){window.print()}<\/script></body></html>`;
+  const slipsHtml = list.map(slipBody).join('');
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Delivery Slips (${list.length})</title><style>${SLIP_PRINT_CSS}</style><script>window.onload=function(){window.print()}</script></head><body>${slipsHtml}</body></html>`;
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
 }
