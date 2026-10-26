@@ -704,6 +704,289 @@ export function MediaPickerModal({
   );
 }
 
+let liveStoreSettings: { storeName?: string; logo?: string } = {};
+
+function updateLiveSettingsCache() {
+  try {
+    fetch('/api/settings')
+      .then((r) => r.json())
+      .then((s) => {
+        if (s) liveStoreSettings = s;
+      })
+      .catch(() => {});
+  } catch {}
+}
+updateLiveSettingsCache();
+
+function code128Svg(text: string, height = 30): string {
+  const PATTERNS = [
+    '212222','222122','222221','121223','121322','131222','122213','122312','132212','221213',
+    '221312','231212','112232','122132','122231','113222','123122','123221','223211','221132',
+    '221231','213212','223112','312131','311222','321122','321221','312212','322112','322211',
+    '212123','212321','232121','111323','131123','131321','112313','132113','132311','211313',
+    '231113','231311','112133','112331','132131','113123','113321','133121','313121','211331',
+    '231131','213113','213311','213131','311123','311321','331121','312113','312311','332111',
+    '314111','221411','431111','111224','111422','121124','121421','141122','141221','112214',
+    '112412','122114','122411','142112','142211','241211','221114','413111','241112','134111',
+    '111242','121142','121241','114212','124112','124211','411212','421112','421211','212141',
+    '214121','412121','111143','111341','131141','114113','114311','411113','411311','113141',
+    '114131','311141','411131','211412','211214','211232','2331112'
+  ];
+  const clean = String(text || '').replace(/[^\x20-\x7E]/g, '');
+  if (!clean) return '';
+  let sum = 104;
+  const codes = [104];
+  for (let i = 0; i < clean.length; i++) {
+    const code = clean.charCodeAt(i) - 32;
+    codes.push(code);
+    sum += code * (i + 1);
+  }
+  codes.push(sum % 103);
+  codes.push(106);
+  let bars = '';
+  for (const c of codes) {
+    const pat = PATTERNS[c];
+    if (pat) {
+      for (let j = 0; j < pat.length; j++) {
+        bars += (j % 2 === 0 ? '1' : '0').repeat(parseInt(pat[j]));
+      }
+    }
+  }
+  let rects = '';
+  for (let i = 0; i < bars.length; i++) {
+    if (bars[i] === '1') rects += `<rect x="${i}" y="0" width="1" height="${height}" fill="#000000" />`;
+  }
+  return `<svg viewBox="0 0 ${bars.length} ${height}" style="height:${height}px; max-width:155px; width:100%; display:block;" shape-rendering="crispEdges">${rects}</svg>`;
+}
+
+const SLIP_PRINT_CSS = `@page {
+  size: 100mm 150mm;
+  margin: 0;
+}
+@media print {
+  html, body {
+    width: 100mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .slip-page {
+    page-break-after: always;
+    break-after: page;
+  }
+  .slip-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: #ffffff;
+  color: #000000;
+  margin: 0;
+  padding: 0;
+}
+.slip-page {
+  width: 100mm;
+  background: #ffffff;
+}
+.slip-card {
+  width: 100mm;
+  background: #ffffff;
+  padding: 14px 14px 10px 14px;
+  box-sizing: border-box;
+}
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.brand-logo {
+  max-height: 28px;
+  max-width: 130px;
+  object-fit: contain;
+}
+.brand-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #000000;
+  line-height: 1.1;
+  letter-spacing: -0.2px;
+}
+.invoice-block {
+  text-align: right;
+  font-size: 11.5px;
+  line-height: 1.25;
+}
+.inv-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #000000;
+  margin-bottom: 2px;
+}
+.inv-no-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #111111;
+  line-height: 1.2;
+}
+.inv-no-val {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #111111;
+  line-height: 1.2;
+  margin-bottom: 1px;
+}
+.inv-date {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #111111;
+  line-height: 1.2;
+}
+.shipto-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: 12px;
+  gap: 12px;
+}
+.shipto-block {
+  flex: 1;
+  min-width: 0;
+}
+.section-title {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #333333;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 2.5px;
+}
+.customer-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #000000;
+  margin-bottom: 1.5px;
+}
+.customer-phone {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #000000;
+  margin-bottom: 1.5px;
+}
+.customer-address {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: #111111;
+  line-height: 1.35;
+  word-break: break-word;
+}
+.cod-block {
+  flex-shrink: 0;
+  text-align: right;
+  align-self: flex-end;
+  padding-bottom: 1px;
+}
+.cod-amount {
+  font-size: 15.5px;
+  font-weight: 800;
+  color: #000000;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+}
+.divider-line {
+  border-top: 1px solid #000000;
+  margin: 8px 0;
+  width: 100%;
+}
+.items-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 60px;
+}
+.items-list {
+  flex: 1;
+  min-width: 0;
+  padding-right: 8px;
+}
+.items-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #000000;
+  margin-bottom: 3px;
+}
+.item-line {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: #000000;
+  line-height: 1.4;
+  margin-bottom: 2px;
+}
+.qr-container {
+  width: 76px;
+  height: 76px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.qr-container svg {
+  width: 72px;
+  height: 72px;
+  display: block;
+}
+.footer-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 2px;
+}
+.note-block {
+  flex: 1;
+  min-width: 0;
+  padding-right: 8px;
+}
+.note-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #000000;
+  margin-bottom: 2px;
+}
+.note-text {
+  font-size: 11px;
+  font-weight: 400;
+  color: #222222;
+  line-height: 1.3;
+  word-break: break-word;
+}
+.barcode-block {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+.parcel-id-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #000000;
+  line-height: 1.2;
+}
+.parcel-id-val {
+  font-size: 11px;
+  font-weight: 600;
+  color: #000000;
+  line-height: 1.2;
+  margin-top: 1px;
+  margin-bottom: 3px;
+}`;
+
 const PRINT_CSS = `*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .pg{width:210mm;padding:18mm 16mm;margin:0 auto}.pg+.pg{border-top:1px dashed #ccc}
 .doc-top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1a1a1a;padding-bottom:16px}
@@ -740,10 +1023,88 @@ function invoiceBody(o: any) {
   return `<div class="pg"><div class="doc-top"><div><div class="brand">dot<span>.</span></div><div class="brand-sub">intimate self-care</div></div><div class="doc-meta"><div class="doc-title">INVOICE</div><div class="doc-id">${o.id}</div><div class="doc-date">${new Date(o.createdAt).toLocaleString()}</div></div></div><div class="cols"><div class="col"><div class="lbl">Deliver to</div><p class="nm">${o.customer.name}</p><p>${o.customer.phone}</p><p>${o.customer.address}${o.customer.area ? ' (' + o.customer.area + ' dhaka)' : ''}</p></div><div class="col"><div class="lbl">Payment</div><span class="pay">Cash on delivery</span></div>${cour}</div><table><thead><tr><th class="c">#</th><th>Item</th><th class="c">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody></table><div class="totbox"><div class="totrow"><span>Subtotal</span><span>৳${o.itemsTotal ?? o.total}</span></div><div class="totrow"><span>Delivery</span><span>${o.delivery ? '৳' + o.delivery : 'Free'}</span></div>${disc}<div class="totrow grand"><span>Total (COD)</span><span>৳${o.total}</span></div></div><div class="foot">Thank you for shopping with dot. &middot; Every order ships in plain, unbranded packaging.<br>This is a computer-generated invoice and needs no signature.</div></div>`;
 }
 function slipBody(o: any) {
-  const rows = o.items.map((it: any) => `<tr><td class="chk"><i></i></td><td><div style="display:flex;align-items:center;gap:8px">${it.image ? `<img src="${it.image}" style="width:32px;height:32px;border-radius:4px;object-fit:cover;border:1px solid #ccc;flex:none"/>` : ''}<b>${it.name}</b></div></td><td class="r" style="font-size:16px;font-weight:700">&times; ${it.qty}</td></tr>`).join('');
-  const cour = o.courier && o.courier.name ? `<div class="cols" style="margin-top:14px"><div class="col"><div class="lbl">Courier</div><p class="nm">${o.courier.name}</p></div>${o.courier.consignment ? `<div class="col"><div class="lbl">Tracking no.</div><p class="nm">${o.courier.consignment}</p></div>` : ''}</div>` : '';
-  const qr = `<div class="qrbox"><div class="qrline">scan &middot; pack &middot; return</div>${qrSvg(o.id)}<div class="qid">${o.id}</div></div>`;
-  return `<div class="pg"><div class="doc-top"><div><div class="brand">dot<span>.</span></div><div class="brand-sub">packing slip</div><div class="doc-date" style="margin-top:8px">${new Date(o.createdAt).toLocaleDateString()}</div></div>${qr}</div><div class="slip-to"><div class="lbl">Ship to</div><div class="nm">${o.customer.name}</div><p>${o.customer.phone}</p><p>${o.customer.address}${o.customer.area ? ' (' + o.customer.area + ' dhaka)' : ''}</p></div>${cour}<div class="cod"><span class="k">Collect on delivery</span><span class="v">৳${o.total}</span></div><table><thead><tr><th class="chk"></th><th>Item</th><th class="r">Qty</th></tr></thead><tbody>${rows}</tbody></table>${o.customer.note ? `<p style="margin-top:16px;font-size:12px;color:#777">Customer note: ${o.customer.note}</p>` : ''}<div class="foot">Scan the QR to receive or return this order &middot; plain, unbranded packaging &middot; dot.</div></div>`;
+  // Dynamic store logo from live settings - NO hardcoded logo!
+  const storeLogo = liveStoreSettings.logo || '';
+  const storeName = liveStoreSettings.storeName || 'METRROMA';
+
+  const brandBlockHtml = storeLogo
+    ? `<img src="${storeLogo}" alt="${storeName}" class="brand-logo" />`
+    : `<div class="brand-name">${storeName}</div>`;
+
+  const dateStr = o.createdAt ? new Date(o.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+  const totalPayable = o.total || 0;
+  
+  const itemsHtml = o.items && o.items.length > 0
+    ? o.items.map((it: any, idx: number) => `<div class="item-line">${idx + 1}. ${it.name} x ${it.qty}</div>`).join('')
+    : `<div class="item-line">1. Order Items x 1</div>`;
+
+  const courierName = o.courier && o.courier.name ? o.courier.name : '';
+  const trackingNo = o.courier && o.courier.consignment ? o.courier.consignment : '';
+  const parcelLabel = courierName ? `${courierName} Parcel ID:` : 'Parcel ID:';
+  const displayParcelId = trackingNo ? (trackingNo.startsWith('#') ? trackingNo : `#${trackingNo}`) : `#${o.id}`;
+  const barcodeValue = trackingNo ? trackingNo.replace('#', '') : String(o.id).replace('#', '');
+
+  const qrData = trackingNo ? `https://merchant.pathao.com/tracking?consignment_id=${trackingNo}` : `ORD:${o.id}|TEL:${o.customer.phone}|COD:${totalPayable}`;
+
+  return `
+    <div class="slip-page">
+      <div class="slip-card">
+        <!-- Header Row -->
+        <div class="header-row">
+          <div class="brand-block">
+            ${brandBlockHtml}
+          </div>
+          <div class="invoice-block">
+            <div class="inv-title">Invoice</div>
+            <div class="inv-no-label">Invoice No:</div>
+            <div class="inv-no-val">#${o.id}</div>
+            <div class="inv-date">Date: ${dateStr}</div>
+          </div>
+        </div>
+
+        <!-- Ship To & COD Section -->
+        <div class="shipto-section">
+          <div class="shipto-block">
+            <div class="section-title">SHIP TO</div>
+            <div class="customer-name">${o.customer.name || 'N/A'}</div>
+            <div class="customer-phone">${o.customer.phone || ''}</div>
+            <div class="customer-address">${o.customer.address || ''}${o.customer.area ? ', ' + o.customer.area : ''}</div>
+          </div>
+          <div class="cod-block">
+            <div class="cod-amount">COD: ${totalPayable} TK</div>
+          </div>
+        </div>
+
+        <div class="divider-line"></div>
+
+        <!-- Items Section & QR Code -->
+        <div class="items-section">
+          <div class="items-list">
+            <div class="items-title">Items</div>
+            ${itemsHtml}
+          </div>
+          <div class="qr-container">
+            ${qrSvg(qrData)}
+          </div>
+        </div>
+
+        <div class="divider-line"></div>
+
+        <!-- Footer Section (Note & Barcode) -->
+        <div class="footer-section">
+          <div class="note-block">
+            <div class="note-title">Note:</div>
+            ${o.customer.note ? `<div class="note-text">${o.customer.note}</div>` : ''}
+          </div>
+          <div class="barcode-block">
+            <div class="parcel-id-label">${parcelLabel}</div>
+            <div class="parcel-id-val">${displayParcelId}</div>
+            ${code128Svg(barcodeValue, 30)}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 function printDoc(title: string, inner: string) {
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${PRINT_CSS}</style></head><body>${inner}<script>window.onload=function(){window.print()}<\/script></body></html>`;
@@ -752,7 +1113,13 @@ function printDoc(title: string, inner: string) {
 }
 function printInvoice(o: any) { printDoc(o.id, invoiceBody(o)); }
 function printInvoices(list: any[]) { if (list.length) printDoc('invoices', list.map(invoiceBody).join('')); }
-function printSlips(list: any[]) { if (list.length) printDoc('packing slips', list.map(slipBody).join('')); }
+function printSlips(list: any[]) {
+  if (!list.length) return;
+  updateLiveSettingsCache();
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Delivery Slips (${list.length})</title><style>${SLIP_PRINT_CSS}</style></head><body>${list.map(slipBody).join('')}<script>window.onload=function(){window.print()}<\/script></body></html>`;
+  const w = window.open('', '_blank');
+  if (w) { w.document.write(html); w.document.close(); }
+}
 const fmt = (d: string) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const Badge = ({ s }: { s: string }) => <span className={'sa-badge b-' + s}>{s}</span>;
 function useCountUp(target: number, ms = 850) {
