@@ -761,12 +761,12 @@ function code128Svg(text: string, height = 30): string {
 
 const SLIP_PRINT_CSS = `@page {
   size: 75mm 100mm;
-  margin: 0;
+  margin: 0 !important;
 }
 @media print {
   @page {
     size: 75mm 100mm;
-    margin: 0;
+    margin: 0 !important;
   }
   html, body {
     width: 75mm !important;
@@ -796,7 +796,7 @@ const SLIP_PRINT_CSS = `@page {
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hind Siliguri", "Anek Bangla", Arial, sans-serif;
   background: #ffffff;
   color: #000000;
   margin: 0;
@@ -822,7 +822,7 @@ body {
   width: 75mm;
   max-width: 75mm;
   background: #ffffff;
-  padding: 5px 7px 4px 7px;
+  padding: 2.5mm 3.5mm 2mm 3.5mm;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -830,15 +830,17 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 4px;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
 }
 .brand-logo {
-  max-height: 20px;
-  max-width:110px;
+  max-height: 22px;
+  max-width: 95px;
   object-fit: contain;
 }
 .brand-name {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 800;
   color: #000000;
   line-height: 1.1;
@@ -846,39 +848,28 @@ body {
 }
 .invoice-block {
   text-align: right;
-  font-size: 8.5px;
-  line-height: 1.15;
+  font-size: 9px;
+  line-height: 1.2;
 }
 .inv-title {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 800;
   color: #000000;
-  line-height: 1;
+  line-height: 1.1;
   margin-bottom: 1px;
 }
-.inv-no-label {
+.inv-meta {
   font-size: 8.5px;
   font-weight: 600;
   color: #222222;
-  line-height: 1.1;
-}
-.inv-no-val {
-  font-size: 9px;
-  font-weight: 700;
-  color: #000000;
-  line-height: 1.1;
-}
-.inv-date {
-  font-size: 8.5px;
-  font-weight: 600;
-  color: #222222;
-  line-height: 1.1;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 .shipto-section {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
-  margin-top: 3px;
+  align-items: flex-start;
+  margin-top: 4px;
   gap: 6px;
 }
 .shipto-block {
@@ -886,49 +877,46 @@ body {
   min-width: 0;
 }
 .section-title {
-  font-size: 8.5px;
+  font-size: 9px;
   font-weight: 800;
-  color: #111111;
+  color: #000000;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
-  margin-bottom: 1px;
+  letter-spacing: 0.4px;
+  margin-bottom: 2px;
 }
 .customer-name {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: #000000;
-  line-height: 1.15;
-  margin-bottom: 1px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.35;
+  margin-bottom: 2px;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 .customer-phone {
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 700;
   color: #000000;
-  line-height: 1.15;
-  margin-bottom: 1px;
+  line-height: 1.25;
+  margin-bottom: 2px;
+  letter-spacing: 0.2px;
 }
 .customer-address {
-  font-size: 8.5px;
+  font-size: 9.5px;
   font-weight: 500;
   color: #111111;
-  line-height: 1.15;
-  word-break: break-word;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  line-height: 1.35;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 .cod-block {
   flex-shrink: 0;
   text-align: right;
-  align-self: flex-end;
-  padding-bottom: 1px;
+  align-self: flex-start;
+  padding-top: 2px;
 }
 .cod-amount {
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 900;
   color: #000000;
   letter-spacing: -0.2px;
@@ -937,7 +925,7 @@ body {
 }
 .divider-line {
   border-top: 1px solid #000000;
-  margin: 3px 0;
+  margin: 3.5px 0;
   width: 100%;
 }
 .items-section {
@@ -945,7 +933,7 @@ body {
   justify-content: space-between;
   align-items: flex-start;
   gap: 6px;
-  min-height: 36px;
+  margin: 2px 0;
 }
 .items-list {
   flex: 1;
@@ -954,17 +942,20 @@ body {
 }
 .items-title {
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 800;
   color: #000000;
-  margin-bottom: 1px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 2px;
 }
 .item-line {
-  font-size: 8.5px;
-  font-weight: 500;
+  font-size: 9.5px;
+  font-weight: 600;
   color: #000000;
-  line-height: 1.15;
-  margin-bottom: 1px;
-  word-break: break-word;
+  line-height: 1.3;
+  margin-bottom: 2px;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 .qr-container {
   width: 44px;
@@ -984,7 +975,7 @@ body {
   justify-content: space-between;
   align-items: flex-end;
   gap: 6px;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 .note-block {
   flex: 1;
@@ -992,21 +983,20 @@ body {
   padding-right: 4px;
 }
 .note-title {
-  font-size: 8.5px;
-  font-weight: 700;
+  font-size: 9px;
+  font-weight: 800;
   color: #000000;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
   margin-bottom: 1px;
 }
 .note-text {
-  font-size: 8px;
+  font-size: 8.5px;
   font-weight: 500;
   color: #222222;
-  line-height: 1.15;
-  word-break: break-word;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  line-height: 1.25;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 .barcode-block {
   text-align: right;
@@ -1015,19 +1005,13 @@ body {
   align-items: flex-end;
   flex-shrink: 0;
 }
-.parcel-id-label {
-  font-size: 8.5px;
+.parcel-id-line {
+  font-size: 9px;
   font-weight: 700;
   color: #000000;
-  line-height: 1.1;
-}
-.parcel-id-val {
-  font-size: 8.5px;
-  font-weight: 700;
-  color: #000000;
-  line-height: 1.1;
-  margin-top: 1px;
-  margin-bottom: 1px;
+  line-height: 1.2;
+  margin-bottom: 2px;
+  white-space: nowrap;
 }`;
 
 const PRINT_CSS = `*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -1099,9 +1083,8 @@ function slipBody(o: any) {
           </div>
           <div class="invoice-block">
             <div class="inv-title">Invoice</div>
-            <div class="inv-no-label">Invoice No:</div>
-            <div class="inv-no-val">#${o.id}</div>
-            <div class="inv-date">Date: ${dateStr}</div>
+            <div class="inv-meta">No: <strong>#${o.id}</strong></div>
+            <div class="inv-meta">Date: ${dateStr}</div>
           </div>
         </div>
 
@@ -1137,12 +1120,11 @@ function slipBody(o: any) {
         <div class="footer-section">
           <div class="note-block">
             <div class="note-title">Note:</div>
-            ${o.customer.note ? `<div class="note-text">${o.customer.note}</div>` : ''}
+            ${o.customer.note ? `<div class="note-text">${o.customer.note}</div>` : '<div class="note-text">-</div>'}
           </div>
           <div class="barcode-block">
-            <div class="parcel-id-label">${parcelLabel}</div>
-            <div class="parcel-id-val">${displayParcelId}</div>
-            ${code128Svg(barcodeValue, 18)}
+            <div class="parcel-id-line">${parcelLabel} <strong>${displayParcelId}</strong></div>
+            ${code128Svg(barcodeValue, 20)}
           </div>
         </div>
       </div>
