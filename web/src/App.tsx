@@ -124,7 +124,7 @@ function Effects() {
             admin: `Admin Dashboard — ${brand}`,
           }
         : {
-            home: `${brand} | Modern Lifestyle, Sunglasses, Watches & Curated Gifts`,
+            home: `${brand} | Embrace the metro lifestyle`,
             shop: `All Collections — ${brand}`,
             track: `Track Your Order — ${brand}`,
             checkout: `Checkout (Cash on Delivery) — ${brand}`,
@@ -161,7 +161,7 @@ function Effects() {
       if (route.name === 'shop' && route.param) {
         if (active) document.title = `${isSkin ? 'Shop Skincare' : 'Collection'} — ${defaultBrand}`;
       } else if (route.name !== 'product') {
-        document.title = isSkin ? 'SECRATE Bangladesh | Skincare & Self-Care' : 'METRROMA | Modern Lifestyle, Watches & Gifts';
+        document.title = isSkin ? 'SECRATE Bangladesh | Skincare & Self-Care' : 'METROMAA | Embrace the metro lifestyle';
       }
     });
 
