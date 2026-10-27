@@ -1136,7 +1136,8 @@ export function Home() {
               shelfProducts = products.filter(p => !p.adult);
             } else {
               const catTarget = String(section.category || '').toLowerCase().replace(/-/g, ' ').trim();
-              shelfProducts = products.filter(p => !p.adult && String(p.category || '').toLowerCase().replace(/-/g, ' ').trim() === catTarget);
+              const matched = products.filter(p => !p.adult && String(p.category || '').toLowerCase().replace(/-/g, ' ').trim() === catTarget);
+              shelfProducts = matched.length > 0 ? matched : products.filter(p => !p.adult);
             }
 
             const limit = Math.max(1, Number(section.count) || 8);
@@ -1144,44 +1145,18 @@ export function Home() {
 
             if (loaded && displayProducts.length === 0) return null;
 
-            if (section.isFlashSale) {
-              return (
-                <section className="metro-shelf-flash" key={section.id || `flash-${idx}`}>
-                  <div className="wrap">
-                    <div className="metro-flash-card">
-                      <div className="metro-flash-top">
-                        <div className="metro-flash-title-wrap">
-                          <h2 className="metro-flash-title">{tr(section.title || 'FLASH SALE', language)}</h2>
-                          <FlashSaleCountdown />
-                        </div>
-                        <button
-                          type="button"
-                          className="metro-shelf-btn-more"
-                          onClick={() => go(section.category && section.category !== 'all' && section.category !== 'flash-sale' ? 'shop/' + section.category : 'shop')}
-                        >
-                          {tr(section.buttonText || 'View More', language)} →
-                        </button>
-                      </div>
-                      <div className="pc-grid">
-                        {!loaded
-                          ? [0, 1, 2, 3].map((i) => <SkeletonCard key={i} />)
-                          : displayProducts.map((p) => <ProductCard key={p.id} p={p} />)}
-                      </div>
-                    </div>
-                  </div>
-                </section>
-              );
-            }
-
             return (
               <section className="metro-shelf-section" key={section.id || `shelf-${section.category}-${idx}`}>
                 <div className="wrap">
                   <div className="metro-shelf-top">
-                    <h2 className="metro-shelf-title">{tr(section.title, language)}</h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                      <h2 className="metro-shelf-title">{tr(section.title, language)}</h2>
+                      {section.isFlashSale && <FlashSaleCountdown />}
+                    </div>
                     <button
                       type="button"
                       className="metro-shelf-btn-more"
-                      onClick={() => go(section.category && section.category !== 'all' ? 'shop/' + section.category : 'shop')}
+                      onClick={() => go(section.category && section.category !== 'all' && section.category !== 'flash-sale' ? 'shop/' + section.category : 'shop')}
                     >
                       {tr(section.buttonText || 'View More', language)} →
                     </button>

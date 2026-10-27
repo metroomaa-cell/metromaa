@@ -1,6 +1,58 @@
 {
   "products": [
     {
+      "id": "mm-watch-01",
+      "wpId": 29999,
+      "name": "Luxury Minimalist Quartz Watch",
+      "slug": "luxury-minimalist-quartz-watch",
+      "category": "watch",
+      "price": 1250,
+      "compareAt": 1750,
+      "image": "https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=800&q=80",
+      "images": [
+        "https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=800&q=80"
+      ],
+      "desc": "প্রিমিয়াম কোয়ালিটি ও নিখুঁত ফিনিশিং-এর ক্লাসিক মেনস ওয়াচ।",
+      "longDesc": "মেট্রোমা এক্সক্লুসিভ কালেকশনের এলিগ্যান্ট কোয়ার্টজ ওয়াচ। প্রিমিয়াম লেদার স্ট্র্যাপ ও ওয়াটার রেজিস্ট্যান্ট ডায়াল。",
+      "inStock": true,
+      "featured": true,
+      "adult": false,
+      "tags": [
+        "Watch",
+        "Men Watch",
+        "Classic Watch",
+        "Luxury Watch"
+      ],
+      "tag": "bestseller",
+      "shortDesc": "",
+      "size": "",
+      "sku": "MM-W01",
+      "weight": ".3",
+      "seoTitle": "",
+      "seoDesc": "",
+      "customDeliveryInside": 80,
+      "customDeliveryOutside": 130,
+      "variations": [],
+      "colors": [
+        {
+          "name": "Black",
+          "hex": "#111111"
+        },
+        {
+          "name": "Brown",
+          "hex": "#795548"
+        },
+        {
+          "name": "Silver",
+          "hex": "#cbd5e1"
+        }
+      ],
+      "stock": 50,
+      "lowStockThreshold": 5,
+      "soldOut": false
+    },
+    {
       "id": "mm-29610",
       "wpId": 29610,
       "name": "Double poly sunglass",
