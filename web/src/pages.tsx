@@ -385,6 +385,44 @@ export function ProductCard({ p }: { p: Product }) {
   );
 }
 
+export function FlashSaleCountdown() {
+  const language = useStoreLanguage();
+  const [timeLeft, setTimeLeft] = useState({ hours: 12, minutes: 45, seconds: 20 });
+
+  useEffect(() => {
+    const calculateTime = () => {
+      const now = new Date();
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999);
+      const diff = Math.max(0, endOfDay.getTime() - now.getTime());
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      return { hours, minutes, seconds };
+    };
+
+    setTimeLeft(calculateTime());
+    const interval = setInterval(() => {
+      setTimeLeft(calculateTime());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+
+  return (
+    <div className="metro-flash-timer">
+      <span className="metro-flash-ending">{language === 'bn' ? 'অফার শেষ হতে বাকি' : 'Ending Offer'}</span>
+      <span className="metro-flash-clock">⏰</span>
+      <span className="metro-flash-box">{pad(timeLeft.hours)}</span>
+      <span className="metro-flash-colon">:</span>
+      <span className="metro-flash-box">{pad(timeLeft.minutes)}</span>
+      <span className="metro-flash-colon">:</span>
+      <span className="metro-flash-box">{pad(timeLeft.seconds)}</span>
+    </div>
+  );
+}
+
 export function SkeletonCard() {
   return (
     <div className="pcard skcard">
@@ -852,6 +890,34 @@ export function Home() {
       .sort((a, b) => (b.tag === 'bestseller' ? 1 : 0) - (a.tag === 'bestseller' ? 1 : 0));
   }, [products, isSkin]);
 
+  const shelfSections = useMemo(() => {
+    const configured = (settings?.homepageSections || []).filter((s: any) => s.active !== false);
+    if (configured.length > 0) return configured;
+
+    const defaults: any[] = [];
+    defaults.push({
+      id: 'sec-flash-sale',
+      title: 'FLASH SALE',
+      category: 'all',
+      count: 4,
+      isFlashSale: true,
+      active: true,
+      buttonText: 'View More',
+    });
+    cats.forEach((c) => {
+      defaults.push({
+        id: `sec-${c.slug}`,
+        title: c.name,
+        category: c.slug,
+        count: 8,
+        isFlashSale: false,
+        active: true,
+        buttonText: 'View More',
+      });
+    });
+    return defaults;
+  }, [settings?.homepageSections, cats]);
+
   const [activeTabCat, setActiveTabCat] = useState('all');
 
   const filteredBest = useMemo(() => {
@@ -1056,94 +1122,82 @@ export function Home() {
       </section>}
       {renderConfiguredSections('after-story')}
 
-      {/* 4. FEATURED PRODUCTS (pc-stage & pc-grid) */}
-      {visibleSections.featured !== false && <section className="pc-stage">
-        <div className="wrap">
-          <div className="pc-section-header">
-            <p className="pc-section-kicker">
-              {homeText('featuredEyebrow', isSkin ? 'CURATED SKINCARE & BEAUTY' : 'CURATED LIFESTYLE & GIFTS')}
-            </p>
-            <h2 className="pc-section-title">
-              {homeText('featuredTitle', isSkin ? 'Skincare & Beauty Picks' : 'Trending & Best Sellers')}
-            </h2>
-            <p className="pc-section-subtitle">
-          {homeText('featuredDescription', isSkin
-            ? 'Explore skincare, beauty, and personal care products from a range of brands. Check each listing for product details, ingredients, and directions. Cash on delivery across Bangladesh.'
-            : 'Explore watches, sunglasses, gift boxes, and lifestyle essentials with nationwide doorstep delivery.')}
-            </p>
+      {/* 4. HOMEPAGE CATEGORY SHELVES & FLASH SALE */}
+      {shelfSections.length > 0 ? (
+        <>
+          {shelfSections.map((section: any, idx: number) => {
+            let shelfProducts: Product[] = [];
+            if (Array.isArray(section.productIds) && section.productIds.length > 0) {
+              shelfProducts = products.filter(p => !p.adult && section.productIds.includes(String(p.id)));
+            } else if (section.isFlashSale) {
+              const saleList = products.filter(p => !p.adult && ((p.compareAt && p.compareAt > p.price) || p.tag === 'sale' || (section.category && section.category !== 'all' && section.category !== 'flash-sale' && p.category === section.category)));
+              shelfProducts = saleList.length > 0 ? saleList : products.filter(p => !p.adult);
+            } else if (section.category === 'all') {
+              shelfProducts = products.filter(p => !p.adult);
+            } else {
+              const catTarget = String(section.category || '').toLowerCase().replace(/-/g, ' ').trim();
+              shelfProducts = products.filter(p => !p.adult && String(p.category || '').toLowerCase().replace(/-/g, ' ').trim() === catTarget);
+            }
 
-            {!isSkin && (
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', marginTop: 18 }}>
-                {[
-                  { id: 'all', label: 'All Products' },
-                  { id: 'cloth', label: '👔 Apparel' },
-                  { id: 'watch', label: '⌚ Watches' },
-                  { id: 'sunglass', label: '🕶️ Sunglasses' },
-                  { id: 'gift', label: '🎁 Gift Sets' },
-                  { id: 'digital', label: '⚡ Digital' },
-                  { id: 'accessories', label: '👜 Accessories' },
-                ].map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => setActiveTabCat(f.id)}
-                    style={{
-                      padding: '7px 16px',
-                      borderRadius: 20,
-                      fontSize: 12,
-                      fontWeight: activeTabCat === f.id ? 700 : 500,
-                      border: activeTabCat === f.id ? '1px solid #1f3147' : '1px solid #dcd7ce',
-                      background: activeTabCat === f.id ? '#1f3147' : '#ffffff',
-                      color: activeTabCat === f.id ? '#ffffff' : '#4b5563',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                      boxShadow: activeTabCat === f.id ? '0 2px 6px rgba(0,0,0,0.1)' : 'none',
-                    }}
-                  >
-                    {tr(f.label.replace(/^[^A-Za-z]+\s*/, ''), language)}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+            const limit = Math.max(1, Number(section.count) || 8);
+            const displayProducts = shelfProducts.slice(0, limit);
 
-          <div className="pc-grid">
-            {!loaded
-              ? [0, 1, 2, 3, 4, 5, 6, 7].map((i) => <SkeletonCard key={i} />)
-              : filteredBest.length > 0
-                ? filteredBest.slice(0, 24).map((p) => <ProductCard key={p.id} p={p} />)
-                : (
-                  <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px 20px', color: '#6b645c' }}>
-                    <div style={{ fontSize: 40, marginBottom: 12 }}>📦</div>
-                    <h3 style={{ fontSize: 20, color: '#1f3147', fontFamily: "'Playfair Display', Georgia, serif" }}>
-                      {tr('No Products Found in this Category', language)}
-                    </h3>
-                    <p style={{ fontSize: 14, marginTop: 6, color: '#8c7d6b' }}>
-                      {tr('We are adding exciting new arrivals to this section shortly!', language)}
-                    </p>
+            if (loaded && displayProducts.length === 0) return null;
+
+            if (section.isFlashSale) {
+              return (
+                <section className="metro-shelf-flash" key={section.id || `flash-${idx}`}>
+                  <div className="wrap">
+                    <div className="metro-flash-card">
+                      <div className="metro-flash-top">
+                        <div className="metro-flash-title-wrap">
+                          <h2 className="metro-flash-title">{tr(section.title || 'FLASH SALE', language)}</h2>
+                          <FlashSaleCountdown />
+                        </div>
+                        <button
+                          type="button"
+                          className="metro-shelf-btn-more"
+                          onClick={() => go(section.category && section.category !== 'all' && section.category !== 'flash-sale' ? 'shop/' + section.category : 'shop')}
+                        >
+                          {tr(section.buttonText || 'View More', language)} →
+                        </button>
+                      </div>
+                      <div className="pc-grid">
+                        {!loaded
+                          ? [0, 1, 2, 3].map((i) => <SkeletonCard key={i} />)
+                          : displayProducts.map((p) => <ProductCard key={p.id} p={p} />)}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              );
+            }
+
+            return (
+              <section className="metro-shelf-section" key={section.id || `shelf-${section.category}-${idx}`}>
+                <div className="wrap">
+                  <div className="metro-shelf-top">
+                    <h2 className="metro-shelf-title">{tr(section.title, language)}</h2>
                     <button
                       type="button"
-                      onClick={() => setActiveTabCat('all')}
-                      style={{
-                        marginTop: 14,
-                        padding: '8px 20px',
-                        borderRadius: 20,
-                        background: '#1f3147',
-                        color: '#fff',
-                        border: 'none',
-                        fontSize: 12,
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                      }}
+                      className="metro-shelf-btn-more"
+                      onClick={() => go(section.category && section.category !== 'all' ? 'shop/' + section.category : 'shop')}
                     >
-                      {tr('VIEW ALL PRODUCTS', language)}
+                      {tr(section.buttonText || 'View More', language)} →
                     </button>
                   </div>
-                )}
-          </div>
+                  <div className="pc-grid">
+                    {!loaded
+                      ? [0, 1, 2, 3].map((i) => <SkeletonCard key={i} />)
+                      : displayProducts.map((p) => <ProductCard key={p.id} p={p} />)}
+                  </div>
+                </div>
+              </section>
+            );
+          })}
 
           {products.length > 0 && (
-            <div style={{ textAlign: 'center', marginTop: 44 }}>
+            <div style={{ textAlign: 'center', marginTop: 32, marginBottom: 20 }}>
               <button
                 className="tabaya-btn primary"
                 style={{ padding: '14px 34px', fontSize: 12, letterSpacing: '2.5px' }}
@@ -1153,9 +1207,34 @@ export function Home() {
               </button>
             </div>
           )}
-        </div>
-      </section>}
-      {renderConfiguredSections('after-promo')}{renderConfiguredSections('after-sale')}
+        </>
+      ) : (
+        visibleSections.featured !== false && (
+          <section className="pc-stage">
+            <div className="wrap">
+              <div className="pc-section-header">
+                <p className="pc-section-kicker">
+                  {homeText('featuredEyebrow', isSkin ? 'CURATED SKINCARE & BEAUTY' : 'CURATED LIFESTYLE & GIFTS')}
+                </p>
+                <h2 className="pc-section-title">
+                  {homeText('featuredTitle', isSkin ? 'Skincare & Beauty Picks' : 'Trending & Best Sellers')}
+                </h2>
+                <p className="pc-section-subtitle">
+                  {homeText('featuredDescription', isSkin
+                    ? 'Explore skincare, beauty, and personal care products from a range of brands.'
+                    : 'Explore watches, sunglasses, gift boxes, and lifestyle essentials with nationwide doorstep delivery.')}
+                </p>
+              </div>
+              <div className="pc-grid">
+                {!loaded
+                  ? [0, 1, 2, 3, 4, 5, 6, 7].map((i) => <SkeletonCard key={i} />)
+                  : filteredBest.slice(0, 24).map((p) => <ProductCard key={p.id} p={p} />)}
+              </div>
+            </div>
+          </section>
+        )
+      )}
+      
 
       {/* 5. BRAND PILLARS (feature-section) */}
       {visibleSections.benefits !== false && <section className="feature-section">

@@ -7357,6 +7357,7 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
+    getCategories().then((c) => setStoreCats(Array.isArray(c) ? c : [])).catch(() => {});
     fetch('/api/settings')
       .then((r) => r.json())
       .then(setF)
@@ -7639,6 +7640,7 @@ function SettingsAdmin() {
   const [uploadingSlideImg, setUploadingSlideImg] = useState(false);
   const [editingSlideIdx, setEditingSlideIdx] = useState<number | null>(null);
   const [pickerTarget, setPickerTarget] = useState<{ title: string; currentImg: string; onSelect: (url: string) => void } | null>(null);
+  const [storeCats, setStoreCats] = useState<any[]>([]);
 
   useEffect(() => {
     fetch('/api/settings').then(async (r) => {
@@ -8319,6 +8321,305 @@ function SettingsAdmin() {
             ))}
           </div>
         </div>
+
+        {/* HOMEPAGE CATEGORY SHELVES & FLASH SALE MANAGER */}
+        <div className="sa-card" style={{ padding: 24, display: 'grid', gap: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <h2 style={{ margin: '0 0 6px', color: '#fff' }}>হোমপেজ ক্যাটাগরি ও ফ্ল্যাশ সেল সাজানো (Category Shelves)</h2>
+              <p style={{ margin: 0, color: '#94a3b8' }}>
+                এডমিন থেকে যে যে ক্যাটাগরি সিলেক্ট করবেন সেগুলো হোমপেজে নির্দিষ্ট সেকশন হিসেবে প্রদর্শিত হবে। ফ্ল্যাশ সেল টাইমার ও সেকশনগুলোর ক্রম (Order) পরিবর্তন করতে পারবেন।
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="sa-btn secondary small"
+                onClick={() => {
+                  const currentSections = Array.isArray(f?.homepageSections) ? [...f.homepageSections] : [];
+                  const newSection = {
+                    id: 'sec-flash-' + Date.now(),
+                    title: 'FLASH SALE',
+                    category: 'all',
+                    count: 4,
+                    active: true,
+                    isFlashSale: true,
+                    buttonText: 'View More',
+                    placement: 'after-story',
+                    productIds: [],
+                  };
+                  setF((cur: any) => ({ ...cur, homepageSections: [newSection, ...currentSections] }));
+                }}
+              >
+                ⚡ + Add Flash Sale
+              </button>
+              <button
+                type="button"
+                className="sa-btn primary small"
+                onClick={() => {
+                  const currentSections = Array.isArray(f?.homepageSections) ? [...f.homepageSections] : [];
+                  const firstCat = storeCats[0]?.slug || 'all';
+                  const firstCatName = storeCats[0]?.name || 'Collection';
+                  const newSection = {
+                    id: 'sec-' + Date.now(),
+                    title: firstCatName,
+                    category: firstCat,
+                    count: 8,
+                    active: true,
+                    isFlashSale: false,
+                    buttonText: 'View More',
+                    placement: 'after-story',
+                    productIds: [],
+                  };
+                  setF((cur: any) => ({ ...cur, homepageSections: [...currentSections, newSection] }));
+                }}
+              >
+                ➕ + Add Category Shelf
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Toggle Store Categories */}
+          {storeCats.length > 0 && (
+            <div style={{ background: '#130f24', padding: '14px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.07)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#cbd5e1', marginBottom: 10 }}>
+                দ্রুত ক্যাটাগরি যোগ বা বন্ধ করুন (Quick Category Toggles):
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {storeCats.map((cat: any) => {
+                  const currentSections = Array.isArray(f?.homepageSections) ? f.homepageSections : [];
+                  const existingIdx = currentSections.findIndex((s: any) => s.category === cat.slug);
+                  const isPresent = existingIdx !== -1 && currentSections[existingIdx].active !== false;
+                  return (
+                    <button
+                      key={cat.slug}
+                      type="button"
+                      onClick={() => {
+                        let updated = [...currentSections];
+                        if (existingIdx !== -1) {
+                          updated[existingIdx] = {
+                            ...updated[existingIdx],
+                            active: !updated[existingIdx].active,
+                          };
+                        } else {
+                          updated.push({
+                            id: 'sec-' + cat.slug,
+                            title: cat.name,
+                            category: cat.slug,
+                            count: 8,
+                            active: true,
+                            isFlashSale: false,
+                            buttonText: 'View More',
+                            placement: 'after-story',
+                            productIds: [],
+                          });
+                        }
+                        setF((cur: any) => ({ ...cur, homepageSections: updated }));
+                      }}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: 20,
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        border: isPresent ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.18)',
+                        background: isPresent ? 'rgba(16, 185, 129, 0.16)' : '#1a162b',
+                        color: isPresent ? '#34d399' : '#94a3b8',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <span>{isPresent ? '✓' : '+'}</span>
+                      <span>{cat.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Shelves List */}
+          <div style={{ display: 'grid', gap: 12 }}>
+            {(!f?.homepageSections || f.homepageSections.length === 0) ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#64748b', background: '#130f24', borderRadius: 8 }}>
+                কোনো সেকশন তৈরি করা হয়নি। উপরের ক্যাটাগরিতে ক্লিক করুন বা "+ Add Category Shelf" বাটনে ক্লিক করুন।
+              </div>
+            ) : (
+              f.homepageSections.map((sec: any, sIdx: number) => {
+                const isFlash = !!sec.isFlashSale;
+                return (
+                  <div
+                    key={sec.id || sIdx}
+                    style={{
+                      background: isFlash ? 'rgba(139, 30, 30, 0.18)' : '#171329',
+                      border: isFlash ? '1px solid rgba(220, 38, 38, 0.45)' : '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: 10,
+                      padding: '16px 18px',
+                      display: 'grid',
+                      gap: 12,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: 600, color: sec.active !== false ? '#fff' : '#64748b' }}>
+                          <input
+                            type="checkbox"
+                            checked={sec.active !== false}
+                            onChange={(e) => {
+                              const updated = [...f.homepageSections];
+                              updated[sIdx] = { ...sec, active: e.target.checked };
+                              setF((cur: any) => ({ ...cur, homepageSections: updated }));
+                            }}
+                          />
+                          <span>{sec.active !== false ? 'Active' : 'Hidden'}</span>
+                        </label>
+                        {isFlash && (
+                          <span style={{ background: '#8b1e1e', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4, letterSpacing: '0.05em' }}>
+                            ⚡ FLASH SALE
+                          </span>
+                        )}
+                        <span style={{ color: '#94a3b8', fontSize: 13 }}>#{sIdx + 1}</span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button
+                          type="button"
+                          className="sa-btn ghost small"
+                          disabled={sIdx === 0}
+                          title="Move Up"
+                          onClick={() => {
+                            if (sIdx === 0) return;
+                            const updated = [...f.homepageSections];
+                            const temp = updated[sIdx - 1];
+                            updated[sIdx - 1] = updated[sIdx];
+                            updated[sIdx] = temp;
+                            setF((cur: any) => ({ ...cur, homepageSections: updated }));
+                          }}
+                          style={{ padding: '3px 8px', fontSize: 11 }}
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          className="sa-btn ghost small"
+                          disabled={sIdx === f.homepageSections.length - 1}
+                          title="Move Down"
+                          onClick={() => {
+                            if (sIdx === f.homepageSections.length - 1) return;
+                            const updated = [...f.homepageSections];
+                            const temp = updated[sIdx + 1];
+                            updated[sIdx + 1] = updated[sIdx];
+                            updated[sIdx] = temp;
+                            setF((cur: any) => ({ ...cur, homepageSections: updated }));
+                          }}
+                          style={{ padding: '3px 8px', fontSize: 11 }}
+                        >
+                          ▼
+                        </button>
+                        <button
+                          type="button"
+                          className="sa-btn danger small"
+                          title="Delete Shelf"
+                          onClick={() => {
+                            const updated = f.homepageSections.filter((_: any, i: number) => i !== sIdx);
+                            setF((cur: any) => ({ ...cur, homepageSections: updated }));
+                          }}
+                          style={{ padding: '3px 8px', fontSize: 11 }}
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                      <div>
+                        <label style={{ fontSize: 12, color: '#94a3b8', display: 'block', marginBottom: 4 }}>সেকশন শিরোনাম (Title):</label>
+                        <input
+                          type="text"
+                          value={sec.title || ''}
+                          onChange={(e) => {
+                            const updated = [...f.homepageSections];
+                            updated[sIdx] = { ...sec, title: e.target.value };
+                            setF((cur: any) => ({ ...cur, homepageSections: updated }));
+                          }}
+                          placeholder="e.g. FLASH SALE, Panjabi, T-Shirt"
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: 6, background: '#0f0c1b', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', fontSize: 13 }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: 12, color: '#94a3b8', display: 'block', marginBottom: 4 }}>ক্যাটাগরি ফিল্টার (Category):</label>
+                        <select
+                          value={sec.category || ''}
+                          onChange={(e) => {
+                            const updated = [...f.homepageSections];
+                            updated[sIdx] = { ...sec, category: e.target.value };
+                            setF((cur: any) => ({ ...cur, homepageSections: updated }));
+                          }}
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: 6, background: '#0f0c1b', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', fontSize: 13 }}
+                        >
+                          <option value="all">All Products (সকল পণ্য)</option>
+                          {storeCats.map((c: any) => (
+                            <option key={c.slug} value={c.slug}>{c.name} ({c.slug})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: 12, color: '#94a3b8', display: 'block', marginBottom: 4 }}>পণ্যের সংখ্যা (Max count):</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={30}
+                          value={sec.count || 8}
+                          onChange={(e) => {
+                            const updated = [...f.homepageSections];
+                            updated[sIdx] = { ...sec, count: parseInt(e.target.value, 10) || 8 };
+                            setF((cur: any) => ({ ...cur, homepageSections: updated }));
+                          }}
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: 6, background: '#0f0c1b', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', fontSize: 13 }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: 12, color: '#94a3b8', display: 'block', marginBottom: 4 }}>বাটন টেক্সট (Button text):</label>
+                        <input
+                          type="text"
+                          value={sec.buttonText || 'View More'}
+                          onChange={(e) => {
+                            const updated = [...f.homepageSections];
+                            updated[sIdx] = { ...sec, buttonText: e.target.value };
+                            setF((cur: any) => ({ ...cur, homepageSections: updated }));
+                          }}
+                          placeholder="View More"
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: 6, background: '#0f0c1b', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', fontSize: 13 }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, paddingTop: 4 }}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12.5, color: '#e2e8f0' }}>
+                        <input
+                          type="checkbox"
+                          checked={!!sec.isFlashSale}
+                          onChange={(e) => {
+                            const updated = [...f.homepageSections];
+                            updated[sIdx] = { ...sec, isFlashSale: e.target.checked };
+                            setF((cur: any) => ({ ...cur, homepageSections: updated }));
+                          }}
+                        />
+                        <span>⚡ Enable Flash Sale Countdown Timer (ঘড়ির টাইমার চালু করুন)</span>
+                      </label>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
         <div className="sa-card" style={{ padding: 24, display: 'grid', gap: 14 }}>
           <div><h2 style={{ margin: '0 0 6px', color: '#fff' }}>Storefront text & translations</h2><p style={{ margin: 0, color: '#94a3b8' }}>Find a visible storefront phrase and set its English and Bangla versions. Blank fields use the built-in text.</p></div>
           <input value={copySearch} onChange={(e) => { setCopySearch(e.target.value); if (copyKey && !copyKey.toLowerCase().includes(e.target.value.toLowerCase())) setCopyKey(''); }} placeholder="Search text, e.g. Add to Cart" style={{ padding: 12, borderRadius: 8, background: '#0f0c1b', color: '#fff', border: '1px solid rgba(255,255,255,.14)' }} />
