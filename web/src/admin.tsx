@@ -7639,6 +7639,10 @@ function SettingsAdmin() {
   const [uploadingSlideImg, setUploadingSlideImg] = useState(false);
   const [editingSlideIdx, setEditingSlideIdx] = useState<number | null>(null);
   const [pickerTarget, setPickerTarget] = useState<{ title: string; currentImg: string; onSelect: (url: string) => void } | null>(null);
+  const [storeCats, setStoreCats] = useState<any[]>([]);
+  useEffect(() => {
+    getCategories().then((c) => setStoreCats(Array.isArray(c) ? c : [])).catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetch('/api/settings').then(async (r) => {
@@ -7656,6 +7660,7 @@ function SettingsAdmin() {
         logo: s.logo || '',
         favicon: s.favicon || '',
         sliders: Array.isArray(s.sliders) ? s.sliders : [],
+        homepageSections: Array.isArray(s.homepageSections) ? s.homepageSections : [],
         siteContent: {
           ...siteContent,
           sections: siteContent.sections && typeof siteContent.sections === 'object' && !Array.isArray(siteContent.sections) ? siteContent.sections : {},
@@ -8308,6 +8313,312 @@ function SettingsAdmin() {
       </div>}
 
       {tab === 'frontend' && <div style={{ display: 'grid', gap: 18 }}>
+        {/* HOMEPAGE CATEGORY SECTIONS (হোমপেজে যে ক্যাটাগরিগুলো দেখাবে) */}
+        <div className="sa-card" style={{ padding: 24, border: '1px solid rgba(59,130,246,0.3)', background: 'linear-gradient(180deg, rgba(30,27,58,0.7) 0%, rgba(15,12,27,0.9) 100%)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <h2 style={{ margin: '0 0 6px', color: '#fff', fontSize: 20 }}>🏷️ হোমপেজ ক্যাটাগরি সেকশন (Homepage Category Sections)</h2>
+              <p style={{ margin: 0, color: '#94a3b8', fontSize: 13 }}>যেসব ক্যাটাগরি এখানে টিক দিয়ে সেভ করবেন, সেগুলো সরাসরি হোমপেজে সেকশন আকারে আসবে।</p>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                className="sa-btn ghost sa-mini"
+                onClick={() => {
+                  const defaults = [
+                    { id: 'sec-flash', title: 'FLASH SALE', category: 'all', isFlashSale: true, count: 10, buttonText: 'View More', active: true },
+                    { id: 'sec-new', title: 'New Arrivals', category: 'all', isFlashSale: false, count: 10, buttonText: 'View More', active: true },
+                    ...storeCats.map((c: any) => ({
+                      id: 'sec-' + c.slug,
+                      title: c.name || c.slug,
+                      category: c.slug,
+                      isFlashSale: false,
+                      count: 10,
+                      buttonText: 'View More',
+                      active: true,
+                    }))
+                  ];
+                  setF((current: any) => ({ ...current, homepageSections: defaults }));
+                }}
+                style={{ color: '#cbd5e1' }}
+              >
+                🔄 ডিফল্ট লেআউট লোড করুন
+              </button>
+              <button
+                type="button"
+                className="sa-btn primary sa-mini"
+                onClick={() => {
+                  const newSection = {
+                    id: 'sec-' + Date.now(),
+                    title: 'New Section',
+                    category: storeCats[0]?.slug || 'all',
+                    isFlashSale: false,
+                    count: 10,
+                    buttonText: 'View More',
+                    active: true,
+                  };
+                  setF((current: any) => ({
+                    ...current,
+                    homepageSections: [...(current.homepageSections || []), newSection],
+                  }));
+                }}
+                style={{ background: '#3b82f6', borderColor: '#2563eb', color: '#fff' }}
+              >
+                ＋ নতুন সেকশন যোগ করুন
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Category Checkbox Matrix */}
+          <div style={{ background: 'rgba(0,0,0,0.25)', padding: 14, borderRadius: 10, marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', marginBottom: 10 }}>
+              দ্রুত ক্যাটাগরি সিলেক্ট করুন (যেগুলো টিক দেওয়া থাকবে সেগুলো হোমপেজে দেখাবে):
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+              {/* Flash Sale quick toggle */}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8, background: '#1c1830', color: '#fff', cursor: 'pointer', border: '1px solid rgba(229,57,53,0.4)' }}>
+                <input
+                  type="checkbox"
+                  checked={(f?.homepageSections || []).some((s: any) => s.isFlashSale && s.active !== false)}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setF((curr: any) => {
+                      const sections = [...(curr?.homepageSections || [])];
+                      const idx = sections.findIndex((s: any) => s.isFlashSale);
+                      if (checked) {
+                        if (idx >= 0) sections[idx].active = true;
+                        else sections.unshift({ id: 'sec-flash', title: 'FLASH SALE', category: 'all', isFlashSale: true, count: 10, buttonText: 'View More', active: true });
+                      } else {
+                        if (idx >= 0) sections[idx].active = false;
+                      }
+                      return { ...curr, homepageSections: sections };
+                    });
+                  }}
+                />
+                <span style={{ color: '#ff6b6b', fontWeight: 600 }}>⚡ FLASH SALE (Timer)</span>
+              </label>
+
+              {/* New Arrivals quick toggle */}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8, background: '#1c1830', color: '#fff', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={(f?.homepageSections || []).some((s: any) => s.category === 'all' && !s.isFlashSale && s.active !== false)}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setF((curr: any) => {
+                      const sections = [...(curr?.homepageSections || [])];
+                      const idx = sections.findIndex((s: any) => s.category === 'all' && !s.isFlashSale);
+                      if (checked) {
+                        if (idx >= 0) sections[idx].active = true;
+                        else sections.splice(1, 0, { id: 'sec-new', title: 'New Arrivals', category: 'all', isFlashSale: false, count: 10, buttonText: 'View More', active: true });
+                      } else {
+                        if (idx >= 0) sections[idx].active = false;
+                      }
+                      return { ...curr, homepageSections: sections };
+                    });
+                  }}
+                />
+                <span style={{ fontWeight: 600 }}>✨ New Arrivals (All)</span>
+              </label>
+
+              {/* Dynamic store categories */}
+              {storeCats.map((c: any) => {
+                const isCatActive = (f?.homepageSections || []).some((s: any) => s.category === c.slug && s.active !== false);
+                return (
+                  <label key={c.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8, background: '#1c1830', color: '#fff', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={isCatActive}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setF((curr: any) => {
+                          const sections = [...(curr?.homepageSections || [])];
+                          const idx = sections.findIndex((s: any) => s.category === c.slug);
+                          if (checked) {
+                            if (idx >= 0) sections[idx].active = true;
+                            else sections.push({ id: 'sec-' + c.slug, title: c.name || c.slug, category: c.slug, isFlashSale: false, count: 10, buttonText: 'View More', active: true });
+                          } else {
+                            if (idx >= 0) sections[idx].active = false;
+                          }
+                          return { ...curr, homepageSections: sections };
+                        });
+                      }}
+                    />
+                    <span>{c.name || c.slug}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Detailed Section List for Order & Custom Title */}
+          <div style={{ display: 'grid', gap: 12 }}>
+            {(!f?.homepageSections || f.homepageSections.length === 0) ? (
+              <div style={{ textAlign: 'center', padding: '30px 20px', color: '#94a3b8', background: 'rgba(0,0,0,0.15)', borderRadius: 8 }}>
+                কোনো সেকশন কাস্টমাইজ করা নেই। ডিফল্টভাবে সব ক্যাটাগরি দেখানো হচ্ছে। নিজের মতো সাজাতে উপরের <b>"ডিফল্ট লেআউট লোড করুন"</b> বাটনে চাপুন।
+              </div>
+            ) : (
+              f.homepageSections.map((sec: any, index: number) => (
+                <div
+                  key={sec.id || index}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '14px 16px',
+                    borderRadius: 10,
+                    background: sec.active !== false ? '#1e1b38' : '#141224',
+                    border: sec.isFlashSale ? '1px solid rgba(229,57,53,0.5)' : '1px solid rgba(255,255,255,0.08)',
+                    opacity: sec.active !== false ? 1 : 0.6,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <span style={{ color: '#94a3b8', fontWeight: 700, width: 24 }}>#{index + 1}</span>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#fff', fontSize: 13, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={sec.active !== false}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setF((curr: any) => {
+                          const sections = [...(curr?.homepageSections || [])];
+                          sections[index] = { ...sections[index], active: checked };
+                          return { ...curr, homepageSections: sections };
+                        });
+                      }}
+                    />
+                    সক্রিয়
+                  </label>
+
+                  <div style={{ flex: '1 1 180px' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 2 }}>সেকশন টাইটেল (Title)</div>
+                    <input
+                      type="text"
+                      value={sec.title || ''}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setF((curr: any) => {
+                          const sections = [...(curr?.homepageSections || [])];
+                          sections[index] = { ...sections[index], title: v };
+                          return { ...curr, homepageSections: sections };
+                        });
+                      }}
+                      placeholder="Title, e.g. Sunglass"
+                      style={{ padding: '8px 12px', borderRadius: 6, background: '#0f0c1b', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', width: '100%' }}
+                    />
+                  </div>
+
+                  <div style={{ flex: '1 1 160px' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 2 }}>ক্যাটাগরি (Category)</div>
+                    <select
+                      value={sec.category || 'all'}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setF((curr: any) => {
+                          const sections = [...(curr?.homepageSections || [])];
+                          sections[index] = { ...sections[index], category: v };
+                          return { ...curr, homepageSections: sections };
+                        });
+                      }}
+                      style={{ padding: '8px 12px', borderRadius: 6, background: '#0f0c1b', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', width: '100%' }}
+                    >
+                      <option value="all">All Products / New Arrivals</option>
+                      {storeCats.map((c: any) => (
+                        <option key={c.slug} value={c.slug}>{c.name || c.slug}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#ff6b6b', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={!!sec.isFlashSale}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setF((curr: any) => {
+                          const sections = [...(curr?.homepageSections || [])];
+                          sections[index] = { ...sections[index], isFlashSale: checked };
+                          return { ...curr, homepageSections: sections };
+                        });
+                      }}
+                    />
+                    ⚡ Flash Sale (Timer)
+                  </label>
+
+                  <div style={{ width: 80 }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 2 }}>পণ্য সংখ্যা</div>
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={sec.count || 10}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10) || 10;
+                        setF((curr: any) => {
+                          const sections = [...(curr?.homepageSections || [])];
+                          sections[index] = { ...sections[index], count: v };
+                          return { ...curr, homepageSections: sections };
+                        });
+                      }}
+                      style={{ padding: '8px 10px', borderRadius: 6, background: '#0f0c1b', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', width: '100%' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      onClick={() => {
+                        setF((curr: any) => {
+                          const sections = [...(curr?.homepageSections || [])];
+                          const [item] = sections.splice(index, 1);
+                          sections.splice(index - 1, 0, item);
+                          return { ...curr, homepageSections: sections };
+                        });
+                      }}
+                      style={{ padding: '6px 10px', borderRadius: 4, background: '#2d284d', color: '#fff', border: 'none', cursor: index === 0 ? 'not-allowed' : 'pointer' }}
+                      title="Move Up"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === f.homepageSections.length - 1}
+                      onClick={() => {
+                        setF((curr: any) => {
+                          const sections = [...(curr?.homepageSections || [])];
+                          const [item] = sections.splice(index, 1);
+                          sections.splice(index + 1, 0, item);
+                          return { ...curr, homepageSections: sections };
+                        });
+                      }}
+                      style={{ padding: '6px 10px', borderRadius: 4, background: '#2d284d', color: '#fff', border: 'none', cursor: index === f.homepageSections.length - 1 ? 'not-allowed' : 'pointer' }}
+                      title="Move Down"
+                    >
+                      ▼
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setF((curr: any) => {
+                          const sections = [...(curr?.homepageSections || [])];
+                          sections.splice(index, 1);
+                          return { ...curr, homepageSections: sections };
+                        });
+                      }}
+                      style={{ padding: '6px 10px', borderRadius: 4, background: '#7f1d1d', color: '#fff', border: 'none', cursor: 'pointer' }}
+                      title="Remove"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
         <div className="sa-card" style={{ padding: 24 }}>
           <div style={{ marginBottom: 18 }}><h2 style={{ margin: '0 0 6px', color: '#fff' }}>Homepage sections</h2><p style={{ margin: 0, color: '#94a3b8' }}>Choose which sections appear on the storefront. Save All Changes to publish these settings to this store.</p></div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 10 }}>
