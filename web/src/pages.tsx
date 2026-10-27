@@ -282,115 +282,106 @@ export function ProductCard({ p }: { p: Product }) {
     setTimeout(() => setAdded(false), 1400);
   };
 
-  const handleOrderNow = (e: any) => {
-    e.stopPropagation();
-    handleAddToCart(e);
-    go('checkout');
-  };
-
   return (
-    <article className="metro-product-card" onClick={() => go('product/' + p.slug)}>
-      {/* Top-left discount badge */}
-      {onSale && !p.soldOut && (
-        <span className="metro-pc-badge">-{salePercent}%</span>
-      )}
-      {p.soldOut && (
-        <span className="metro-pc-badge" style={{ background: '#555' }}>SOLD OUT</span>
-      )}
+    <article className="product-card" onClick={() => go('product/' + p.slug)}>
+      {/* Tabaya Gold Corner Accents */}
+      <div className="pc-corner-tr" />
+      <div className="pc-corner-bl" />
 
-      {/* Centered Image */}
-      <div className="metro-pc-img-wrap">
-        <img
-          ref={imgRef}
-          className="metro-pc-img"
-          src={currentCardImage}
-          alt={p.name}
-          loading="lazy"
-          decoding="async"
-          onError={(e: any) => {
-            e.currentTarget.style.display = 'none';
-            e.currentTarget.parentElement?.classList.add('image-unavailable');
-          }}
-          style={p.soldOut ? { opacity: 0.55 } : undefined}
-        />
-        {p.freeShipping && (
-          <div className="metro-pc-free-badge">
-            <span>FREE DELIVERY</span>
+      {/* Sale state stays in a reserved strip, outside the product photo. */}
+      {(p.soldOut || onSale) && <div className="pc-badges-col">
+        {p.soldOut ? (
+          <span className="pc-badge-save out">SOLD OUT</span>
+        ) : onSale ? (
+          <span className="pc-badge-save">{language === 'bn' ? `${salePercent}% ছাড়` : `-${salePercent}% OFF`}</span>
+        ) : null}
+      </div>}
+
+      {/* Image */}
+      <div className="pc-image-wrap">
+        <img ref={imgRef} className="pc-image" src={currentCardImage} alt={p.name} loading="lazy" decoding="async" onError={(e: any) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.classList.add('image-unavailable'); }} style={p.soldOut ? { opacity: 0.55 } : undefined} />
+      </div>
+
+      {/* Card Content */}
+      <div className="pc-content">
+        <div className="pc-divider" />
+        <div className="pc-eyebrow">{p.category ? tr(p.category.replace(/-/g, ' '), language) : tr('EXCLUSIVE COLLECTION', language)}</div>
+        <a className="pc-title">{p.name}</a>
+        {(p.tag || p.isDigital) && <span className="pc-product-note">{p.isDigital ? '⚡ DIGITAL · ৳0 DELIVERY' : p.tag}</span>}
+
+        {/* Colors Preview Chips */}
+        {colors.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, marginBottom: 2, flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
+            {colors.slice(0, 5).map((c) => {
+              const hex = (c as any).hex || '#111';
+              const isSel = (selColor || colors[0]?.name).toLowerCase() === c.name.toLowerCase();
+              return (
+                <span
+                  key={c.name}
+                  onClick={() => setSelColor(c.name)}
+                  title={c.name}
+                  style={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: '50%',
+                    background: hex,
+                    border: isSel ? '2px solid #b48e4c' : '1px solid rgba(0,0,0,0.25)',
+                    cursor: 'pointer',
+                    boxShadow: isSel ? '0 0 0 1px #fff' : 'none',
+                    display: 'inline-block',
+                    transition: 'all 0.15s ease',
+                    transform: isSel ? 'scale(1.2)' : 'scale(1)',
+                  }}
+                />
+              );
+            })}
+            {colors.length > 5 && (
+              <span style={{ fontSize: 10, color: '#8c7d6b', fontWeight: 600 }}>+{colors.length - 5}</span>
+            )}
           </div>
         )}
-      </div>
 
-      {/* Title */}
-      <h3 className="metro-pc-title" title={p.name}>{p.name}</h3>
+        <div className="pc-price-row">
+          <span className="pc-price">
+            {activeCompareAt && activeCompareAt > activePrice && (
+              <span className="pc-price-old">{taka(activeCompareAt)}</span>
+            )}
+            {taka(activePrice)}
+          </span>
+        </div>
 
-      {/* Price row */}
-      <div className="metro-pc-price-row">
-        {activeCompareAt && activeCompareAt > activePrice && (
-          <span className="metro-pc-old-price">{taka(activeCompareAt)}</span>
+        {/* Sizes Selection Chips right on Card - ONLY IF SIZES EXIST */}
+        {sizes.length > 0 && (
+          <>
+            <div className="pc-sizes" onClick={(e) => e.stopPropagation()}>
+              {sizes.map((sz: string) => (
+                <button
+                  key={sz}
+                  type="button"
+                  className={'pc-size' + (selSize === sz ? ' selected' : '')}
+                  onClick={() => setSelSize(sz)}
+                >
+                  {sz}
+                </button>
+              ))}
+            </div>
+            <div className="pc-size-hint">
+              {selSize ? `${tr('Size:', language)} ${selSize}` : tr('Select size', language)}
+            </div>
+          </>
         )}
-        <span className="metro-pc-price">{taka(activePrice)}</span>
+
+        {/* Cut-Corner CTA Button */}
+        <button
+          type="button"
+          className="pc-cta"
+          disabled={p.soldOut}
+          onClick={handleAddToCart}
+        >
+          <span>{p.soldOut ? tr('SOLD OUT', language) : added ? tr('ADDED TO BAG ✓', language) : tr('ADD TO CART', language)}</span>
+        </button>
       </div>
-
-      {/* Buttons */}
-      <button
-        type="button"
-        className="metro-pc-btn-cart"
-        disabled={p.soldOut}
-        onClick={handleAddToCart}
-      >
-        {p.soldOut ? tr('SOLD OUT', language) : added ? tr('ADDED ✓', language) : tr('Add To Cart', language)}
-      </button>
-      <button
-        type="button"
-        className="metro-pc-btn-order"
-        disabled={p.soldOut}
-        onClick={handleOrderNow}
-      >
-        {p.soldOut ? tr('SOLD OUT', language) : tr('Order Now', language)}
-      </button>
     </article>
-  );
-}
-
-export function FlashSaleCountdown() {
-  const [timeLeft, setTimeLeft] = useState({ hours: 11, minutes: 59, seconds: 48 });
-
-  useEffect(() => {
-    const getEnd = () => {
-      const stored = localStorage.getItem('metro_flash_timer_end');
-      const now = Date.now();
-      if (stored && Number(stored) > now) {
-        return Number(stored);
-      }
-      const newEnd = now + (12 * 3600 * 1000);
-      localStorage.setItem('metro_flash_timer_end', String(newEnd));
-      return newEnd;
-    };
-    const target = getEnd();
-    const tick = () => {
-      const diff = Math.max(0, target - Date.now());
-      const h = Math.floor(diff / (1000 * 60 * 60));
-      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const s = Math.floor((diff % (1000 * 60)) / 1000);
-      setTimeLeft({ hours: h, minutes: m, seconds: s });
-    };
-    tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const pad = (n: number) => String(n).padStart(2, '0');
-
-  return (
-    <div className="metro-flash-timer">
-      <span className="metro-flash-ending">Ending Offer</span>
-      <span className="metro-flash-clock">⏰</span>
-      <span className="metro-flash-box">{pad(timeLeft.hours)}</span>
-      <span className="metro-flash-colon">:</span>
-      <span className="metro-flash-box">{pad(timeLeft.minutes)}</span>
-      <span className="metro-flash-colon">:</span>
-      <span className="metro-flash-box">{pad(timeLeft.seconds)}</span>
-    </div>
   );
 }
 
@@ -843,27 +834,6 @@ export function Home() {
   const isSkin = isSkincareSite();
   const customHomeCopy = settings?.homeContent?.[language] || {};
   const visibleSections = settings?.siteContent?.sections || {};
-  const homepageShelves = useMemo(() => {
-    if (Array.isArray(settings?.homepageSections) && settings.homepageSections.length > 0) {
-      return settings.homepageSections.filter((s: any) => s.active !== false);
-    }
-    const list: any[] = [
-      { id: 'sec-flash', title: 'FLASH SALE', category: 'all', isFlashSale: true, count: 10, buttonText: 'View More', active: true },
-      { id: 'sec-new', title: 'New Arrivals', category: 'all', isFlashSale: false, count: 10, buttonText: 'View More', active: true },
-    ];
-    cats.forEach((c) => {
-      list.push({
-        id: 'sec-cat-' + c.slug,
-        title: c.name || c.slug,
-        category: c.slug,
-        isFlashSale: false,
-        count: 10,
-        buttonText: 'View More',
-        active: true,
-      });
-    });
-    return list;
-  }, [settings?.homepageSections, cats]);
   const homeText = (key: string, fallback: string) => customHomeCopy[key]?.trim() || tr(fallback, language);
 
   const best = useMemo(() => {
@@ -1085,73 +1055,6 @@ export function Home() {
         </div>
       </section>}
       {renderConfiguredSections('after-story')}
-
-      {/* 2. DYNAMIC CATEGORY SHELVES & FLASH SALE */}
-      {homepageShelves.map((section: any, idx: number) => {
-        const selected = Array.isArray(section.productIds) ? section.productIds.map(String) : [];
-        let catProducts = products.filter((p) => {
-          if (p.adult) return false;
-          if (selected.length > 0) return selected.includes(String(p.id));
-          if (!section.category || section.category === 'all' || section.category === 'new-arrivals') return true;
-          return p.category === section.category;
-        });
-
-        if (section.isFlashSale) {
-          catProducts = [...catProducts].sort((a, b) => {
-            const aSale = (a.compareAt || 0) > a.price ? 1 : 0;
-            const bSale = (b.compareAt || 0) > b.price ? 1 : 0;
-            return bSale - aSale;
-          });
-        }
-
-        const itemsToShow = catProducts.slice(0, Number(section.count) || 10);
-        if (!itemsToShow.length) return null;
-
-        const isFlash = !!section.isFlashSale;
-
-        return (
-          <section
-            key={section.id || 'shelf-' + (section.category || 'all') + '-' + idx}
-            className={isFlash ? 'metro-shelf-section metro-shelf-flash' : 'metro-shelf-section'}
-          >
-            <div className="wrap">
-              {isFlash ? (
-                <div className="metro-flash-container">
-                  <div className="metro-flash-header">
-                    <div className="metro-flash-title-row">
-                      <h2 className="metro-flash-heading">{tr(section.title || 'FLASH SALE', language)}</h2>
-                      <FlashSaleCountdown />
-                    </div>
-                  </div>
-                  <div className="metro-shelf-grid">
-                    {itemsToShow.map((p) => (
-                      <ProductCard key={p.id} p={p} />
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="metro-standard-container">
-                  <div className="metro-shelf-header">
-                    <h2 className="metro-shelf-title">{tr(section.title || 'Collection', language)}</h2>
-                    <button
-                      type="button"
-                      className="metro-shelf-view-more"
-                      onClick={() => go(section.category && section.category !== 'all' ? 'shop/' + section.category : 'shop')}
-                    >
-                      {tr(section.buttonText || 'View More', language)}
-                    </button>
-                  </div>
-                  <div className="metro-shelf-grid">
-                    {itemsToShow.map((p) => (
-                      <ProductCard key={p.id} p={p} />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
-        );
-      })}
 
       {/* 4. FEATURED PRODUCTS (pc-stage & pc-grid) */}
       {visibleSections.featured !== false && <section className="pc-stage">
