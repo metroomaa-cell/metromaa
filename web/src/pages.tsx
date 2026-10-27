@@ -1042,7 +1042,7 @@ export function Home() {
       {renderConfiguredSections('after-categories')}
 
       {/* 3. FRAMED INTRO BOX */}
-      {visibleSections.intro !== false && <section className="tabaya-intro">
+      {false && <section className="tabaya-intro">
         <div className="tabaya-intro__frame">
           <h2 className="tabaya-intro__title">
             {homeText('introTitle', isSkin ? 'Skincare & Self-Care, Carefully Curated' : 'Lifestyle Watches, Sunglasses & Gifts')}
