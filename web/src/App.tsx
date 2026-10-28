@@ -249,7 +249,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
   const [menu, setMenu] = useState(false);
   const isSkin = isSkincareSite();
   const [storeName, setStoreName] = useState(() => getCachedSettings()?.storeName || (isSkin ? 'SECRATE' : 'METRROMA'));
-  const [logo, setLogo] = useState(() => getCachedSettings()?.logo || (isSkin ? '' : '/uploads/img_mvddqd311xu5c.webp'));
+  const [logo, setLogo] = useState(() => getCachedSettings()?.logo || (isSkin ? '' : '/uploads/img_mvkr0y8i1irod.webp'));
   const [cats, setCats] = useState<{ slug: string; name: string; parentSlug?: string }[]>(() => getCachedCategories());
   const [expandedMobileCat, setExpandedMobileCat] = useState<string | null>(null);
   const [hoveredMainCat, setHoveredMainCat] = useState<string | null>(null);

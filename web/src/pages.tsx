@@ -1154,7 +1154,7 @@ export function Home() {
       phone: '8801633617136',
       gtmId: 'GTM-WM964FQV',
       fbPixelId: '',
-      logo: '/uploads/img_mvddqd311xu5c.webp',
+      logo: '/uploads/img_mvkr0y8i1irod.webp',
       favicon: '/uploads/img_mvddqn154or1h.webp',
       sliders: DEFAULT_SLIDERS,
       homepageSections: DEFAULT_HOMEPAGE_SECTIONS,
@@ -1299,54 +1299,6 @@ export function Home() {
       {visibleSections.hero !== false && <HomeHeroSlider slides={sliders} />}
 
       
-      {/* 1.5 QUICK CATEGORY PILLS BAR (Mobile-First / Curated Lifestyle Navigation) */}
-      {visibleSections.quickCategories !== false && !isSkin && (
-        <section style={{ background: '#FAF7F2', borderBottom: '1px solid #ECE7DE', padding: '12px 0' }}>
-          <div className="wrap" style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-            {[
-              { id: 'all', label: 'All Collections', icon: '✨' },
-              { id: 'cloth', label: 'Fashion & Apparel', icon: '👔' },
-              { id: 'watch', label: 'Timepieces & Watches', icon: '⌚' },
-              { id: 'sunglass', label: 'Designer Sunglasses', icon: '🕶️' },
-              { id: 'gift', label: 'Curated Gift Sets', icon: '🎁' },
-              { id: 'digital', label: 'Digital Products', icon: '⚡' },
-              { id: 'accessories', label: 'Leather & Accessories', icon: '👜' },
-            ].map((catItem) => {
-              const isActive = activeTabCat === catItem.id;
-              return (
-                <button
-                  key={catItem.id}
-                  type="button"
-                  onClick={() => setActiveTabCat(catItem.id)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '8px 16px',
-                    borderRadius: 30,
-                    fontSize: 13,
-                    fontWeight: isActive ? 600 : 500,
-                    letterSpacing: '0.02em',
-                    whiteSpace: 'nowrap',
-                    cursor: 'pointer',
-                    border: isActive ? '1px solid #1f3147' : '1px solid #d9d4cc',
-                    background: isActive ? '#1f3147' : '#ffffff',
-                    color: isActive ? '#ffffff' : '#3d4a57',
-                    boxShadow: isActive ? '0 2px 6px rgba(31,49,71,0.18)' : '0 1px 3px rgba(0,0,0,0.03)',
-                    transition: 'all 0.2s ease',
-                    flexShrink: 0,
-                  }}
-                >
-                  <span>{catItem.icon}</span>
-                  <span>{tr(catItem.label, language)}</span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
-      
-
       {/* 2. SHOP BY COLLECTION / CATEGORY (ara-section) */}
       {visibleSections.collections !== false && cats.length > 0 && (
         <section className="ara-section">
@@ -1435,13 +1387,14 @@ export function Home() {
             } else {
               const catTarget = String(section.category || '').toLowerCase().replace(/-/g, ' ').trim();
               const matched = products.filter(p => !p.adult && String(p.category || '').toLowerCase().replace(/-/g, ' ').trim() === catTarget);
-              shelfProducts = matched.length > 0 ? matched : products.filter(p => !p.adult);
+              shelfProducts = matched;
             }
 
             const limit = Math.max(1, Number(section.count) || 8);
             const displayProducts = shelfProducts.slice(0, limit);
 
-            if (loaded && displayProducts.length === 0) return null;
+            if ((loaded || products.length > 0) && displayProducts.length === 0) return null;
+            if (!loaded && products.length === 0 && idx > 1) return null;
 
             return (
               <section className="metro-shelf-section" key={section.id || `shelf-${section.category}-${idx}`}>
