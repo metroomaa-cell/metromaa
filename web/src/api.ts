@@ -163,11 +163,69 @@ function getJsonOnce<T>(url: string): Promise<T> {
   return request;
 }
 
-export const getSettings = (): Promise<Settings> => getJsonOnce('/api/settings');
-export const getCategories = (): Promise<Category[]> => getJsonOnce('/api/categories');
+const SETTINGS_CACHE_KEY = 'metromaa_cached_settings';
+const CATS_CACHE_KEY = 'metromaa_cached_categories';
+const PRODUCTS_CACHE_KEY = 'metromaa_cached_products';
+
+export function getCachedSettings(): Settings | null {
+  try {
+    const raw = localStorage.getItem(SETTINGS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+export function getCachedCategories(): Category[] {
+  try {
+    const raw = localStorage.getItem(CATS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+export function getCachedProducts(): Product[] {
+  try {
+    const raw = localStorage.getItem(PRODUCTS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+export function getCachedProduct(slug: string): Product | null {
+  try {
+    const products = getCachedProducts();
+    return products.find((p: any) => p.slug === slug || p.id === slug) || null;
+  } catch { return null; }
+}
+
+export const getSettings = (): Promise<Settings> =>
+  getJsonOnce<Settings>('/api/settings').then((data) => {
+    try { localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(data)); } catch {}
+    return data;
+  });
+
+export const getCategories = (): Promise<Category[]> =>
+  getJsonOnce<Category[]>('/api/categories').then((data) => {
+    try { localStorage.setItem(CATS_CACHE_KEY, JSON.stringify(data)); } catch {}
+    return data;
+  });
+
 export const getProducts = (category?: string): Promise<Product[]> =>
-  getJsonOnce('/api/products' + (category ? `?category=${encodeURIComponent(category)}` : ''));
-export const getProduct = (slug: string): Promise<Product> => getJsonOnce('/api/products/' + encodeURIComponent(slug));
+  getJsonOnce<Product[]>('/api/products' + (category ? `?category=${encodeURIComponent(category)}` : '')).then((data) => {
+    if (!category && Array.isArray(data) && data.length > 0) {
+      try { localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(data)); } catch {}
+    }
+    return data;
+  });
+
+export const getProduct = (slug: string): Promise<Product> =>
+  getJsonOnce<Product>('/api/products/' + encodeURIComponent(slug)).then((data) => {
+    try {
+      const existing = getCachedProducts();
+      const idx = existing.findIndex((p: any) => p.id === data.id || p.slug === data.slug);
+      if (idx >= 0) existing[idx] = data;
+      else existing.push(data);
+      localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(existing));
+    } catch {}
+    return data;
+  });
 
 export type OrderPayload = {
   items: {

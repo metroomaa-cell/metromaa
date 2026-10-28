@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { getProducts, getCategories, getProduct, placeOrder, getSettings, validateCoupon, fetchReviews, postReview, getSource, taka, getDeviceId, isSkincareSite, type Product, type Category, type Settings, type Review } from './api';
+import { getProducts, getCategories, getProduct, placeOrder, getSettings, validateCoupon, fetchReviews, postReview, getSource, taka, getDeviceId, isSkincareSite, type Product, type Category, type Settings, type Review, getCachedSettings, getCachedCategories, getCachedProducts, getCachedProduct } from './api';
 import { useCart, go, useAge } from './cart';
 import { useCustomer } from './CustomerAccount';
 import { BD_GEO } from './bd-geo';
@@ -885,7 +885,7 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
             <img
               src={isSkin
                 ? '/uploads/banner_secrate_desktop.webp'
-                : '/uploads/img_mvcvyjixc2dpi.webp'}
+                : '/uploads/img_mvdpqsl1t81m6.webp'}
               alt={isSkin ? 'Skincare & Self-Care Products' : 'METRROMA Lifestyle & Gifts'}
               loading="eager"
               fetchPriority="high"
@@ -977,7 +977,7 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
             onError={(e: any) => {
               const fallback = isSkincareSite()
                 ? 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=1920&q=85'
-                : '/uploads/img_mvcvyjixc2dpi.webp';
+                : '/uploads/img_mvdpqsl1t81m6.webp';
               if (e.currentTarget.src.endsWith(fallback)) return;
               e.currentTarget.src = fallback;
             }}
@@ -1114,14 +1114,56 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
   );
 }
 
+const DEFAULT_SLIDERS = [
+  {
+    id: 'slide_mvdpqkvg',
+    image: '/uploads/img_mvdpqsl1t81m6.webp',
+    mobileImage: '',
+    badge: '',
+    title: '',
+    subtitle: '',
+    btnText: 'Best Gift Ever ',
+    btnLink: 'shop',
+    active: true,
+  },
+];
+
+const DEFAULT_HOMEPAGE_SECTIONS = [
+  { id: 'sec-watch', title: 'Watch', category: 'watch', count: 10, active: true, isFlashSale: false, buttonText: 'View More' },
+  { id: 'sec-gift', title: 'Gift', category: 'gift', count: 10, active: true, isFlashSale: false, buttonText: 'View More' },
+  { id: 'sec-sunglass', title: 'Sunglass', category: 'sunglass', count: 10, active: true, isFlashSale: false, buttonText: 'View More' },
+];
+
 export function Home() {
   const language = useStoreLanguage();
   const { openAuth } = useCustomer();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [cats, setCats] = useState<Category[]>([]);
-  const [sliders, setSliders] = useState<any[]>([]);
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const [products, setProducts] = useState<Product[]>(() => getCachedProducts());
+  const [loaded, setLoaded] = useState(() => (getCachedProducts()?.length ?? 0) > 0);
+  const [cats, setCats] = useState<Category[]>(() => getCachedCategories());
+  const [settings, setSettings] = useState<Settings | null>(() => {
+    const cached = getCachedSettings();
+    if (cached) return cached;
+    return {
+      storeName: 'METRROMA',
+      announce: '✨ FREE SHIPPING ON ORDERS OVER Tk 3,000 · 100% AUTHENTIC LIFESTYLE & GIFTS · CASH ON DELIVERY NATIONWIDE',
+      deliveryInside: 80,
+      deliveryOutside: 130,
+      freeShipThreshold: 3000,
+      lowStockAt: 5,
+      whatsapp: '8801633617136',
+      phone: '8801633617136',
+      gtmId: 'GTM-WM964FQV',
+      fbPixelId: '',
+      logo: '/uploads/img_mvddqd311xu5c.webp',
+      favicon: '/uploads/img_mvddqn154or1h.webp',
+      sliders: DEFAULT_SLIDERS,
+      homepageSections: DEFAULT_HOMEPAGE_SECTIONS,
+    } as Settings;
+  });
+  const [sliders, setSliders] = useState<any[]>(() => {
+    const cached = getCachedSettings();
+    return (cached?.sliders && cached.sliders.length > 0) ? cached.sliders : DEFAULT_SLIDERS;
+  });
   const [subEmail, setSubEmail] = useState('');
   const [subbed, setSubbed] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
@@ -1161,17 +1203,9 @@ export function Home() {
   const shelfSections = useMemo(() => {
     const configured = (settings?.homepageSections || []).filter((s: any) => s.active !== false);
     if (configured.length > 0) return configured;
+    if (!loaded && !settings) return [];
 
     const defaults: any[] = [];
-    defaults.push({
-      id: 'sec-flash-sale',
-      title: 'FLASH SALE',
-      category: 'all',
-      count: 4,
-      isFlashSale: true,
-      active: true,
-      buttonText: 'View More',
-    });
     cats.forEach((c) => {
       defaults.push({
         id: `sec-${c.slug}`,
@@ -1184,7 +1218,7 @@ export function Home() {
       });
     });
     return defaults;
-  }, [settings?.homepageSections, cats]);
+  }, [settings?.homepageSections, cats, loaded, settings]);
 
   const [activeTabCat, setActiveTabCat] = useState('all');
 
@@ -1612,9 +1646,13 @@ export function Home() {
 export function Shop({ category }: { category: string }) {
   const language = useStoreLanguage();
   const { ok, confirm } = useAge();
-  const [cats, setCats] = useState<Category[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [cats, setCats] = useState<Category[]>(() => getCachedCategories());
+  const [products, setProducts] = useState<Product[]>(() => {
+    const all = getCachedProducts();
+    if (!category) return all;
+    return all.filter((p) => p.category === category);
+  });
+  const [loaded, setLoaded] = useState(() => (getCachedProducts()?.length ?? 0) > 0);
   const isSkin = isSkincareSite();
 
   useEffect(() => { getCategories().then(setCats).catch(() => {}); }, []);
@@ -1717,7 +1755,7 @@ export function ProductPage({ slug }: { slug: string }) {
   const language = useStoreLanguage();
   const { ok, confirm } = useAge();
   const { add, setOpen } = useCart();
-  const [p, setP] = useState<Product | null>(null);
+  const [p, setP] = useState<Product | null>(() => getCachedProduct(slug));
   const [err, setErr] = useState(false);
   const [gi, setGi] = useState(0);
   const [qty, setQty] = useState(1);

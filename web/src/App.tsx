@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { CartProvider, useCart, useRoute, go } from './cart';
-import { taka, getSettings, isSkincareSite, getCategories, isWellnessOrExcludedCategory } from './api';
+import { taka, getSettings, isSkincareSite, getCategories, isWellnessOrExcludedCategory, getCachedSettings, getCachedCategories } from './api';
 import { initGTM, initFB, dl, trackEngagement, initInteractionTracking } from './analytics';
 import { Home, Shop, ProductPage, Checkout, Confirm, Track, SearchOverlay, InfoPage } from './pages';
 import { CustomerProvider, useCustomer, CustomerHeaderIcon, CustomerAccountPage } from './CustomerAccount';
@@ -203,7 +203,15 @@ function Effects() {
 function AnnouncementBar() {
   const language = useStoreLanguage();
   const isSkin = isSkincareSite();
-  const [announce, setAnnounce] = useState('');
+  const [announce, setAnnounce] = useState(() => {
+    const s = getCachedSettings();
+    if (s?.announce && s.announce.trim()) {
+      return s.announce.trim().replace(/100%\s+AUTHENTIC[^·]*/gi, isSkin ? 'PRODUCT DETAILS AVAILABLE' : 'CURATED LIFESTYLE & GIFTS');
+    }
+    return isSkin
+      ? '✨ Skincare & Self-Care · Cash on Delivery Nationwide · Product Details Available'
+      : '✨ Carefully Curated Watches, Sunglasses & Gifts · Cash on Delivery Nationwide';
+  });
   useEffect(() => {
     getSettings().then((s) => {
       if (s.announce && s.announce.trim()) {
@@ -240,9 +248,9 @@ function Header({ onSearch }: { onSearch: () => void }) {
   const { customer, openAuth } = useCustomer();
   const [menu, setMenu] = useState(false);
   const isSkin = isSkincareSite();
-  const [storeName, setStoreName] = useState(isSkin ? 'SECRATE' : 'METRROMA');
-  const [logo, setLogo] = useState('');
-  const [cats, setCats] = useState<{ slug: string; name: string; parentSlug?: string }[]>([]);
+  const [storeName, setStoreName] = useState(() => getCachedSettings()?.storeName || (isSkin ? 'SECRATE' : 'METRROMA'));
+  const [logo, setLogo] = useState(() => getCachedSettings()?.logo || (isSkin ? '' : '/uploads/img_mvddqd311xu5c.webp'));
+  const [cats, setCats] = useState<{ slug: string; name: string; parentSlug?: string }[]>(() => getCachedCategories());
   const [expandedMobileCat, setExpandedMobileCat] = useState<string | null>(null);
   const [hoveredMainCat, setHoveredMainCat] = useState<string | null>(null);
   const route = useRoute();
