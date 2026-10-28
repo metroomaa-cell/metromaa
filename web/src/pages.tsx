@@ -282,6 +282,8 @@ export function ProductCard({ p }: { p: Product }) {
     setTimeout(() => setAdded(false), 1400);
   };
 
+const secondaryImage = Array.isArray(p.images) && p.images.length > 1 ? p.images[1] : (p.images && p.images[0] && p.images[0] !== p.image ? p.images[0] : null);
+
   return (
     <article className="product-card" onClick={() => go('product/' + p.slug)}>
       {/* Tabaya Gold Corner Accents */}
@@ -297,9 +299,24 @@ export function ProductCard({ p }: { p: Product }) {
         ) : null}
       </div>}
 
-      {/* Image */}
+      {/* Image with Secondary Flip on Hover & Quick View Pill */}
       <div className="pc-image-wrap">
-        <img ref={imgRef} className="pc-image" src={currentCardImage} alt={p.name} loading="lazy" decoding="async" onError={(e: any) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.classList.add('image-unavailable'); }} style={p.soldOut ? { opacity: 0.55 } : undefined} />
+        <img ref={imgRef} className="pc-image pc-image-primary" src={currentCardImage} alt={p.name} loading="lazy" decoding="async" onError={(e: any) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.classList.add('image-unavailable'); }} style={p.soldOut ? { opacity: 0.55 } : undefined} />
+        {secondaryImage && secondaryImage !== currentCardImage && (
+          <img className="pc-image pc-image-secondary" src={secondaryImage} alt={p.name} loading="lazy" decoding="async" onError={(e: any) => { e.currentTarget.style.display = 'none'; }} />
+        )}
+        <button
+          type="button"
+          className="pc-quick-view-btn"
+          title={language === 'bn' ? 'দ্রুত দেখুন' : 'Quick View'}
+          onClick={(e) => {
+            e.stopPropagation();
+            if ((window as any).__openQuickView) (window as any).__openQuickView(p);
+          }}
+        >
+          <span>👁</span>
+          <span>{language === 'bn' ? 'কুইক ভিউ' : 'Quick View'}</span>
+        </button>
       </div>
 
       {/* Card Content */}
@@ -419,6 +436,255 @@ export function FlashSaleCountdown() {
       <span className="metro-flash-box">{pad(timeLeft.minutes)}</span>
       <span className="metro-flash-colon">:</span>
       <span className="metro-flash-box">{pad(timeLeft.seconds)}</span>
+    </div>
+  );
+}
+
+
+
+export function QuickViewModal({ product, onClose }: { product: Product | null; onClose: () => void }) {
+  const language = useStoreLanguage();
+  const { add } = useCart();
+  const [activeImg, setActiveImg] = useState<string>('');
+  const [selColor, setSelColor] = useState<string>('');
+  const [selSize, setSelSize] = useState<string>('');
+  const [qty, setQty] = useState(1);
+  const [added, setAdded] = useState(false);
+
+  useEffect(() => {
+    if (product) {
+      setActiveImg(product.image || (product.images && product.images[0]) || '');
+      const colors = getProductColors(product);
+      setSelColor(colors[0]?.name || '');
+      const sizes = getProductSizes(product);
+      setSelSize(sizes[0] || '');
+      setQty(1);
+      setAdded(false);
+    }
+  }, [product]);
+
+  if (!product) return null;
+
+  const colors = getProductColors(product);
+  const sizes = getProductSizes(product);
+
+  const selectedVar = product.variations && product.variations.length > 0
+    ? product.variations.find((v: any) => (!selColor || v.color === selColor) && (!selSize || v.size === selSize)) || product.variations[0]
+    : null;
+
+  const price = selectedVar ? selectedVar.price : product.price;
+  const compareAt = selectedVar?.compareAt || product.compareAt;
+  const onSale = !!compareAt && compareAt > price;
+  const salePercent = onSale ? Math.round((1 - price / compareAt!) * 100) : 0;
+  const allImages = Array.isArray(product.images) && product.images.length > 0 ? product.images : [product.image].filter(Boolean);
+
+  const handleAdd = () => {
+    const variantDesc = [selColor ? `Color: ${selColor}` : '', selSize ? `Size: ${selSize}` : ''].filter(Boolean).join(' · ');
+    const itemToAdd = {
+      ...product,
+      price,
+      size: selSize,
+      color: selColor,
+      name: variantDesc ? `${product.name} (${variantDesc})` : product.name,
+      variantId: selectedVar?.id,
+    };
+    for (let i = 0; i < qty; i++) {
+      add(itemToAdd as any);
+    }
+    setAdded(true);
+    setTimeout(() => setAdded(false), 1500);
+  };
+
+  const handleOrderNow = () => {
+    handleAdd();
+    onClose();
+    go('checkout');
+  };
+
+  return (
+    <div className="qv-modal-overlay" onClick={onClose}>
+      <div className="qv-modal-box" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="qv-close-btn" onClick={onClose}>×</button>
+
+        {/* Left: Images */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ width: '100%', aspectRatio: '4/4.5', borderRadius: 12, overflow: 'hidden', background: '#fff', border: '1px solid rgba(0,0,0,0.08)' }}>
+            <img src={activeImg || product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          </div>
+          {allImages.length > 1 && (
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+              {allImages.map((img, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setActiveImg(img)}
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: 8,
+                    overflow: 'hidden',
+                    border: (activeImg === img || (!activeImg && i === 0)) ? '2px solid #b48e4c' : '1px solid rgba(0,0,0,0.12)',
+                    padding: 0,
+                    cursor: 'pointer',
+                    background: '#fff',
+                    flexShrink: 0,
+                  }}
+                >
+                  <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Right: Info & Purchase */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#b48e4c', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+            {product.category || 'EXCLUSIVE COLLECTION'}
+          </div>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#1f3147', margin: 0, fontFamily: "var(--font-serif, 'Playfair Display', Georgia, serif)" }}>
+            {product.name}
+          </h2>
+
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, margin: '4px 0' }}>
+            <span style={{ fontSize: 22, fontWeight: 800, color: '#1f3147' }}>{taka(price)}</span>
+            {onSale && (
+              <>
+                <span style={{ fontSize: 15, textDecoration: 'line-through', color: '#94a3b8' }}>{taka(compareAt)}</span>
+                <span style={{ background: '#8b1e1e', color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4 }}>
+                  -{salePercent}% OFF
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* Color Picker */}
+          {colors.length > 0 && (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#4b5563', marginBottom: 6 }}>
+                {tr('Color', language)}: <b style={{ color: '#1f3147' }}>{selColor}</b>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {colors.map((c) => {
+                  const isSel = selColor.toLowerCase() === c.name.toLowerCase();
+                  return (
+                    <button
+                      key={c.name}
+                      type="button"
+                      onClick={() => {
+                        setSelColor(c.name);
+                        if ((c as any).image) setActiveImg((c as any).image);
+                      }}
+                      style={{
+                        padding: '5px 12px',
+                        borderRadius: 20,
+                        border: isSel ? '2px solid #b48e4c' : '1px solid #d1d5db',
+                        background: isSel ? '#faf5ec' : '#fff',
+                        fontWeight: isSel ? 700 : 500,
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <span style={{ width: 12, height: 12, borderRadius: '50%', background: (c as any).hex || '#111', display: 'inline-block' }} />
+                      <span>{c.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Size Picker */}
+          {sizes.length > 0 && (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#4b5563', marginBottom: 6 }}>
+                {tr('Size', language)}: <b style={{ color: '#1f3147' }}>{selSize}</b>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {sizes.map((s) => {
+                  const isSel = selSize === s;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setSelSize(s)}
+                      style={{
+                        minWidth: 42,
+                        padding: '6px 12px',
+                        borderRadius: 6,
+                        border: isSel ? '2px solid #1f3147' : '1px solid #d1d5db',
+                        background: isSel ? '#1f3147' : '#fff',
+                        color: isSel ? '#fff' : '#1f3147',
+                        fontWeight: 700,
+                        fontSize: 12,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {s}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Quantity Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#4b5563' }}>{tr('Quantity', language)}:</span>
+            <div style={{ display: 'inline-flex', alignItems: 'center', border: '1px solid #d1d5db', borderRadius: 6, overflow: 'hidden' }}>
+              <button
+                type="button"
+                onClick={() => setQty(Math.max(1, qty - 1))}
+                style={{ width: 32, height: 32, background: '#f8fafc', border: 'none', cursor: 'pointer', fontWeight: 700 }}
+              >
+                -
+              </button>
+              <span style={{ width: 36, textAlign: 'center', fontSize: 13, fontWeight: 700 }}>{qty}</span>
+              <button
+                type="button"
+                onClick={() => setQty(qty + 1)}
+                style={{ width: 32, height: 32, background: '#f8fafc', border: 'none', cursor: 'pointer', fontWeight: 700 }}
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12 }}>
+            <button
+              type="button"
+              onClick={handleAdd}
+              disabled={product.soldOut}
+              className="tabaya-btn secondary"
+              style={{ padding: '12px 16px', fontSize: 12, letterSpacing: '1px', fontWeight: 700 }}
+            >
+              {added ? tr('ADDED ✓', language) : tr('ADD TO BAG', language)}
+            </button>
+            <button
+              type="button"
+              onClick={handleOrderNow}
+              disabled={product.soldOut}
+              className="tabaya-btn primary"
+              style={{ padding: '12px 16px', fontSize: 12, letterSpacing: '1px', fontWeight: 700 }}
+            >
+              ⚡ {tr('ORDER NOW', language)}
+            </button>
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: 4 }}>
+            <a
+              onClick={(e) => { e.preventDefault(); onClose(); go('product/' + product.slug); }}
+              style={{ fontSize: 12, color: '#b48e4c', textDecoration: 'underline', cursor: 'pointer', fontWeight: 600 }}
+            >
+              {language === 'bn' ? 'সম্পূর্ণ বিবরণ দেখুন →' : 'View Full Product Details →'}
+            </a>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -859,6 +1125,8 @@ export function Home() {
   const [subEmail, setSubEmail] = useState('');
   const [subbed, setSubbed] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
+  useEffect(() => { (window as any).__openQuickView = setQuickViewProduct; return () => { delete (window as any).__openQuickView; }; }, []);
 
   useEffect(() => {
     getProducts().then((d) => { setProducts(d); setLoaded(true); }).catch(() => setLoaded(true));
@@ -996,6 +1264,7 @@ export function Home() {
       {/* 1. HERO BANNER / SLIDER */}
       {visibleSections.hero !== false && <HomeHeroSlider slides={sliders} />}
 
+      
       {/* 1.5 QUICK CATEGORY PILLS BAR (Mobile-First / Curated Lifestyle Navigation) */}
       {visibleSections.quickCategories !== false && !isSkin && (
         <section style={{ background: '#FAF7F2', borderBottom: '1px solid #ECE7DE', padding: '12px 0' }}>
@@ -1336,6 +1605,7 @@ export function Home() {
         </div>
       </section>}
       
+      <QuickViewModal product={quickViewProduct} onClose={() => setQuickViewProduct(null)} />
     </div>
   );
 }
