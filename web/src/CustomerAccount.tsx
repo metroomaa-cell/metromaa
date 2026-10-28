@@ -81,8 +81,10 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
 export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
   const { refreshCustomer } = useCustomer();
   const [step, setStep] = useState<'auth' | 'otp' | 'set_address'>('auth');
+  const [loginMode, setLoginMode] = useState<'email' | 'phone'>('email'); // 2 Login Options: Email or Mobile
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -109,26 +111,43 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
     setNotice('');
 
     const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      setError('Please enter a valid email address (e.g. example@gmail.com)');
-      return;
-    }
+    const cleanPhone = phone.replace(/\D/g, '').slice(-11);
 
-    const cleanName = name.trim();
-    if (!cleanName) {
-      setError('Please enter your full name');
-      return;
+    if (loginMode === 'email') {
+      if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        setError('Please enter a valid email address (e.g. example@gmail.com)');
+        return;
+      }
+      if (cleanPhone && !/^01[3-9]\d{8}$/.test(cleanPhone)) {
+        setError('Please enter a valid 11-digit mobile number (01XXXXXXXXX)');
+        return;
+      }
+    } else {
+      // Mobile login option
+      if (!cleanPhone || !/^01[3-9]\d{8}$/.test(cleanPhone)) {
+        setError('Please enter a valid 11-digit mobile number (01XXXXXXXXX)');
+        return;
+      }
+      if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        setError('Please enter a valid email address (e.g. example@gmail.com)');
+        return;
+      }
     }
 
     setBusy(true);
     try {
-      const res = await sendCustomerOtp(cleanEmail, cleanName);
+      const res = await sendCustomerOtp({
+        email: cleanEmail,
+        phone: cleanPhone,
+        name: name.trim(),
+        method: loginMode
+      });
       setStep('otp');
       setCountdown(60);
       if (res.demoCode) {
-        setNotice(`Verification code sent to ${cleanEmail}. (Test code: ${res.demoCode})`);
+        setNotice(`Verification code: ${res.demoCode} (Sent to ${loginMode === 'email' ? cleanEmail : '+88 ' + cleanPhone})`);
       } else {
-        setNotice(res.message || `Verification code sent to ${cleanEmail}`);
+        setNotice(res.message || `Verification code sent to ${loginMode === 'email' ? cleanEmail : '+88 ' + cleanPhone}`);
       }
     } catch (err: any) {
       setError(err.message || 'Could not send verification code');
@@ -147,13 +166,20 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
     setBusy(true);
     try {
       const cleanEmail = email.trim().toLowerCase();
-      const res = await verifyCustomerOtp(cleanEmail, code.trim(), name.trim());
+      const cleanPhone = phone.replace(/\D/g, '').slice(-11);
+      const res = await verifyCustomerOtp({
+        email: cleanEmail,
+        phone: cleanPhone,
+        code: code.trim(),
+        name: name.trim()
+      });
       await refreshCustomer();
 
       // Check if address needs to be set (new account or address not set yet)
       const hasAddress = res.customer?.savedAddress?.address && res.customer.savedAddress.address.trim().length > 0;
       if (!hasAddress) {
         setNotice('Account verified! Please set your delivery address below.');
+        setAddrPhone(cleanPhone || res.customer?.phone || '');
         setStep('set_address');
       } else {
         onClose();
@@ -226,7 +252,7 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
           background: '#ffffff',
           color: '#111827',
           width: '100%',
-          maxWidth: step === 'set_address' ? 480 : 440,
+          maxWidth: step === 'set_address' ? 480 : 450,
           borderRadius: 8,
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
           overflow: 'hidden',
@@ -236,7 +262,7 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
         {/* Header Bar */}
         <div
           style={{
-            padding: '24px 28px 20px',
+            padding: '24px 28px 18px',
             background: '#0f172a',
             color: '#f8fafc',
             position: 'relative',
@@ -263,16 +289,66 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
             {step === 'set_address' ? 'VIP DELIVERY SETUP' : 'METRROMA VIP Circle'}
           </div>
           <h3 style={{ margin: 0, fontSize: 20, fontFamily: 'var(--font-serif)', fontWeight: 500, color: '#ffffff' }}>
-            {step === 'auth' ? 'Sign In or Create Account' : step === 'otp' ? 'Verify Email Address' : 'Set Your Delivery Address'}
+            {step === 'auth' ? 'Sign In or Create Account' : step === 'otp' ? 'Enter Verification Code' : 'Set Your Delivery Address'}
           </h3>
           <p style={{ margin: '6px 0 0', fontSize: 13, color: '#94a3b8', lineHeight: 1.4 }}>
             {step === 'auth'
-              ? 'Enter your name and email to receive your 6-digit verification code.'
+              ? 'Choose your preferred sign-in method to access your VIP benefits.'
               : step === 'otp'
-              ? `Verification code sent to ${email}`
+              ? `6-digit verification code sent to ${loginMode === 'email' ? email : '+88 ' + phone}`
               : 'Please enter your delivery address. No address is preset.'}
           </p>
         </div>
+
+        {/* 2 Login Options Tab Switcher (Visible in Auth Step) */}
+        {step === 'auth' && (
+          <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+            <button
+              type="button"
+              onClick={() => { setLoginMode('email'); setError(''); setNotice(''); }}
+              style={{
+                flex: 1,
+                padding: '12px 14px',
+                fontSize: 13,
+                fontWeight: 600,
+                border: 'none',
+                borderBottom: loginMode === 'email' ? '2.5px solid #0f172a' : '2.5px solid transparent',
+                background: loginMode === 'email' ? '#ffffff' : 'transparent',
+                color: loginMode === 'email' ? '#0f172a' : '#64748b',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span>✉️ Email Verification</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLoginMode('phone'); setError(''); setNotice(''); }}
+              style={{
+                flex: 1,
+                padding: '12px 14px',
+                fontSize: 13,
+                fontWeight: 600,
+                border: 'none',
+                borderBottom: loginMode === 'phone' ? '2.5px solid #0f172a' : '2.5px solid transparent',
+                background: loginMode === 'phone' ? '#ffffff' : 'transparent',
+                color: loginMode === 'phone' ? '#0f172a' : '#64748b',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span>📱 Mobile OTP</span>
+            </button>
+          </div>
+        )}
 
         {/* Form Body */}
         <div style={{ padding: '24px 28px' }}>
@@ -310,52 +386,179 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
 
           {step === 'auth' ? (
             <form onSubmit={handleSendOtp}>
-              {/* Full Name */}
-              <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
-                  Full Name <span style={{ color: '#dc2626' }}>*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  autoFocus
-                  placeholder="Enter your name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  style={{
-                    width: '100%',
-                    border: '1px solid #cbd5e1',
-                    borderRadius: 6,
-                    padding: '10px 12px',
-                    fontSize: 14,
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
+              {/* Option 1: Email Mode */}
+              {loginMode === 'email' ? (
+                <>
+                  {/* Email Address */}
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
+                      Email Address <span style={{ color: '#dc2626' }}>*</span>
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      autoFocus
+                      placeholder="example@gmail.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      style={{
+                        width: '100%',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 6,
+                        padding: '10px 12px',
+                        fontSize: 14,
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
 
-              {/* Email Address */}
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
-                  Email Address <span style={{ color: '#dc2626' }}>*</span>
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="example@gmail.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  style={{
-                    width: '100%',
-                    border: '1px solid #cbd5e1',
-                    borderRadius: 6,
-                    padding: '10px 12px',
-                    fontSize: 14,
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
+                  {/* Mobile Number with Placeholder */}
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
+                      Mobile Number (For Courier)
+                    </label>
+                    <div style={{ display: 'flex' }}>
+                      <span
+                        style={{
+                          background: '#f1f5f9',
+                          border: '1px solid #cbd5e1',
+                          borderRight: 'none',
+                          borderRadius: '6px 0 0 6px',
+                          padding: '10px 12px',
+                          fontSize: 14,
+                          color: '#475569',
+                          fontWeight: 600,
+                        }}
+                      >
+                        +88
+                      </span>
+                      <input
+                        type="tel"
+                        placeholder="01XXXXXXXXX"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        style={{
+                          flex: 1,
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '0 6px 6px 0',
+                          padding: '10px 12px',
+                          fontSize: 14,
+                          outline: 'none',
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Full Name */}
+                  <div style={{ marginBottom: 18 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
+                      Full Name (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter your name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      style={{
+                        width: '100%',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 6,
+                        padding: '10px 12px',
+                        fontSize: 14,
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </>
+              ) : (
+                /* Option 2: Mobile SMS Mode */
+                <>
+                  {/* Mobile Number with Placeholder */}
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
+                      Mobile Number <span style={{ color: '#dc2626' }}>*</span>
+                    </label>
+                    <div style={{ display: 'flex' }}>
+                      <span
+                        style={{
+                          background: '#f1f5f9',
+                          border: '1px solid #cbd5e1',
+                          borderRight: 'none',
+                          borderRadius: '6px 0 0 6px',
+                          padding: '10px 12px',
+                          fontSize: 14,
+                          color: '#475569',
+                          fontWeight: 600,
+                        }}
+                      >
+                        +88
+                      </span>
+                      <input
+                        type="tel"
+                        required
+                        autoFocus
+                        placeholder="01XXXXXXXXX"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        style={{
+                          flex: 1,
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '0 6px 6px 0',
+                          padding: '10px 12px',
+                          fontSize: 14,
+                          outline: 'none',
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Email Address */}
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
+                      Email Address (Optional)
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="example@gmail.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      style={{
+                        width: '100%',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 6,
+                        padding: '10px 12px',
+                        fontSize: 14,
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+
+                  {/* Full Name */}
+                  <div style={{ marginBottom: 18 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
+                      Full Name (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter your name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      style={{
+                        width: '100%',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 6,
+                        padding: '10px 12px',
+                        fontSize: 14,
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </>
+              )}
 
               <div
                 style={{
@@ -363,7 +566,7 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                   border: '1px solid #e2e8f0',
                   borderRadius: 6,
                   padding: '12px 14px',
-                  marginBottom: 20,
+                  marginBottom: 18,
                   fontSize: 12,
                   color: '#334155',
                   lineHeight: 1.5,
@@ -371,10 +574,9 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
               >
                 <strong style={{ color: '#0f172a' }}>VIP Privileges:</strong>
                 <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
-                  <li>Instant 1-click email OTP verification</li>
-                  <li>5% off voucher applied to your account</li>
-                  <li>Fast checkout with your custom saved address</li>
-                  <li>Live order status & delivery tracking</li>
+                  <li>5% off voucher applied upon joining</li>
+                  <li>Fast checkout with your custom delivery address</li>
+                  <li>Instant order tracking and delivery updates</li>
                 </ul>
               </div>
 
@@ -395,14 +597,18 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                   transition: 'background 0.2s',
                 }}
               >
-                {busy ? 'Sending verification code...' : 'Continue with Email Verification'}
+                {busy
+                  ? 'Sending verification code...'
+                  : loginMode === 'email'
+                  ? 'Continue with Email Verification'
+                  : 'Continue with Mobile OTP'}
               </button>
             </form>
           ) : step === 'otp' ? (
             <form onSubmit={handleVerifyOtp}>
               <div style={{ marginBottom: 18 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
-                  Email Verification Code
+                  {loginMode === 'email' ? 'Email Verification Code' : 'SMS Verification Code'}
                 </label>
                 <input
                   type="text"

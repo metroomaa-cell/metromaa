@@ -4471,17 +4471,25 @@ function enrichCustomer(cust) {
   };
 }
 
-// 1. Send OTP via Email
+// 1. Send OTP (Supports both Email and Mobile Phone login options)
 app.post('/api/customer/send-otp', async (req, res) => {
+  const method = req.body?.method || (req.body?.loginMode) || (req.body?.email && !req.body?.phone ? 'email' : 'email');
   const email = String(req.body?.email || '').trim().toLowerCase();
-  const name = String(req.body?.name || '').trim().slice(0, 50);
   const phone = String(req.body?.phone || '').replace(/\D/g, '').slice(-11);
+  const name = String(req.body?.name || '').trim().slice(0, 50);
 
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ error: 'Please enter a valid email address (e.g. example@gmail.com)' });
+  if (method === 'phone' || (!email && phone)) {
+    if (!/^01[3-9]\d{8}$/.test(phone)) {
+      return res.status(400).json({ error: 'Please enter a valid 11-digit Bangladeshi mobile number (01XXXXXXXXX)' });
+    }
+  } else {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Please enter a valid email address (e.g. example@gmail.com)' });
+    }
   }
 
-  const prev = customerOtpCache.get(email) || (phone ? customerOtpCache.get(phone) : null);
+  const cacheKey = (method === 'phone' || (!email && phone)) ? phone : email;
+  const prev = customerOtpCache.get(cacheKey) || (phone ? customerOtpCache.get(phone) : null) || (email ? customerOtpCache.get(email) : null);
   if (prev && Date.now() < prev.expiresAt - 4 * 60 * 1000) {
     return res.status(429).json({ error: 'Please wait a moment before requesting another code.' });
   }
@@ -4489,19 +4497,23 @@ app.post('/api/customer/send-otp', async (req, res) => {
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const otpPayload = {
     code,
+    method,
     email,
+    phone,
     name: name || (prev?.name || ''),
-    phone: phone || (prev?.phone || ''),
     expiresAt: Date.now() + 5 * 60 * 1000,
     attempts: 0,
   };
-  customerOtpCache.set(email, otpPayload);
+  if (email) customerOtpCache.set(email, otpPayload);
   if (phone) customerOtpCache.set(phone, otpPayload);
 
   const storeName = getSettings().storeName || 'METRROMA';
+  let emailSent = false;
+  let smsSent = false;
 
-  // Send verification code via Email API
-  const emailHtml = `
+  // Send via Email API if method is email or email is provided
+  if (email && (method !== 'phone' || !phone)) {
+    const emailHtml = `
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
@@ -4512,7 +4524,7 @@ app.post('/api/customer/send-otp', async (req, res) => {
     
     <p style="font-size:14px;color:#cbd5e1;margin:0 0 16px;line-height:1.5;">
       Hello ${name || 'VIP Member'},<br>
-      Use the following verification code to sign in or create your account:
+      Use the following 6-digit verification code to sign in or create your account:
     </p>
 
     <div style="background:rgba(231,180,134,0.12);border:2px solid #e7b486;border-radius:12px;padding:14px 24px;display:inline-block;margin:12px 0 20px;">
@@ -4526,25 +4538,39 @@ app.post('/api/customer/send-otp', async (req, res) => {
 </body>
 </html>`.trim();
 
-  let emailSent = false;
-  try {
-    const emailRes = await sendEmail(email, `${storeName} VIP Verification Code: ${code}`, emailHtml);
-    if (emailRes && emailRes.ok) emailSent = true;
-  } catch (err) {
-    console.warn('[Customer OTP] Email send error:', err.message);
+    try {
+      const emailRes = await sendEmail(email, `${storeName} VIP Verification Code: ${code}`, emailHtml);
+      if (emailRes && emailRes.ok) emailSent = true;
+    } catch (err) {
+      console.warn('[Customer OTP] Email send error:', err.message);
+    }
   }
 
+  // Send via SMS if method is phone or SMS gateway is available
   if (phone) {
     const smsText = `${storeName}: Your VIP verification code is ${code}. Valid for 5 minutes.`;
-    await sendSMS(phone, smsText).catch(() => ({ ok: false }));
+    const smsRes = await sendSMS(phone, smsText).catch(() => ({ ok: false }));
+    if (smsRes && smsRes.ok) smsSent = true;
+  }
+
+  const ig = getIntegrations();
+  const isSmsLive = ig.sms?.enabled && ig.sms?.url;
+
+  let message = '';
+  if (method === 'phone') {
+    message = smsSent || isSmsLive
+      ? `Verification code sent to +88 ${phone}`
+      : `Verification code sent to +88 ${phone}`;
+  } else {
+    message = emailSent
+      ? `Verification code sent to ${email}`
+      : `Verification code sent to ${email}`;
   }
 
   res.json({
     ok: true,
-    message: emailSent
-      ? `Verification code sent to ${email}`
-      : `Verification code sent to ${email}`,
-    demoCode: emailSent ? undefined : code,
+    message,
+    demoCode: (emailSent || smsSent) ? undefined : code,
   });
 });
 
@@ -4555,16 +4581,16 @@ app.post('/api/customer/verify-otp', (req, res) => {
   const code = String(req.body?.code || '').trim();
   const name = String(req.body?.name || '').trim().slice(0, 50);
 
-  if (!email || !code) {
-    return res.status(400).json({ error: 'Email address and verification code are required' });
+  if ((!email && !phone) || !code) {
+    return res.status(400).json({ error: 'Verification code is required' });
   }
 
-  const cached = customerOtpCache.get(email) || (phone ? customerOtpCache.get(phone) : null);
+  const cached = (email ? customerOtpCache.get(email) : null) || (phone ? customerOtpCache.get(phone) : null);
   if (!cached) {
     return res.status(400).json({ error: 'Verification code expired or not requested. Please request a new code.' });
   }
   if (Date.now() > cached.expiresAt) {
-    customerOtpCache.delete(email);
+    if (email) customerOtpCache.delete(email);
     if (phone) customerOtpCache.delete(phone);
     return res.status(400).json({ error: 'Verification code expired. Please request a new one.' });
   }
@@ -4572,19 +4598,20 @@ app.post('/api/customer/verify-otp', (req, res) => {
   if (cached.code !== code) {
     cached.attempts = (cached.attempts || 0) + 1;
     if (cached.attempts >= 5) {
-      customerOtpCache.delete(email);
+      if (email) customerOtpCache.delete(email);
       if (phone) customerOtpCache.delete(phone);
       return res.status(400).json({ error: 'Too many incorrect attempts. Please request a new code.' });
     }
     return res.status(400).json({ error: 'Invalid verification code. Please check and try again.' });
   }
 
-  customerOtpCache.delete(email);
+  if (email) customerOtpCache.delete(email);
   if (phone) customerOtpCache.delete(phone);
 
-  const finalEmail = email || cached.email;
+  const finalEmail = email || cached.email || '';
   const cleanPhone = phone || cached.phone || '';
-  let cust = getCustomerByEmail(finalEmail);
+  let cust = null;
+  if (finalEmail) cust = getCustomerByEmail(finalEmail);
   if (!cust && cleanPhone) cust = getCustomerByPhone(cleanPhone);
 
   const customerName = name || cached.name || cust?.name || 'VIP Member';
