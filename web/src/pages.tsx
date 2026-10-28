@@ -989,12 +989,7 @@ export function Home() {
     q: customFaqs?.[index]?.q?.trim() || faq.q,
     a: customFaqs?.[index]?.a?.trim() || faq.a,
   }));
-  const renderConfiguredSections = (placement: string) => (settings?.homepageSections || []).filter((section: any) => section.active !== false && (section.placement || 'after-story') === placement).map((section: any, index: number) => {
-    const selected = Array.isArray(section.productIds) ? section.productIds.map(String) : [];
-    const categoryProducts = products.filter((product) => !product.adult && (selected.length ? selected.includes(String(product.id)) : product.category === section.category));
-    if (!categoryProducts.length) return null;
-    return <section className="pc-stage" key={section.id || `${section.category}-${placement}-${index}`}><div className="wrap"><div className="pc-section-header"><p className="pc-section-kicker">{tr(section.eyebrow || 'CURATED COLLECTION', language)}</p><h2 className="pc-section-title">{tr(section.title, language)}</h2></div><div className="pc-grid">{categoryProducts.slice(0, Number(section.count) || 8).map((product) => <ProductCard key={product.id} p={product} />)}</div><div style={{ textAlign: 'center', marginTop: 24 }}><button className="tabaya-btn primary" onClick={() => go('shop/' + section.category)}>{tr(section.buttonText || 'View the collection', language)} →</button></div></div></section>;
-  });
+
 
   return (
     <div className="tabaya-home">
@@ -1047,7 +1042,7 @@ export function Home() {
           </div>
         </section>
       )}
-      {renderConfiguredSections('after-brands')}
+      
 
       {/* 2. SHOP BY COLLECTION / CATEGORY (ara-section) */}
       {visibleSections.collections !== false && cats.length > 0 && (
@@ -1105,7 +1100,7 @@ export function Home() {
           </div>
         </section>
       )}
-      {renderConfiguredSections('after-categories')}
+      
 
       {/* 3. FRAMED INTRO BOX */}
       {false && <section className="tabaya-intro">
@@ -1120,7 +1115,7 @@ export function Home() {
           </p>
         </div>
       </section>}
-      {renderConfiguredSections('after-story')}
+      
 
       {/* 4. HOMEPAGE CATEGORY SHELVES & FLASH SALE */}
       {shelfSections.length > 0 ? (
@@ -1288,7 +1283,7 @@ export function Home() {
           </div>
         </div>
       </section>}
-      {renderConfiguredSections('before-newsletter')}
+      
 
       {/* 7. VIP NEWSLETTER */}
       {visibleSections.newsletter !== false && <section className="tabaya-sec-newsletter">
@@ -1340,7 +1335,7 @@ export function Home() {
           </div>
         </div>
       </section>}
-      {renderConfiguredSections('before-footer')}
+      
     </div>
   );
 }
