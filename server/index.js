@@ -9,7 +9,7 @@ import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns';
 try { dns.setDefaultResultOrder('ipv4first'); } catch {}
-import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, saveColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, saveCustomer, syncCustomersFromOrders, initStorageProtection, getPersistentDataDirectory } from './store.js';
+import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, saveColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, getCustomerByEmail, saveCustomer, syncCustomersFromOrders, initStorageProtection, getPersistentDataDirectory } from './store.js';
 import { getWhatsAppSettings, saveWhatsAppSettings, sendWhatsAppNotification, formatWhatsAppMessage } from './whatsapp_engine.js';
 import { startWhatsAppSocket, getWhatsAppLiveStatus, requestPairingCode, sendBaileysMessage } from './whatsapp_baileys.js';
 
@@ -4406,7 +4406,11 @@ function resolveCustomer(req) {
     customerSessions.delete(token);
     return null;
   }
-  return getCustomerByPhone(sess.phone);
+  let cust = null;
+  if (sess.id) cust = getCustomers().find((x) => x.id === sess.id);
+  if (!cust && sess.email) cust = getCustomerByEmail(sess.email);
+  if (!cust && sess.phone) cust = getCustomerByPhone(sess.phone);
+  return cust;
 }
 
 function customerAuth(req, res, next) {
@@ -4467,21 +4471,17 @@ function enrichCustomer(cust) {
   };
 }
 
-// 1. Send OTP via Email & SMS
+// 1. Send OTP via Email
 app.post('/api/customer/send-otp', async (req, res) => {
-  const phone = String(req.body?.phone || '').replace(/\D/g, '').slice(-11);
   const email = String(req.body?.email || '').trim().toLowerCase();
   const name = String(req.body?.name || '').trim().slice(0, 50);
-
-  if (!/^01[3-9]\d{8}$/.test(phone)) {
-    return res.status(400).json({ error: 'Please enter a valid 11-digit Bangladeshi mobile number (01XXXXXXXXX)' });
-  }
+  const phone = String(req.body?.phone || '').replace(/\D/g, '').slice(-11);
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: 'Please enter a valid email address (e.g. example@gmail.com)' });
   }
 
-  const prev = customerOtpCache.get(phone) || customerOtpCache.get(email);
+  const prev = customerOtpCache.get(email) || (phone ? customerOtpCache.get(phone) : null);
   if (prev && Date.now() < prev.expiresAt - 4 * 60 * 1000) {
     return res.status(429).json({ error: 'Please wait a moment before requesting another code.' });
   }
@@ -4489,14 +4489,14 @@ app.post('/api/customer/send-otp', async (req, res) => {
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const otpPayload = {
     code,
-    phone,
     email,
     name: name || (prev?.name || ''),
+    phone: phone || (prev?.phone || ''),
     expiresAt: Date.now() + 5 * 60 * 1000,
     attempts: 0,
   };
-  customerOtpCache.set(phone, otpPayload);
   customerOtpCache.set(email, otpPayload);
+  if (phone) customerOtpCache.set(phone, otpPayload);
 
   const storeName = getSettings().storeName || 'METRROMA';
 
@@ -4512,7 +4512,7 @@ app.post('/api/customer/send-otp', async (req, res) => {
     
     <p style="font-size:14px;color:#cbd5e1;margin:0 0 16px;line-height:1.5;">
       Hello ${name || 'VIP Member'},<br>
-      Use the following verification code to verify and open your account:
+      Use the following verification code to sign in or create your account:
     </p>
 
     <div style="background:rgba(231,180,134,0.12);border:2px solid #e7b486;border-radius:12px;padding:14px 24px;display:inline-block;margin:12px 0 20px;">
@@ -4520,7 +4520,7 @@ app.post('/api/customer/send-otp', async (req, res) => {
     </div>
 
     <p style="font-size:12.5px;color:#94a3b8;margin:0;line-height:1.5;">
-      This code is valid for 5 minutes. If you did not request this code, please ignore this email.
+      This code is valid for 5 minutes. If you did not request this, please ignore this email.
     </p>
   </div>
 </body>
@@ -4529,72 +4529,69 @@ app.post('/api/customer/send-otp', async (req, res) => {
   let emailSent = false;
   try {
     const emailRes = await sendEmail(email, `${storeName} VIP Verification Code: ${code}`, emailHtml);
-    if (emailRes && emailRes.ok) {
-      emailSent = true;
-    }
+    if (emailRes && emailRes.ok) emailSent = true;
   } catch (err) {
     console.warn('[Customer OTP] Email send error:', err.message);
   }
 
-  // Also send via SMS if SMS gateway is configured
-  const smsText = `${storeName}: Your VIP verification code is ${code}. Valid for 5 minutes.`;
-  await sendSMS(phone, smsText).catch(() => ({ ok: false }));
-
-  const ig = getIntegrations();
-  const isSmsLive = ig.sms?.enabled && ig.sms?.url;
+  if (phone) {
+    const smsText = `${storeName}: Your VIP verification code is ${code}. Valid for 5 minutes.`;
+    await sendSMS(phone, smsText).catch(() => ({ ok: false }));
+  }
 
   res.json({
     ok: true,
     message: emailSent
       ? `Verification code sent to ${email}`
-      : (isSmsLive ? 'Verification code sent to your mobile.' : `Verification code sent to ${email}`),
+      : `Verification code sent to ${email}`,
     demoCode: emailSent ? undefined : code,
   });
 });
 
 // 2. Verify OTP and authenticate/create customer
 app.post('/api/customer/verify-otp', (req, res) => {
-  const phone = String(req.body?.phone || '').replace(/\D/g, '').slice(-11);
   const email = String(req.body?.email || '').trim().toLowerCase();
+  const phone = String(req.body?.phone || '').replace(/\D/g, '').slice(-11);
   const code = String(req.body?.code || '').trim();
   const name = String(req.body?.name || '').trim().slice(0, 50);
 
-  if ((!phone && !email) || !code) {
-    return res.status(400).json({ error: 'Mobile number, email address, and verification code are required' });
+  if (!email || !code) {
+    return res.status(400).json({ error: 'Email address and verification code are required' });
   }
 
-  const cached = (phone ? customerOtpCache.get(phone) : null) || (email ? customerOtpCache.get(email) : null);
+  const cached = customerOtpCache.get(email) || (phone ? customerOtpCache.get(phone) : null);
   if (!cached) {
     return res.status(400).json({ error: 'Verification code expired or not requested. Please request a new code.' });
   }
   if (Date.now() > cached.expiresAt) {
+    customerOtpCache.delete(email);
     if (phone) customerOtpCache.delete(phone);
-    if (email) customerOtpCache.delete(email);
     return res.status(400).json({ error: 'Verification code expired. Please request a new one.' });
   }
 
   if (cached.code !== code) {
     cached.attempts = (cached.attempts || 0) + 1;
     if (cached.attempts >= 5) {
+      customerOtpCache.delete(email);
       if (phone) customerOtpCache.delete(phone);
-      if (email) customerOtpCache.delete(email);
       return res.status(400).json({ error: 'Too many incorrect attempts. Please request a new code.' });
     }
     return res.status(400).json({ error: 'Invalid verification code. Please check and try again.' });
   }
 
+  customerOtpCache.delete(email);
   if (phone) customerOtpCache.delete(phone);
-  if (email) customerOtpCache.delete(email);
 
-  const cleanPhone = phone || cached.phone;
-  const finalEmail = email || cached.email || '';
-  let cust = getCustomerByPhone(cleanPhone);
-  if (!cust && finalEmail) {
-    cust = getCustomers().find((c) => c.email && c.email.toLowerCase() === finalEmail.toLowerCase()) || null;
-  }
+  const finalEmail = email || cached.email;
+  const cleanPhone = phone || cached.phone || '';
+  let cust = getCustomerByEmail(finalEmail);
+  if (!cust && cleanPhone) cust = getCustomerByPhone(cleanPhone);
+
   const customerName = name || cached.name || cust?.name || 'VIP Member';
+  let isNew = false;
 
   if (!cust) {
+    isNew = true;
     cust = saveCustomer({
       id: 'cust_' + randomUUID().slice(0, 8),
       phone: cleanPhone,
@@ -4613,11 +4610,12 @@ app.post('/api/customer/verify-otp', (req, res) => {
   }
 
   const token = 'cust_' + randomBytes(24).toString('hex');
-  customerSessions.set(token, { phone: cleanPhone, email: finalEmail, expiresAt: Date.now() + CUST_SESSION_TTL });
+  customerSessions.set(token, { id: cust.id, phone: cust.phone, email: cust.email, expiresAt: Date.now() + CUST_SESSION_TTL });
 
   res.json({
     ok: true,
     token,
+    isNew,
     customer: enrichCustomer(cust),
   });
 });
@@ -4627,12 +4625,13 @@ app.get('/api/customer/me', customerAuth, (req, res) => {
   res.json({ ok: true, customer: enrichCustomer(req.customer) });
 });
 
-// 4. Update customer profile & saved delivery address
+// 4. Update customer profile & address
 app.put('/api/customer/profile', customerAuth, (req, res) => {
   const b = req.body || {};
   const patch = {};
   if (typeof b.name === 'string') patch.name = b.name.trim().slice(0, 60);
   if (typeof b.email === 'string') patch.email = b.email.trim().slice(0, 80);
+  if (typeof b.phone === 'string') patch.phone = b.phone.replace(/\D/g, '').slice(-11);
   if (b.savedAddress && typeof b.savedAddress === 'object') {
     patch.savedAddress = {
       address: String(b.savedAddress.address || '').trim().slice(0, 200),

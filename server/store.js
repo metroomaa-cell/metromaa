@@ -893,6 +893,13 @@ export function saveCustomers(list) {
   return list;
 }
 
+export function getCustomerByEmail(email) {
+  if (!email) return null;
+  const clean = String(email).trim().toLowerCase();
+  if (!clean) return null;
+  return getCustomers().find((c) => c.email && c.email.trim().toLowerCase() === clean) || null;
+}
+
 export function getCustomerByPhone(phone) {
   if (!phone) return null;
   const clean = String(phone).replace(/\D/g, '').slice(-11);
@@ -900,10 +907,12 @@ export function getCustomerByPhone(phone) {
 }
 
 export function saveCustomer(cust) {
-  if (!cust || !cust.phone) return null;
+  if (!cust || (!cust.phone && !cust.email && !cust.id)) return null;
   const list = getCustomers();
   const clean = String(cust.phone).replace(/\D/g, '').slice(-11);
-  const idx = list.findIndex((c) => String(c.phone).replace(/\D/g, '').slice(-11) === clean);
+  const cleanEmail = cust.email ? String(cust.email).trim().toLowerCase() : '';
+  const custId = cust.id || '';
+  const idx = list.findIndex((c) => (custId && c.id === custId) || (cleanEmail && c.email && c.email.trim().toLowerCase() === cleanEmail) || (clean && c.phone && String(c.phone).replace(/\D/g, '').slice(-11) === clean));
   if (idx >= 0) {
     list[idx] = { ...list[idx], ...cust, updatedAt: new Date().toISOString() };
     saveCustomers(list);

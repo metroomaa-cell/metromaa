@@ -1,3 +1,4 @@
+import { BD_GEO } from './bd-geo';
 import React, { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import {
   type Customer,
@@ -79,15 +80,21 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
 // Minimalist Luxury Auth Modal (No Emoji Clutter)
 export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
   const { refreshCustomer } = useCustomer();
-  const [step, setStep] = useState<'phone' | 'otp'>('phone');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
+  const [step, setStep] = useState<'auth' | 'otp' | 'set_address'>('auth');
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [countdown, setCountdown] = useState(0);
+
+  // Set Address State (Popup after account creation/login)
+  const [addrPhone, setAddrPhone] = useState('');
+  const [addrDistrict, setAddrDistrict] = useState('');
+  const [addrThana, setAddrThana] = useState('');
+  const [addrStreet, setAddrStreet] = useState('');
+  const [addrSaving, setAddrSaving] = useState(false);
 
   useEffect(() => {
     if (countdown > 0) {
@@ -100,19 +107,22 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
     if (e) e.preventDefault();
     setError('');
     setNotice('');
-    const cleanPhone = phone.replace(/\D/g, '').slice(-11);
-    if (!/^01[3-9]\d{8}$/.test(cleanPhone)) {
-      setError('Please enter a valid 11-digit mobile number (01XXXXXXXXX)');
-      return;
-    }
+
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       setError('Please enter a valid email address (e.g. example@gmail.com)');
       return;
     }
+
+    const cleanName = name.trim();
+    if (!cleanName) {
+      setError('Please enter your full name');
+      return;
+    }
+
     setBusy(true);
     try {
-      const res = await sendCustomerOtp(cleanPhone, name.trim(), cleanEmail);
+      const res = await sendCustomerOtp(cleanEmail, cleanName);
       setStep('otp');
       setCountdown(60);
       if (res.demoCode) {
@@ -136,11 +146,18 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
     }
     setBusy(true);
     try {
-      const cleanPhone = phone.replace(/\D/g, '').slice(-11);
       const cleanEmail = email.trim().toLowerCase();
-      await verifyCustomerOtp(cleanPhone, code.trim(), name.trim(), cleanEmail);
+      const res = await verifyCustomerOtp(cleanEmail, code.trim(), name.trim());
       await refreshCustomer();
-      onClose();
+
+      // Check if address needs to be set (new account or address not set yet)
+      const hasAddress = res.customer?.savedAddress?.address && res.customer.savedAddress.address.trim().length > 0;
+      if (!hasAddress) {
+        setNotice('Account verified! Please set your delivery address below.');
+        setStep('set_address');
+      } else {
+        onClose();
+      }
     } catch (err: any) {
       setError(err.message || 'Invalid verification code');
     } finally {
@@ -148,13 +165,52 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const handleSaveAddress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setAddrSaving(true);
+    try {
+      const cleanPhone = addrPhone.replace(/\D/g, '').slice(-11);
+      if (cleanPhone && !/^01[3-9]\d{8}$/.test(cleanPhone)) {
+        setError('Please enter a valid 11-digit mobile number (01XXXXXXXXX)');
+        setAddrSaving(false);
+        return;
+      }
+      if (!addrStreet.trim()) {
+        setError('Please enter your detailed delivery address');
+        setAddrSaving(false);
+        return;
+      }
+
+      await updateCustomerProfile({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        phone: cleanPhone,
+        savedAddress: {
+          address: addrStreet.trim(),
+          district: addrDistrict.trim(),
+          thana: addrThana.trim(),
+        },
+      });
+      await refreshCustomer();
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Could not save address');
+    } finally {
+      setAddrSaving(false);
+    }
+  };
+
+  const districts = Object.keys(BD_GEO).sort();
+  const thanas = addrDistrict ? (BD_GEO[addrDistrict] || []) : [];
+
   return (
     <div
       style={{
         position: 'fixed',
         inset: 0,
         zIndex: 9999,
-        background: 'rgba(9, 13, 22, 0.75)',
+        background: 'rgba(9, 13, 22, 0.78)',
         backdropFilter: 'blur(8px)',
         display: 'flex',
         alignItems: 'center',
@@ -170,7 +226,7 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
           background: '#ffffff',
           color: '#111827',
           width: '100%',
-          maxWidth: 440,
+          maxWidth: step === 'set_address' ? 480 : 440,
           borderRadius: 8,
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
           overflow: 'hidden',
@@ -204,15 +260,17 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
             &times;
           </button>
           <div style={{ fontSize: 11, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#cbd5e1', marginBottom: 4 }}>
-            METRROMA VIP Circle
+            {step === 'set_address' ? 'VIP DELIVERY SETUP' : 'METRROMA VIP Circle'}
           </div>
           <h3 style={{ margin: 0, fontSize: 20, fontFamily: 'var(--font-serif)', fontWeight: 500, color: '#ffffff' }}>
-            {step === 'phone' ? 'Sign In or Create Account' : 'Verify Email & Account'}
+            {step === 'auth' ? 'Sign In or Create Account' : step === 'otp' ? 'Verify Email Address' : 'Set Your Delivery Address'}
           </h3>
           <p style={{ margin: '6px 0 0', fontSize: 13, color: '#94a3b8', lineHeight: 1.4 }}>
-            {step === 'phone'
-              ? 'Receive 5% off your first order upon joining. Simple email verification.'
-              : `6-digit verification code sent to ${email || phone}`}
+            {step === 'auth'
+              ? 'Enter your name and email to receive your 6-digit verification code.'
+              : step === 'otp'
+              ? `Verification code sent to ${email}`
+              : 'Please enter your delivery address. No address is preset.'}
           </p>
         </div>
 
@@ -250,58 +308,20 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {step === 'phone' ? (
+          {step === 'auth' ? (
             <form onSubmit={handleSendOtp}>
-              {/* Mobile Number */}
+              {/* Full Name */}
               <div style={{ marginBottom: 14 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
-                  Mobile Number <span style={{ color: '#dc2626' }}>*</span>
-                </label>
-                <div style={{ display: 'flex' }}>
-                  <span
-                    style={{
-                      background: '#f1f5f9',
-                      border: '1px solid #cbd5e1',
-                      borderRight: 'none',
-                      borderRadius: '6px 0 0 6px',
-                      padding: '10px 12px',
-                      fontSize: 14,
-                      color: '#475569',
-                      fontWeight: 600,
-                    }}
-                  >
-                    +88
-                  </span>
-                  <input
-                    type="tel"
-                    required
-                    autoFocus
-                    placeholder="01XXXXXXXXX"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    style={{
-                      flex: 1,
-                      border: '1px solid #cbd5e1',
-                      borderRadius: '0 6px 6px 0',
-                      padding: '10px 12px',
-                      fontSize: 14,
-                      outline: 'none',
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Email Address */}
-              <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
-                  Email Address <span style={{ color: '#dc2626' }}>*</span>
+                  Full Name <span style={{ color: '#dc2626' }}>*</span>
                 </label>
                 <input
-                  type="email"
+                  type="text"
                   required
-                  placeholder="example@gmail.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  autoFocus
+                  placeholder="Enter your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   style={{
                     width: '100%',
                     border: '1px solid #cbd5e1',
@@ -314,16 +334,17 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                 />
               </div>
 
-              {/* Full Name */}
+              {/* Email Address */}
               <div style={{ marginBottom: 20 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
-                  Full Name (Optional)
+                  Email Address <span style={{ color: '#dc2626' }}>*</span>
                 </label>
                 <input
-                  type="text"
-                  placeholder="Enter your name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  type="email"
+                  required
+                  placeholder="example@gmail.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   style={{
                     width: '100%',
                     border: '1px solid #cbd5e1',
@@ -350,10 +371,10 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
               >
                 <strong style={{ color: '#0f172a' }}>VIP Privileges:</strong>
                 <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
-                  <li>5% off voucher on your first order</li>
-                  <li>Instant email verification & fast order updates</li>
-                  <li>1-click fast checkout with saved delivery address</li>
-                  <li>Complete order tracking and purchase history</li>
+                  <li>Instant 1-click email OTP verification</li>
+                  <li>5% off voucher applied to your account</li>
+                  <li>Fast checkout with your custom saved address</li>
+                  <li>Live order status & delivery tracking</li>
                 </ul>
               </div>
 
@@ -374,14 +395,14 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                   transition: 'background 0.2s',
                 }}
               >
-                {busy ? 'Sending verification code...' : 'Continue to Verify Email'}
+                {busy ? 'Sending verification code...' : 'Continue with Email Verification'}
               </button>
             </form>
-          ) : (
+          ) : step === 'otp' ? (
             <form onSubmit={handleVerifyOtp}>
               <div style={{ marginBottom: 18 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
-                  Verification Code
+                  Email Verification Code
                 </label>
                 <input
                   type="text"
@@ -429,7 +450,7 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
                 <button
                   type="button"
-                  onClick={() => { setStep('phone'); setCode(''); setError(''); }}
+                  onClick={() => { setStep('auth'); setCode(''); setError(''); }}
                   style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: 0 }}
                 >
                   &larr; Change Details
@@ -450,6 +471,180 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                   {countdown > 0 ? `Resend in ${countdown}s` : 'Resend code'}
                 </button>
               </div>
+            </form>
+          ) : (
+            /* Step 3: Pop-up to Set Your Address */
+            <form onSubmit={handleSaveAddress}>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
+                  Contact Phone Number <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <div style={{ display: 'flex' }}>
+                  <span
+                    style={{
+                      background: '#f1f5f9',
+                      border: '1px solid #cbd5e1',
+                      borderRight: 'none',
+                      borderRadius: '6px 0 0 6px',
+                      padding: '10px 12px',
+                      fontSize: 14,
+                      color: '#475569',
+                      fontWeight: 600,
+                    }}
+                  >
+                    +88
+                  </span>
+                  <input
+                    type="tel"
+                    required
+                    autoFocus
+                    placeholder="01XXXXXXXXX"
+                    value={addrPhone}
+                    onChange={(e) => setAddrPhone(e.target.value)}
+                    style={{
+                      flex: 1,
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '0 6px 6px 0',
+                      padding: '10px 12px',
+                      fontSize: 14,
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
+                    District (Zilla)
+                  </label>
+                  <select
+                    value={addrDistrict}
+                    onChange={(e) => {
+                      setAddrDistrict(e.target.value);
+                      setAddrThana('');
+                    }}
+                    style={{
+                      width: '100%',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 6,
+                      padding: '10px 10px',
+                      fontSize: 13.5,
+                      background: '#ffffff',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                    }}
+                  >
+                    <option value="">-- Select District --</option>
+                    {districts.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
+                    Thana / Upazila
+                  </label>
+                  {thanas.length > 0 ? (
+                    <select
+                      value={addrThana}
+                      onChange={(e) => setAddrThana(e.target.value)}
+                      style={{
+                        width: '100%',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 6,
+                        padding: '10px 10px',
+                        fontSize: 13.5,
+                        background: '#ffffff',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    >
+                      <option value="">-- Select Thana --</option>
+                      {thanas.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      placeholder="e.g. Dhanmondi, Mirpur"
+                      value={addrThana}
+                      onChange={(e) => setAddrThana(e.target.value)}
+                      style={{
+                        width: '100%',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 6,
+                        padding: '10px 12px',
+                        fontSize: 13.5,
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Full Address */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
+                  Full Delivery Address <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <textarea
+                  required
+                  rows={2}
+                  placeholder="House / Flat No, Road, Area, Landmark"
+                  value={addrStreet}
+                  onChange={(e) => setAddrStreet(e.target.value)}
+                  style={{
+                    width: '100%',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 6,
+                    padding: '10px 12px',
+                    fontSize: 13.5,
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={addrSaving}
+                style={{
+                  width: '100%',
+                  background: '#0f172a',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '12px 16px',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: addrSaving ? 'not-allowed' : 'pointer',
+                  opacity: addrSaving ? 0.7 : 1,
+                  marginBottom: 10,
+                }}
+              >
+                {addrSaving ? 'Saving Address...' : 'Save Address & Finish'}
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  width: '100%',
+                  background: 'none',
+                  border: 'none',
+                  color: '#64748b',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  padding: '8px 0',
+                }}
+              >
+                Skip for now & browse store
+              </button>
             </form>
           )}
         </div>

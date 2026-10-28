@@ -421,22 +421,22 @@ export function clearCustomerToken() {
   catch {}
 }
 
-export async function sendCustomerOtp(phone: string, name?: string, email?: string): Promise<{ ok: boolean; message: string; demoCode?: string }> {
+export async function sendCustomerOtp(email: string, name?: string, phone?: string): Promise<{ ok: boolean; message: string; demoCode?: string }> {
   const r = await fetch('/api/customer/send-otp', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone, name, email })
+    body: JSON.stringify({ email, name, phone })
   });
   const d = await r.json();
   if (!r.ok) throw new Error(d.error || 'Could not send verification code');
   return d;
 }
 
-export async function verifyCustomerOtp(phone: string, code: string, name?: string, email?: string): Promise<{ ok: boolean; token: string; customer: Customer }> {
+export async function verifyCustomerOtp(email: string, code: string, name?: string, phone?: string): Promise<{ ok: boolean; token: string; isNew?: boolean; customer: Customer }> {
   const r = await fetch('/api/customer/verify-otp', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone, code, name, email })
+    body: JSON.stringify({ email, code, name, phone })
   });
   const d = await r.json();
   if (!r.ok) throw new Error(d.error || 'Invalid verification code');
@@ -458,7 +458,7 @@ export async function getCustomerMe(): Promise<Customer | null> {
   return d.customer;
 }
 
-export async function updateCustomerProfile(data: { name?: string; email?: string; savedAddress?: any }): Promise<Customer> {
+export async function updateCustomerProfile(data: { name?: string; email?: string; phone?: string; savedAddress?: any }): Promise<Customer> {
   const token = getCustomerToken();
   const r = await fetch('/api/customer/profile', {
     method: 'PUT',
