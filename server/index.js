@@ -4471,48 +4471,113 @@ function enrichCustomer(cust) {
   };
 }
 
-// 1. Send OTP (Supports both Email and Mobile Phone login options)
+// 1. Send OTP (Strict Log In vs Sign Up separation with 1m->10m timer & device limits)
 app.post('/api/customer/send-otp', async (req, res) => {
-  const method = req.body?.method || (req.body?.loginMode) || (req.body?.email && !req.body?.phone ? 'email' : 'email');
-  const email = String(req.body?.email || '').trim().toLowerCase();
-  const phone = String(req.body?.phone || '').replace(/\D/g, '').slice(-11);
+  const mode = req.body?.mode === 'signup' ? 'signup' : 'login';
+  let email = String(req.body?.email || '').trim().toLowerCase();
+  let phone = String(req.body?.phone || '').replace(/\D/g, '').slice(-11);
+  const identifier = String(req.body?.identifier || '').trim();
   const name = String(req.body?.name || '').trim().slice(0, 50);
 
-  if (method === 'phone' || (!email && phone)) {
-    if (!/^01[3-9]\d{8}$/.test(phone)) {
-      return res.status(400).json({ error: 'Please enter a valid 11-digit Bangladeshi mobile number (01XXXXXXXXX)' });
+  // Allow flexible identifier in login mode (either email or phone)
+  if (identifier) {
+    if (identifier.includes('@')) {
+      email = identifier.toLowerCase();
+    } else {
+      phone = identifier.replace(/\D/g, '').slice(-11);
     }
-  } else {
+  }
+
+  const rawDid = req.headers['x-device-id'] || req.body?.deviceId || '';
+  const deviceId = String(rawDid).trim();
+
+  if (mode === 'signup') {
+    // Validate required signup fields
+    if (!name) {
+      return res.status(400).json({ error: 'Please enter your full name' });
+    }
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: 'Please enter a valid email address (e.g. example@gmail.com)' });
     }
+    if (!phone || !/^01[3-9]\d{8}$/.test(phone)) {
+      return res.status(400).json({ error: 'Please enter a valid 11-digit mobile number (01XXXXXXXXX)' });
+    }
+
+    // A. Anti-Abuse Device Limit: Prevent creating multiple fake accounts from the same device
+    if (deviceId && deviceId !== 'unknown_device') {
+      const deviceAccounts = getCustomers().filter((c) => c.deviceId && c.deviceId === deviceId);
+      if (deviceAccounts.length >= 1) {
+        return res.status(403).json({
+          error: 'An account has already been registered from this device. Please use Log In to access your account.'
+        });
+      }
+    }
+
+    // B. Prevent duplicate accounts with existing email or phone
+    const existingEmail = getCustomerByEmail(email);
+    const existingPhone = getCustomerByPhone(phone);
+    if (existingEmail || existingPhone) {
+      return res.status(400).json({
+        error: 'An account already exists with this ' + (existingEmail ? 'email address' : 'mobile number') + '. Please Log In instead.'
+      });
+    }
+  } else {
+    // --- LOG IN MODE ---
+    if (!email && !phone) {
+      return res.status(400).json({ error: 'Please enter your registered email or 11-digit mobile number' });
+    }
+
+    // Must verify that account already exists
+    let cust = null;
+    if (email) cust = getCustomerByEmail(email);
+    if (!cust && phone) cust = getCustomerByPhone(phone);
+    if (!cust) {
+      return res.status(404).json({
+        error: 'No account found with this ' + (email ? 'email address' : 'mobile number') + '. Please click Sign Up to create an account.'
+      });
+    }
+    if (cust.email && !email) email = cust.email;
+    if (cust.phone && !phone) phone = cust.phone;
   }
 
-  const cacheKey = (method === 'phone' || (!email && phone)) ? phone : email;
+  // --- RESEND TIMER CHECK (1 min for 1st resend, 10 min for subsequent) ---
+  const cacheKey = (email || phone).toLowerCase();
   const prev = customerOtpCache.get(cacheKey) || (phone ? customerOtpCache.get(phone) : null) || (email ? customerOtpCache.get(email) : null);
-  if (prev && Date.now() < prev.expiresAt - 4 * 60 * 1000) {
-    return res.status(429).json({ error: 'Please wait a moment before requesting another code.' });
+
+  if (prev) {
+    const resendCount = prev.resendCount || 0;
+    const requiredWaitMs = resendCount === 0 ? 60 * 1000 : 10 * 60 * 1000;
+    const elapsed = Date.now() - (prev.lastSentAt || 0);
+    if (elapsed < requiredWaitMs) {
+      const remSec = Math.ceil((requiredWaitMs - elapsed) / 1000);
+      const remText = remSec > 60 ? `${Math.ceil(remSec / 60)} minute(s)` : `${remSec} second(s)`;
+      return res.status(429).json({ error: `Please wait ${remText} before requesting another code.` });
+    }
   }
 
   const code = String(Math.floor(100000 + Math.random() * 900000));
+  const newResendCount = prev ? (prev.resendCount || 0) + 1 : 0;
+
   const otpPayload = {
     code,
-    method,
+    mode,
     email,
     phone,
     name: name || (prev?.name || ''),
-    expiresAt: Date.now() + 5 * 60 * 1000,
+    deviceId,
+    resendCount: newResendCount,
+    lastSentAt: Date.now(),
+    expiresAt: Date.now() + 15 * 60 * 1000,
     attempts: 0,
   };
-  if (email) customerOtpCache.set(email, otpPayload);
+  if (email) customerOtpCache.set(email.toLowerCase(), otpPayload);
   if (phone) customerOtpCache.set(phone, otpPayload);
 
   const storeName = getSettings().storeName || 'METRROMA';
   let emailSent = false;
-  let smsSent = false;
 
-  // Send via Email API if method is email or email is provided
-  if (email && (method !== 'phone' || !phone)) {
+  // Send Code via Email API
+  if (email) {
     const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -4520,11 +4585,13 @@ app.post('/api/customer/send-otp', async (req, res) => {
 <body style="margin:0;padding:24px;background:#090d16;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#ffffff;">
   <div style="max-width:480px;margin:0 auto;background:#131c2e;border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:32px 24px;text-align:center;">
     <div style="font-size:20px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:#e7b486;margin-bottom:6px;">${storeName}</div>
-    <div style="font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#94a3b8;margin-bottom:20px;">VIP Circle Account Verification</div>
+    <div style="font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#94a3b8;margin-bottom:20px;">
+      ${mode === 'signup' ? 'VIP Account Registration' : 'VIP Account Login'}
+    </div>
     
     <p style="font-size:14px;color:#cbd5e1;margin:0 0 16px;line-height:1.5;">
       Hello ${name || 'VIP Member'},<br>
-      Use the following 6-digit verification code to sign in or create your account:
+      Your 6-digit ${mode === 'signup' ? 'registration' : 'login'} verification code is:
     </p>
 
     <div style="background:rgba(231,180,134,0.12);border:2px solid #e7b486;border-radius:12px;padding:14px 24px;display:inline-block;margin:12px 0 20px;">
@@ -4532,45 +4599,33 @@ app.post('/api/customer/send-otp', async (req, res) => {
     </div>
 
     <p style="font-size:12.5px;color:#94a3b8;margin:0;line-height:1.5;">
-      This code is valid for 5 minutes. If you did not request this, please ignore this email.
+      This code is valid for 15 minutes. If you did not request this, please ignore this email.
     </p>
   </div>
 </body>
 </html>`.trim();
 
     try {
-      const emailRes = await sendEmail(email, `${storeName} VIP Verification Code: ${code}`, emailHtml);
+      const emailRes = await sendEmail(email, `${storeName} ${mode === 'signup' ? 'Registration' : 'Login'} Code: ${code}`, emailHtml);
       if (emailRes && emailRes.ok) emailSent = true;
     } catch (err) {
       console.warn('[Customer OTP] Email send error:', err.message);
     }
   }
 
-  // Send via SMS if method is phone or SMS gateway is available
+  // Also send via SMS if phone is provided
   if (phone) {
-    const smsText = `${storeName}: Your VIP verification code is ${code}. Valid for 5 minutes.`;
-    const smsRes = await sendSMS(phone, smsText).catch(() => ({ ok: false }));
-    if (smsRes && smsRes.ok) smsSent = true;
-  }
-
-  const ig = getIntegrations();
-  const isSmsLive = ig.sms?.enabled && ig.sms?.url;
-
-  let message = '';
-  if (method === 'phone') {
-    message = smsSent || isSmsLive
-      ? `Verification code sent to +88 ${phone}`
-      : `Verification code sent to +88 ${phone}`;
-  } else {
-    message = emailSent
-      ? `Verification code sent to ${email}`
-      : `Verification code sent to ${email}`;
+    const smsText = `${storeName}: Your ${mode === 'signup' ? 'registration' : 'login'} code is ${code}. Valid for 15 minutes.`;
+    await sendSMS(phone, smsText).catch(() => ({ ok: false }));
   }
 
   res.json({
     ok: true,
-    message,
-    demoCode: (emailSent || smsSent) ? undefined : code,
+    message: emailSent
+      ? `Verification code sent to ${email}`
+      : `Verification code sent to ${email || '+88 ' + phone}`,
+    nextWaitSeconds: newResendCount === 0 ? 60 : 600,
+    demoCode: emailSent ? undefined : code,
   });
 });
 
@@ -4578,14 +4633,16 @@ app.post('/api/customer/send-otp', async (req, res) => {
 app.post('/api/customer/verify-otp', (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
   const phone = String(req.body?.phone || '').replace(/\D/g, '').slice(-11);
+  const identifier = String(req.body?.identifier || '').trim().toLowerCase();
   const code = String(req.body?.code || '').trim();
   const name = String(req.body?.name || '').trim().slice(0, 50);
 
-  if ((!email && !phone) || !code) {
+  if (!code) {
     return res.status(400).json({ error: 'Verification code is required' });
   }
 
-  const cached = (email ? customerOtpCache.get(email) : null) || (phone ? customerOtpCache.get(phone) : null);
+  const cached = (email ? customerOtpCache.get(email) : null) || (phone ? customerOtpCache.get(phone) : null) || (identifier ? customerOtpCache.get(identifier) : null);
+
   if (!cached) {
     return res.status(400).json({ error: 'Verification code expired or not requested. Please request a new code.' });
   }
@@ -4614,25 +4671,26 @@ app.post('/api/customer/verify-otp', (req, res) => {
   if (finalEmail) cust = getCustomerByEmail(finalEmail);
   if (!cust && cleanPhone) cust = getCustomerByPhone(cleanPhone);
 
-  const customerName = name || cached.name || cust?.name || 'VIP Member';
   let isNew = false;
-
   if (!cust) {
     isNew = true;
     cust = saveCustomer({
       id: 'cust_' + randomUUID().slice(0, 8),
       phone: cleanPhone,
       email: finalEmail,
-      name: customerName,
+      name: name || cached.name || 'VIP Member',
+      deviceId: cached.deviceId || '',
       savedAddress: { address: '', district: '', thana: '', area: 'outside' },
       wishlist: [],
       welcomeCouponUsed: false,
     });
   } else {
+    // Returning customer logging in — DOES NOT create a new account or new coupon!
     const updates = { ...cust };
-    if (customerName && cust.name !== customerName) updates.name = customerName;
+    if (name && cust.name !== name) updates.name = name;
     if (finalEmail && (!cust.email || cust.email !== finalEmail)) updates.email = finalEmail;
     if (cleanPhone && (!cust.phone || cust.phone !== cleanPhone)) updates.phone = cleanPhone;
+    if (cached.deviceId && !cust.deviceId) updates.deviceId = cached.deviceId;
     cust = saveCustomer(updates);
   }
 

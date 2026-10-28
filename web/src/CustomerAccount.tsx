@@ -80,18 +80,26 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
 // Minimalist Luxury Auth Modal (No Emoji Clutter)
 export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
   const { refreshCustomer } = useCustomer();
-  const [step, setStep] = useState<'auth' | 'otp' | 'set_address'>('auth');
-  const [loginMode, setLoginMode] = useState<'email' | 'phone'>('email'); // 2 Login Options: Email or Mobile
+  const [authTab, setAuthTab] = useState<'login' | 'signup'>('login'); // Separate Log In vs Sign Up
+  const [step, setStep] = useState<'form' | 'otp' | 'set_address'>('form');
+
+  // Login Field
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+
+  // Signup Fields
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+
+  // Verification
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [countdown, setCountdown] = useState(0);
+  const [resendCount, setResendCount] = useState(0);
 
-  // Set Address State (Popup after account creation/login)
+  // Set Address State (Popup after new signup)
   const [addrPhone, setAddrPhone] = useState('');
   const [addrDistrict, setAddrDistrict] = useState('');
   const [addrThana, setAddrThana] = useState('');
@@ -105,31 +113,40 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
     }
   }, [countdown]);
 
-  const handleSendOtp = async (e?: React.FormEvent) => {
+  const formatTimer = (sec: number) => {
+    if (sec <= 60) return `${sec}s`;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}m ${s < 10 ? '0' : ''}${s}s`;
+  };
+
+  const handleSendOtp = async (isResend = false, e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setError('');
     setNotice('');
 
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanPhone = phone.replace(/\D/g, '').slice(-11);
+    if (authTab === 'login') {
+      const cleanIdent = loginIdentifier.trim();
+      if (!cleanIdent) {
+        setError('Please enter your registered email address or 11-digit mobile number');
+        return;
+      }
+    } else {
+      // Signup Validation
+      const cleanName = name.trim();
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanPhone = phone.replace(/\D/g, '').slice(-11);
 
-    if (loginMode === 'email') {
+      if (!cleanName) {
+        setError('Please enter your full name');
+        return;
+      }
       if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
         setError('Please enter a valid email address (e.g. example@gmail.com)');
         return;
       }
-      if (cleanPhone && !/^01[3-9]\d{8}$/.test(cleanPhone)) {
-        setError('Please enter a valid 11-digit mobile number (01XXXXXXXXX)');
-        return;
-      }
-    } else {
-      // Mobile login option
       if (!cleanPhone || !/^01[3-9]\d{8}$/.test(cleanPhone)) {
         setError('Please enter a valid 11-digit mobile number (01XXXXXXXXX)');
-        return;
-      }
-      if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-        setError('Please enter a valid email address (e.g. example@gmail.com)');
         return;
       }
     }
@@ -137,17 +154,28 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
     setBusy(true);
     try {
       const res = await sendCustomerOtp({
-        email: cleanEmail,
-        phone: cleanPhone,
-        name: name.trim(),
-        method: loginMode
+        mode: authTab,
+        identifier: authTab === 'login' ? loginIdentifier.trim() : undefined,
+        email: authTab === 'signup' ? email.trim().toLowerCase() : (loginIdentifier.includes('@') ? loginIdentifier.trim() : undefined),
+        phone: authTab === 'signup' ? phone.replace(/\D/g, '').slice(-11) : (!loginIdentifier.includes('@') ? loginIdentifier.replace(/\D/g, '').slice(-11) : undefined),
+        name: authTab === 'signup' ? name.trim() : undefined,
       });
+
       setStep('otp');
-      setCountdown(60);
-      if (res.demoCode) {
-        setNotice(`Verification code: ${res.demoCode} (Sent to ${loginMode === 'email' ? cleanEmail : '+88 ' + cleanPhone})`);
+
+      // Timer Logic: First time = 60s (1 min), subsequent resends = 600s (10 min)
+      if (resendCount === 0) {
+        setCountdown(60);
+        setResendCount(1);
       } else {
-        setNotice(res.message || `Verification code sent to ${loginMode === 'email' ? cleanEmail : '+88 ' + cleanPhone}`);
+        setCountdown(600); // 10 minutes wait
+        setResendCount((c) => c + 1);
+      }
+
+      if (res.demoCode) {
+        setNotice(`Verification code: ${res.demoCode}`);
+      } else {
+        setNotice(res.message || 'Verification code sent.');
       }
     } catch (err: any) {
       setError(err.message || 'Could not send verification code');
@@ -165,19 +193,21 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
     }
     setBusy(true);
     try {
-      const cleanEmail = email.trim().toLowerCase();
-      const cleanPhone = phone.replace(/\D/g, '').slice(-11);
+      const cleanEmail = authTab === 'signup' ? email.trim().toLowerCase() : (loginIdentifier.includes('@') ? loginIdentifier.trim().toLowerCase() : '');
+      const cleanPhone = authTab === 'signup' ? phone.replace(/\D/g, '').slice(-11) : (!loginIdentifier.includes('@') ? loginIdentifier.replace(/\D/g, '').slice(-11) : '');
+
       const res = await verifyCustomerOtp({
+        identifier: authTab === 'login' ? loginIdentifier.trim() : undefined,
         email: cleanEmail,
         phone: cleanPhone,
         code: code.trim(),
-        name: name.trim()
+        name: authTab === 'signup' ? name.trim() : undefined,
       });
       await refreshCustomer();
 
-      // Check if address needs to be set (new account or address not set yet)
+      // Only brand new accounts without address show the Set Address popup
       const hasAddress = res.customer?.savedAddress?.address && res.customer.savedAddress.address.trim().length > 0;
-      if (!hasAddress) {
+      if (res.isNew || !hasAddress) {
         setNotice('Account verified! Please set your delivery address below.');
         setAddrPhone(cleanPhone || res.customer?.phone || '');
         setStep('set_address');
@@ -209,8 +239,6 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
       }
 
       await updateCustomerProfile({
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
         phone: cleanPhone,
         savedAddress: {
           address: addrStreet.trim(),
@@ -252,7 +280,7 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
           background: '#ffffff',
           color: '#111827',
           width: '100%',
-          maxWidth: step === 'set_address' ? 480 : 450,
+          maxWidth: step === 'set_address' ? 480 : 440,
           borderRadius: 8,
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
           overflow: 'hidden',
@@ -286,35 +314,47 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
             &times;
           </button>
           <div style={{ fontSize: 11, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#cbd5e1', marginBottom: 4 }}>
-            {step === 'set_address' ? 'VIP DELIVERY SETUP' : 'METRROMA VIP Circle'}
+            {step === 'set_address'
+              ? 'VIP DELIVERY SETUP'
+              : authTab === 'login'
+              ? 'WELCOME BACK'
+              : 'NEW VIP REGISTRATION (5% OFF)'}
           </div>
           <h3 style={{ margin: 0, fontSize: 20, fontFamily: 'var(--font-serif)', fontWeight: 500, color: '#ffffff' }}>
-            {step === 'auth' ? 'Sign In or Create Account' : step === 'otp' ? 'Enter Verification Code' : 'Set Your Delivery Address'}
+            {step === 'set_address'
+              ? 'Set Your Delivery Address'
+              : step === 'otp'
+              ? 'Enter Verification Code'
+              : authTab === 'login'
+              ? 'Log In to Your Account'
+              : 'Create New Account'}
           </h3>
           <p style={{ margin: '6px 0 0', fontSize: 13, color: '#94a3b8', lineHeight: 1.4 }}>
-            {step === 'auth'
-              ? 'Choose your preferred sign-in method to access your VIP benefits.'
+            {step === 'set_address'
+              ? 'Please enter your delivery address. No address is preset.'
               : step === 'otp'
-              ? `6-digit verification code sent to ${loginMode === 'email' ? email : '+88 ' + phone}`
-              : 'Please enter your delivery address. No address is preset.'}
+              ? `6-digit verification code sent to ${authTab === 'login' ? loginIdentifier : email}`
+              : authTab === 'login'
+              ? 'Enter your registered email or phone to log into your account.'
+              : 'Sign up with your details to receive 5% off your first order.'}
           </p>
         </div>
 
-        {/* 2 Login Options Tab Switcher (Visible in Auth Step) */}
-        {step === 'auth' && (
+        {/* 2 Clear Distinct Tabs: Log In vs Sign Up */}
+        {step === 'form' && (
           <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
             <button
               type="button"
-              onClick={() => { setLoginMode('email'); setError(''); setNotice(''); }}
+              onClick={() => { setAuthTab('login'); setError(''); setNotice(''); }}
               style={{
                 flex: 1,
-                padding: '12px 14px',
-                fontSize: 13,
+                padding: '13px 16px',
+                fontSize: 13.5,
                 fontWeight: 600,
                 border: 'none',
-                borderBottom: loginMode === 'email' ? '2.5px solid #0f172a' : '2.5px solid transparent',
-                background: loginMode === 'email' ? '#ffffff' : 'transparent',
-                color: loginMode === 'email' ? '#0f172a' : '#64748b',
+                borderBottom: authTab === 'login' ? '2.5px solid #0f172a' : '2.5px solid transparent',
+                background: authTab === 'login' ? '#ffffff' : 'transparent',
+                color: authTab === 'login' ? '#0f172a' : '#64748b',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -323,20 +363,20 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                 transition: 'all 0.15s ease',
               }}
             >
-              <span>✉️ Email Verification</span>
+              <span>🔑 Log In</span>
             </button>
             <button
               type="button"
-              onClick={() => { setLoginMode('phone'); setError(''); setNotice(''); }}
+              onClick={() => { setAuthTab('signup'); setError(''); setNotice(''); }}
               style={{
                 flex: 1,
-                padding: '12px 14px',
-                fontSize: 13,
+                padding: '13px 16px',
+                fontSize: 13.5,
                 fontWeight: 600,
                 border: 'none',
-                borderBottom: loginMode === 'phone' ? '2.5px solid #0f172a' : '2.5px solid transparent',
-                background: loginMode === 'phone' ? '#ffffff' : 'transparent',
-                color: loginMode === 'phone' ? '#0f172a' : '#64748b',
+                borderBottom: authTab === 'signup' ? '2.5px solid #0f172a' : '2.5px solid transparent',
+                background: authTab === 'signup' ? '#ffffff' : 'transparent',
+                color: authTab === 'signup' ? '#0f172a' : '#64748b',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -345,7 +385,7 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                 transition: 'all 0.15s ease',
               }}
             >
-              <span>📱 Mobile OTP</span>
+              <span>✍️ Sign Up (5% OFF)</span>
             </button>
           </div>
         )}
@@ -384,11 +424,92 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {step === 'auth' ? (
-            <form onSubmit={handleSendOtp}>
-              {/* Option 1: Email Mode */}
-              {loginMode === 'email' ? (
-                <>
+          {step === 'form' ? (
+            <form onSubmit={(e) => handleSendOtp(false, e)}>
+              {authTab === 'login' ? (
+                /* OPTION 1: LOG IN FORM */
+                <div>
+                  <div style={{ marginBottom: 18 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
+                      Registered Email or Mobile Number <span style={{ color: '#dc2626' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      autoFocus
+                      placeholder="e.g. example@gmail.com or 01XXXXXXXXX"
+                      value={loginIdentifier}
+                      onChange={(e) => setLoginIdentifier(e.target.value)}
+                      style={{
+                        width: '100%',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 6,
+                        padding: '11px 12px',
+                        fontSize: 14,
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={busy}
+                    style={{
+                      width: '100%',
+                      background: '#0f172a',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: 6,
+                      padding: '12px 16px',
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: busy ? 'not-allowed' : 'pointer',
+                      opacity: busy ? 0.7 : 1,
+                      marginBottom: 14,
+                    }}
+                  >
+                    {busy ? 'Verifying account...' : 'Send Login Code'}
+                  </button>
+
+                  <div style={{ textAlign: 'center', fontSize: 13, color: '#64748b' }}>
+                    Don't have an account yet?{' '}
+                    <button
+                      type="button"
+                      onClick={() => { setAuthTab('signup'); setError(''); setNotice(''); }}
+                      style={{ background: 'none', border: 'none', color: '#0f172a', fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                    >
+                      Sign Up here (Get 5% OFF)
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* OPTION 2: SIGN UP FORM */
+                <div>
+                  {/* Full Name */}
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
+                      Full Name <span style={{ color: '#dc2626' }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      autoFocus
+                      placeholder="Enter your name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      style={{
+                        width: '100%',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 6,
+                        padding: '10px 12px',
+                        fontSize: 14,
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+
                   {/* Email Address */}
                   <div style={{ marginBottom: 14 }}>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
@@ -397,7 +518,6 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                     <input
                       type="email"
                       required
-                      autoFocus
                       placeholder="example@gmail.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -414,69 +534,7 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                   </div>
 
                   {/* Mobile Number with Placeholder */}
-                  <div style={{ marginBottom: 14 }}>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
-                      Mobile Number (For Courier)
-                    </label>
-                    <div style={{ display: 'flex' }}>
-                      <span
-                        style={{
-                          background: '#f1f5f9',
-                          border: '1px solid #cbd5e1',
-                          borderRight: 'none',
-                          borderRadius: '6px 0 0 6px',
-                          padding: '10px 12px',
-                          fontSize: 14,
-                          color: '#475569',
-                          fontWeight: 600,
-                        }}
-                      >
-                        +88
-                      </span>
-                      <input
-                        type="tel"
-                        placeholder="01XXXXXXXXX"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        style={{
-                          flex: 1,
-                          border: '1px solid #cbd5e1',
-                          borderRadius: '0 6px 6px 0',
-                          padding: '10px 12px',
-                          fontSize: 14,
-                          outline: 'none',
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Full Name */}
-                  <div style={{ marginBottom: 18 }}>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
-                      Full Name (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Enter your name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      style={{
-                        width: '100%',
-                        border: '1px solid #cbd5e1',
-                        borderRadius: 6,
-                        padding: '10px 12px',
-                        fontSize: 14,
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                  </div>
-                </>
-              ) : (
-                /* Option 2: Mobile SMS Mode */
-                <>
-                  {/* Mobile Number with Placeholder */}
-                  <div style={{ marginBottom: 14 }}>
+                  <div style={{ marginBottom: 16 }}>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
                       Mobile Number <span style={{ color: '#dc2626' }}>*</span>
                     </label>
@@ -498,7 +556,6 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                       <input
                         type="tel"
                         required
-                        autoFocus
                         placeholder="01XXXXXXXXX"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
@@ -514,101 +571,65 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                     </div>
                   </div>
 
-                  {/* Email Address */}
-                  <div style={{ marginBottom: 14 }}>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
-                      Email Address (Optional)
-                    </label>
-                    <input
-                      type="email"
-                      placeholder="example@gmail.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      style={{
-                        width: '100%',
-                        border: '1px solid #cbd5e1',
-                        borderRadius: 6,
-                        padding: '10px 12px',
-                        fontSize: 14,
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                      }}
-                    />
+                  <div
+                    style={{
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 6,
+                      padding: '12px 14px',
+                      marginBottom: 18,
+                      fontSize: 12,
+                      color: '#334155',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <strong style={{ color: '#0f172a' }}>New Member Privileges:</strong>
+                    <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                      <li>5% discount voucher applied to your first order</li>
+                      <li>Fast checkout with your saved delivery address</li>
+                      <li>Live parcel tracking and order history</li>
+                    </ul>
                   </div>
 
-                  {/* Full Name */}
-                  <div style={{ marginBottom: 18 }}>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
-                      Full Name (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Enter your name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      style={{
-                        width: '100%',
-                        border: '1px solid #cbd5e1',
-                        borderRadius: 6,
-                        padding: '10px 12px',
-                        fontSize: 14,
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                      }}
-                    />
+                  <button
+                    type="submit"
+                    disabled={busy}
+                    style={{
+                      width: '100%',
+                      background: '#0f172a',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: 6,
+                      padding: '12px 16px',
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: busy ? 'not-allowed' : 'pointer',
+                      opacity: busy ? 0.7 : 1,
+                      marginBottom: 14,
+                    }}
+                  >
+                    {busy ? 'Sending verification code...' : 'Create Account & Send Code'}
+                  </button>
+
+                  <div style={{ textAlign: 'center', fontSize: 13, color: '#64748b' }}>
+                    Already have an account?{' '}
+                    <button
+                      type="button"
+                      onClick={() => { setAuthTab('login'); setError(''); setNotice(''); }}
+                      style={{ background: 'none', border: 'none', color: '#0f172a', fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                    >
+                      Log In here
+                    </button>
                   </div>
-                </>
+                </div>
               )}
-
-              <div
-                style={{
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: 6,
-                  padding: '12px 14px',
-                  marginBottom: 18,
-                  fontSize: 12,
-                  color: '#334155',
-                  lineHeight: 1.5,
-                }}
-              >
-                <strong style={{ color: '#0f172a' }}>VIP Privileges:</strong>
-                <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
-                  <li>5% off voucher applied upon joining</li>
-                  <li>Fast checkout with your custom delivery address</li>
-                  <li>Instant order tracking and delivery updates</li>
-                </ul>
-              </div>
-
-              <button
-                type="submit"
-                disabled={busy}
-                style={{
-                  width: '100%',
-                  background: '#0f172a',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: 6,
-                  padding: '12px 16px',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: busy ? 'not-allowed' : 'pointer',
-                  opacity: busy ? 0.7 : 1,
-                  transition: 'background 0.2s',
-                }}
-              >
-                {busy
-                  ? 'Sending verification code...'
-                  : loginMode === 'email'
-                  ? 'Continue with Email Verification'
-                  : 'Continue with Mobile OTP'}
-              </button>
             </form>
           ) : step === 'otp' ? (
+            /* STEP 2: VERIFICATION OTP */
             <form onSubmit={handleVerifyOtp}>
               <div style={{ marginBottom: 18 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
-                  {loginMode === 'email' ? 'Email Verification Code' : 'SMS Verification Code'}
+                  6-Digit Verification Code
                 </label>
                 <input
                   type="text"
@@ -650,13 +671,17 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                   marginBottom: 14,
                 }}
               >
-                {busy ? 'Verifying...' : 'Verify & Sign In'}
+                {busy
+                  ? 'Verifying...'
+                  : authTab === 'signup'
+                  ? 'Verify & Create Account'
+                  : 'Verify & Log In'}
               </button>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
                 <button
                   type="button"
-                  onClick={() => { setStep('auth'); setCode(''); setError(''); }}
+                  onClick={() => { setStep('form'); setCode(''); setError(''); }}
                   style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: 0 }}
                 >
                   &larr; Change Details
@@ -664,7 +689,7 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                 <button
                   type="button"
                   disabled={busy || countdown > 0}
-                  onClick={() => handleSendOtp()}
+                  onClick={() => handleSendOtp(true)}
                   style={{
                     background: 'none',
                     border: 'none',
@@ -674,12 +699,12 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                     padding: 0,
                   }}
                 >
-                  {countdown > 0 ? `Resend in ${countdown}s` : 'Resend code'}
+                  {countdown > 0 ? `Resend in ${formatTimer(countdown)}` : 'Resend code'}
                 </button>
               </div>
             </form>
           ) : (
-            /* Step 3: Pop-up to Set Your Address */
+            /* STEP 3: POPUP TO SET YOUR ADDRESS (FOR NEW SIGNUPS) */
             <form onSubmit={handleSaveAddress}>
               <div style={{ marginBottom: 14 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>

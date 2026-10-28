@@ -422,18 +422,16 @@ export function clearCustomerToken() {
 }
 
 export async function sendCustomerOtp(
-  arg1: string | { email?: string; phone?: string; name?: string; method?: 'email' | 'phone' },
-  name?: string,
-  phone?: string
-): Promise<{ ok: boolean; message: string; demoCode?: string }> {
-  const payload = typeof arg1 === 'object'
-    ? arg1
-    : { email: arg1, name, phone, method: arg1.includes('@') ? 'email' : 'phone' };
-
+  payload: { mode?: 'login' | 'signup'; identifier?: string; email?: string; phone?: string; name?: string }
+): Promise<{ ok: boolean; message: string; nextWaitSeconds?: number; demoCode?: string }> {
+  const did = getDeviceId();
   const r = await fetch('/api/customer/send-otp', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    headers: {
+      'Content-Type': 'application/json',
+      'x-device-id': did
+    },
+    body: JSON.stringify({ ...payload, deviceId: did })
   });
   const d = await r.json();
   if (!r.ok) throw new Error(d.error || 'Could not send verification code');
@@ -441,19 +439,16 @@ export async function sendCustomerOtp(
 }
 
 export async function verifyCustomerOtp(
-  arg1: string | { email?: string; phone?: string; code: string; name?: string },
-  code?: string,
-  name?: string,
-  phone?: string
+  payload: { identifier?: string; email?: string; phone?: string; code: string; name?: string }
 ): Promise<{ ok: boolean; token: string; isNew?: boolean; customer: Customer }> {
-  const payload = typeof arg1 === 'object'
-    ? arg1
-    : { email: arg1, code: code || '', name, phone };
-
+  const did = getDeviceId();
   const r = await fetch('/api/customer/verify-otp', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    headers: {
+      'Content-Type': 'application/json',
+      'x-device-id': did
+    },
+    body: JSON.stringify({ ...payload, deviceId: did })
   });
   const d = await r.json();
   if (!r.ok) throw new Error(d.error || 'Invalid verification code');
