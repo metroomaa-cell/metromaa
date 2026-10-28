@@ -706,7 +706,25 @@ function Footer() {
         </div>
         <div className="tabaya-footer-bottom">
           <span>{language === 'bn' ? `© ২০২৬ ${name}. সর্বস্বত্ব সংরক্ষিত।` : `© 2026 ${name}. All Rights Reserved.`}</span>
-          <span>{tr('Cash on Delivery · Steadfast Courier · Customer Support Available', language)}</span>
+          <span>
+            Designed & Developed by{' '}
+            <a
+              href="https://shakil.metrroma.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                color: '#b48e4c',
+                textDecoration: 'underline',
+                textUnderlineOffset: '3px',
+                fontWeight: 600,
+                transition: 'color 0.2s',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#e2c58a')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = '#b48e4c')}
+            >
+              Shakil
+            </a>
+          </span>
         </div>
       </div>
     </footer>
