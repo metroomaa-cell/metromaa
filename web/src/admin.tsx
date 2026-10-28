@@ -10275,11 +10275,15 @@ function WhatsAppAdmin() {
   const startSession = async (reset = false) => {
     setConnecting(true);
     try {
-      await aFetch('/admin/whatsapp/start-session', {
+      const res = await aFetch('/admin/whatsapp/start-session', {
         method: 'POST',
         body: JSON.stringify({ reset }),
-      });
-      load(false);
+      }).then(r => r.json());
+      if (res && res.qrDataUrl) {
+        setStatus((prev: any) => ({ ...prev, ...res }));
+      } else {
+        load(false);
+      }
     } catch {}
     finally {
       setConnecting(false);
@@ -10320,7 +10324,7 @@ function WhatsAppAdmin() {
   // When opening modal for QR tab, make sure session is started on server
   useEffect(() => {
     if (showPairModal && pairTab === 'qr' && !status.connected && !status.qrDataUrl) {
-      startSession(false);
+      startSession(true);
     }
   }, [showPairModal, pairTab, status.connected, status.qrDataUrl]);
 
@@ -10468,7 +10472,7 @@ function WhatsAppAdmin() {
           {status.connected ? (
             <button className="sa-btn ghost danger" onClick={handleDisconnect}>🔌 Disconnect WhatsApp</button>
           ) : (
-            <button className="sa-btn" style={{ background: '#25D366', color: '#000', fontWeight: 600 }} onClick={() => setShowPairModal(true)}>
+            <button className="sa-btn" style={{ background: '#25D366', color: '#000', fontWeight: 600 }} onClick={() => { setShowPairModal(true); if (!status.connected) startSession(true); }}>
               🔗 Link WhatsApp Device (QR)
             </button>
           )}
@@ -10512,7 +10516,7 @@ function WhatsAppAdmin() {
             💬 Open Test Chat
           </button>
           {!status.connected && (
-            <button className="sa-btn sa-mini" style={{ background: '#25D366', color: '#000', fontWeight: 600 }} onClick={() => setShowPairModal(true)}>
+            <button className="sa-btn sa-mini" style={{ background: '#25D366', color: '#000', fontWeight: 600 }} onClick={() => { setShowPairModal(true); if (!status.connected) startSession(true); }}>
               📷 Scan QR Code
             </button>
           )}

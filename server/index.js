@@ -11,7 +11,7 @@ import dns from 'node:dns';
 try { dns.setDefaultResultOrder('ipv4first'); } catch {}
 import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, saveColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, getCustomerByEmail, saveCustomer, syncCustomersFromOrders, initStorageProtection, getPersistentDataDirectory } from './store.js';
 import { getWhatsAppSettings, saveWhatsAppSettings, sendWhatsAppNotification, formatWhatsAppMessage } from './whatsapp_engine.js';
-import { startWhatsAppSocket, getWhatsAppLiveStatus, requestPairingCode, sendBaileysMessage } from './whatsapp_baileys.js';
+import { startWhatsAppSocket, getWhatsAppLiveStatus, requestPairingCode, sendBaileysMessage, waitForQrCode, clearWhatsAppSession } from './whatsapp_baileys.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 initStorageProtection();
@@ -4012,9 +4012,13 @@ app.get('/api/admin/whatsapp/status', adminAuth, requireRole('owner', 'manager')
 
 app.post('/api/admin/whatsapp/start-session', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   try {
-    const forceNew = req.body?.reset === true;
+    const forceNew = req.body?.reset !== false;
     const result = await startWhatsAppSocket(forceNew);
-    res.json({ ok: true, result });
+    if (!result?.connected) {
+      await waitForQrCode(3500).catch(() => {});
+    }
+    const live = getWhatsAppLiveStatus();
+    res.json({ ok: true, result, ...live });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -4059,7 +4063,7 @@ app.post('/api/admin/whatsapp/connect', adminAuth, requireRole('owner', 'manager
 
 app.post('/api/admin/whatsapp/disconnect', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   try {
-    await startWhatsAppSocket(true);
+    clearWhatsAppSession();
     const updated = saveWhatsAppSettings({
       connected: false,
       phone: '',
