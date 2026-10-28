@@ -81,6 +81,7 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
   const { refreshCustomer } = useCustomer();
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -95,8 +96,8 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
     }
   }, [countdown]);
 
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setError('');
     setNotice('');
     const cleanPhone = phone.replace(/\D/g, '').slice(-11);
@@ -104,15 +105,20 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
       setError('Please enter a valid 11-digit mobile number (01XXXXXXXXX)');
       return;
     }
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setError('Please enter a valid email address (e.g. example@gmail.com)');
+      return;
+    }
     setBusy(true);
     try {
-      const res = await sendCustomerOtp(cleanPhone, name.trim());
+      const res = await sendCustomerOtp(cleanPhone, name.trim(), cleanEmail);
       setStep('otp');
       setCountdown(60);
       if (res.demoCode) {
-        setNotice(`Demo test code: ${res.demoCode}`);
+        setNotice(`Verification code sent to ${cleanEmail}. (Test code: ${res.demoCode})`);
       } else {
-        setNotice(res.message || 'Verification code sent to your mobile.');
+        setNotice(res.message || `Verification code sent to ${cleanEmail}`);
       }
     } catch (err: any) {
       setError(err.message || 'Could not send verification code');
@@ -131,7 +137,8 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
     setBusy(true);
     try {
       const cleanPhone = phone.replace(/\D/g, '').slice(-11);
-      await verifyCustomerOtp(cleanPhone, code.trim(), name.trim());
+      const cleanEmail = email.trim().toLowerCase();
+      await verifyCustomerOtp(cleanPhone, code.trim(), name.trim(), cleanEmail);
       await refreshCustomer();
       onClose();
     } catch (err: any) {
@@ -200,12 +207,12 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
             METRROMA VIP Circle
           </div>
           <h3 style={{ margin: 0, fontSize: 20, fontFamily: 'var(--font-serif)', fontWeight: 500, color: '#ffffff' }}>
-            {step === 'phone' ? 'Sign In or Create Account' : 'Verify Mobile Number'}
+            {step === 'phone' ? 'Sign In or Create Account' : 'Verify Email & Account'}
           </h3>
           <p style={{ margin: '6px 0 0', fontSize: 13, color: '#94a3b8', lineHeight: 1.4 }}>
             {step === 'phone'
-              ? 'Receive 5% off your first order upon joining. Simple 1-click verification.'
-              : `Code sent to +88 ${phone.replace(/\D/g, '').slice(-11)}`}
+              ? 'Receive 5% off your first order upon joining. Simple email verification.'
+              : `6-digit verification code sent to ${email || phone}`}
           </p>
         </div>
 
@@ -245,6 +252,7 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
 
           {step === 'phone' ? (
             <form onSubmit={handleSendOtp}>
+              {/* Mobile Number */}
               <div style={{ marginBottom: 14 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
                   Mobile Number <span style={{ color: '#dc2626' }}>*</span>
@@ -283,6 +291,30 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                 </div>
               </div>
 
+              {/* Email Address */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
+                  Email Address <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="example@gmail.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  style={{
+                    width: '100%',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 6,
+                    padding: '10px 12px',
+                    fontSize: 14,
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              {/* Full Name */}
               <div style={{ marginBottom: 20 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', marginBottom: 6 }}>
                   Full Name (Optional)
@@ -319,6 +351,7 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                 <strong style={{ color: '#0f172a' }}>VIP Privileges:</strong>
                 <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
                   <li>5% off voucher on your first order</li>
+                  <li>Instant email verification & fast order updates</li>
                   <li>1-click fast checkout with saved delivery address</li>
                   <li>Complete order tracking and purchase history</li>
                 </ul>
@@ -341,7 +374,7 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                   transition: 'background 0.2s',
                 }}
               >
-                {busy ? 'Sending code...' : 'Continue with Mobile Number'}
+                {busy ? 'Sending verification code...' : 'Continue to Verify Email'}
               </button>
             </form>
           ) : (
@@ -363,8 +396,8 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                     border: '1px solid #cbd5e1',
                     borderRadius: 6,
                     padding: '12px 14px',
-                    fontSize: 18,
-                    letterSpacing: '0.3em',
+                    fontSize: 20,
+                    letterSpacing: '0.35em',
                     textAlign: 'center',
                     fontWeight: 700,
                     outline: 'none',
@@ -390,7 +423,7 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                   marginBottom: 14,
                 }}
               >
-                {busy ? 'Verifying...' : 'Verify & Enter'}
+                {busy ? 'Verifying...' : 'Verify & Open Account'}
               </button>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
@@ -399,20 +432,23 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                   onClick={() => { setStep('phone'); setCode(''); setError(''); }}
                   style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: 0 }}
                 >
-                  Change phone number
+                  &larr; Change Details
                 </button>
-                {countdown > 0 ? (
-                  <span style={{ color: '#94a3b8' }}>Resend in {countdown}s</span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleSendOtp}
-                    disabled={busy}
-                    style={{ background: 'none', border: 'none', color: '#0f172a', fontWeight: 600, cursor: 'pointer', padding: 0 }}
-                  >
-                    Resend code
-                  </button>
-                )}
+                <button
+                  type="button"
+                  disabled={busy || countdown > 0}
+                  onClick={() => handleSendOtp()}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: countdown > 0 ? '#94a3b8' : '#0f172a',
+                    fontWeight: 600,
+                    cursor: countdown > 0 ? 'default' : 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  {countdown > 0 ? `Resend in ${countdown}s` : 'Resend code'}
+                </button>
               </div>
             </form>
           )}

@@ -421,22 +421,22 @@ export function clearCustomerToken() {
   catch {}
 }
 
-export async function sendCustomerOtp(phone: string, name?: string): Promise<{ ok: boolean; message: string; demoCode?: string }> {
+export async function sendCustomerOtp(phone: string, name?: string, email?: string): Promise<{ ok: boolean; message: string; demoCode?: string }> {
   const r = await fetch('/api/customer/send-otp', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone, name })
+    body: JSON.stringify({ phone, name, email })
   });
   const d = await r.json();
   if (!r.ok) throw new Error(d.error || 'Could not send verification code');
   return d;
 }
 
-export async function verifyCustomerOtp(phone: string, code: string, name?: string): Promise<{ ok: boolean; token: string; customer: Customer }> {
+export async function verifyCustomerOtp(phone: string, code: string, name?: string, email?: string): Promise<{ ok: boolean; token: string; customer: Customer }> {
   const r = await fetch('/api/customer/verify-otp', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone, code, name })
+    body: JSON.stringify({ phone, code, name, email })
   });
   const d = await r.json();
   if (!r.ok) throw new Error(d.error || 'Invalid verification code');
