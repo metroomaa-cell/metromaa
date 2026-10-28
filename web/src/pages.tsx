@@ -394,6 +394,7 @@ const secondaryImage = Array.isArray(p.images) && p.images.length > 1 ? p.images
           className="pc-cta"
           disabled={p.soldOut}
           onClick={handleAddToCart}
+          style={{ marginTop: 'auto' }}
         >
           <span>{p.soldOut ? tr('SOLD OUT', language) : added ? tr('ADDED TO BAG ✓', language) : tr('ADD TO CART', language)}</span>
         </button>
@@ -1698,6 +1699,7 @@ export function ProductPage({ slug }: { slug: string }) {
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [activeAcc, setActiveAcc] = useState<string>('');
   const [pdpTab, setPdpTab] = useState<'desc' | 'specs' | 'size' | 'delivery' | 'care'>('desc');
+  const [galleryTouchStart, setGalleryTouchStart] = useState<number | null>(null);
   const [waNum, setWaNum] = useState('');
   const [settings, setSettings] = useState<Settings | null>(null);
   const [revData, setRevData] = useState<{ count: number; avg: number; reviews: Review[] }>({ count: 0, avg: 0, reviews: [] });
@@ -1895,8 +1897,43 @@ export function ProductPage({ slug }: { slug: string }) {
 
           {/* Left: Gallery */}
           <div>
-            <div className="pimg" style={{ overflow: 'hidden', border: '1px solid rgba(180, 150, 100, 0.25)', background: '#EDE9E3', position: 'relative' }}>
+            <div
+              className="pimg"
+              onTouchStart={(e) => setGalleryTouchStart(e.touches[0].clientX)}
+              onTouchEnd={(e) => {
+                if (galleryTouchStart === null || gallery.length <= 1) return;
+                const diff = galleryTouchStart - e.changedTouches[0].clientX;
+                if (diff > 40) {
+                  setGi((prev) => (prev + 1) % gallery.length);
+                } else if (diff < -40) {
+                  setGi((prev) => (prev - 1 + gallery.length) % gallery.length);
+                }
+                setGalleryTouchStart(null);
+              }}
+              style={{ overflow: 'hidden', border: '1px solid rgba(180, 150, 100, 0.25)', background: '#EDE9E3', position: 'relative', touchAction: 'pan-y' }}
+            >
               <img ref={pimgRef} key={gi} className="pdimg-fade" src={gallery[gi] || p.image} alt={p.name} onError={(e: any) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.classList.add('image-unavailable'); }} />
+              {gallery.length > 1 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 12,
+                    right: 12,
+                    background: 'rgba(23, 18, 14, 0.72)',
+                    backdropFilter: 'blur(6px)',
+                    color: '#FAF8F5',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: '0.08em',
+                    padding: '3px 9px',
+                    borderRadius: 12,
+                    pointerEvents: 'none',
+                    zIndex: 4
+                  }}
+                >
+                  {gi + 1} / {gallery.length}
+                </div>
+              )}
             </div>
 
             {gallery.length > 1 && (
@@ -1966,15 +2003,43 @@ export function ProductPage({ slug }: { slug: string }) {
             )}
 
             {/* Price block */}
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, padding: '16px 20px', background: '#f3f0ec', border: '1px solid rgba(180, 150, 100, 0.25)', marginBottom: 22 }}>
-              <span style={{ fontSize: 28, fontWeight: 700, color: '#1f3147', fontFamily: "'Inter', sans-serif", letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>{taka(currentPrice)}</span>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 12,
+                padding: '16px 22px',
+                background: '#FAF8F5',
+                border: '1px solid rgba(180, 150, 100, 0.3)',
+                borderRadius: 4,
+                marginBottom: 20
+              }}
+            >
+              <span style={{ fontSize: 30, fontWeight: 700, color: '#1f3147', fontFamily: "'Inter', sans-serif", letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+                {taka(currentPrice)}
+              </span>
               {onSale && (
-                <>
-                  <s style={{ fontSize: 16, color: '#8c7d6b', fontWeight: 400, fontFamily: "'Inter', sans-serif", fontVariantNumeric: 'tabular-nums' }}>{taka(currentCompareAt!)}</s>
-                  <span className="pc-badge-save" style={{ position: 'static' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <s style={{ fontSize: 16, color: '#8c7d6b', fontWeight: 400, fontFamily: "'Inter', sans-serif", fontVariantNumeric: 'tabular-nums' }}>
+                    {taka(currentCompareAt!)}
+                  </s>
+                  <span
+                    style={{
+                      background: '#17120E',
+                      color: '#FAF8F5',
+                      border: '1px solid rgba(180, 142, 76, 0.45)',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: '0.06em',
+                      padding: '3px 10px',
+                      borderRadius: 2,
+                      fontVariantNumeric: 'tabular-nums'
+                    }}
+                  >
                     {tr('Save', language)} {taka(currentCompareAt! - currentPrice)}
                   </span>
-                </>
+                </div>
               )}
             </div>
 
@@ -2012,10 +2077,10 @@ export function ProductPage({ slug }: { slug: string }) {
             {productColors.length > 0 && (
               <div style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 10 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#1f3147', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                  <label style={{ fontSize: 11.5, fontWeight: 600, color: '#8c7d6b', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
                     Color:
                   </label>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#8B1E1E' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1f3147' }}>
                     {selectedColor || productColors[0].name}
                   </span>
                 </div>
@@ -2037,19 +2102,19 @@ export function ProductPage({ slug }: { slug: string }) {
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: 8,
-                          padding: '7px 14px',
+                          padding: '7px 15px',
                           borderRadius: 24,
-                          border: isSelected ? '1.5px solid #8B1E1E' : '1px solid rgba(180, 150, 100, 0.35)',
-                          background: isSelected ? '#FAF5F5' : '#FAF8F5',
+                          border: isSelected ? '1.5px solid #1f3147' : '1px solid rgba(180, 150, 100, 0.35)',
+                          background: isSelected ? '#1f3147' : '#FAF8F5',
                           cursor: 'pointer',
                           transition: 'all 0.2s ease',
-                          boxShadow: isSelected ? '0 1px 4px rgba(139, 30, 30, 0.15)' : 'none'
+                          boxShadow: isSelected ? '0 2px 8px rgba(31, 49, 71, 0.18), 0 0 0 1px #b48e4c' : 'none'
                         }}
                       >
                         <span
                           style={{
-                            width: 16,
-                            height: 16,
+                            width: 14,
+                            height: 14,
                             borderRadius: '50%',
                             background: c.hex || getColorHex(c.name),
                             border: '1px solid rgba(0,0,0,0.18)',
@@ -2057,7 +2122,7 @@ export function ProductPage({ slug }: { slug: string }) {
                             flexShrink: 0
                           }}
                         />
-                        <span style={{ fontSize: 12, fontWeight: isSelected ? 700 : 500, color: isSelected ? '#8B1E1E' : '#1f3147', letterSpacing: '0.04em' }}>
+                        <span style={{ fontSize: 12, fontWeight: isSelected ? 700 : 500, color: isSelected ? '#ffffff' : '#1f3147', letterSpacing: '0.04em' }}>
                           {c.name}
                         </span>
                       </button>
@@ -2113,14 +2178,16 @@ export function ProductPage({ slug }: { slug: string }) {
                           padding: isVolumeSize(sz) ? '8px 16px' : '10px 20px',
                           minWidth: 54,
                           textAlign: 'center',
-                          border: isSelected ? '1px solid #1f3147' : '1px solid rgba(180, 150, 100, 0.45)',
+                          borderRadius: 4,
+                          border: isSelected ? '1.5px solid #1f3147' : '1px solid rgba(180, 150, 100, 0.35)',
                           background: isSelected ? '#1f3147' : '#FAF8F5',
                           color: isSelected ? '#FAF8F5' : '#1f3147',
-                          fontWeight: 600,
+                          fontWeight: isSelected ? 700 : 600,
                           fontSize: 12,
                           letterSpacing: '0.06em',
                           cursor: 'pointer',
-                          transition: 'all 0.25s',
+                          transition: 'all 0.2s ease',
+                          boxShadow: isSelected ? '0 2px 8px rgba(31, 49, 71, 0.18), 0 0 0 1px #b48e4c' : 'none'
                         }}
                       >
                         {sz}
@@ -2203,91 +2270,66 @@ export function ProductPage({ slug }: { slug: string }) {
               </>
             )}
 
-            {/* Trust Badges */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 26, padding: '18px', background: '#f3f0ec', border: '1px solid rgba(180, 150, 100, 0.25)', fontSize: 12, color: '#6b645c' }}>
-              <div>{tr('🚚 Express Delivery Nationwide', language)}</div>
-              <div>{tr('💵 Cash on Delivery at Doorstep', language)}</div>
-              <div>{tr('Product Details Available', language)}</div>
-              <div>{tr('🔄 7-Day Easy Exchange Policy', language)}</div>
+            {/* Trust Highlights */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: 12,
+                marginTop: 26,
+                padding: '16px 20px',
+                background: '#FAF8F5',
+                border: '1px solid rgba(180, 150, 100, 0.3)',
+                borderRadius: 4,
+                fontSize: 12,
+                color: '#4b5563',
+                lineHeight: 1.5
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: '#b48e4c', fontSize: 13, flexShrink: 0 }}>✦</span>
+                <span>{tr('Express Nationwide Delivery', language)}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: '#b48e4c', fontSize: 13, flexShrink: 0 }}>✦</span>
+                <span>{tr('Cash on Delivery Available', language)}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: '#b48e4c', fontSize: 13, flexShrink: 0 }}>✦</span>
+                <span>{tr('Inspected & Carefully Packed', language)}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: '#b48e4c', fontSize: 13, flexShrink: 0 }}>✦</span>
+                <span>{tr('7-Day Easy Exchange Guarantee', language)}</span>
+              </div>
             </div>
 
-            {/* Tabaya Style Accordions */}
-            <div style={{ marginTop: 24, borderTop: '1px solid #ede8e3' }}>
-              {/* Accordion 1: Details */}
-              <div style={{ borderBottom: '1px solid #ede8e3' }}>
-                <div
-                  onClick={() => setActiveAcc(activeAcc === 'desc' ? '' : 'desc')}
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: '#111827' }}
-                >
-                  <span>{isSkin ? '📋 Skincare Details & Formulation' : (isApparel ? '📋 Product Details & Fabric' : '📋 Product Details & Specifications')}</span>
-                  <span>{activeAcc === 'desc' ? '−' : '+'}</span>
-                </div>
-                {activeAcc === 'desc' && (
-                  <div style={{ paddingBottom: 16, fontSize: 14, color: '#4b5563', lineHeight: 1.75 }} className="product-rich-desc">
-                    <div dangerouslySetInnerHTML={{ __html: formatProductDescription(p.longDesc || p.desc) }} />
-                    <ul style={{ paddingLeft: 20, marginTop: 14 }}>
-                      {isSkin ? (
-                        <>
-                          <li>Review the product listing and package for ingredients</li>
-                          <li>Follow the usage directions provided by the product brand</li>
-                          <li>Individual skin suitability can vary</li>
-                        </>
-                      ) : isApparel ? (
-                        <>
-                          <li>Premium breathable, luxuriously soft fabric</li>
-                          <li>Resistant to color fading and wrinkling</li>
-                          <li>Perfect for both everyday elegance and special occasions</li>
-                        </>
-                      ) : (
-                        <>
-                          <li>Product information is shown on each item page</li>
-                          <li>Fast nationwide home delivery with cash on delivery</li>
-                          <li>Check parcel upon delivery before making payment</li>
-                        </>
-                      )}
-                    </ul>
-                    <button
-                      type="button"
-                      onClick={() => scrollToTab('desc')}
-                      style={{
-                        marginTop: 14,
-                        background: '#1f3147',
-                        color: '#FAF8F5',
-                        border: 'none',
-                        padding: '9px 18px',
-                        fontSize: 11,
-                        letterSpacing: '1px',
-                        textTransform: 'uppercase',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6
-                      }}
-                    >
-                      <span>{isSkin ? 'View Complete Information Below ↓' : 'View Complete Specifications Below ↓'}</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Accordion 2: Delivery & Return */}
-              <div style={{ borderBottom: '1px solid #ede8e3' }}>
-                <div
-                  onClick={() => setActiveAcc(activeAcc === 'del' ? '' : 'del')}
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: '#111827' }}
-                >
-                  <span>🚚 Delivery & Return Policy</span>
-                  <span>{activeAcc === 'del' ? '−' : '+'}</span>
-                </div>
-                {activeAcc === 'del' && (
-                  <div style={{ paddingBottom: 16, fontSize: 13.5, color: '#4b5563', lineHeight: 1.6 }}>
-                    <p><b>Inside Dhaka:</b> Delivered in 1–2 business days. Delivery fee {settings ? taka(settings.deliveryInside) : '৳80'}.</p>
-                    <p style={{ marginTop: 4 }}><b>Outside Dhaka:</b> Delivered in 2–3 business days. Delivery fee {settings ? taka(settings.deliveryOutside) : '৳130'}.</p>
-                    <p style={{ marginTop: 6 }}>{tr('Parcel inspection follows the courier policy. Report transit damage to customer support promptly; requests are handled under the published returns policy.', language)}</p>
-                  </div>
-                )}
-              </div>
+            {/* Jump Link to Details & Specifications */}
+            <div style={{ marginTop: 20, textAlign: 'center' }}>
+              <button
+                type="button"
+                onClick={() => scrollToTab('desc')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#8c7d6b',
+                  fontSize: 12,
+                  letterSpacing: '0.08em',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  textTransform: 'uppercase',
+                  fontWeight: 600,
+                  transition: 'color 0.2s ease',
+                  padding: '6px 12px'
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = '#1f3147')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = '#8c7d6b')}
+              >
+                <span>{tr('View Complete Specifications & Details', language)}</span>
+                <span style={{ fontSize: 14 }}>↓</span>
+              </button>
             </div>
           </div>
         </div>
@@ -3107,8 +3149,20 @@ export function ProductPage({ slug }: { slug: string }) {
           <button
             className="sticky-buy-btn"
             onClick={handleDirectBuy}
+            style={{
+              padding: '12px 22px',
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: '0.14em',
+              background: '#1f3147',
+              color: '#FAF8F5',
+              border: '1px solid #b48e4c',
+              cursor: 'pointer',
+              borderRadius: 4,
+              boxShadow: '0 4px 12px rgba(31, 49, 71, 0.25)'
+            }}
           >
-            <span>ORDER NOW</span>
+            <span>{tr('ORDER NOW', language)}</span>
           </button>
         </div>
       )}

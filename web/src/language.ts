@@ -218,6 +218,11 @@ const BN: Record<string, string> = {
   'Nourish your skin barrier with clinically-inspired botanical cleansers, hydrating serums, and restorative moisture balms. Cash on delivery nationwide.': 'বোটানিক্যাল ক্লেনজার, হাইড্রেটিং সিরাম ও ময়েশ্চার বামে ত্বকের যত্ন নিন। সারা দেশে ক্যাশ অন ডেলিভারি।',
   'Discover signature sunglasses, authentic timepieces, and bespoke gift boxes crafted for timeless elegance. Cash on delivery nationwide.': 'চিরকালীন আভিজাত্যের জন্য বাছাই করা সানগ্লাস, অরিজিনাল ঘড়ি ও বিশেষ গিফট বক্স দেখুন। সারা দেশে ক্যাশ অন ডেলিভারি।',
   'EXPLORE SKINCARE →': 'স্কিনকেয়ার পণ্য দেখুন →', 'EXPLORE COLLECTIONS →': 'কালেকশন দেখুন →',
+  'Express Nationwide Delivery': 'সারা দেশে এক্সপ্রেস ডেলিভারি',
+  'Cash on Delivery Available': 'ক্যাশ অন ডেলিভারি সুবিধা',
+  'Inspected & Carefully Packed': 'যাচাইকৃত ও যত্নসহকারে প্যাকেজিং',
+  '7-Day Easy Exchange Guarantee': '৭ দিনের সহজ এক্সচেঞ্জ নিশ্চয়তা',
+  'View Complete Specifications & Details': 'সম্পূর্ণ বিবরণ ও স্পেসিফিকেশন দেখুন',
   'Delivery inside Dhaka is typically 24–48 hours (৳70). Delivery outside Dhaka takes 2–4 business days (৳130). Orders above ৳1,999 qualify for 100% Free Nationwide Delivery.': 'ঢাকার ভেতরে সাধারণত ২৪–৪৮ ঘণ্টায় (৳৭০) এবং ঢাকার বাইরে ২–৪ কর্মদিবসে (৳১৩০) পণ্য পৌঁছে যায়। ৳১,৯৯৯-এর বেশি অর্ডারে সারা দেশে ডেলিভারি ফ্রি।',
 };
 
