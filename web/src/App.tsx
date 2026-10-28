@@ -249,7 +249,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
   const [menu, setMenu] = useState(false);
   const isSkin = isSkincareSite();
   const [storeName, setStoreName] = useState(() => getCachedSettings()?.storeName || (isSkin ? 'SECRATE' : 'METRROMA'));
-  const [logo, setLogo] = useState(() => getCachedSettings()?.logo || (isSkin ? '' : '/uploads/img_mvkr0y8i1irod.webp'));
+  const [logo, setLogo] = useState(() => getCachedSettings()?.logo || (isSkin ? '' : '/uploads/logo_metrroma_gold_perfect.png'));
   const [cats, setCats] = useState<{ slug: string; name: string; parentSlug?: string }[]>(() => getCachedCategories());
   const [expandedMobileCat, setExpandedMobileCat] = useState<string | null>(null);
   const [hoveredMainCat, setHoveredMainCat] = useState<string | null>(null);
@@ -260,7 +260,10 @@ function Header({ onSearch }: { onSearch: () => void }) {
     getSettings().then((s) => {
       if (s.storeName && s.storeName !== 'dot.') setStoreName(s.storeName);
       else if (s.storeName === 'dot.' && isSkin) setStoreName('SECRATE');
-      setLogo(s.logo || '');
+      const activeLogo = (s.logo && !s.logo.includes('img_mvsqgtsqxzgig') && !s.logo.includes('img_mvddqd311xu5c'))
+        ? s.logo
+        : (isSkin ? '' : '/uploads/logo_metrroma_gold_perfect.png');
+      setLogo(activeLogo);
     }).catch(() => {});
     getCategories().then((cs) => {
       if (Array.isArray(cs)) setCats(cs);
@@ -624,7 +627,10 @@ function Footer() {
       if (s.whatsapp) setWhatsapp(s.whatsapp);
       if (s.storeName && s.storeName !== 'dot.') setName(s.storeName);
       else if (s.storeName === 'dot.' && isSkin) setName('SECRATE');
-      if (s.logo) setLogo(s.logo);
+      const activeLogo = (s.logo && !s.logo.includes('img_mvsqgtsqxzgig') && !s.logo.includes('img_mvddqd311xu5c'))
+        ? s.logo
+        : (isSkin ? '' : '/uploads/logo_metrroma_gold_perfect.png');
+      if (activeLogo) setLogo(activeLogo);
     }).catch(() => {});
     getCategories().then((cs) => {
       if (Array.isArray(cs)) setCats(cs);
