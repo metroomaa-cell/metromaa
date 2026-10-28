@@ -7825,8 +7825,8 @@ function SettingsAdmin() {
   };
 
   const saveSlideForm = () => {
-    if (!slideForm.image && !slideForm.title) {
-      alert('Please provide at least a slide image or a title');
+    if (!slideForm.image) {
+      alert('Please provide at least a slide image');
       return;
     }
     const next = [...sliders];
@@ -8799,6 +8799,19 @@ function SettingsAdmin() {
                   value={slideForm.subtitle || ''}
                   onChange={(e) => setSlideForm((sf: any) => ({ ...sf, subtitle: e.target.value }))}
                   placeholder="e.g. Contemporary Modest Living & Exclusive Fashion Drops"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
+                  Description paragraph (optional)
+                </label>
+                <textarea
+                  style={{ width: '100%', minHeight: 64, padding: '8px 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13, resize: 'vertical' }}
+                  value={slideForm.description || ''}
+                  onChange={(e) => setSlideForm((sf: any) => ({ ...sf, description: e.target.value }))}
+                  placeholder="Leave empty if no description is desired"
                 />
               </div>
 

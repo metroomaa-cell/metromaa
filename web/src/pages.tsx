@@ -890,53 +890,9 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
               loading="eager"
               fetchPriority="high"
               decoding="async"
-              onError={(e: any) => {
-                if (isSkin) {
-                  e.currentTarget.src = 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=1920&q=85';
-                } else {
-                  e.currentTarget.style.display = 'none';
-                }
-              }}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           </picture>
-        </div>
-        <div className="tabaya-hero-overlay" style={isSkin ? { background: 'linear-gradient(90deg,rgba(12,23,17,.90) 0%,rgba(12,23,17,.58) 60%,rgba(12,23,17,.24) 100%)' } : undefined} />
-        <div className="wrap tabaya-hero-wrap">
-          <div className="tabaya-hero-card">
-            <span className="tabaya-hero-badge">
-              {tr(isSkin ? '🌿 SKINCARE & SELF-CARE · CAREFULLY CURATED' : '✨ EXCLUSIVE 2026 COLLECTION · PREMIUM LIFESTYLE', language)}
-            </span>
-            <h1 className="tabaya-hero-title serif">
-              {isSkin ? (
-                <>
-                {tr('Skincare & Self-Care', language)}<br />
-                  <span className="it" style={{ color: '#d4af37' }}>{tr('Elevated Everyday Skincare', language)}</span>
-                </>
-              ) : (
-                <>
-                  {tr('Curated Modern Lifestyle', language)}<br />
-                  <span className="it" style={{ color: '#b48e4c' }}>{tr('Watches, Sunglasses & Gifts', language)}</span>
-                </>
-              )}
-            </h1>
-            <p className="tabaya-hero-desc">
-              {tr(isSkin
-                ? 'Explore skincare, beauty, and personal care products from a range of brands. Check each listing for ingredients and directions. Cash on delivery nationwide.'
-                : 'Explore watches, sunglasses, and gift boxes selected for everyday style. Cash on delivery nationwide.', language)}
-            </p>
-            <div className="tabaya-hero-btns">
-              <button className="tabaya-btn primary" onClick={() => go(isSkin ? 'shop/skincare' : 'shop')}>
-                {tr(isSkin ? 'EXPLORE SKINCARE →' : 'EXPLORE COLLECTIONS →', language)}
-              </button>
-              <button className="tabaya-btn outline" onClick={() => go('shop')}>
-                {tr('ALL PRODUCTS', language)}
-              </button>
-            </div>
-            <div className="tabaya-hero-micro">
-              <span>🚚 {tr('Cash on Delivery Nationwide', language)}</span>
-              <span>{isSkin ? `🌿 ${tr('Product Details & Ingredient Information', language)}` : `📦 ${tr('Courier Inspection Policy Applies', language)}`}</span>
-            </div>
-          </div>
         </div>
       </section>
     );
@@ -944,16 +900,31 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
 
   const s = activeSlides[cur] || activeSlides[0];
   const isSkin = isSkincareSite();
-  const heroTitle = s.title || (isSkin ? 'Skincare & self-care for everyday routines' : 'Curated Modern Lifestyle');
-  const heroSubtitle = s.subtitle || (s.title ? '' : (isSkin ? 'Skincare, beauty & personal care' : 'Watches, Sunglasses & Gifts'));
-  const heroDescription = s.description || (isSkin
-    ? 'Discover considered skincare and self-care essentials made to bring a little more intention to your everyday routine.'
-    : 'Explore signature accessories and timeless pieces, thoughtfully selected for the way you live.');
+
+  const title = String(s.title || '').trim();
+  const subtitle = String(s.subtitle || '').trim();
+  const badge = String(s.badge || '').trim();
+  const description = String(s.description || '').trim();
+  const btnText = String(s.btnText || '').trim();
+  const btnLink = String(s.btnLink || 'shop').trim();
+
+  // If no text is provided, hasContent is false -> NO text, NO overlay, pure clean banner image
+  const hasContent = Boolean(title || subtitle || badge || description || btnText);
 
   return (
     <section
       className="tabaya-hero"
-      style={{ position: 'relative', overflow: 'hidden', ...(isSkincareSite() ? { background: 'radial-gradient(ellipse at 78% 35%, rgba(104,126,78,.38), transparent 44%), radial-gradient(ellipse at 12% 100%, rgba(174,142,80,.18), transparent 42%), linear-gradient(120deg,#101b16 0%,#1d2b20 54%,#111914 100%)' } : {}) }}
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        cursor: (!hasContent && btnLink) ? 'pointer' : 'default',
+        ...(isSkincareSite() ? { background: 'radial-gradient(ellipse at 78% 35%, rgba(104,126,78,.38), transparent 44%), radial-gradient(ellipse at 12% 100%, rgba(174,142,80,.18), transparent 42%), linear-gradient(120deg,#101b16 0%,#1d2b20 54%,#111914 100%)' } : {})
+      }}
+      onClick={(e) => {
+        if (!hasContent && btnLink && !(e.target as HTMLElement).closest('button')) {
+          go(btnLink);
+        }
+      }}
       onTouchStart={(e) => setTouchStart(e.touches[0].clientX)}
       onTouchEnd={(e) => {
         if (touchStart === null) return;
@@ -969,7 +940,7 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
           <img
             key={s.image}
             src={s.image}
-            alt={s.title || 'Hero Banner'}
+            alt={title || 'Hero Banner'}
             loading="eager"
             fetchPriority={cur === 0 ? 'high' : 'auto'}
             decoding="async"
@@ -984,14 +955,20 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
           />
         </picture>
       </div>
-      <div className="tabaya-hero-overlay" style={isSkincareSite() ? { background: 'linear-gradient(90deg,rgba(12,23,17,.90) 0%,rgba(12,23,17,.58) 60%,rgba(12,23,17,.24) 100%)' } : undefined} />
+
+      {hasContent && (
+        <div
+          className="tabaya-hero-overlay"
+          style={isSkincareSite() ? { background: 'linear-gradient(90deg,rgba(12,23,17,.90) 0%,rgba(12,23,17,.58) 60%,rgba(12,23,17,.24) 100%)' } : undefined}
+        />
+      )}
 
       {/* Navigation Arrows */}
       {activeSlides.length > 1 && (
         <>
           <button
             type="button"
-            onClick={() => setCur((c) => (c - 1 + activeSlides.length) % activeSlides.length)}
+            onClick={(e) => { e.stopPropagation(); setCur((c) => (c - 1 + activeSlides.length) % activeSlides.length); }}
             aria-label="Previous Slide"
             style={{
               position: 'absolute',
@@ -1017,7 +994,7 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
           </button>
           <button
             type="button"
-            onClick={() => setCur((c) => (c + 1) % activeSlides.length)}
+            onClick={(e) => { e.stopPropagation(); setCur((c) => (c + 1) % activeSlides.length); }}
             aria-label="Next Slide"
             style={{
               position: 'absolute',
@@ -1044,37 +1021,40 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
         </>
       )}
 
-      {/* Slide Content Card */}
-      <div className="wrap tabaya-hero-wrap">
-        <div className="tabaya-hero-card" key={s.id || cur} style={{ animation: 'fadeIn 0.5s ease' }}>
-          {s.badge && <span className="tabaya-hero-badge">{tr(s.badge, language)}</span>}
-          <h1 className="tabaya-hero-title serif">
-            {tr(heroTitle, language)}
-            {heroSubtitle && (
-              <>
-                <br />
-                <span className="it" style={{ color: '#b48e4c' }}>{tr(heroSubtitle, language)}</span>
-              </>
+      {/* Slide Content Card — only rendered when user entered text */}
+      {hasContent && (
+        <div className="wrap tabaya-hero-wrap">
+          <div className="tabaya-hero-card" key={s.id || cur} style={{ animation: 'fadeIn 0.5s ease' }}>
+            {badge && <span className="tabaya-hero-badge">{tr(badge, language)}</span>}
+            {(title || subtitle) && (
+              <h1 className="tabaya-hero-title serif">
+                {title && tr(title, language)}
+                {subtitle && (
+                  <>
+                    {title && <br />}
+                    <span className="it" style={{ color: '#b48e4c' }}>{tr(subtitle, language)}</span>
+                  </>
+                )}
+              </h1>
             )}
-          </h1>
-          <p className="tabaya-hero-desc">{tr(heroDescription, language)}</p>
-          <div className="tabaya-hero-btns">
-            <button
-              className="tabaya-btn primary"
-              onClick={() => go(s.btnLink || 'shop')}
-            >
-              {tr(s.btnText || 'SHOP NOW →', language)}
-            </button>
-            <button className="tabaya-btn outline" onClick={() => go('shop')}>
-              {tr('ALL COLLECTIONS', language)}
-            </button>
-          </div>
-          <div className="tabaya-hero-micro">
-            <span>🚚 {tr('Cash on Delivery Nationwide', language)}</span>
-            <span>🔒 {tr('Courier Inspection Policy Applies', language)}</span>
+            {description && <p className="tabaya-hero-desc">{tr(description, language)}</p>}
+            {btnText && (
+              <div className="tabaya-hero-btns">
+                <button
+                  className="tabaya-btn primary"
+                  onClick={() => go(btnLink || 'shop')}
+                >
+                  {tr(btnText, language)}
+                </button>
+              </div>
+            )}
+            <div className="tabaya-hero-micro">
+              <span>🚚 {tr('Cash on Delivery Nationwide', language)}</span>
+              <span>🔒 {tr('Courier Inspection Policy Applies', language)}</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Pagination Dots */}
       {activeSlides.length > 1 && (
@@ -1094,7 +1074,7 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
             <button
               key={i}
               type="button"
-              onClick={() => setCur(i)}
+              onClick={(e) => { e.stopPropagation(); setCur(i); }}
               aria-label={`Go to slide ${i + 1}`}
               style={{
                 width: cur === i ? 28 : 8,
@@ -1122,7 +1102,7 @@ const DEFAULT_SLIDERS = [
     badge: '',
     title: '',
     subtitle: '',
-    btnText: 'Best Gift Ever ',
+    btnText: '',
     btnLink: 'shop',
     active: true,
   },
