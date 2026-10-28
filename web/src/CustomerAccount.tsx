@@ -650,7 +650,7 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                   marginBottom: 14,
                 }}
               >
-                {busy ? 'Verifying...' : 'Verify & Open Account'}
+                {busy ? 'Verifying...' : 'Verify & Sign In'}
               </button>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
