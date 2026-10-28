@@ -267,10 +267,9 @@ export async function postReview(b: { productId: string; name: string; rating: n
 }
 
 export function isSkincareSite(): boolean {
-  if (typeof window === 'undefined') return true;
+  if (typeof window === 'undefined') return false;
   const h = (window.location.hostname || '').toLowerCase();
-  if (h.includes('metrroma') || h.includes('metromaa')) return false;
-  return true;
+  return h.includes('secrate');
 }
 
 export type MasterColor = {
