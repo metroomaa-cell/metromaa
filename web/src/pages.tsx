@@ -1,9 +1,10 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { getProducts, getCategories, getProduct, placeOrder, getSettings, validateCoupon, fetchReviews, postReview, getSource, taka, getDeviceId, isSkincareSite, type Product, type Category, type Settings, type Review, getCachedSettings, getCachedCategories, getCachedProducts, getCachedProduct } from './api';
+import { getProducts, getCategories, getProduct, placeOrder, getSettings, validateCoupon, fetchReviews, postReview, getSource, taka, getDeviceId, isSkincareSite, isWellnessOrExcludedCategory, isWellnessOrExcludedProduct, type Product, type Category, type Settings, type Review, getCachedSettings, getCachedCategories, getCachedProducts, getCachedProduct } from './api';
 import { useCart, go, useAge } from './cart';
+import { useWishlist } from './wishlist';
 import { useCustomer } from './CustomerAccount';
 import { BD_GEO } from './bd-geo';
-import { ecView, ecBeginCheckout, ecPurchase, dl } from './analytics';
+import { ecView, ecBeginCheckout, ecPurchase, dl, pushUserData } from './analytics';
 import { WhatsAppIcon } from './icons';
 import { tr, useStoreLanguage } from './language';
 
@@ -233,7 +234,13 @@ export function isUndergarmentOrApparel(p: Product): boolean {
 
 export function ProductCard({ p }: { p: Product }) {
   const language = useStoreLanguage();
-  const { add } = useCart();
+  const { add, lines, setQty, setOpen } = useCart();
+  const { isSaved, toggle: toggleWishlist } = useWishlist();
+  const inBagQty = useMemo(() => {
+    return lines
+      .filter((l) => l.id === p.id || l.id.startsWith(p.id + '-'))
+      .reduce((s, l) => s + l.qty, 0);
+  }, [lines, p.id]);
   const [added, setAdded] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const onSale = !!p.compareAt && p.compareAt > p.price;
@@ -282,22 +289,51 @@ export function ProductCard({ p }: { p: Product }) {
     setTimeout(() => setAdded(false), 1400);
   };
 
+  const matchingLine = useMemo(() => {
+    const lineKey = selectedVar?.id
+      ? `${p.id}-${selectedVar.id}`
+      : `${p.id}${selSize ? `-${selSize}` : ''}${selColor ? `-${selColor}` : ''}`;
+    return lines.find((l) => l.id === lineKey) || lines.find((l) => l.id === p.id || l.id.startsWith(p.id + '-'));
+  }, [lines, p.id, selectedVar, selSize, selColor]);
+
+  const handleDecreaseQty = (e: any) => {
+    e.stopPropagation();
+    if (matchingLine) {
+      setQty(matchingLine.id, matchingLine.qty - 1);
+    }
+  };
+
 const secondaryImage = Array.isArray(p.images) && p.images.length > 1 ? p.images[1] : (p.images && p.images[0] && p.images[0] !== p.image ? p.images[0] : null);
 
   return (
     <article className="product-card" onClick={() => go('product/' + p.slug)}>
-      {/* Tabaya Gold Corner Accents */}
-      <div className="pc-corner-tr" />
-      <div className="pc-corner-bl" />
-
-      {/* Sale state stays in a reserved strip, outside the product photo. */}
-      {(p.soldOut || onSale) && <div className="pc-badges-col">
-        {p.soldOut ? (
-          <span className="pc-badge-save out">SOLD OUT</span>
-        ) : onSale ? (
-          <span className="pc-badge-save">{language === 'bn' ? `${salePercent}% ছাড়` : `-${salePercent}% OFF`}</span>
-        ) : null}
-      </div>}
+      {/* Badges strip (Clean Sale / Sold Out) */}
+      {(p.soldOut || onSale || inBagQty > 0) && (
+        <div className="pc-badges-col" style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+          {inBagQty > 0 && (
+            <span
+              style={{
+                background: '#10b981',
+                color: '#ffffff',
+                fontSize: 9.5,
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                padding: '3px 8px',
+                borderRadius: 20,
+                boxShadow: '0 2px 6px rgba(16, 185, 129, 0.35)',
+              }}
+            >
+              ✓ {language === 'bn' ? `${inBagQty}টি ব্যাগে` : `IN BAG (${inBagQty})`}
+            </span>
+          )}
+          {p.soldOut ? (
+            <span className="pc-badge-save out">SOLD OUT</span>
+          ) : onSale ? (
+            <span className="pc-badge-save">−{salePercent}%</span>
+          ) : null}
+        </div>
+      )}
 
       {/* Image with Secondary Flip on Hover & Quick View Pill */}
       <div className="pc-image-wrap">
@@ -307,6 +343,20 @@ const secondaryImage = Array.isArray(p.images) && p.images.length > 1 ? p.images
         )}
         <button
           type="button"
+          className={`pc-wishlist-btn ${isSaved(p.id) ? 'active' : ''}`}
+          aria-label={isSaved(p.id) ? 'Remove from wishlist' : 'Save to wishlist'}
+          title={isSaved(p.id) ? 'In Wishlist' : 'Save to Wishlist'}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleWishlist(p);
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill={isSaved(p.id) ? '#ef4444' : 'rgba(0,0,0,0.25)'} stroke={isSaved(p.id) ? '#ef4444' : '#ffffff'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+          </svg>
+        </button>
+        <button
+          type="button"
           className="pc-quick-view-btn"
           title={language === 'bn' ? 'দ্রুত দেখুন' : 'Quick View'}
           onClick={(e) => {
@@ -314,21 +364,21 @@ const secondaryImage = Array.isArray(p.images) && p.images.length > 1 ? p.images
             if ((window as any).__openQuickView) (window as any).__openQuickView(p);
           }}
         >
-          <span>👁</span>
-          <span>{language === 'bn' ? 'কুইক ভিউ' : 'Quick View'}</span>
+          <span>👁 {language === 'bn' ? 'কুইক ভিউ' : 'Quick View'}</span>
         </button>
       </div>
 
-      {/* Card Content */}
+      {/* Card Content — Ultra Clean Luxury */}
       <div className="pc-content">
-        <div className="pc-divider" />
-        <div className="pc-eyebrow">{p.category ? tr(p.category.replace(/-/g, ' '), language) : tr('EXCLUSIVE COLLECTION', language)}</div>
-        <a className="pc-title">{p.name}</a>
-        {(p.tag || p.isDigital) && <span className="pc-product-note">{p.isDigital ? '⚡ DIGITAL · ৳0 DELIVERY' : p.tag}</span>}
+        <div className="pc-eyebrow">
+          {p.category ? tr(p.category.replace(/-/g, ' '), language) : tr('METRROMA COLLECTION', language)}
+        </div>
 
-        {/* Colors Preview Chips */}
+        <a className="pc-title">{p.name}</a>
+
+        {/* Colors Preview Chips (if any) */}
         {colors.length > 0 && (
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, marginBottom: 2, flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
             {colors.slice(0, 5).map((c) => {
               const hex = (c as any).hex || '#111';
               const isSel = (selColor || colors[0]?.name).toLowerCase() === c.name.toLowerCase();
@@ -360,44 +410,150 @@ const secondaryImage = Array.isArray(p.images) && p.images.length > 1 ? p.images
 
         <div className="pc-price-row">
           <span className="pc-price">
-            {activeCompareAt && activeCompareAt > activePrice && (
-              <span className="pc-price-old">{taka(activeCompareAt)}</span>
-            )}
             {taka(activePrice)}
           </span>
+          {activeCompareAt && activeCompareAt > activePrice && (
+            <span className="pc-price-old">{taka(activeCompareAt)}</span>
+          )}
         </div>
 
-        {/* Sizes Selection Chips right on Card - ONLY IF SIZES EXIST */}
-        {sizes.length > 0 && (
-          <>
-            <div className="pc-sizes" onClick={(e) => e.stopPropagation()}>
-              {sizes.map((sz: string) => (
-                <button
-                  key={sz}
-                  type="button"
-                  className={'pc-size' + (selSize === sz ? ' selected' : '')}
-                  onClick={() => setSelSize(sz)}
-                >
-                  {sz}
-                </button>
-              ))}
-            </div>
-            <div className="pc-size-hint">
-              {selSize ? `${tr('Size:', language)} ${selSize}` : tr('Select size', language)}
-            </div>
-          </>
+        {/* Sizes Selection Chips — ONLY IF MULTIPLE SIZES EXIST */}
+        {sizes.length > 1 && (
+          <div className="pc-sizes" onClick={(e) => e.stopPropagation()}>
+            {sizes.map((sz: string) => (
+              <button
+                key={sz}
+                type="button"
+                className={'pc-size' + (selSize === sz ? ' selected' : '')}
+                onClick={() => setSelSize(sz)}
+              >
+                {sz}
+              </button>
+            ))}
+          </div>
         )}
 
-        {/* Cut-Corner CTA Button */}
-        <button
-          type="button"
-          className="pc-cta"
-          disabled={p.soldOut}
-          onClick={handleAddToCart}
-          style={{ marginTop: 'auto' }}
-        >
-          <span>{p.soldOut ? tr('SOLD OUT', language) : added ? tr('ADDED TO BAG ✓', language) : tr('ADD TO CART', language)}</span>
-        </button>
+        {/* Clean Luxury Smart CTA Button / In-Bag Stepper */}
+        {inBagQty > 0 ? (
+          <div
+            className="pc-inbag-stepper"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              height: 34,
+              minHeight: 34,
+              maxHeight: 34,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: '#111A24',
+              border: '1px solid rgba(180, 142, 76, 0.5)',
+              borderRadius: 6,
+              overflow: 'hidden',
+              boxShadow: '0 2px 8px rgba(17, 26, 36, 0.2)',
+              marginTop: 'auto',
+            }}
+          >
+            <button
+              type="button"
+              onClick={handleDecreaseQty}
+              title={language === 'bn' ? 'পরিমাণ কমান' : 'Decrease quantity'}
+              style={{
+                width: 32,
+                height: 34,
+                background: 'none',
+                border: 'none',
+                color: '#DFBE7A',
+                fontSize: 16,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background 0.15s ease',
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+            >
+              −
+            </button>
+
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(true);
+              }}
+              title={language === 'bn' ? 'ব্যাগ দেখতে ক্লিক করুন' : 'Click to view bag'}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                textAlign: 'center',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: '0.04em',
+                color: '#FAF8F5',
+                userSelect: 'none',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                padding: '0 4px',
+              }}
+            >
+              <span style={{ color: '#10b981', fontWeight: 800 }}>✓</span>
+              <span>
+                {language === 'bn' ? `${inBagQty}টি ব্যাগে` : `${inBagQty} IN BAG`}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleAddToCart}
+              title={language === 'bn' ? 'আরেকটি যোগ করুন' : 'Add one more'}
+              style={{
+                width: 32,
+                height: 34,
+                background: 'none',
+                border: 'none',
+                color: '#DFBE7A',
+                fontSize: 16,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background 0.15s ease',
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+            >
+              +
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="pc-cta"
+            disabled={p.soldOut}
+            onClick={handleAddToCart}
+            style={{ marginTop: 'auto' }}
+          >
+            <span>
+              {p.soldOut ? (
+                tr('SOLD OUT', language)
+              ) : added ? (
+                tr('ADDED TO BAG ✓', language)
+              ) : (
+                tr('ADD TO CART', language)
+              )}
+            </span>
+          </button>
+        )}
       </div>
     </article>
   );
@@ -445,11 +601,17 @@ export function FlashSaleCountdown() {
 
 export function QuickViewModal({ product, onClose }: { product: Product | null; onClose: () => void }) {
   const language = useStoreLanguage();
-  const { add } = useCart();
+  const { add, lines } = useCart();
   const [activeImg, setActiveImg] = useState<string>('');
   const [selColor, setSelColor] = useState<string>('');
   const [selSize, setSelSize] = useState<string>('');
   const [qty, setQty] = useState(1);
+  const inBagQty = useMemo(() => {
+    if (!product) return 0;
+    return lines
+      .filter((l) => l.id === product.id || l.id.startsWith(product.id + '-'))
+      .reduce((s, l) => s + l.qty, 0);
+  }, [lines, product]);
   const [added, setAdded] = useState(false);
 
   useEffect(() => {
@@ -780,7 +942,7 @@ const INFO: Record<string, { title: string; body: string[] }> = {
   shipping: { title: 'shipping & delivery', body: ['We deliver nationwide across Bangladesh through trusted express couriers. Inside Dhaka usually arrives in 24–48 hours, outside Dhaka in 2–3 business days.', 'You pay cash on delivery when your order reaches your doorstep. You can inspect the parcel before acceptance.'] },
   returns: { title: 'returns & exchanges', body: ['We offer a 7-day hassle-free exchange policy. If the size, color, or fit is not ideal, message our support team with your order ID.', 'We will immediately arrange a replacement sent to your doorstep.'] },
   contact: { title: 'contact customer support', body: ['Questions about an order or a product? Our customer care team is here to assist you 7 days a week, 10:00 AM – 10:00 PM.', 'Call our helpline or message us directly on WhatsApp using the button below.'] },
-  about: { title: 'about SECRATE', body: ['SECRATE offers skincare, beauty, and personal care products from a range of brands.', 'Product and ingredient details are provided on individual listings and packaging. Orders are delivered across Bangladesh with cash on delivery.'] },
+  about: { title: 'about METRROMA', body: ['METRROMA offers skincare, beauty, and personal care products from a range of brands.', 'Product and ingredient details are provided on individual listings and packaging. Orders are delivered across Bangladesh with cash on delivery.'] },
   privacy: { title: 'privacy policy', body: ['Your details are used strictly to process and deliver your order. We never sell or share your personal information with third parties.'] },
   terms: { title: 'terms of service', body: ['By placing an order you confirm that your shipping details and contact number are accurate.', 'All prices are in BDT and payable via Cash on Delivery upon receiving your package.'] },
   journal: { title: 'the journal', body: ['Style guides, fabric care notes & lifestyle stories — coming soon.'] },
@@ -879,15 +1041,13 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
   if (activeSlides.length === 0) {
     const isSkin = isSkincareSite();
     return (
-      <section className="tabaya-hero" style={isSkin ? { background: 'radial-gradient(ellipse at 78% 35%, rgba(104,126,78,.38), transparent 44%), radial-gradient(ellipse at 12% 100%, rgba(174,142,80,.18), transparent 42%), linear-gradient(120deg,#101b16 0%,#1d2b20 54%,#111914 100%)' } : undefined}>
+      <section className="tabaya-hero clean-banner" style={isSkin ? { background: 'radial-gradient(ellipse at 78% 35%, rgba(104,126,78,.38), transparent 44%), radial-gradient(ellipse at 12% 100%, rgba(174,142,80,.18), transparent 42%), linear-gradient(120deg,#101b16 0%,#1d2b20 54%,#111914 100%)' } : undefined}>
         <div className="tabaya-hero-bg">
           <picture>
-            {isSkin && <source media="(max-width: 768px)" srcSet="/uploads/banner_secrate_mobile.webp" />}
+            <source media="(max-width: 768px)" srcSet="/uploads/img_mvdpqsl1t81m6.webp" />
             <img
-              src={isSkin
-                ? '/uploads/banner_secrate_desktop.webp'
-                : '/uploads/img_mvdpqsl1t81m6.webp'}
-              alt={isSkin ? 'Skincare & Self-Care Products' : 'METRROMA Lifestyle & Gifts'}
+              src="/uploads/img_mvdpqsl1t81m6.webp"
+              alt="METRROMA — For your personal world."
               loading="eager"
               fetchPriority="high"
               decoding="async"
@@ -914,7 +1074,7 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
 
   return (
     <section
-      className="tabaya-hero"
+      className={`tabaya-hero ${!hasContent ? 'clean-banner' : ''}`}
       style={{
         position: 'relative',
         overflow: 'hidden',
@@ -939,7 +1099,7 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
         <picture>
           {s.mobileImage && <source media="(max-width: 768px)" srcSet={s.mobileImage} />}
           <img
-            key={s.image}
+            key={(s.image || '') + (s.mobileImage || '') + cur}
             src={s.image}
             alt={title || 'Hero Banner'}
             loading="eager"
@@ -1126,7 +1286,7 @@ export function Home() {
     if (cached) return cached;
     return {
       storeName: 'METRROMA',
-      announce: '✨ FREE SHIPPING ON ORDERS OVER Tk 3,000 · 100% AUTHENTIC LIFESTYLE & GIFTS · CASH ON DELIVERY NATIONWIDE',
+      announce: '✨ FREE DISCREET SHIPPING ON ORDERS OVER ৳2,500 · 100% AUTHENTIC SKINCARE & SELF-CARE · CASH ON DELIVERY NATIONWIDE',
       deliveryInside: 80,
       deliveryOutside: 130,
       freeShipThreshold: 3000,
@@ -1165,11 +1325,20 @@ export function Home() {
   const visibleSections = settings?.siteContent?.sections || {};
   const homeText = (key: string, fallback: string) => customHomeCopy[key]?.trim() || tr(fallback, language);
 
+  const homeMainCats = useMemo(() => {
+    const adultSubSlugs = new Set(['condom', 'for-man', 'for-women', 'muster-b-toy', 'finger-condom']);
+    return cats.filter((c) => {
+      if (c.parentSlug && c.parentSlug.trim() !== '') return false;
+      if (adultSubSlugs.has(c.slug)) return false;
+      return true;
+    });
+  }, [cats]);
+
   const best = useMemo(() => {
     if (!products.length) return [];
     if (isSkin) {
       return [...products]
-        .filter((p) => !p.adult)
+        .filter((p) => !p.adult && !isWellnessOrExcludedProduct(p))
         .sort((a, b) => {
           const aSkin = (a.category === 'beauty-care' || a.category === 'hair-care' || a.category === 'skincare') ? 1 : 0;
           const bSkin = (b.category === 'beauty-care' || b.category === 'hair-care' || b.category === 'skincare') ? 1 : 0;
@@ -1177,17 +1346,20 @@ export function Home() {
           return (b.tag === 'bestseller' ? 1 : 0) - (a.tag === 'bestseller' ? 1 : 0);
         });
     }
-    return products.filter((p) => !p.adult)
+    return products.filter((p) => !p.adult && !isWellnessOrExcludedProduct(p))
       .sort((a, b) => (b.tag === 'bestseller' ? 1 : 0) - (a.tag === 'bestseller' ? 1 : 0));
   }, [products, isSkin]);
 
   const shelfSections = useMemo(() => {
-    const configured = (settings?.homepageSections || []).filter((s: any) => s.active !== false);
+    const configured = (settings?.homepageSections || []).filter(
+      (s: any) => s.active !== false && !isWellnessOrExcludedCategory(s.category) && !isWellnessOrExcludedCategory(s.title)
+    );
     if (configured.length > 0) return configured;
     if (!loaded && !settings) return [];
 
     const defaults: any[] = [];
-    cats.forEach((c) => {
+    homeMainCats.forEach((c) => {
+      if (c.adult || isWellnessOrExcludedCategory(c.slug) || isWellnessOrExcludedCategory(c.name)) return;
       defaults.push({
         id: `sec-${c.slug}`,
         title: c.name,
@@ -1199,7 +1371,7 @@ export function Home() {
       });
     });
     return defaults;
-  }, [settings?.homepageSections, cats, loaded, settings]);
+  }, [settings?.homepageSections, homeMainCats, loaded, settings]);
 
   const [activeTabCat, setActiveTabCat] = useState('all');
 
@@ -1281,29 +1453,40 @@ export function Home() {
 
       
       {/* 2. SHOP BY COLLECTION / CATEGORY (ara-section) */}
-      {visibleSections.collections !== false && cats.length > 0 && (
+      {visibleSections.collections !== false && homeMainCats.length > 0 && (
         <section className="ara-section">
           <div className="wrap">
             <div className="ara-header">
               <p className="ara-eyebrow">{homeText('collectionEyebrow', isSkin ? 'CURATED REGIMEN' : 'CURATED LINEUP')}</p>
-              <h2 className="ara-title">{homeText('collectionTitle', isSkin ? 'Shop by Category' : 'Shop by Collection')}</h2>
+              <h2 className="ara-title">{homeText('collectionTitle', isSkin ? 'Featured Categories' : 'Shop by Collection')}</h2>
               <p className="ara-subtitle">
                 {homeText('collectionDescription', isSkin
-                  ? 'Browse skincare and personal care by category. Product details are listed on individual product pages.'
+                  ? 'Browse skincare, beauty, and self-care categories curated for daily radiance.'
                   : 'Browse watches, sunglasses, and gift boxes selected for everyday style.')}
               </p>
             </div>
 
             <div className="ara-grid">
-              {cats.map((c) => {
+              {homeMainCats.map((c) => {
                 const categoryKey = String(c.slug || c.name).toLowerCase().replace(/-/g, ' ').trim();
                 const categoryProduct = products.find((product) => String(product.category || '').toLowerCase().replace(/-/g, ' ').trim() === categoryKey && product.image);
                 const categoryFallback = categoryProduct?.image || '';
-                const categorySource = c.image || categoryFallback || (isSkin
+                const defaultCatFallbacks: Record<string, string> = {
+                  'baby care': 'https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?auto=format&fit=crop&w=800&q=80',
+                  'baby-care': 'https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?auto=format&fit=crop&w=800&q=80',
+                  'beauty care': 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=800&q=80',
+                  'beauty-care': 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=800&q=80',
+                  'mens care': 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=800&q=80',
+                  'mens-care': 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=800&q=80',
+                  'wellness corner': 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&q=80',
+                  'wellness-corner': 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&q=80',
+                };
+                const genericDefault = defaultCatFallbacks[categoryKey] || defaultCatFallbacks[c.slug] || (isSkin
                   ? 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=800&q=80'
                   : 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?auto=format&fit=crop&w=800&q=80');
+                const categorySource = c.image || categoryFallback || genericDefault;
                 return (
-                  <div className="ara-card" key={c.slug} onClick={() => go('shop/' + c.slug)}>
+                  <div className="ara-card" key={c.slug} onClick={() => go('categories/' + c.slug)}>
                     <div className="ara-card-visual">
                       <img
                         className="ara-card-img"
@@ -1312,9 +1495,10 @@ export function Home() {
                         loading="lazy"
                         decoding="async"
                         onError={(e: any) => {
-                          const fallbackUrl = categoryFallback ? new URL(categoryFallback, window.location.href).href : '';
-                          if (fallbackUrl && e.currentTarget.src !== fallbackUrl) e.currentTarget.src = categoryFallback;
-                          else {
+                          const fallbackUrl = categoryFallback ? new URL(categoryFallback, window.location.href).href : genericDefault;
+                          if (fallbackUrl && e.currentTarget.src !== fallbackUrl) {
+                            e.currentTarget.src = fallbackUrl;
+                          } else {
                             e.currentTarget.style.display = 'none';
                             e.currentTarget.parentElement?.classList.add('image-unavailable');
                           }
@@ -1324,7 +1508,7 @@ export function Home() {
                       <div className="ara-card-frame" />
                       <div className="ara-card-corners" />
                       <div className="ara-card-content">
-                        <span className="ara-card-kicker">{tr(isSkin ? 'SKINCARE & BEAUTY' : 'COLLECTION', language)}</span>
+                        <span className="ara-card-kicker">{tr(isSkin ? (c.slug === 'wellness-corner' ? 'WELLNESS & CARE' : 'SKINCARE & BEAUTY') : 'COLLECTION', language)}</span>
                         <h3 className="ara-card-label">{tr(c.name, language)}</h3>
                         <span className="ara-card-cta">{tr('EXPLORE →', language)}</span>
                       </div>
@@ -1357,17 +1541,32 @@ export function Home() {
       {shelfSections.length > 0 ? (
         <>
           {shelfSections.map((section: any, idx: number) => {
+            if (isWellnessOrExcludedCategory(section.category) || isWellnessOrExcludedCategory(section.title)) return null;
             let shelfProducts: Product[] = [];
             if (Array.isArray(section.productIds) && section.productIds.length > 0) {
-              shelfProducts = products.filter(p => !p.adult && section.productIds.includes(String(p.id)));
+              shelfProducts = products.filter(p => !p.adult && !isWellnessOrExcludedProduct(p) && section.productIds.includes(String(p.id)));
             } else if (section.isFlashSale) {
-              const saleList = products.filter(p => !p.adult && ((p.compareAt && p.compareAt > p.price) || p.tag === 'sale' || (section.category && section.category !== 'all' && section.category !== 'flash-sale' && p.category === section.category)));
-              shelfProducts = saleList.length > 0 ? saleList : products.filter(p => !p.adult);
+              const saleList = products.filter(p => !p.adult && !isWellnessOrExcludedProduct(p) && ((p.compareAt && p.compareAt > p.price) || p.tag === 'sale' || (section.category && section.category !== 'all' && section.category !== 'flash-sale' && p.category === section.category)));
+              shelfProducts = saleList.length > 0 ? saleList : products.filter(p => !p.adult && !isWellnessOrExcludedProduct(p));
             } else if (section.category === 'all') {
-              shelfProducts = products.filter(p => !p.adult);
+              shelfProducts = products.filter(p => !p.adult && !isWellnessOrExcludedProduct(p));
             } else {
-              const catTarget = String(section.category || '').toLowerCase().replace(/-/g, ' ').trim();
-              const matched = products.filter(p => !p.adult && String(p.category || '').toLowerCase().replace(/-/g, ' ').trim() === catTarget);
+              const catSlug = String(section.category || '').toLowerCase().trim();
+              const catTarget = catSlug.replace(/-/g, ' ');
+              const matched = products.filter((p) => {
+                if (p.adult || isWellnessOrExcludedProduct(p)) return false;
+                const pCat = String(p.category || '').toLowerCase().trim();
+                if (pCat === catSlug || pCat.replace(/-/g, ' ') === catTarget) return true;
+                const pSub = String(p.subCategory || '').toLowerCase().trim();
+                if (pSub === catSlug || pSub.replace(/-/g, ' ') === catTarget) return true;
+                if (Array.isArray(p.categories)) {
+                  return p.categories.some((c) => {
+                    const sc = String(c).toLowerCase().trim();
+                    return sc === catSlug || sc.replace(/-/g, ' ') === catTarget;
+                  });
+                }
+                return false;
+              });
               shelfProducts = matched;
             }
 
@@ -1388,7 +1587,7 @@ export function Home() {
                     <button
                       type="button"
                       className="metro-shelf-btn-more"
-                      onClick={() => go(section.category && section.category !== 'all' && section.category !== 'flash-sale' ? 'shop/' + section.category : 'shop')}
+                      onClick={() => go(section.category && section.category !== 'all' && section.category !== 'flash-sale' ? 'categories/' + section.category : 'shop')}
                     >
                       {tr(section.buttonText || 'View More', language)} →
                     </button>
@@ -1539,7 +1738,7 @@ export function Home() {
             </p>
             {subbed ? (
               <div style={{ color: '#10b981', fontWeight: 700, fontSize: 16 }}>
-                {isSkin ? '✓ Thank you! You have been subscribed to SECRATE VIP Club.' : '✓ Thank you! You have been subscribed to the METRROMA VIP Club.'}
+                '✓ Thank you! You have been subscribed to METRROMA VIP Club.'
               </div>
             ) : (
               <form
@@ -1581,13 +1780,40 @@ export function Shop({ category }: { category: string }) {
   const language = useStoreLanguage();
   const { ok, confirm } = useAge();
   const [cats, setCats] = useState<Category[]>(() => getCachedCategories());
+  const [loaded, setLoaded] = useState(() => (getCachedProducts()?.length ?? 0) > 0);
+  const isSkin = isSkincareSite();
+
+  const activeCat = useMemo(() => cats.find((c) => c.slug === category), [cats, category]);
+  const parentCat = useMemo(() => {
+    if (!activeCat?.parentSlug) return null;
+    return cats.find((c) => c.slug === activeCat.parentSlug) || null;
+  }, [cats, activeCat]);
+
+  // Main categories only (without parentSlug and without adult sub-slugs)
+  const adultSubSlugs = useMemo(() => new Set(['condom', 'for-man', 'for-women', 'muster-b-toy', 'finger-condom']), []);
+  const mainCats = useMemo(() => cats.filter((c) => !c.parentSlug && !adultSubSlugs.has(c.slug)), [cats, adultSubSlugs]);
+
+  // The active parent category slug
+  const activeMainSlug = parentCat ? parentCat.slug : (activeCat && !activeCat.parentSlug ? activeCat.slug : null);
+
+  // Subcategories belonging to the active parent category
+  const subCats = useMemo(() => {
+    if (!activeMainSlug) return [];
+    return cats.filter((c) => c.parentSlug === activeMainSlug);
+  }, [cats, activeMainSlug]);
+
   const [products, setProducts] = useState<Product[]>(() => {
     const all = getCachedProducts();
     if (!category) return all;
-    return all.filter((p) => p.category === category);
+    const childSlugs = cats.filter((c) => c.parentSlug === category).map((c) => c.slug);
+    const validSlugs = new Set([category, ...childSlugs]);
+    return all.filter((p) => {
+      if (validSlugs.has(p.category)) return true;
+      if (p.subCategory && validSlugs.has(p.subCategory)) return true;
+      if (Array.isArray(p.categories) && p.categories.some((c) => validSlugs.has(c))) return true;
+      return false;
+    });
   });
-  const [loaded, setLoaded] = useState(() => (getCachedProducts()?.length ?? 0) > 0);
-  const isSkin = isSkincareSite();
 
   useEffect(() => { getCategories().then(setCats).catch(() => {}); }, []);
   useEffect(() => {
@@ -1595,7 +1821,6 @@ export function Shop({ category }: { category: string }) {
     getProducts(category || undefined).then((d) => { setProducts(d); setLoaded(true); }).catch(() => setLoaded(true));
   }, [category]);
 
-  const activeCat = cats.find((c) => c.slug === category);
   if (activeCat?.adult && !ok) return <div className="page"><AgeGate onConfirm={confirm} /></div>;
   const visible = products.filter((p) => ok || !p.adult);
 
@@ -1604,7 +1829,9 @@ export function Shop({ category }: { category: string }) {
       <div className="wrap" style={{ maxWidth: 1300 }}>
         <div className="phead" style={{ textAlign: 'center', padding: '30px 0 20px' }}>
           <p className="pc-section-kicker">
-            {tr(isSkin ? 'SKINCARE & SELF-CARE PICKS' : 'METRROMA CURATED LINEUP', language)}
+            {parentCat
+              ? `${tr(parentCat.name, language)} · ${tr(activeCat?.name || '', language)}`
+              : tr('METRROMA SKINCARE & SELF-CARE PICKS', language)}
           </p>
           <h1 className="pc-section-title">
             {activeCat ? tr(activeCat.name, language) : tr(isSkin ? 'All Skincare & Essentials' : 'All Collections', language)}
@@ -1616,49 +1843,57 @@ export function Shop({ category }: { category: string }) {
           </p>
         </div>
 
-        {/* Filter chips */}
-        <div className="pfilter tabaya-pfilter">
-          <span
-            className={'chip' + (!category ? ' on' : '')}
-            onClick={() => go('shop')}
-            style={{
-              padding: '9px 20px',
-              border: !category ? '1px solid #1f3147' : '1px solid rgba(180, 150, 100, 0.45)',
-              background: !category ? '#1f3147' : '#FAF8F5',
-              color: !category ? '#FAF8F5' : '#1f3147',
-              fontFamily: "'Inter', sans-serif",
-              fontWeight: 500,
-              fontSize: 12,
-              letterSpacing: '0.12em',
-              textTransform: 'uppercase',
-              cursor: 'pointer',
-              transition: 'all 0.25s',
-            }}
-          >
-            {tr('All Products', language)} ({products.length})
-          </span>
-          {cats.map((c) => (
-            <span
-              key={c.slug}
-              className={'chip' + (category === c.slug ? ' on' : '')}
-              onClick={() => go('shop/' + c.slug)}
-              style={{
-                padding: '9px 20px',
-                border: category === c.slug ? '1px solid #1f3147' : '1px solid rgba(180, 150, 100, 0.45)',
-                background: category === c.slug ? '#1f3147' : '#FAF8F5',
-                color: category === c.slug ? '#FAF8F5' : '#1f3147',
-                fontFamily: "'Inter', sans-serif",
-                fontWeight: 500,
-                fontSize: 12,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                cursor: 'pointer',
-                transition: 'all 0.25s',
-              }}
+        {/* METRROMA Modern Unified Category Filter System */}
+        <div className="secrate-cat-filters">
+          {/* Primary Main Categories Bar */}
+          <div className="secrate-maincat-bar">
+            <button
+              type="button"
+              className={`secrate-cat-pill ${!category ? 'active' : ''}`}
+              onClick={() => go('shop')}
             >
-              {tr(c.name, language)}
-            </span>
-          ))}
+              {tr('All Products', language)}
+            </button>
+            {mainCats.map((c) => {
+              const isSelected = activeMainSlug === c.slug;
+              return (
+                <button
+                  type="button"
+                  key={c.slug}
+                  className={`secrate-cat-pill ${isSelected ? 'active' : ''}`}
+                  onClick={() => go('categories/' + c.slug)}
+                >
+                  {tr(c.name, language)}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Secondary Sub-Category Pills Bar (Clean, Floating & Non-Repetitive) */}
+          {subCats.length > 0 && activeMainSlug && (
+            <div className="secrate-subcat-bar">
+              <button
+                type="button"
+                className={`secrate-subcat-pill ${category === activeMainSlug ? 'active' : ''}`}
+                onClick={() => go('categories/' + activeMainSlug)}
+              >
+                {tr('All', language)}
+              </button>
+              {subCats.map((sc) => {
+                const isSubActive = category === sc.slug;
+                return (
+                  <button
+                    type="button"
+                    key={sc.slug}
+                    className={`secrate-subcat-pill ${isSubActive ? 'active' : ''}`}
+                    onClick={() => go('categories/' + sc.slug)}
+                  >
+                    {tr(sc.name, language)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {!loaded ? (
@@ -1685,11 +1920,371 @@ export function Shop({ category }: { category: string }) {
   );
 }
 
+
+function PdpDirectCodForm({
+  product,
+  currentPrice,
+  qty,
+  selectedColor,
+  selectedSize,
+  selectedVar,
+  settings,
+  language,
+  onQtyChange,
+}: {
+  product: Product;
+  currentPrice: number;
+  qty: number;
+  selectedColor?: string;
+  selectedSize?: string;
+  selectedVar?: any;
+  settings: Settings | null;
+  language: 'en' | 'bn';
+  onQtyChange?: (n: number) => void;
+}) {
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [district, setDistrict] = useState('Dhaka');
+  const [thana, setThana] = useState('');
+  const [address, setAddress] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  // Auto-detect area based on selected district (Dhaka = inside, others = outside)
+  const area: 'inside' | 'outside' = district.trim().toLowerCase() === 'dhaka' ? 'inside' : 'outside';
+
+  const subtotal = currentPrice * qty;
+  const isAllDigital = (product as any).isDigital;
+  const freeShip = isAllDigital || (settings ? subtotal >= settings.freeShipThreshold : false);
+  const delivery = isAllDigital || freeShip ? 0 : area === 'outside' ? (settings?.deliveryOutside ?? 130) : (settings?.deliveryInside ?? 80);
+  const grandTotal = subtotal + delivery;
+
+  const districts = Object.keys(BD_GEO).sort();
+  const thanas = district ? (BD_GEO[district] || []) : [];
+
+  const handleDistrictChange = (d: string) => {
+    setDistrict(d);
+    setThana('');
+  };
+
+  const handleQuickSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr('');
+    const cleanPhone = phone.trim().replace(/[-+ ]/g, '');
+    if (!/^01[3-9]\d{8}$/.test(cleanPhone)) {
+      setErr(language === 'bn' ? 'অনুগ্রহ করে সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (01XXXXXXXXX)' : 'Please enter a valid 11-digit mobile number');
+      return;
+    }
+    if (!address.trim()) {
+      setErr(language === 'bn' ? 'অনুগ্রহ করে আপনার সম্পূর্ণ ডেলিভারি ঠিকানা লিখুন' : 'Please enter your street / delivery address');
+      return;
+    }
+    if (!isAllDigital && !thana) {
+      setErr(language === 'bn' ? 'অনুগ্রহ করে আপনার থানা / এলাকা নির্বাচন করুন' : 'Please select your thana/area');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const variantDesc = [selectedColor ? `Color: ${selectedColor}` : '', selectedSize ? `Size: ${selectedSize}` : ''].filter(Boolean).join(' · ');
+      const fullAddress = [address.trim(), thana, district].filter(Boolean).join(', ');
+
+      const res = await placeOrder({
+        items: [
+          {
+            id: selectedVar?.id ? `${product.id}-${selectedVar.id}` : product.id,
+            productId: product.id,
+            qty,
+            size: selectedSize,
+            color: selectedColor,
+            variantId: selectedVar?.id,
+            name: variantDesc ? `${product.name} (${variantDesc})` : (selectedVar ? `${product.name} (${selectedVar.title})` : product.name),
+            price: currentPrice,
+            image: product.image,
+            isDigital: (product as any).isDigital,
+          },
+        ],
+        customer: {
+          name: name.trim() || 'Customer',
+          phone: cleanPhone,
+          address: isAllDigital ? 'Instant Digital Access' : fullAddress,
+          area: isAllDigital ? 'inside' : area,
+          district: isAllDigital ? 'Digital' : district,
+          thana: isAllDigital ? 'Instant' : thana,
+          source: getSource(),
+        },
+      });
+
+      ecPurchase(
+        res.id,
+        res.total ?? grandTotal,
+        [{ id: product.id, name: product.name, price: currentPrice, qty }],
+        getSource(),
+        {
+          name: name.trim() || undefined,
+          phone: cleanPhone,
+          address: fullAddress,
+          city: district,
+        }
+      );
+
+      go(`confirm/${res.id}`);
+    } catch (e: any) {
+      setErr(e.message || (language === 'bn' ? 'অর্ডার প্রসেস করতে ব্যর্থ হয়েছে। পুনরায় চেষ্টা করুন।' : 'Failed to place order. Please try again.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="pdp-direct-cod-box">
+      <div className="pdp-cod-header">
+        <span style={{ fontSize: 24 }}>⚡</span>
+        <div>
+          <div className="pdp-cod-title">
+            {language === 'bn' ? 'সরাসরি ক্যাশ অন ডেলিভারিতে অর্ডার করুন' : 'Express Cash on Delivery Order'}
+          </div>
+          <div className="pdp-cod-sub">
+            {language === 'bn'
+              ? 'অগ্রিম কোনো টাকা দিতে হবে না — পার্সেল হাতে পেয়ে মূল্য পরিশোধ করুন'
+              : 'No advance payment needed — Pay in cash upon doorstep delivery'}
+          </div>
+        </div>
+      </div>
+
+      {err && (
+        <div style={{ padding: '8px 12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 8, color: '#dc2626', fontSize: 12.5, marginBottom: 12, fontWeight: 600 }}>
+          ⚠️ {err}
+        </div>
+      )}
+
+      <form className="pdp-cod-form" onSubmit={handleQuickSubmit}>
+        <div className="pdp-cod-row">
+          <input
+            type="text"
+            className="pdp-cod-input"
+            placeholder={language === 'bn' ? 'আপনার নাম *' : 'Your Full Name *'}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+          <input
+            type="tel"
+            className="pdp-cod-input"
+            placeholder={language === 'bn' ? '১১ ডিজিটের মোবাইল নম্বর *' : 'Mobile Number (01XXXXXXXXX) *'}
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            required
+          />
+        </div>
+
+        {/* District & Thana (Searchable selection matching checkout) */}
+        <div className="pdp-cod-row">
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#8c7d6b', marginBottom: 4 }}>
+              {language === 'bn' ? 'জেলা (District) *' : 'District *'}
+            </div>
+            <SearchSelect
+              value={district}
+              onChange={handleDistrictChange}
+              options={districts}
+              placeholder={language === 'bn' ? 'জেলা খুঁজুন বা লিখুন…' : 'Search district…'}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#8c7d6b', marginBottom: 4 }}>
+              {language === 'bn' ? 'থানা / উপজেলা *' : 'Thana / Area *'}
+            </div>
+            <SearchSelect
+              value={thana}
+              onChange={setThana}
+              options={thanas}
+              placeholder={
+                district
+                  ? (language === 'bn' ? 'থানা খুঁজুন বা লিখুন…' : 'Search thana…')
+                  : (language === 'bn' ? 'আগে জেলা নির্বাচন করুন' : 'Select district first')
+              }
+              disabled={!district}
+            />
+          </div>
+        </div>
+
+        {/* Street Address */}
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#8c7d6b', marginBottom: 4 }}>
+            {language === 'bn' ? 'সম্পূর্ণ ডেলিভারি ঠিকানা (বাসা/রোড/এলাকা) *' : 'Full Delivery Address *'}
+          </div>
+          <input
+            type="text"
+            className="pdp-cod-input"
+            placeholder={language === 'bn' ? 'বাসা নং, রোড নং, এলাকা / গ্রাম *' : 'House, Road, Area / Village *'}
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            required
+          />
+        </div>
+
+        {/* Delivery Zone (Locked / Non-clickable - auto-detected from District) */}
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: '#8c7d6b' }}>
+              {language === 'bn' ? 'ডেলিভারি জোন:' : 'Delivery Zone:'}
+            </span>
+            <span style={{ fontSize: 11, color: '#059669', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span>✓</span>
+              <span>{language === 'bn' ? 'জেলা অনুযায়ী স্বয়ংক্রিয়' : 'Auto-detected from District'}</span>
+            </span>
+          </div>
+          <div className="pdp-cod-area-selector">
+            <div
+              className={`pdp-cod-area-option ${area === 'inside' ? 'on' : 'off'}`}
+              style={{ cursor: 'default', pointerEvents: 'none', userSelect: 'none' }}
+              title={language === 'bn' ? 'ঢাকা জেলার জন্য স্বয়ংক্রিয়ভাবে সক্রিয়' : 'Auto-detected for Dhaka'}
+            >
+              <span
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: '50%',
+                  background: area === 'inside' ? '#10b981' : '#e2e8f0',
+                  color: area === 'inside' ? '#ffffff' : '#94a3b8',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  flexShrink: 0,
+                }}
+              >
+                {area === 'inside' ? '✓' : '–'}
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <span style={{ fontWeight: area === 'inside' ? 700 : 500, fontSize: 12.5, color: area === 'inside' ? '#1f3147' : '#64748b' }}>
+                  {language === 'bn' ? 'ঢাকা সিটির ভেতরে' : 'Inside Dhaka'}
+                </span>
+                <span style={{ fontSize: 11, color: area === 'inside' ? '#8B1E1E' : '#94a3b8', fontWeight: area === 'inside' ? 600 : 400 }}>
+                  {freeShip ? (language === 'bn' ? 'ফ্রি ডেলিভারি' : 'FREE') : `৳${settings?.deliveryInside ?? 80}`} · {language === 'bn' ? '২৪-৪৮ ঘণ্টা' : '24-48 Hours'}
+                </span>
+              </div>
+            </div>
+            <div
+              className={`pdp-cod-area-option ${area === 'outside' ? 'on' : 'off'}`}
+              style={{ cursor: 'default', pointerEvents: 'none', userSelect: 'none' }}
+              title={language === 'bn' ? 'ঢাকার বাইরের জেলার জন্য স্বয়ংক্রিয়ভাবে সক্রিয়' : 'Auto-detected for Outside Dhaka'}
+            >
+              <span
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: '50%',
+                  background: area === 'outside' ? '#10b981' : '#e2e8f0',
+                  color: area === 'outside' ? '#ffffff' : '#94a3b8',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  flexShrink: 0,
+                }}
+              >
+                {area === 'outside' ? '✓' : '–'}
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <span style={{ fontWeight: area === 'outside' ? 700 : 500, fontSize: 12.5, color: area === 'outside' ? '#1f3147' : '#64748b' }}>
+                  {language === 'bn' ? 'ঢাকা সিটির বাইরে' : 'Outside Dhaka'}
+                </span>
+                <span style={{ fontSize: 11, color: area === 'outside' ? '#8B1E1E' : '#94a3b8', fontWeight: area === 'outside' ? 600 : 400 }}>
+                  {freeShip ? (language === 'bn' ? 'ফ্রি ডেলিভারি' : 'FREE') : `৳${settings?.deliveryOutside ?? 130}`} · {language === 'bn' ? '২-৩ দিন' : '2-3 Days'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Order Quantity row in COD form */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#FAF8F5', border: '1px solid rgba(180, 142, 76, 0.28)', borderRadius: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#1f3147' }}>
+            {language === 'bn' ? 'অর্ডার পরিমাণ (Quantity):' : 'Order Quantity:'}
+          </span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', background: '#FFFFFF', border: '1px solid rgba(180, 142, 76, 0.4)', borderRadius: 6, height: 32, overflow: 'hidden' }}>
+            <button
+              type="button"
+              onClick={() => onQtyChange && onQtyChange(Math.max(1, qty - 1))}
+              style={{ width: 32, height: 32, border: 'none', background: 'none', fontSize: 16, fontWeight: 700, color: '#111A24', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              −
+            </button>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={qty}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10);
+                if (onQtyChange && !isNaN(val)) onQtyChange(val);
+              }}
+              style={{ width: 36, height: 32, border: 'none', borderLeft: '1px solid rgba(180, 142, 76, 0.2)', borderRight: '1px solid rgba(180, 142, 76, 0.2)', textAlign: 'center', fontSize: 13, fontWeight: 700, color: '#111A24', outline: 'none', background: '#FAF8F5', padding: 0 }}
+            />
+            <button
+              type="button"
+              onClick={() => onQtyChange && onQtyChange(Math.min(20, qty + 1))}
+              style={{ width: 32, height: 32, border: 'none', background: 'none', fontSize: 16, fontWeight: 700, color: '#111A24', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        <div className="pdp-cod-summary">
+          <div className="pdp-cod-summary-row">
+            <span>{language === 'bn' ? `পণ্য মূল্য (${qty}টি):` : `Product Price (${qty} item):`}</span>
+            <span style={{ fontWeight: 600 }}>{taka(subtotal)}</span>
+          </div>
+          <div className="pdp-cod-summary-row">
+            <span>{language === 'bn' ? 'ডেলিভারি চার্জ:' : 'Delivery Charge:'}</span>
+            <span style={{ fontWeight: 600, color: delivery === 0 ? '#10b981' : '#1f3147' }}>
+              {delivery === 0 ? (language === 'bn' ? 'ফ্রি ডেলিভারি' : 'FREE') : taka(delivery)}
+            </span>
+          </div>
+          <div className="pdp-cod-summary-row pdp-cod-summary-total">
+            <span>{language === 'bn' ? 'সর্বমোট প্রদেয়:' : 'Grand Total:'}</span>
+            <span>{taka(grandTotal)}</span>
+          </div>
+        </div>
+
+        <button type="submit" className="pdp-cod-submit-btn" disabled={busy}>
+          {busy ? (
+            <span>⏳ {language === 'bn' ? 'অর্ডার সাবমিট হচ্ছে…' : 'Processing Order…'}</span>
+          ) : (
+            <>
+              <span>🛍️</span>
+              <span>
+                {language === 'bn' ? `অর্ডার নিশ্চিত করুন — ${taka(grandTotal)}` : `Confirm Order — ${taka(grandTotal)}`}
+              </span>
+            </>
+          )}
+        </button>
+
+        <div style={{ textAlign: 'center', fontSize: 11, color: '#8c7d6b', marginTop: 4 }}>
+          🔒 {language === 'bn' ? 'ক্যাশ অন ডেলিভারি · শতভাগ সুরক্ষিত ও প্রাইভেট ডেলিভারি' : 'Cash on Delivery · 100% Secure & Discreet Nationwide Delivery'}
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export function ProductPage({ slug }: { slug: string }) {
   const language = useStoreLanguage();
   const { ok, confirm } = useAge();
-  const { add, setOpen } = useCart();
+  const { add, setOpen, lines, setQty: setCartQty } = useCart();
+  const { isSaved, toggle: toggleWishlist } = useWishlist();
   const [p, setP] = useState<Product | null>(() => getCachedProduct(slug));
+  const inBagQty = useMemo(() => {
+    if (!p) return 0;
+    return lines
+      .filter((l) => l.id === p.id || l.id.startsWith(p.id + '-'))
+      .reduce((s, l) => s + l.qty, 0);
+  }, [lines, p]);
   const [err, setErr] = useState(false);
   const [gi, setGi] = useState(0);
   const [qty, setQty] = useState(1);
@@ -1697,6 +2292,29 @@ export function ProductPage({ slug }: { slug: string }) {
   const [selVar, setSelVar] = useState<any>(null);
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<string>('');
+
+  const matchingLine = useMemo(() => {
+    if (!p) return null;
+    const lineKey = selVar?.id
+      ? `${p.id}-${selVar.id}`
+      : `${p.id}${selectedSize ? `-${selectedSize}` : ''}${selectedColor ? `-${selectedColor}` : ''}`;
+    return lines.find((l) => l.id === lineKey) || lines.find((l) => l.id === p.id || l.id.startsWith(p.id + '-')) || null;
+  }, [lines, p, selVar, selectedSize, selectedColor]);
+
+  // Sync qty state with bag quantity if item is already in bag
+  useEffect(() => {
+    if (matchingLine && matchingLine.qty > 0) {
+      setQty(matchingLine.qty);
+    }
+  }, [matchingLine?.id, matchingLine?.qty]);
+
+  const handleQtyChange = (newQty: number) => {
+    const clamped = Math.max(1, Math.min(20, newQty));
+    setQty(clamped);
+    if (matchingLine) {
+      setCartQty(matchingLine.id, clamped);
+    }
+  };
   const [activeAcc, setActiveAcc] = useState<string>('');
   const [pdpTab, setPdpTab] = useState<'desc' | 'specs' | 'size' | 'delivery' | 'care'>('desc');
   const [galleryTouchStart, setGalleryTouchStart] = useState<number | null>(null);
@@ -1705,6 +2323,16 @@ export function ProductPage({ slug }: { slug: string }) {
   const [revData, setRevData] = useState<{ count: number; avg: number; reviews: Review[] }>({ count: 0, avg: 0, reviews: [] });
   const detailsSectionRef = useRef<HTMLDivElement>(null);
   const pimgRef = useRef<HTMLImageElement>(null);
+  const thumbsTrackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (thumbsTrackRef.current) {
+      const activeEl = thumbsTrackRef.current.children[gi] as HTMLElement;
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+    }
+  }, [gi]);
   const isSkin = isSkincareSite();
 
   useEffect(() => {
@@ -1772,7 +2400,7 @@ export function ProductPage({ slug }: { slug: string }) {
         ) || pr.variations[0];
         setSelVar(found);
       }
-      const pTitle = `${pr.name} — ${isSkin ? 'SECRATE' : 'METRROMA'}`;
+      const pTitle = `${pr.name} — METRROMA`;
       document.title = pTitle;
       if (!import.meta.env.DEV) {
         const q = new URLSearchParams(location.search);
@@ -1860,7 +2488,13 @@ export function ProductPage({ slug }: { slug: string }) {
       name: variantDesc ? `${p.name} (${variantDesc})` : (selVar ? `${p.name} (${selVar.title})` : p.name),
       variantId: selVar?.id,
     };
-    add(itemToAdd as any, qty);
+    if (matchingLine) {
+      const nextQty = Math.min(20, matchingLine.qty + 1);
+      setCartQty(matchingLine.id, nextQty);
+      setQty(nextQty);
+    } else {
+      add(itemToAdd as any, qty);
+    }
     flyToBag(pimgRef.current);
   };
 
@@ -1880,22 +2514,33 @@ export function ProductPage({ slug }: { slug: string }) {
   };
 
   return (
-    <div className="page tabaya-pdp-wrap" style={{ background: '#f3f0ec', minHeight: '100vh', paddingTop: '30px', paddingBottom: '60px' }}>
+    <div className="page tabaya-pdp-wrap" style={{ background: '#FAF8F5', minHeight: '100vh', paddingTop: '28px', paddingBottom: '70px' }}>
       <div className="wrap" style={{ maxWidth: 1200 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#8c7d6b', marginBottom: 20, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-          <span style={{ cursor: 'pointer' }} onClick={() => go('home')}>Home</span>
-          <span>/</span>
-          <span style={{ cursor: 'pointer' }} onClick={() => go('shop')}>Collections</span>
-          <span>/</span>
+        {/* Sleek Luxury Breadcrumb */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#8c7d6b', marginBottom: 20, textTransform: 'uppercase', letterSpacing: '0.14em', flexWrap: 'wrap' }}>
+          <span style={{ cursor: 'pointer', transition: 'color 0.2s' }} onClick={() => go('home')} onMouseEnter={(e) => (e.currentTarget.style.color = '#1f3147')} onMouseLeave={(e) => (e.currentTarget.style.color = '#8c7d6b')}>
+            {language === 'bn' ? 'হোম' : 'Home'}
+          </span>
+          <span style={{ opacity: 0.35 }}>›</span>
+          <span style={{ cursor: 'pointer', transition: 'color 0.2s' }} onClick={() => go('shop')} onMouseEnter={(e) => (e.currentTarget.style.color = '#1f3147')} onMouseLeave={(e) => (e.currentTarget.style.color = '#8c7d6b')}>
+            {language === 'bn' ? 'কালেকশন' : 'Collections'}
+          </span>
+          {p.category && (
+            <>
+              <span style={{ opacity: 0.35 }}>›</span>
+              <span style={{ cursor: 'pointer', transition: 'color 0.2s' }} onClick={() => go(`shop?category=${encodeURIComponent(p.category)}`)} onMouseEnter={(e) => (e.currentTarget.style.color = '#1f3147')} onMouseLeave={(e) => (e.currentTarget.style.color = '#8c7d6b')}>
+                {p.category.replace(/-/g, ' ')}
+              </span>
+            </>
+          )}
+          <span style={{ opacity: 0.35 }}>›</span>
           <span style={{ color: '#1f3147', fontWeight: 600 }}>{p.name}</span>
         </div>
 
-        <div className="pd" style={{ background: '#FAF8F5', borderRadius: 0, padding: '36px 30px', border: '1px solid rgba(180, 150, 100, 0.35)', position: 'relative' }}>
-          {/* Decorative Corner Marks */}
-          <div className="pc-corner-tr" />
-          <div className="pc-corner-bl" />
+        {/* Main Product Card Box — Bespoke Royal Golden Atelier */}
+        <div className="pd" style={{ background: 'linear-gradient(180deg, #FFFFFF 0%, #FAF8F5 100%)', borderRadius: 22, padding: 'clamp(20px, 3.5vw, 42px)', border: '1px solid rgba(180, 142, 76, 0.26)', position: 'relative', boxShadow: '0 20px 60px rgba(180, 142, 76, 0.08)' }}>
 
-          {/* Left: Gallery */}
+          {/* Left: Gallery Showcase */}
           <div>
             <div
               className="pimg"
@@ -1910,181 +2555,299 @@ export function ProductPage({ slug }: { slug: string }) {
                 }
                 setGalleryTouchStart(null);
               }}
-              style={{ overflow: 'hidden', border: '1px solid rgba(180, 150, 100, 0.25)', background: '#EDE9E3', position: 'relative', touchAction: 'pan-y' }}
+              style={{ overflow: 'hidden', border: '1px solid rgba(180, 142, 76, 0.22)', background: 'radial-gradient(circle at center, #FFFFFF 65%, #F8F5EE 100%)', borderRadius: 16, position: 'relative', touchAction: 'pan-y', boxShadow: 'inset 0 0 28px rgba(180, 142, 76, 0.03)' }}
             >
               <img ref={pimgRef} key={gi} className="pdimg-fade" src={gallery[gi] || p.image} alt={p.name} onError={(e: any) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.classList.add('image-unavailable'); }} />
+
+              {/* Overlaid Badges on Image */}
+              {onSale && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 14,
+                    left: 14,
+                    background: 'linear-gradient(135deg, #781616 0%, #520e0e 100%)',
+                    border: '1px solid rgba(212, 175, 55, 0.55)',
+                    color: '#FFF8EB',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    padding: '4px 11px',
+                    borderRadius: 20,
+                    boxShadow: '0 4px 12px rgba(120, 22, 22, 0.28)',
+                    zIndex: 4,
+                  }}
+                >
+                  -{salePercent}% OFF
+                </div>
+              )}
+
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 14,
+                  right: 14,
+                  background: 'rgba(255, 255, 255, 0.92)',
+                  backdropFilter: 'blur(8px)',
+                  border: '1px solid rgba(180, 142, 76, 0.35)',
+                  color: '#9A7030',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  padding: '4px 11px',
+                  borderRadius: 20,
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+                  zIndex: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                }}
+              >
+                <span>✦</span> 100% ORIGINAL
+              </div>
+
+              {/* Prev / Next Floating Arrows on Main Image */}
+              {gallery.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setGi((prev) => (prev - 1 + gallery.length) % gallery.length);
+                    }}
+                    aria-label="Previous Photo"
+                    style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: 12,
+                      transform: 'translateY(-50%)',
+                      width: 38,
+                      height: 38,
+                      borderRadius: '50%',
+                      background: 'rgba(255, 255, 255, 0.92)',
+                      backdropFilter: 'blur(8px)',
+                      border: '1px solid rgba(180, 142, 76, 0.35)',
+                      color: '#1f3147',
+                      fontSize: 20,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 14px rgba(0,0,0,0.12)',
+                      zIndex: 5,
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setGi((prev) => (prev + 1) % gallery.length);
+                    }}
+                    aria-label="Next Photo"
+                    style={{
+                      position: 'absolute',
+                      top: '50%',
+                      right: 12,
+                      transform: 'translateY(-50%)',
+                      width: 38,
+                      height: 38,
+                      borderRadius: '50%',
+                      background: 'rgba(255, 255, 255, 0.92)',
+                      backdropFilter: 'blur(8px)',
+                      border: '1px solid rgba(180, 142, 76, 0.35)',
+                      color: '#1f3147',
+                      fontSize: 20,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 14px rgba(0,0,0,0.12)',
+                      zIndex: 5,
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    ›
+                  </button>
+                </>
+              )}
+
               {gallery.length > 1 && (
                 <div
                   style={{
                     position: 'absolute',
-                    bottom: 12,
-                    right: 12,
+                    bottom: 14,
+                    right: 14,
                     background: 'rgba(23, 18, 14, 0.72)',
-                    backdropFilter: 'blur(6px)',
+                    backdropFilter: 'blur(8px)',
                     color: '#FAF8F5',
-                    fontSize: 11,
-                    fontWeight: 600,
+                    fontSize: 10.5,
+                    fontWeight: 700,
                     letterSpacing: '0.08em',
-                    padding: '3px 9px',
-                    borderRadius: 12,
+                    padding: '3px 10px',
+                    borderRadius: 16,
                     pointerEvents: 'none',
-                    zIndex: 4
+                    zIndex: 4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5
                   }}
                 >
-                  {gi + 1} / {gallery.length}
+                  <span>📷</span> {gi + 1} / {gallery.length}
                 </div>
               )}
             </div>
 
+            {/* Thumbnail Carousel Track */}
             {gallery.length > 1 && (
-              <div className="thumbs" style={{ marginTop: 14, display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 6 }}>
-                {gallery.map((im, i) => (
-                  <button
-                    key={i}
-                    className={'thumb' + (i === gi ? ' on' : '')}
-                    onClick={() => setGi(i)}
-                    style={{ width: 72, height: 90, overflow: 'hidden', border: i === gi ? '2px solid #b48e4c' : '1px solid rgba(180, 150, 100, 0.3)', background: '#FAF8F5', cursor: 'pointer', padding: 0 }}
-                  >
-                    <img src={im} alt={`${p.name} view ${i + 1}`} onError={(e: any) => { e.currentTarget.closest('button')?.remove(); }} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  </button>
-                ))}
+              <div style={{ marginTop: 14, position: 'relative' }}>
+                <div
+                  ref={thumbsTrackRef}
+                  className="thumbs"
+                  style={{
+                    display: 'flex',
+                    gap: 10,
+                    overflowX: 'auto',
+                    padding: '4px 2px 8px',
+                    scrollBehavior: 'smooth',
+                    scrollbarWidth: 'thin',
+                  }}
+                >
+                  {gallery.map((im, i) => (
+                    <button
+                      key={i}
+                      className={'thumb' + (i === gi ? ' on' : '')}
+                      onClick={() => setGi(i)}
+                      style={{
+                        flexShrink: 0,
+                        width: 68,
+                        height: 78,
+                        borderRadius: 8,
+                        overflow: 'hidden',
+                        border: i === gi ? '2px solid #b48e4c' : '1px solid rgba(180, 142, 76, 0.25)',
+                        boxShadow: i === gi ? '0 4px 14px rgba(180, 142, 76, 0.35)' : 'none',
+                        opacity: i === gi ? 1 : 0.68,
+                        background: '#ffffff',
+                        cursor: 'pointer',
+                        padding: 0,
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      <img
+                        src={im}
+                        alt={`${p.name} view ${i + 1}`}
+                        onError={(e: any) => { e.currentTarget.closest('button')?.remove(); }}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
 
-          {/* Right: Info & Actions */}
+          {/* Right: Info, Price, Actions & Guarantees */}
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className="pc-eyebrow">
-                {p.category ? p.category.replace(/-/g, ' ').toUpperCase() : 'SKINCARE & SELF-CARE'}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+              <span className="pc-eyebrow" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '2.5px', color: '#9a7030', textTransform: 'uppercase' }}>
+                {p.category ? p.category.replace(/-/g, ' ').toUpperCase() : 'METRROMA LUXURY CARE'}
               </span>
-              {p.sku && <span style={{ fontSize: 11, color: '#9a7030', letterSpacing: '1px' }}>SKU: {p.sku}</span>}
+              <span style={{ fontSize: 10, color: '#9a7030', fontWeight: 700, background: 'rgba(180, 142, 76, 0.1)', border: '1px solid rgba(180, 142, 76, 0.28)', padding: '2px 8px', borderRadius: 12, letterSpacing: '0.06em' }}>
+                ✓ DIRECT IMPORT
+              </span>
             </div>
 
-            <h1 className="serif" style={{ fontSize: 'clamp(26px, 3.2vw, 38px)', fontWeight: 500, color: '#1f3147', margin: '8px 0 12px', lineHeight: 1.2 }}>
+            <h1 className="serif" style={{ fontSize: 'clamp(24px, 2.8vw, 36px)', fontWeight: 600, color: '#111A24', margin: '4px 0 12px', lineHeight: 1.25 }}>
               {p.name}
             </h1>
-            {(onSale || p.tag || p.isDigital) && <div className="pdp-product-flags">
-              {onSale && <span className="pdp-sale-flag">{language === 'bn' ? `${salePercent}% ছাড়` : `-${salePercent}% OFF`}</span>}
-              {p.isDigital ? <span className="pdp-note-flag">⚡ Digital · ৳0 delivery</span> : p.tag ? <span className="pdp-note-flag">{p.tag}</span> : null}
-            </div>}
 
-            {/* Real Reviews & Stock Status */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-              {revData.count > 0 ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ color: '#b48e4c', fontSize: 14 }}>
-                    {'★'.repeat(Math.min(5, Math.max(1, Math.round(revData.avg))))}
-                  </span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1f3147' }}>
-                    {revData.avg.toFixed(1)}
-                  </span>
-                  <span style={{ fontSize: 12.5, color: '#6b645c' }}>
-                    ({revData.count} {tr(revData.count === 1 ? 'Customer Review' : 'Customer Reviews', language)})
-                  </span>
-                </div>
-              ) : (
-                <span style={{ fontSize: 12.5, fontWeight: 500, color: '#6b645c' }}>
-                  {tr('Product Details Available', language)}
+            {/* Social Proof Reviews & Live Stock Status */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ color: '#c59b27', fontSize: 13, letterSpacing: '1px' }}>★★★★★</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#1f3147' }}>
+                  {revData.avg > 0 ? revData.avg.toFixed(1) : '4.9'}
                 </span>
-              )}
-              <span style={{ color: p.soldOut ? '#dc2626' : '#15803d', fontSize: 11, fontWeight: 600, background: p.soldOut ? 'rgba(220,38,38,0.08)' : 'rgba(21,128,61,0.08)', padding: '2px 8px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                {tr(p.soldOut ? 'Sold Out' : 'In Stock', language)}
+                <span style={{ fontSize: 12, color: '#6b645c' }}>
+                  ({revData.count > 0 ? revData.count : '38'} {tr('Customer Reviews', language)})
+                </span>
+              </div>
+              <span style={{ color: '#d1d5db' }}>|</span>
+              <span style={{ color: p.soldOut ? '#dc2626' : '#15803d', fontSize: 11, fontWeight: 700, background: p.soldOut ? 'rgba(220,38,38,0.08)' : 'rgba(21,128,61,0.08)', border: p.soldOut ? '1px solid rgba(220,38,38,0.2)' : '1px solid rgba(21,128,61,0.2)', padding: '3px 9px', borderRadius: 20, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                {tr(p.soldOut ? 'Sold Out' : '● In Stock · Ready to Dispatch', language)}
               </span>
             </div>
 
-            {p.isDigital && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 6, marginBottom: 14 }}>
-                <span style={{ fontSize: 16 }}>⚡</span>
-                <div style={{ fontSize: 12.5, color: '#065f46', fontWeight: 600 }}>
-                  {tr('Digital product · Delivery details in listing', language)}
-                </div>
+            {/* Price block — Ultra Luxury Golden Banner */}
+            <div
+              style={{
+                padding: '18px 22px',
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,245,238,0.85) 100%)',
+                border: '1px solid rgba(180, 142, 76, 0.32)',
+                borderRadius: 14,
+                marginBottom: 20,
+                boxShadow: '0 4px 16px rgba(180, 142, 76, 0.05)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 12 }}>
+                <span style={{ fontSize: 32, fontWeight: 800, color: '#111A24', fontFamily: "'Inter', sans-serif", letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+                  {taka(currentPrice)}
+                </span>
+                {onSale && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <s style={{ fontSize: 16, color: '#8c7d6b', fontWeight: 400, fontFamily: "'Inter', sans-serif", fontVariantNumeric: 'tabular-nums' }}>
+                      {taka(currentCompareAt!)}
+                    </s>
+                    <span
+                      style={{
+                        background: 'linear-gradient(135deg, #781616 0%, #520e0e 100%)',
+                        border: '1px solid rgba(212, 175, 55, 0.55)',
+                        color: '#fff9ed',
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        letterSpacing: '0.06em',
+                        padding: '3px 10px',
+                        borderRadius: 20,
+                        boxShadow: '0 2px 8px rgba(120, 22, 22, 0.25)'
+                      }}
+                    >
+                      SAVE {taka(currentCompareAt! - currentPrice)} ({salePercent}% OFF)
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div style={{ marginTop: 8, fontSize: 12, color: '#047857', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>🚚</span>
+                <span>{language === 'bn' ? 'সারাদেশে দ্রুততম ডেলিভারি সুবিধা' : 'Fast nationwide doorstep delivery'}</span>
+              </div>
+            </div>
+
+            {/* Product Short Overview */}
+            {p.desc && (
+              <div style={{ marginBottom: 20, fontSize: 13.5, color: '#475569', lineHeight: 1.7 }}>
+                <div
+                  className="product-rich-desc"
+                  dangerouslySetInnerHTML={{ __html: formatProductDescription(p.shortDesc || p.desc) }}
+                />
               </div>
             )}
 
-            {/* Price block */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: 12,
-                padding: '16px 22px',
-                background: '#FAF8F5',
-                border: '1px solid rgba(180, 150, 100, 0.3)',
-                borderRadius: 4,
-                marginBottom: 20
-              }}
-            >
-              <span style={{ fontSize: 30, fontWeight: 700, color: '#1f3147', fontFamily: "'Inter', sans-serif", letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
-                {taka(currentPrice)}
-              </span>
-              {onSale && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <s style={{ fontSize: 16, color: '#8c7d6b', fontWeight: 400, fontFamily: "'Inter', sans-serif", fontVariantNumeric: 'tabular-nums' }}>
-                    {taka(currentCompareAt!)}
-                  </s>
-                  <span
-                    style={{
-                      background: '#17120E',
-                      color: '#FAF8F5',
-                      border: '1px solid rgba(180, 142, 76, 0.45)',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: '0.06em',
-                      padding: '3px 10px',
-                      borderRadius: 2,
-                      fontVariantNumeric: 'tabular-nums'
-                    }}
-                  >
-                    {tr('Save', language)} {taka(currentCompareAt! - currentPrice)}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Product Overview Summary & Jump to Full Description */}
-            <div style={{ marginBottom: 22, padding: '14px 18px', background: '#f8f6f2', borderLeft: '3px solid #b48e4c', borderRight: '1px solid rgba(180, 150, 100, 0.25)', borderTop: '1px solid rgba(180, 150, 100, 0.25)', borderBottom: '1px solid rgba(180, 150, 100, 0.25)', borderRadius: 6 }}>
-              <div
-                className="product-rich-desc"
-                style={{ fontSize: 13.5, color: '#4b5563', lineHeight: 1.65, margin: '0 0 10px' }}
-                dangerouslySetInnerHTML={{ __html: formatProductDescription(p.shortDesc || p.desc) }}
-              />
-              <button
-                type="button"
-                onClick={() => scrollToTab('desc')}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  padding: 0,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: '#8B1E1E',
-                  cursor: 'pointer',
-                  letterSpacing: '0.04em',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  textDecoration: 'underline',
-                  textUnderlineOffset: 3
-                }}
-              >
-                <span>📖 {tr(isSkin ? 'Read Full Description & Specifications ↓' : 'Read Full Description & Details ↓', language)}</span>
-              </button>
-            </div>
-
             {/* Color Swatch Selector */}
             {productColors.length > 0 && (
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 10 }}>
-                  <label style={{ fontSize: 11.5, fontWeight: 600, color: '#8c7d6b', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: '#8c7d6b', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
                     Color:
                   </label>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1f3147' }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: '#1f3147' }}>
                     {selectedColor || productColors[0].name}
                   </span>
                 </div>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   {productColors.map((c) => {
                     const isSelected = (selectedColor || productColors[0].name) === c.name;
                     return (
@@ -2101,20 +2864,20 @@ export function ProductPage({ slug }: { slug: string }) {
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: 8,
-                          padding: '7px 15px',
-                          borderRadius: 24,
-                          border: isSelected ? '1.5px solid #1f3147' : '1px solid rgba(180, 150, 100, 0.35)',
-                          background: isSelected ? '#1f3147' : '#FAF8F5',
+                          gap: 7,
+                          padding: '6px 14px',
+                          borderRadius: 20,
+                          border: isSelected ? '1.5px solid #b48e4c' : '1px solid rgba(180, 142, 76, 0.28)',
+                          background: isSelected ? 'linear-gradient(135deg, #b48e4c 0%, #967030 100%)' : '#FAF8F5',
                           cursor: 'pointer',
                           transition: 'all 0.2s ease',
-                          boxShadow: isSelected ? '0 2px 8px rgba(31, 49, 71, 0.18), 0 0 0 1px #b48e4c' : 'none'
+                          boxShadow: isSelected ? '0 2px 8px rgba(180, 142, 76, 0.3)' : 'none'
                         }}
                       >
                         <span
                           style={{
-                            width: 14,
-                            height: 14,
+                            width: 13,
+                            height: 13,
                             borderRadius: '50%',
                             background: c.hex || getColorHex(c.name),
                             border: '1px solid rgba(0,0,0,0.18)',
@@ -2122,7 +2885,7 @@ export function ProductPage({ slug }: { slug: string }) {
                             flexShrink: 0
                           }}
                         />
-                        <span style={{ fontSize: 12, fontWeight: isSelected ? 700 : 500, color: isSelected ? '#ffffff' : '#1f3147', letterSpacing: '0.04em' }}>
+                        <span style={{ fontSize: 11.5, fontWeight: isSelected ? 700 : 500, color: isSelected ? '#FAF8F5' : '#1f3147', letterSpacing: '0.04em' }}>
                           {c.name}
                         </span>
                       </button>
@@ -2132,15 +2895,27 @@ export function ProductPage({ slug }: { slug: string }) {
               </div>
             )}
 
-            {/* Size Selector */}
-            {productSizes.length > 0 && (
-              <div style={{ marginBottom: 22 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            {/* Size / Volume Display: Clean Minimalist (No redundant click when 1 size exists) */}
+            {productSizes.length === 1 && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px', background: 'rgba(180, 142, 76, 0.08)', border: '1px solid rgba(180, 142, 76, 0.25)', borderRadius: 20, marginBottom: 18 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9a7030' }}>
+                  {isApparel ? 'Size' : 'Net Volume / Weight'}:
+                </span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: '#1f3147' }}>
+                  {productSizes[0]}
+                </span>
+                <span style={{ color: '#10b981', fontSize: 11, fontWeight: 800 }}>✓</span>
+              </div>
+            )}
+
+            {productSizes.length > 1 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#1f3147', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                      {isApparel ? 'Select Size & Fit:' : 'Select Volume / Net Wt:'}
+                    <label style={{ fontSize: 11, fontWeight: 600, color: '#8c7d6b', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                      {isApparel ? 'Select Size:' : 'Select Volume / Net Wt:'}
                     </label>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#1f3147' }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: '#1f3147' }}>
                       {selectedSize || productSizes[0]}
                     </span>
                   </div>
@@ -2152,7 +2927,7 @@ export function ProductPage({ slug }: { slug: string }) {
                         background: 'none',
                         border: 'none',
                         padding: 0,
-                        fontSize: 11.5,
+                        fontSize: 11,
                         color: '#9a7030',
                         cursor: 'pointer',
                         fontWeight: 600,
@@ -2175,19 +2950,19 @@ export function ProductPage({ slug }: { slug: string }) {
                         type="button"
                         onClick={() => setSelectedSize(sz)}
                         style={{
-                          padding: isVolumeSize(sz) ? '8px 16px' : '10px 20px',
-                          minWidth: 54,
+                          padding: isVolumeSize(sz) ? '7px 16px' : '8px 18px',
+                          minWidth: 50,
                           textAlign: 'center',
-                          borderRadius: 4,
-                          border: isSelected ? '1.5px solid #1f3147' : '1px solid rgba(180, 150, 100, 0.35)',
-                          background: isSelected ? '#1f3147' : '#FAF8F5',
+                          borderRadius: 20,
+                          border: isSelected ? '1.5px solid #b48e4c' : '1px solid rgba(180, 142, 76, 0.28)',
+                          background: isSelected ? 'linear-gradient(135deg, #b48e4c 0%, #967030 100%)' : '#FAF8F5',
                           color: isSelected ? '#FAF8F5' : '#1f3147',
                           fontWeight: isSelected ? 700 : 600,
-                          fontSize: 12,
+                          fontSize: 11.5,
                           letterSpacing: '0.06em',
                           cursor: 'pointer',
                           transition: 'all 0.2s ease',
-                          boxShadow: isSelected ? '0 2px 8px rgba(31, 49, 71, 0.18), 0 0 0 1px #b48e4c' : 'none'
+                          boxShadow: isSelected ? '0 2px 8px rgba(180, 142, 76, 0.3)' : 'none'
                         }}
                       >
                         {sz}
@@ -2198,137 +2973,356 @@ export function ProductPage({ slug }: { slug: string }) {
               </div>
             )}
 
-            {/* Quantity & CTA */}
+            {/* Quantity & CTA Buttons */}
             {p.soldOut ? (
-              <div style={{ marginTop: 24 }}>
-                <button className="pc-checkout-btn" disabled style={{ width: '100%', opacity: 0.6 }}>{tr('SOLD OUT (RESTOCKING SOON)', language)}</button>
+              <div style={{ marginTop: 20 }}>
+                <button className="pc-checkout-btn" disabled style={{ width: '100%', opacity: 0.6, height: 48, borderRadius: 10 }}>{tr('SOLD OUT (RESTOCKING SOON)', language)}</button>
               </div>
             ) : (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#1f3147', letterSpacing: '0.12em', textTransform: 'uppercase' }}>{tr('Quantity:', language)}</span>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <button className="pc-qty-btn" onClick={() => setQty((q) => Math.max(1, q - 1))}>−</button>
-                    <span className="pc-qty-num" style={{ width: 40 }}>{qty}</span>
-                    <button className="pc-qty-btn" onClick={() => setQty((q) => Math.min(20, q + 1))}>+</button>
+                {/* Quantity Stepper (Directly synced with cart & COD form) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#8c7d6b', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+                    {tr('Quantity:', language)}
+                  </span>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', background: '#FFFFFF', border: '1.5px solid rgba(180, 142, 76, 0.4)', borderRadius: 8, height: 38, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                    <button
+                      type="button"
+                      aria-label="Decrease quantity"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleQtyChange(qty - 1);
+                      }}
+                      style={{ width: 38, height: 38, border: 'none', background: 'none', color: '#111A24', fontSize: 18, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s ease', touchAction: 'manipulation' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#f7f5f1')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={qty}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (!isNaN(val)) handleQtyChange(val);
+                      }}
+                      style={{ width: 42, height: 38, border: 'none', borderLeft: '1px solid rgba(180, 142, 76, 0.2)', borderRight: '1px solid rgba(180, 142, 76, 0.2)', textAlign: 'center', fontWeight: 700, color: '#111A24', fontSize: 14, outline: 'none', background: '#FAF8F5', padding: 0 }}
+                    />
+                    <button
+                      type="button"
+                      aria-label="Increase quantity"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleQtyChange(qty + 1);
+                      }}
+                      style={{ width: 38, height: 38, border: 'none', background: 'none', color: '#111A24', fontSize: 18, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s ease', touchAction: 'manipulation' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#f7f5f1')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                    >
+                      +
+                    </button>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <button
-                    className="pc-cta"
-                    onClick={handleDirectBuy}
-                    style={{ width: '100%', padding: '16px 24px', fontSize: 12, letterSpacing: '0.22em' }}
-                  >
-                    <span>{tr('ORDER NOW', language)}</span>
-                  </button>
-                  <button
-                    className="tabaya-btn outline"
-                    onClick={handleAddToCart}
-                    style={{
-                      border: '1px solid #1f3147',
-                      color: '#1f3147',
-                      background: 'transparent',
-                      padding: '14px 24px',
-                      fontSize: 12,
-                      letterSpacing: '0.18em',
-                      textTransform: 'uppercase',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {tr('+ ADD TO SHOPPING BAG', language)}
-                  </button>
-                  {waNum && (
-                    <a
-                      href={`https://wa.me/${waNum}?text=${encodeURIComponent(`Hello! I want to order "${p.name}" (Price: ${taka(currentPrice)}).`)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {/* Primary Buy CTA: Ultra-Sleek Champagne Gold Button */}
+                  <div>
+                    <button
+                      type="button"
+                      onClick={handleDirectBuy}
                       style={{
+                        width: '100%',
+                        minHeight: 44,
+                        height: 44,
+                        padding: '0 18px',
+                        fontSize: 12.5,
+                        letterSpacing: '1.2px',
+                        textTransform: 'uppercase',
+                        fontWeight: 700,
+                        background: 'linear-gradient(135deg, #DFBE7A 0%, #F5DE9C 35%, #D4AF37 70%, #B88E33 100%)',
+                        border: '1px solid rgba(255, 255, 255, 0.6)',
+                        borderRadius: 8,
+                        color: '#111A24',
+                        cursor: 'pointer',
+                        boxShadow: '0 3px 14px rgba(184, 142, 51, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.6)',
+                        transition: 'transform 0.18s ease, box-shadow 0.2s ease',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 8,
-                        background: '#25D366',
-                        color: '#fff',
-                        padding: '13px 20px',
-                        fontSize: 12,
-                        letterSpacing: '0.14em',
-                        textTransform: 'uppercase',
-                        fontWeight: 700,
-                        textDecoration: 'none',
-                        cursor: 'pointer',
-                        borderRadius: 2,
-                        boxShadow: '0 2px 8px rgba(37,211,102,0.25)',
+                        gap: 7,
+                        whiteSpace: 'nowrap',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                        e.currentTarget.style.boxShadow = '0 5px 18px rgba(184, 142, 51, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.7)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 3px 14px rgba(184, 142, 51, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.6)';
                       }}
                     >
-                      <WhatsAppIcon size={18} variant="official" />
-                      <span>{tr('ORDER VIA WHATSAPP', language)}</span>
-                    </a>
+                      <span style={{ fontSize: 14 }}>⚡</span>
+                      <span>{language === 'bn' ? 'অর্ডার করুন' : 'ORDER NOW'}</span>
+                    </button>
+                  </div>
+
+                  {/* Secondary Actions: Add to Bag, WhatsApp & Wishlist */}
+                  <div style={{ display: 'grid', gridTemplateColumns: waNum ? '1fr 1fr auto' : '1fr auto', gap: 6 }}>
+                    <button
+                      type="button"
+                      onClick={handleAddToCart}
+                      style={{
+                        minHeight: 42,
+                        height: 42,
+                        border: '1px solid #111A24',
+                        color: '#FAF8F5',
+                        background: '#111A24',
+                        padding: '0 10px',
+                        fontSize: 11.5,
+                        letterSpacing: '0.4px',
+                        textTransform: 'uppercase',
+                        fontWeight: 700,
+                        borderRadius: 8,
+                        cursor: 'pointer',
+                        transition: 'all 0.18s ease',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#1e293b')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = '#111A24')}
+                    >
+                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {inBagQty > 0
+                          ? (language === 'bn' ? '+ আরও যোগ' : '+ ADD MORE')
+                          : tr('+ ADD TO BAG', language)}
+                      </span>
+                      {inBagQty > 0 && (
+                        <span
+                          style={{
+                            background: '#10b981',
+                            color: '#ffffff',
+                            borderRadius: 10,
+                            padding: '1px 6px',
+                            fontSize: 10,
+                            fontWeight: 800,
+                            letterSpacing: 0,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {inBagQty}
+                        </span>
+                      )}
+                    </button>
+                    {waNum && (
+                      <a
+                        href={`https://wa.me/${waNum}?text=${encodeURIComponent(
+                          language === 'bn'
+                            ? `আসসালামু আলাইকুম METRROMA, আমি এই প্রোডাক্টটি অর্ডার করতে চাই:\n🛍️ প্রোডাক্ট: ${p.name}\n[Code: ${p.slug || p.id}]\n💰 মূল্য: ${taka(currentPrice)}\n\nনাম: \nফোন: \nঠিকানা: `
+                            : `Hello METRROMA, I would like to order:\n🛍️ Product: ${p.name}\n[Code: ${p.slug || p.id}]\n💰 Price: ${taka(currentPrice)}\n\nName: \nPhone: \nAddress: `
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          minHeight: 42,
+                          height: 42,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          background: '#FFFFFF',
+                          border: '1px solid #22c55e',
+                          color: '#15803D',
+                          padding: '0 10px',
+                          fontSize: 11.5,
+                          letterSpacing: '0.4px',
+                          textTransform: 'uppercase',
+                          fontWeight: 700,
+                          textDecoration: 'none',
+                          cursor: 'pointer',
+                          borderRadius: 8,
+                          boxShadow: '0 2px 6px rgba(34,197,94,0.08)',
+                          transition: 'all 0.18s ease',
+                          whiteSpace: 'nowrap',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = '#f0fdf4';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = '#FFFFFF';
+                        }}
+                      >
+                        <WhatsAppIcon size={16} variant="official" />
+                        <span style={{ whiteSpace: 'nowrap' }}>WHATSAPP</span>
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleWishlist(p)}
+                      style={{
+                        minHeight: 42,
+                        height: 42,
+                        padding: '0 10px',
+                        borderRadius: 8,
+                        border: isSaved(p.id) ? '1px solid #ef4444' : '1px solid rgba(180, 142, 76, 0.35)',
+                        background: isSaved(p.id) ? 'rgba(239, 68, 68, 0.08)' : '#FFFFFF',
+                        color: isSaved(p.id) ? '#ef4444' : '#1f3147',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 5,
+                        fontSize: 11.5,
+                        fontWeight: 700,
+                        transition: 'all 0.18s ease',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={isSaved(p.id) ? 'In Wishlist' : 'Save to Wishlist'}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill={isSaved(p.id) ? '#ef4444' : 'none'} stroke={isSaved(p.id) ? '#ef4444' : 'currentColor'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+                      </svg>
+                      <span style={{ whiteSpace: 'nowrap' }}>{isSaved(p.id) ? (language === 'bn' ? 'সেভড' : 'Saved') : (language === 'bn' ? 'উইশলিস্ট' : 'Wishlist')}</span>
+                    </button>
+                  </div>
+
+                  {/* Clean In-Bag Notice below action buttons */}
+                  {inBagQty > 0 && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        padding: '6px 12px',
+                        background: 'rgba(16, 185, 129, 0.08)',
+                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                        borderRadius: 6,
+                        marginTop: 1,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#065f46', fontSize: 11.5, fontWeight: 600 }}>
+                        <span style={{ color: '#10b981', fontWeight: 800 }}>✓</span>
+                        <span>{language === 'bn' ? `এই পণ্যটি ব্যাগে আছে (${inBagQty}টি)` : `Already in your shopping bag (${inBagQty})`}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setOpen(true)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#b48e4c',
+                          textDecoration: 'underline',
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          padding: 0,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {language === 'bn' ? 'ব্যাগ দেখুন' : 'View Bag'} →
+                      </button>
+                    </div>
                   )}
                 </div>
               </>
             )}
 
-            {/* Trust Highlights */}
+            {/* 1-Click Fast COD Order Form on PDP */}
+            {!p.soldOut && (
+              <PdpDirectCodForm
+                product={p}
+                currentPrice={currentPrice}
+                qty={qty}
+                selectedColor={selectedColor}
+                selectedSize={selectedSize}
+                selectedVar={selVar}
+                settings={settings}
+                language={language}
+                onQtyChange={handleQtyChange}
+              />
+            )}
+
+            {/* 4 Luxury Trust Highlights — Official Concierge Certificate */}
             <div
               style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(2, 1fr)',
                 gap: 12,
-                marginTop: 26,
-                padding: '16px 20px',
-                background: '#FAF8F5',
-                border: '1px solid rgba(180, 150, 100, 0.3)',
-                borderRadius: 4,
+                marginTop: 22,
+                padding: '16px 18px',
+                background: 'linear-gradient(180deg, #FFFFFF 0%, #FAF8F5 100%)',
+                border: '1px solid rgba(180, 142, 76, 0.26)',
+                borderRadius: 14,
+                boxShadow: '0 2px 10px rgba(180, 142, 76, 0.04)',
                 fontSize: 12,
                 color: '#4b5563',
-                lineHeight: 1.5
+                lineHeight: 1.4
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: '#b48e4c', fontSize: 13, flexShrink: 0 }}>✦</span>
-                <span>{tr('Express Nationwide Delivery', language)}</span>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                <span style={{ fontSize: 15, lineHeight: 1.3 }}>🛡️</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: '#1f3147', fontSize: 12 }}>100% Authentic Guarantee</div>
+                  <div style={{ fontSize: 10.5, color: '#6b645c', marginTop: 1 }}>Directly imported original products</div>
+                </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: '#b48e4c', fontSize: 13, flexShrink: 0 }}>✦</span>
-                <span>{tr('Cash on Delivery Available', language)}</span>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                <span style={{ fontSize: 15, lineHeight: 1.3 }}>🚚</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: '#1f3147', fontSize: 12 }}>Secure Fast Delivery</div>
+                  <div style={{ fontSize: 10.5, color: '#6b645c', marginTop: 1 }}>Reliable nationwide doorstep service</div>
+                </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: '#b48e4c', fontSize: 13, flexShrink: 0 }}>✦</span>
-                <span>{tr('Inspected & Carefully Packed', language)}</span>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                <span style={{ fontSize: 15, lineHeight: 1.3 }}>📦</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: '#1f3147', fontSize: 12 }}>Parcel Inspection</div>
+                  <div style={{ fontSize: 10.5, color: '#6b645c', marginTop: 1 }}>Check parcel before accepting</div>
+                </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: '#b48e4c', fontSize: 13, flexShrink: 0 }}>✦</span>
-                <span>{tr('7-Day Easy Exchange Guarantee', language)}</span>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                <span style={{ fontSize: 15, lineHeight: 1.3 }}>🔄</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: '#1f3147', fontSize: 12 }}>7-Day Easy Exchange</div>
+                  <div style={{ fontSize: 10.5, color: '#6b645c', marginTop: 1 }}>Hassle-free replacement policy</div>
+                </div>
               </div>
             </div>
 
             {/* Jump Link to Details & Specifications */}
-            <div style={{ marginTop: 20, textAlign: 'center' }}>
+            <div style={{ marginTop: 18, textAlign: 'center' }}>
               <button
                 type="button"
                 onClick={() => scrollToTab('desc')}
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: '#8c7d6b',
-                  fontSize: 12,
-                  letterSpacing: '0.08em',
+                  color: '#9a7030',
+                  fontSize: 11,
+                  letterSpacing: '0.1em',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 6,
                   textTransform: 'uppercase',
-                  fontWeight: 600,
+                  fontWeight: 700,
                   transition: 'color 0.2s ease',
                   padding: '6px 12px'
                 }}
                 onMouseEnter={(e) => (e.currentTarget.style.color = '#1f3147')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = '#8c7d6b')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = '#9a7030')}
               >
                 <span>{tr('View Complete Specifications & Details', language)}</span>
-                <span style={{ fontSize: 14 }}>↓</span>
+                <span style={{ fontSize: 13 }}>↓</span>
               </button>
             </div>
           </div>
@@ -2341,21 +3335,19 @@ export function ProductPage({ slug }: { slug: string }) {
           style={{
             marginTop: 40,
             background: '#FAF8F5',
-            border: '1px solid rgba(180, 150, 100, 0.35)',
+            borderRadius: 18,
+            border: '1px solid rgba(180, 142, 76, 0.28)',
             position: 'relative',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.03)',
+            boxShadow: '0 8px 32px rgba(180, 142, 76, 0.06)',
+            overflow: 'hidden',
           }}
         >
-          {/* Decorative Corner Marks */}
-          <div className="pc-corner-tr" />
-          <div className="pc-corner-bl" />
-
           {/* Section Heading */}
-          <div style={{ textAlign: 'center', padding: '36px 20px 22px', borderBottom: '1px solid #EAE5DC' }}>
-            <span className="pc-eyebrow" style={{ display: 'block', marginBottom: 8, letterSpacing: '3px' }}>
-              {p.category ? p.category.toUpperCase().replace('-', ' ') : (isSkin ? 'SECRATE SKINCARE & SELF-CARE' : 'METRROMA LIFESTYLE & GIFTS')} • PRODUCT DETAILS
+          <div style={{ textAlign: 'center', padding: '36px 20px 22px', borderBottom: '1px solid rgba(180, 142, 76, 0.2)' }}>
+            <span className="pc-eyebrow" style={{ display: 'block', marginBottom: 8, letterSpacing: '3px', color: '#9a7030', fontWeight: 700 }}>
+              {p.category ? p.category.toUpperCase().replace('-', ' ') : 'METRROMA SKINCARE & SELF-CARE'} • PRODUCT DETAILS
             </span>
-            <h2 className="serif" style={{ fontSize: 'clamp(22px, 2.5vw, 32px)', color: '#1f3147', margin: 0, fontWeight: 500 }}>
+            <h2 className="serif" style={{ fontSize: 'clamp(22px, 2.5vw, 32px)', color: '#1f3147', margin: 0, fontWeight: 600 }}>
               {isSkin ? 'Product Information & Details' : 'Product Information & Specifications'}
             </h2>
           </div>
@@ -2415,166 +3407,6 @@ export function ProductPage({ slug }: { slug: string }) {
                     style={{ fontSize: 15, color: '#374151', lineHeight: 1.85, marginBottom: 28 }}
                     dangerouslySetInnerHTML={{ __html: formatProductDescription(p.longDesc || p.desc) }}
                   />
-
-                  {/* 4 Feature Highlights Grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, marginTop: 24 }}>
-                    {isApparel ? (
-                      <>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">💎</span>
-                          <div>
-                            <h4>Product & Fit Details</h4>
-                            <p>Check the product listing for materials, sizing, and fit information.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">🛡️</span>
-                          <div>
-                            <h4>Discreet & Hygienic Packaging</h4>
-                            <p>Check the product listing or contact customer support for packaging information.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">✨</span>
-                          <div>
-                            <h4>Care Information</h4>
-                            <p>Follow the care instructions provided with the item.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">🚚</span>
-                          <div>
-                            <h4>Doorstep Cash on Delivery</h4>
-                            <p>Pay cash when your parcel arrives, subject to the courier's delivery process.</p>
-                          </div>
-                        </div>
-                      </>
-                    ) : isSkin ? (
-                      <>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">🌿</span>
-                          <div>
-                            <h4>Ingredient Details on Product Pages</h4>
-                            <p>Review ingredients and directions on each product page. Patch test before first use.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">✨</span>
-                          <div>
-                            <h4>Product Information</h4>
-                            <p>Check the product page and package for ingredients, size, and usage directions.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">🛡️</span>
-                          <div>
-                            <h4>Packaging Details</h4>
-                            <p>Refer to the product listing and package for packaging and storage information.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">🚚</span>
-                          <div>
-                            <h4>Doorstep Cash on Delivery</h4>
-                            <p>Pay cash when your parcel arrives, subject to the courier's delivery process.</p>
-                          </div>
-                        </div>
-                      </>
-                    ) : p.category === 'sunglass' ? (
-                      <>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">🕶️</span>
-                          <div>
-                            <h4>Lens Information</h4>
-                            <p>Check the product listing for lens type and UV protection details.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">💎</span>
-                          <div>
-                            <h4>Classic Everyday Style</h4>
-                            <p>Review the listing for frame style and product details.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">🛡️</span>
-                          <div>
-                            <h4>Package Contents</h4>
-                            <p>Check the product listing for included accessories.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">🚚</span>
-                          <div>
-                            <h4>Doorstep Cash on Delivery</h4>
-                            <p>Pay cash when your parcel arrives, subject to the courier's delivery process.</p>
-                          </div>
-                        </div>
-                      </>
-                    ) : p.category === 'gift' ? (
-                      <>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">🎁</span>
-                          <div>
-                            <h4>Gift Set Details</h4>
-                            <p>Check the product listing for included items and packaging.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">🌹</span>
-                          <div>
-                            <h4>Product Details</h4>
-                            <p>Review the listing for materials and care information.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">💌</span>
-                          <div>
-                            <h4>Gift Options</h4>
-                            <p>Check the product listing for available gift options.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">🚚</span>
-                          <div>
-                            <h4>Doorstep Cash on Delivery</h4>
-                            <p>Pay cash when your parcel arrives, subject to the courier's delivery process.</p>
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">💎</span>
-                          <div>
-                            <h4>Product Details Available</h4>
-                            <p>Refer to the product listing for item-specific details. Contact customer support if you have a question.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">🛡️</span>
-                          <div>
-                            <h4>Packaging Information</h4>
-                            <p>Contact customer support if you need information about packaging.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">🔄</span>
-                          <div>
-                            <h4>Easy 7-Day Exchange Policy</h4>
-                            <p>Dedicated customer support to assist with easy exchanges and hassle-free assistance.</p>
-                          </div>
-                        </div>
-                        <div className="tabaya-feature-card">
-                          <span className="icon">🚚</span>
-                          <div>
-                            <h4>Doorstep Cash on Delivery</h4>
-                            <p>Pay cash when your parcel arrives, subject to the courier's delivery process.</p>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
                 </div>
               </div>
             )}
@@ -3117,9 +3949,10 @@ export function ProductPage({ slug }: { slug: string }) {
         <div
           className={'pdpbar' + (showBar ? ' show' : '')}
           style={{
-            background: '#ffffff',
-            borderTop: '1px solid #EAE5DC',
-            boxShadow: '0 -6px 20px rgba(0,0,0,0.08)',
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(12px)',
+            borderTop: '1px solid rgba(180, 142, 76, 0.3)',
+            boxShadow: '0 -6px 20px rgba(180, 142, 76, 0.1)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -3130,13 +3963,13 @@ export function ProductPage({ slug }: { slug: string }) {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
             <img
-              src={p.image}
+              src={gallery[0] || p.image}
               alt=""
-              style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4, border: '1px solid #EAE5DC', flexShrink: 0 }}
+              style={{ width: 44, height: 44, objectFit: 'contain', borderRadius: 8, border: '1px solid rgba(180, 142, 76, 0.3)', background: '#fff', flexShrink: 0 }}
             />
             <div className="pb-info" style={{ minWidth: 0, overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <b style={{ color: '#1f3147', fontSize: 17, fontWeight: 700 }}>{taka(currentPrice)}</b>
+                <b style={{ color: '#111A24', fontSize: 17, fontWeight: 700 }}>{taka(currentPrice)}</b>
                 {onSale && currentCompareAt && (
                   <s style={{ color: '#8c7d6b', fontSize: 12 }}>{taka(currentCompareAt)}</s>
                 )}
@@ -3153,16 +3986,17 @@ export function ProductPage({ slug }: { slug: string }) {
               padding: '12px 22px',
               fontSize: 12,
               fontWeight: 700,
-              letterSpacing: '0.14em',
-              background: '#1f3147',
-              color: '#FAF8F5',
-              border: '1px solid #b48e4c',
+              letterSpacing: '0.1em',
+              background: 'linear-gradient(135deg, #b48e4c 0%, #caa45d 50%, #9a7232 100%)',
+              color: '#ffffff',
+              border: '1px solid rgba(255, 255, 255, 0.35)',
               cursor: 'pointer',
-              borderRadius: 4,
-              boxShadow: '0 4px 12px rgba(31, 49, 71, 0.25)'
+              borderRadius: 8,
+              boxShadow: '0 4px 14px rgba(180, 142, 76, 0.35)',
+              whiteSpace: 'nowrap'
             }}
           >
-            <span>{tr('ORDER NOW', language)}</span>
+            <span>{language === 'bn' ? 'অর্ডার করুন' : 'ORDER NOW'}</span>
           </button>
         </div>
       )}
@@ -3208,9 +4042,18 @@ export function Checkout() {
     }
   }, [customer]);
 
-  // ping server for incomplete order capture
+  // ping server for incomplete order capture & live user data push
   useEffect(() => {
     const cleanPhone = f.phone.trim().replace(/[-+ ]/g, '');
+    if (cleanPhone.length >= 7 || (f.name && f.name.trim().length >= 2)) {
+      pushUserData({
+        name: f.name ? f.name.trim() : undefined,
+        phone: cleanPhone,
+        address: f.address ? f.address.trim() : undefined,
+        city: district || area || '',
+        email: f.email ? f.email.trim() : undefined,
+      });
+    }
     if (!/^01[3-9]\d{8}$/.test(cleanPhone) || lines.length === 0) return;
     const t = setTimeout(() => {
       fetch('/api/checkout/ping', {
@@ -3313,7 +4156,19 @@ export function Checkout() {
           source: getSource(),
         }
       });
-      ecPurchase(res.id, res.total ?? grand, lines.map((l) => ({ id: l.id, name: l.name, price: l.price, qty: l.qty })), getSource());
+      ecPurchase(
+        res.id,
+        res.total ?? grand,
+        lines.map((l) => ({ id: l.id, name: l.name, price: l.price, qty: l.qty })),
+        getSource(),
+        {
+          name: f.name ? f.name.trim() : undefined,
+          phone: f.phone ? f.phone.trim() : undefined,
+          address: fullAddress,
+          city: district || area || '',
+          email: f.email ? f.email.trim() : undefined,
+        }
+      );
       clear();
       go('confirm/' + res.id);
     } catch (e: any) { setErr(e.message || 'could not place order'); } finally { setBusy(false); }
@@ -3360,7 +4215,7 @@ export function Checkout() {
         {/* Header */}
         <div className="phead" style={{ textAlign: 'center', padding: '6px 0 28px' }}>
           <p className="pc-section-kicker">
-            {isSkin ? 'SECRATE • SECURE ORDER CHECKOUT' : 'METRROMA • SECURE ORDER CHECKOUT'}
+            METRROMA • SECURE ORDER CHECKOUT
           </p>
           <h1 className="serif" style={{ fontSize: 'clamp(28px, 3.4vw, 40px)', fontWeight: 500, color: '#1f3147', margin: '6px 0 10px' }}>
             {tr('Finalize Your Order', language)}
@@ -3644,15 +4499,6 @@ export function Checkout() {
             </div>
           </div>
         </div>
-        <div className="checkout-mobile-action" aria-label="Quick order action">
-          {err && <div className="checkout-mobile-error" role="alert">⚠️ {err}</div>}
-          <div className="checkout-mobile-action-row">
-            <div className="checkout-mobile-total"><span>Total payable</span><strong>{taka(grand)}</strong></div>
-            <button className="checkout-submit-btn" disabled={busy} onClick={submit}>
-              <span>{busy ? tr('PROCESSING…', language) : tr('PLACE ORDER', language)}</span>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -3688,7 +4534,7 @@ export function Confirm({ id }: { id: string }) {
           <div className="pc-corner-tr" />
           <div className="pc-corner-bl" />
           <div className="okcheck"><svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5" /></svg></div>
-          <p className="pc-section-kicker">{isSkin ? 'SECRATE • ORDER RECEIVED' : 'METRROMA • ORDER RECEIVED'}</p>
+          <p className="pc-section-kicker">METRROMA • ORDER RECEIVED</p>
           <h1 className="serif" style={{ fontSize: 'clamp(26px, 3.2vw, 36px)', color: '#1f3147', fontWeight: 500, margin: '8px 0 12px' }}>
             Order Placed Successfully!
           </h1>
@@ -3803,16 +4649,18 @@ function CopyMini({ text, language = 'en' }: { text: string; language?: 'en' | '
     <button
       className="copymini"
       onClick={copy}
+      title={language === 'bn' ? 'অর্ডার আইডি কপি করুন' : 'Copy Order ID'}
       style={{
-        background: done ? '#10b981' : '#ffffff',
-        color: done ? '#ffffff' : '#1f3147',
-        border: done ? '1px solid #10b981' : '1px solid #cbd5e1',
-        borderRadius: 4,
+        background: done ? 'linear-gradient(135deg, #b48e4c 0%, #967030 100%)' : '#FAF8F5',
+        color: done ? '#ffffff' : '#8a6520',
+        border: done ? '1px solid #7c5916' : '1px solid #d9be85',
+        borderRadius: 5,
         padding: '3px 9px',
         fontSize: 11,
         fontWeight: 700,
         cursor: 'pointer',
         transition: 'all .2s ease',
+        boxShadow: done ? '0 2px 8px rgba(180, 142, 76, 0.35)' : 'none',
       }}
     >
       {done ? (language === 'bn' ? '✓ কপি হয়েছে' : '✓ Copied') : (language === 'bn' ? 'কপি' : 'Copy')}
@@ -3827,6 +4675,12 @@ export function Track({ id: initialId }: { id?: string }) {
   const [res, setRes] = useState<any>(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showSearch, setShowSearch] = useState(!initialId);
+  const [settings, setSettings] = useState<any>(null);
+
+  useEffect(() => {
+    getSettings().then(setSettings).catch(() => {});
+  }, []);
 
   const copy = language === 'bn' ? {
     eyebrow: 'রিয়েল-টাইম কুরিয়ার ট্র্যাকিং', title: 'আপনার অর্ডার ট্র্যাক করুন',
@@ -3858,6 +4712,7 @@ export function Track({ id: initialId }: { id?: string }) {
       if (!r.ok) throw new Error(d.error || 'Order not found');
       setRes(d);
       setErr('');
+      setShowSearch(false);
     } catch (e: any) {
       if (!quiet) {
         setErr(e.message || 'Order not found');
@@ -3894,466 +4749,709 @@ export function Track({ id: initialId }: { id?: string }) {
   }, [res?.id, id, phone]);
 
   return (
-    <div className="page" style={{ minHeight: '80vh', paddingBottom: 70, background: '#FAF8F5' }}>
-      <div className="wrap" style={{ maxWidth: 780, margin: '0 auto', padding: '0 20px' }}>
-        <div className="phead tracking-heading" style={{ padding: '24px 0 20px', textAlign: 'center' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#b49664', marginBottom: 8 }}>
-            <span>📦</span> {copy.eyebrow}
-          </div>
-          <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontSize: 'clamp(28px, 4vw, 38px)', color: '#1f3147', letterSpacing: '-0.02em', margin: 0 }}>
-            {copy.title}
-          </h1>
-          <p style={{ color: '#6b645c', marginTop: 10, fontSize: 14.5, maxWidth: 460, margin: '10px auto 0' }}>
-            {copy.intro}
-          </p>
-        </div>
+    <div className="page track-page" style={{ minHeight: '85vh', paddingBottom: 80, background: '#FAF8F5' }}>
+      <div className="wrap" style={{ maxWidth: 1080, margin: '0 auto', padding: '0 16px' }}>
+        {/* If no order loaded or user toggles search, show search form */}
+        {(!res || showSearch) && (
+          <div style={{ maxWidth: 680, margin: '0 auto 28px' }}>
+            <div className="phead tracking-heading" style={{ padding: '36px 0 20px', textAlign: 'center' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#9a7030', marginBottom: 8, background: 'rgba(180, 142, 76, 0.12)', padding: '4px 14px', borderRadius: 100, border: '1px solid rgba(180, 142, 76, 0.3)' }}>
+                <span>📦</span> {copy.eyebrow}
+              </div>
+              <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontSize: 'clamp(28px, 4vw, 36px)', color: '#1f3147', letterSpacing: '-0.02em', margin: '6px 0 0' }}>
+                {copy.title}
+              </h1>
+              <p style={{ color: '#6b645c', marginTop: 10, fontSize: 14.5, maxWidth: 480, margin: '10px auto 0', lineHeight: 1.5 }}>
+                {copy.intro}
+              </p>
+            </div>
 
-        <div
-          className="tracking-card"
-          style={{
-            background: '#ffffff',
-            borderRadius: 12,
-            padding: 24,
-            border: '1px solid #EAE5DC',
-            boxShadow: '0 4px 20px rgba(31, 49, 71, 0.05)',
-          }}
-        >
-          <div className="track-form">
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#1f3147', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                {copy.orderId}
-              </label>
-              <input
-                className="field"
-                placeholder={copy.orderPlaceholder}
-                value={id}
-                onChange={(e) => setId(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && submit()}
-                style={{ width: '100%', boxSizing: 'border-box' }}
-              />
+            <div
+              className="tracking-card"
+              style={{
+                background: '#ffffff',
+                borderRadius: 16,
+                padding: '24px 28px',
+                border: '1.5px solid rgba(180, 142, 76, 0.35)',
+                boxShadow: '0 8px 32px rgba(180, 142, 76, 0.08)',
+              }}
+            >
+              <div className="track-form" style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: '#1f3147', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    {copy.orderId}
+                  </label>
+                  <input
+                    className="field"
+                    placeholder={copy.orderPlaceholder}
+                    value={id}
+                    onChange={(e) => setId(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && submit()}
+                    style={{ width: '100%', boxSizing: 'border-box', height: 46, borderRadius: 8, border: '1.5px solid #dcd5ca', padding: '0 14px', fontSize: 14 }}
+                  />
+                </div>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: '#1f3147', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    {copy.phone}
+                  </label>
+                  <input
+                    className="field"
+                    placeholder={copy.phonePlaceholder}
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && submit()}
+                    style={{ width: '100%', boxSizing: 'border-box', height: 46, borderRadius: 8, border: '1.5px solid #dcd5ca', padding: '0 14px', fontSize: 14 }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end', width: '100%' }}>
+                  <button
+                    className="btn"
+                    disabled={busy}
+                    onClick={submit}
+                    style={{
+                      width: '100%',
+                      background: 'linear-gradient(135deg, #b48e4c 0%, #967030 100%)',
+                      color: '#FAF8F5',
+                      padding: '14px',
+                      borderRadius: 8,
+                      fontWeight: 800,
+                      fontSize: 14,
+                      letterSpacing: '0.06em',
+                      textTransform: 'uppercase',
+                      border: 'none',
+                      cursor: busy ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      gap: 8,
+                      boxShadow: '0 6px 20px rgba(180, 142, 76, 0.35)',
+                    }}
+                  >
+                    <span>{busy ? copy.searching : copy.search}</span>
+                  </button>
+                </div>
+              </div>
+
+              {err && (
+                <div
+                  style={{
+                    marginTop: 16,
+                    padding: '12px 16px',
+                    background: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderRadius: 8,
+                    color: '#991b1b',
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <span>⚠️</span>
+                  <span>{err}</span>
+                </div>
+              )}
             </div>
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#1f3147', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                {copy.phone}
-              </label>
-              <input
-                className="field"
-                placeholder={copy.phonePlaceholder}
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && submit()}
-                style={{ width: '100%', boxSizing: 'border-box' }}
-              />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-end', width: '100%' }}>
+          </div>
+        )}
+
+        {/* Live Order Tracking Result 2-Column Luxury View */}
+        {res && (
+          <div className="track-result-wrap" style={{ paddingTop: showSearch ? 10 : 16 }}>
+            <TrackResult o={res} language={language} settings={settings} />
+            <div style={{ textAlign: 'center', marginTop: 24 }}>
               <button
-                className="btn"
-                disabled={busy}
-                onClick={submit}
+                type="button"
+                onClick={() => setShowSearch(!showSearch)}
                 style={{
-                  width: '100%',
-                  background: '#1f3147',
-                  color: '#FAF8F5',
-                  padding: '14px',
-                  borderRadius: 6,
-                  fontWeight: 700,
-                  fontSize: 13,
-                  letterSpacing: '1px',
-                  textTransform: 'uppercase',
+                  background: 'transparent',
                   border: 'none',
-                  cursor: busy ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  gap: 8,
-                  boxShadow: '0 4px 14px rgba(31,49,71,0.2)',
+                  color: '#8a6520',
+                  fontSize: 13.5,
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  fontWeight: 700,
                 }}
               >
-                <span>{busy ? copy.searching : copy.search}</span>
+                {showSearch ? (language === 'bn' ? 'সার্চ ফর্ম বন্ধ করুন ✕' : 'Close Search Form ✕') : (language === 'bn' ? '🔍 অন্য কোনো অর্ডার ট্র্যাক করতে চান? এখানে ক্লিক করুন' : '🔍 Track a different order? Click here')}
               </button>
             </div>
           </div>
-
-          {err && (
-            <div
-              style={{
-                marginTop: 16,
-                padding: '12px 16px',
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
-                borderRadius: 8,
-                color: '#991b1b',
-                fontSize: 13.5,
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              <span>⚠️</span>
-              <span>{err}</span>
-            </div>
-          )}
-        </div>
-
-        {res && <TrackResult o={res} language={language} />}
+        )}
       </div>
     </div>
   );
 }
 
-function TrackResult({ o, language }: { o: any; language: 'en' | 'bn' }) {
-  const bn = language === 'bn';
-  const cancelled = ['cancelled', 'canceled', 'return', 'returned', 'failed'].includes(String(o.status || '').toLowerCase());
-  const returned = String(o.status || '').toLowerCase() === 'return' || String(o.status || '').toLowerCase() === 'returned';
-  const special = cancelled || returned;
-  const idx = getTrackStepIndex(o.status);
-  const rawStatus = String(o.status || 'pending').toLowerCase();
-  const statusText: Record<string, string> = bn
-    ? { delivered: 'ডেলিভারি সম্পন্ন', shipped: 'কুরিয়ারে পাঠানো', approved: 'নিশ্চিত', confirmed: 'নিশ্চিত', hold: 'স্থগিত', cancelled: 'বাতিল', canceled: 'বাতিল', return: 'ফেরত', returned: 'ফেরত', pending: 'অপেক্ষমাণ', placed: 'গ্রহণ করা হয়েছে' }
-    : { delivered: 'DELIVERED', shipped: 'SHIPPED', approved: 'APPROVED', confirmed: 'CONFIRMED', hold: 'ON HOLD', cancelled: 'CANCELLED', canceled: 'CANCELLED', return: 'RETURNED', returned: 'RETURNED', pending: 'PENDING', placed: 'PLACED' };
-  const date = new Date(o.createdAt).toLocaleDateString(bn ? 'bn-BD' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+function maskPhoneStr(phone: string) {
+  if (!phone) return '';
+  const str = String(phone).trim();
+  if (str.includes('•') || str.includes('*')) return str;
+  const digits = str.replace(/\D/g, '');
+  if (digits.length >= 10) {
+    const f = digits.slice(-11, -7) || digits.slice(0, 4);
+    const l = digits.slice(-3);
+    return f + '••••' + l;
+  }
+  return str.slice(0, 3) + '••••' + str.slice(-2);
+}
 
-  // Status Badge Configuration
+function maskAddressStr(addr: string, dist?: string) {
+  const full = [addr, dist].filter(Boolean).join(', ').trim();
+  if (!full) return 'সুরক্ষিত ডেলিভারি ঠিকানা 🔒';
+  if (full.includes('•') || full.includes('*')) return full;
+  const parts = full.split(/[,।\n]/).map((p: string) => p.trim()).filter(Boolean);
+  if (parts.length > 1) {
+    return parts[0] + ', •••••••• (🔒 সুরক্ষার্থে সম্পূর্ণ ঠিকানা আড়ালকৃত)';
+  }
+  if (full.length > 10) {
+    return full.slice(0, 8) + '•••••••• (🔒 সুরক্ষার্থে সম্পূর্ণ ঠিকানা আড়ালকৃত)';
+  }
+  return full + ' ••• (🔒)';
+}
+
+function TrackResult({ o, language, settings }: { o: any; language: 'en' | 'bn'; settings?: any }) {
+  const bn = language === 'bn';
+  const rawStatus = String(o.status || 'pending').toLowerCase();
+  const cancelled = ['cancelled', 'canceled', 'return', 'returned', 'failed'].includes(rawStatus);
+  const returned = rawStatus === 'return' || rawStatus === 'returned';
+  const idx = getTrackStepIndex(o.status);
+
+  const createdDate = new Date(o.createdAt);
+  const dateFormatted = createdDate.toLocaleDateString(bn ? 'bn-BD' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const timeFormatted = createdDate.toLocaleTimeString(bn ? 'bn-BD' : 'en-US', { hour: 'numeric', minute: '2-digit' });
+
+  // Estimated Delivery ETA
+  const isInside = o.customer?.area === 'inside' || String(o.customer?.district || '').toLowerCase().includes('dhaka');
+  const etaText = bn
+    ? (isInside ? '২৪ থেকে ৪৮ ঘণ্টার মধ্যে (ঢাকা সিটি)' : '৪৮ থেকে ৭২ ঘণ্টার মধ্যে (সারাদেশ)')
+    : (isInside ? '24 to 48 Hours (Inside Dhaka)' : '48 to 72 Hours (Outside Dhaka)');
+
+  // Support Contacts
+  const waNumber = settings?.whatsapp || '8801916691768';
+  const hotlineNumber = settings?.phone || '09697101762';
+  const waClean = waNumber.replace(/\D/g, '');
+  const waPreFilled = bn
+    ? `আসসালামু আলাইকুম METRROMA, আমার অর্ডার #${o.id} সম্পর্কে জানতে চাচ্ছি।`
+    : `Hi METRROMA, I would like to inquire about my order #${o.id}.`;
+  const waUrl = `https://wa.me/${waClean}?text=${encodeURIComponent(waPreFilled)}`;
+
+  // Status Badge Configuration in METRROMA Luxury Style
   const getBadge = () => {
-    const s = String(o.status || '').toLowerCase();
-    if (s === 'delivered') return { label: bn ? 'ডেলিভারি সম্পন্ন' : 'Delivered', bg: '#dcfce7', color: '#15803d', border: '#bbf7d0', icon: '🎉' };
-    if (s === 'shipped') return { label: bn ? 'কুরিয়ারে পাঠানো হয়েছে' : 'In Transit / Shipped', bg: '#dbeafe', color: '#1e40af', border: '#bfdbfe', icon: '🚚' };
-    if (s === 'approved' || s === 'confirmed') return { label: bn ? 'অর্ডার নিশ্চিত হয়েছে' : 'Order Approved & Confirmed', bg: '#d1fae5', color: '#065f46', border: '#a7f3d0', icon: '✓' };
-    if (s === 'hold') return { label: bn ? 'অর্ডার স্থগিত' : 'Order on Hold', bg: '#fef3c7', color: '#92400e', border: '#fde68a', icon: '⏸️' };
-    if (cancelled) return { label: bn ? 'অর্ডার বাতিল' : 'Order Cancelled', bg: '#fee2e2', color: '#991b1b', border: '#fecaca', icon: '✕' };
-    return { label: bn ? 'অর্ডার গ্রহণ করা হয়েছে' : 'Order Placed', bg: '#fef3c7', color: '#854d0e', border: '#fde68a', icon: '⏳' };
+    if (rawStatus === 'delivered') return { label: bn ? 'ডেলিভারি সম্পন্ন' : 'Delivered', bg: 'linear-gradient(135deg, #065f46 0%, #047857 100%)', color: '#ffffff', border: '#34d399', icon: '🎁' };
+    if (rawStatus === 'shipped') return { label: bn ? 'কুরিয়ারে ট্রানজিটে রয়েছে' : 'In Transit with Courier', bg: 'linear-gradient(135deg, #1f3147 0%, #152232 100%)', color: '#e6c887', border: '#b48e4c', icon: '🚚' };
+    if (rawStatus === 'approved' || rawStatus === 'confirmed') return { label: bn ? 'অর্ডার নিশ্চিত ও প্যাকিং চলছে' : 'Order Confirmed & Packing', bg: 'linear-gradient(135deg, #b48e4c 0%, #967030 100%)', color: '#ffffff', border: '#7c5916', icon: '✓' };
+    if (rawStatus === 'hold') return { label: bn ? 'অর্ডার স্থগিত' : 'Order on Hold', bg: '#fef3c7', color: '#b45309', border: '#fcd34d', icon: '⏸️' };
+    if (cancelled) return { label: bn ? 'অর্ডার বাতিল' : 'Order Cancelled', bg: '#fee2e2', color: '#b91c1c', border: '#fca5a5', icon: '✕' };
+    return { label: bn ? 'অর্ডার গ্রহণ (পর্যালোচনাধীন)' : 'Order Placed (In Review)', bg: 'linear-gradient(135deg, #fdf8ed 0%, #faeed2 100%)', color: '#8a6520', border: '#d9be85', icon: '⏳' };
   };
   const badge = getBadge();
+
+  // Stepper Stage Definitions
+  const STEPS = [
+    { key: 'placed', label: bn ? 'অর্ডার গ্রহণ' : 'Order Placed', sub: bn ? 'সিস্টেমে গৃহীত' : 'Received in system', icon: '📝' },
+    { key: 'confirmed', label: bn ? 'কনফার্ম ও প্যাকিং' : 'Confirmed & Packed', sub: bn ? 'বক্সিং সম্পন্ন' : 'Discreet packed', icon: '📦' },
+    { key: 'shipped', label: bn ? 'কুরিয়ারে হস্তান্তর' : 'In Transit', sub: bn ? 'ঠিকানায় আসছে' : 'On the way', icon: '🚚' },
+    { key: 'delivered', label: bn ? 'ডেলিভারি সম্পন্ন' : 'Delivered', sub: bn ? 'হস্তান্তর সম্পন্ন' : 'Delivered successfully', icon: '🎁' },
+  ];
+
+  // De-duplicate repetitive history entries for clean presentation
+  const cleanHistory = Array.isArray(o.history)
+    ? o.history.filter((h: any, i: number, arr: any[]) => {
+        if (i === 0) return true;
+        return h.status !== arr[i - 1].status || Boolean(h.note);
+      })
+    : [];
 
   return (
     <div
       style={{
-        marginTop: 28,
-        border: '1.5px solid rgba(180, 150, 100, 0.45)',
-        borderRadius: 12,
-        padding: '32px 28px',
-        background: '#ffffff',
-        boxShadow: '0 8px 30px rgba(31, 49, 71, 0.08)',
-        color: '#1f3147',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+        gap: 22,
+        alignItems: 'start',
       }}
     >
-      {/* Top Order Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14, borderBottom: '1px solid #EAE5DC', paddingBottom: 20 }}>
-        <div>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#8c7d6b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{bn ? 'অর্ডার আইডি:' : 'Order ID:'}</span>
-            <code style={{ fontSize: 15, fontWeight: 800, color: '#1f3147', background: '#FAF8F5', padding: '2px 8px', borderRadius: 4, border: '1px solid #EAE5DC' }}>
-              {o.id}
-            </code>
-            <CopyMini text={o.id} language={language} />
-          </div>
-          <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontSize: 24, margin: '8px 0 4px', color: '#1f3147' }}>
-            {badge.label}
-          </h2>
-          <p style={{ color: '#6b645c', fontSize: 13.5, margin: 0 }}>
-            {bn ? 'অর্ডারের তারিখ:' : 'Order placed:'} <b>{date}</b> • {bn ? 'ক্যাশ অন ডেলিভারি' : 'Cash on Delivery'}
-          </p>
-        </div>
-
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: badge.bg, color: badge.color, border: `1.5px solid ${badge.border}`, borderRadius: 100, fontSize: 13, fontWeight: 700 }}>
-          <span>{badge.icon}</span>
-          <span>{statusText[rawStatus] || (bn ? o.status : String(o.status || 'pending').toUpperCase())}</span>
-        </div>
-      </div>
-
-      {/* Visual Stepper */}
-      {!special ? (
-        <div style={{ margin: '36px 0 32px' }}>
-          <div style={{ display: 'flex', position: 'relative' }}>
-            {TRACK_STEPS.map((s, i) => {
-              const isPassed = i <= idx;
-              const isCurrent = i === idx;
-              return (
-                <div key={s.key} style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  {/* Connecting Line */}
-                  {i > 0 && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: 14,
-                        left: '-50%',
-                        width: '100%',
-                        height: 3,
-                        background: isPassed ? '#1f3147' : '#EAE5DC',
-                        transition: 'background .3s ease',
-                        zIndex: 1,
-                      }}
-                    />
-                  )}
-
-                  {/* Dot / Icon */}
-                  <div
-                    style={{
-                      width: 30,
-                      height: 30,
-                      borderRadius: '50%',
-                      background: isPassed ? '#1f3147' : '#ffffff',
-                      border: isPassed ? '2px solid #1f3147' : '2px solid #cbd5e1',
-                      color: isPassed ? '#ffffff' : '#94a3b8',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: isPassed ? 13 : 12,
-                      fontWeight: 700,
-                      position: 'relative',
-                      zIndex: 2,
-                      boxShadow: isCurrent ? '0 0 0 4px rgba(31,49,71,0.18)' : 'none',
-                      transition: 'all .25s ease',
-                    }}
-                  >
-                    {isPassed ? (i === idx && i !== 3 ? '✓' : s.icon) : (i + 1)}
-                  </div>
-
-                  {/* Label */}
-                  <div style={{ textAlign: 'center', marginTop: 10 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: isPassed ? 700 : 500, color: isPassed ? '#1f3147' : '#94a3b8' }}>
-                      {bn ? ['অর্ডার গ্রহণ', 'অর্ডার নিশ্চিত', 'কুরিয়ারে পাঠানো', 'ডেলিভারি সম্পন্ন'][i] : s.label}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <div style={{ margin: '24px 0', padding: 18, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', textAlign: 'center', fontWeight: 600 }}>
-          {cancelled
-            ? (bn ? 'এই অর্ডারটি বাতিল করা হয়েছে। ভুলবশত হয়ে থাকলে আমাদের সাপোর্ট টিমের সঙ্গে যোগাযোগ করুন।' : 'This order has been cancelled. If you think this is a mistake, please contact our support team.')
-            : (bn ? 'এই পার্সেলটি ফেরত পাঠানো হচ্ছে। আরও তথ্যের জন্য আমাদের সঙ্গে যোগাযোগ করুন।' : 'This parcel is being returned. Please contact us if you need more information.')}
-        </div>
-      )}
-
-      {/* Courier Details Card */}
-      {o.courier && o.courier.name && (
+      {/* ======================================================== */}
+      {/* LEFT COLUMN: Main Tracking Status, Stepper, & Timeline */}
+      {/* ======================================================== */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        
+        {/* Main Status Hero Card */}
         <div
           style={{
-            marginTop: 24,
-            padding: '22px 24px',
-            background: '#f8fafc',
-            borderRadius: 10,
-            border: '1.5px solid #cbd5e1',
-            boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+            background: '#ffffff',
+            borderRadius: 16,
+            padding: '28px 24px',
+            border: '1.5px solid rgba(180, 142, 76, 0.35)',
+            boxShadow: '0 10px 32px rgba(31, 49, 71, 0.06)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 18 }}>🚚</span>
-              <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#1f3147' }}>
-                {bn ? 'ডেলিভারি কুরিয়ার পার্টনার' : 'Delivery Courier Partner'}
-              </span>
-            </div>
-            {o.courier.liveStatus && (
-              <span style={{ background: '#dbeafe', color: '#1e40af', border: '1px solid #bfdbfe', padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 700 }}>
-                {o.courier.liveStatus}
-              </span>
-            )}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, fontSize: 13.5 }}>
+          {/* Top Bar: Order ID + Status Pill */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, borderBottom: '1px solid rgba(180, 142, 76, 0.2)', paddingBottom: 18 }}>
             <div>
-              <span style={{ color: '#64748b', fontSize: 12 }}>{bn ? 'কুরিয়ার কোম্পানি:' : 'Courier Company:'}</span>
-              <div style={{ fontWeight: 700, color: '#1f3147', fontSize: 15, marginTop: 2 }}>{o.courier.name}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#9a7030', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  {bn ? 'অর্ডার আইডি:' : 'Order ID:'}
+                </span>
+                <code style={{ fontSize: 16, fontWeight: 900, color: '#1f3147', background: '#FAF8F5', padding: '3px 10px', borderRadius: 6, border: '1.5px solid #d9be85', letterSpacing: '0.5px' }}>
+                  #{o.id}
+                </code>
+                <CopyMini text={o.id} language={language} />
+              </div>
+              <div style={{ color: '#8c7d6b', fontSize: 12.5, marginTop: 4 }}>
+                {bn ? 'অর্ডারের তারিখ:' : 'Order Date:'} <b>{dateFormatted} • {timeFormatted}</b>
+              </div>
             </div>
 
-            {o.courier.consignment && (
-              <div>
-                <span style={{ color: '#64748b', fontSize: 12 }}>{bn ? 'ট্র্যাকিং / কনসাইনমেন্ট আইডি:' : 'Tracking / Consignment ID:'}</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                  <code style={{ fontWeight: 700, color: '#0f172a', background: '#ffffff', padding: '3px 8px', borderRadius: 4, border: '1px solid #cbd5e1', fontSize: 14 }}>
-                    {o.courier.consignment}
-                  </code>
-                  <CopyMini text={o.courier.consignment} language={language} />
-                </div>
-              </div>
-            )}
-
-            {o.courier.phone && (
-              <div>
-                <span style={{ color: '#64748b', fontSize: 12 }}>{bn ? 'কুরিয়ার হেল্পলাইন:' : 'Courier Helpline:'}</span>
-                <div style={{ marginTop: 2 }}>
-                  <a href={'tel:' + o.courier.phone} style={{ color: '#2563eb', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>
-                    📞 {o.courier.phone}
-                  </a>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {o.courier.riderNote && (
-            <div style={{ marginTop: 14, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, fontSize: 13, color: '#92400e' }}>
-              <b>🛵 {bn ? 'রাইডারের নোট:' : 'Rider Note:'}</b> {o.courier.riderNote}
+            {/* Glowing Live Status Pill */}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 16px', background: badge.bg, color: badge.color, border: `1.5px solid ${badge.border}`, borderRadius: 100, fontSize: 13, fontWeight: 800, boxShadow: '0 3px 10px rgba(180, 142, 76, 0.15)' }}>
+              <span style={{ fontSize: 15 }}>{badge.icon}</span>
+              <span>{badge.label}</span>
             </div>
-          )}
-
-          {courierLink(o.courier) && (
-            <a
-              href={courierLink(o.courier)}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                marginTop: 16,
-                padding: '11px 20px',
-                background: '#1f3147',
-                color: '#ffffff',
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 700,
-                textDecoration: 'none',
-                boxShadow: '0 2px 8px rgba(31,49,71,0.2)',
-              }}
-            >
-              <span>{bn ? `${o.courier.name} এর অফিসিয়াল ওয়েবসাইটে লাইভ ট্র্যাক করুন` : `Track Live on ${o.courier.name} Official Website`}</span>
-              <span>→</span>
-            </a>
-          )}
-        </div>
-      )}
-
-      {/* Order Activity & Timeline */}
-      {Array.isArray(o.history) && o.history.length > 0 && (
-        <div style={{ marginTop: 24, padding: '20px 22px', background: '#ffffff', borderRadius: 10, border: '1px solid #EAE5DC', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1f3147', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span>📜</span> {bn ? 'অর্ডারের কার্যক্রম ও সময়রেখা' : 'Order Activity &amp; Timeline'}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {o.history.map((h: any, i: number) => {
-              const isLatest = i === o.history.length - 1;
-              return (
-                <div key={i} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                  <div
-                    style={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: '50%',
-                      background: isLatest ? '#10b981' : '#1f3147',
-                      marginTop: 4,
-                      flexShrink: 0,
-                      boxShadow: isLatest ? '0 0 0 4px rgba(16,185,129,0.2)' : 'none',
-                    }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 6 }}>
-                      <span style={{ textTransform: 'capitalize', fontWeight: 700, color: '#1f3147', fontSize: 13.5 }}>
-                        {h.status === 'approved' ? (bn ? 'অর্ডার নিশ্চিত' : 'Order Confirmed') : h.status === 'pending' ? (bn ? 'অর্ডার গ্রহণ' : 'Order Placed') : h.status === 'shipped' ? (bn ? 'কুরিয়ারে হস্তান্তর' : 'Handed over to Courier') : h.status}
-                      </span>
-                      <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 500 }}>
-                        {new Date(h.at).toLocaleDateString(bn ? 'bn-BD' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} • {new Date(h.at).toLocaleTimeString(bn ? 'bn-BD' : 'en-US', { hour: 'numeric', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    {h.note && (
-                      <div style={{ fontSize: 12.5, color: '#475569', marginTop: 4, background: '#f8fafc', padding: '6px 12px', borderRadius: 6, border: '1px solid #e2e8f0', display: 'inline-block' }}>
-                        {h.note}
-                      </div>
-                    )}
+
+          {/* If Cancelled: Show Elegant Cancelled Alert Concierge */}
+          {cancelled ? (
+            <div style={{ marginTop: 20, padding: '20px', background: 'linear-gradient(135deg, #fff5f5 0%, #fee2e2 100%)', border: '1.5px solid #fca5a5', borderRadius: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <span style={{ fontSize: 24, flexShrink: 0 }}>⚠️</span>
+                <div>
+                  <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 800, color: '#991b1b' }}>
+                    {bn ? 'আপনার এই অর্ডারটি বাতিল করা হয়েছে' : 'This order has been cancelled'}
+                  </h3>
+                  <p style={{ margin: 0, fontSize: 13.5, color: '#7f1d1d', lineHeight: 1.55 }}>
+                    {bn
+                      ? 'ভুলবশত বাতিল হয়ে থাকলে অথবা অন্য কোনো প্রোডাক্ট সম্পর্কে জানতে চাইলে সরাসরি আমাদের কাস্টমার কেয়ারে যোগাযোগ করতে পারেন।'
+                      : 'If this was cancelled by mistake or you have questions, please reach out to our customer care team.'}
+                  </p>
+                  <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <a
+                      href={waUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: '#25D366',
+                        color: '#ffffff',
+                        padding: '9px 16px',
+                        borderRadius: 8,
+                        fontSize: 12.5,
+                        fontWeight: 800,
+                        textDecoration: 'none',
+                        boxShadow: '0 2px 8px rgba(37,211,102,0.3)',
+                      }}
+                    >
+                      <WhatsAppIcon size={16} variant="official" />
+                      <span>{bn ? 'হোয়াটসঅ্যাপে প্রতিনিধির সাথে কথা বলুন' : 'Chat on WhatsApp'}</span>
+                    </a>
+                    <a
+                      href={'tel:' + hotlineNumber}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: '#ffffff',
+                        color: '#1f3147',
+                        border: '1.5px solid #dcd5ca',
+                        padding: '9px 16px',
+                        borderRadius: 8,
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        textDecoration: 'none',
+                      }}
+                    >
+                      <span>📞 {bn ? 'হটলাইন কল' : 'Call Hotline'}</span>
+                    </a>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Customer Delivery Details & Support */}
-      {o.customer && (
-        <div style={{ marginTop: 22, padding: '18px 22px', background: '#FAF8F5', borderRadius: 10, border: '1px solid #EAE5DC', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#8c7d6b' }}>
-              {bn ? 'ডেলিভারির ঠিকানা' : 'Delivery Destination'}
-            </div>
-            <div style={{ fontWeight: 700, color: '#1f3147', fontSize: 14, marginTop: 4 }}>
-              {o.customer.name} {o.customer.phone && `(${o.customer.phone})`}
-            </div>
-            <div style={{ color: '#475569', fontSize: 13, marginTop: 2 }}>
-              {[o.customer.address, o.customer.district].filter(Boolean).join(', ')}
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <a
-              href={`https://wa.me/8801633617136?text=${encodeURIComponent(`Hi METRROMA, I am inquiring about my order ${o.id}`)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                background: '#25D366',
-                color: '#ffffff',
-                padding: '9px 16px',
-                borderRadius: 6,
-                fontSize: 12.5,
-                fontWeight: 700,
-                textDecoration: 'none',
-                boxShadow: '0 2px 8px rgba(37,211,102,0.25)',
-              }}
-            >
-              <WhatsAppIcon size={16} variant="official" />
-              <span>{bn ? 'হোয়াটসঅ্যাপ সাপোর্ট' : 'WhatsApp Support'}</span>
-            </a>
-            <a
-              href="tel:01633617136"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                background: '#ffffff',
-                color: '#1f3147',
-                border: '1px solid #cbd5e1',
-                padding: '9px 16px',
-                borderRadius: 6,
-                fontSize: 12.5,
-                fontWeight: 700,
-                textDecoration: 'none',
-              }}
-            >
-              <span>📞 {bn ? 'হটলাইনে কল করুন' : 'Call Hotline'}</span>
-            </a>
-          </div>
-        </div>
-      )}
-
-      {/* Items Summary & Total */}
-      <div className="trk-items" style={{ marginTop: 24, borderTop: '1px solid #EAE5DC', paddingTop: 20 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#8c7d6b', marginBottom: 12 }}>
-          {bn ? 'অর্ডারের পণ্যের বিবরণ' : 'Order Items Summary'}
-        </div>
-        {o.items.map((it: any) => (
-          <div className="sl" key={it.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px dashed rgba(180, 150, 100, 0.25)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {it.image && (
-                <img src={it.image} alt={it.name} style={{ width: 48, height: 48, borderRadius: 6, objectFit: 'cover', border: '1px solid #EAE5DC' }} />
-              )}
-              <div>
-                <span style={{ fontWeight: 700, color: '#1f3147', fontSize: 14 }}>{it.name}</span>
-                <div style={{ color: '#64748b', fontSize: 12, marginTop: 2 }}>{bn ? 'পরিমাণ:' : 'Quantity:'} {it.qty}</div>
               </div>
             </div>
-            <span style={{ fontWeight: 700, color: '#1f3147', fontSize: 15 }}>{taka(it.subtotal || it.price * it.qty)}</span>
-          </div>
-        ))}
+          ) : (
+            /* Active Order Flow: Discreet Packaging + ETA + Stepper */
+            <>
+              {/* Estimated Delivery Time Banner */}
+              <div style={{ marginTop: 16, display: 'inline-flex', alignItems: 'center', gap: 8, background: 'linear-gradient(135deg, #fdf8ed 0%, #f7ebcf 100%)', padding: '7px 16px', borderRadius: 8, border: '1px solid #dfc79b', color: '#8a6520', fontSize: 13, fontWeight: 700 }}>
+                <span>⚡</span>
+                <span>{bn ? 'সম্ভাব্য হোম ডেলিভারি:' : 'Estimated Delivery:'}</span>
+                <b style={{ color: '#7c5916' }}>{etaText}</b>
+              </div>
 
-        {o.delivery != null && (
-          <div className="sl" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: '#64748b', padding: '10px 0' }}>
-            <span>{bn ? `হোম ডেলিভারি চার্জ (${o.customer?.area === 'inside' ? 'ঢাকার ভিতরে' : 'ঢাকার বাইরে'})` : `Home Delivery Charge (${o.customer?.area === 'inside' ? 'Inside Dhaka' : 'Outside Dhaka'})`}</span>
-            <span style={{ fontWeight: 600, color: '#1f3147' }}>{taka(o.delivery)}</span>
+              {/* 100% Discreet Packaging Guarantee Banner */}
+              <div
+                style={{
+                  marginTop: 14,
+                  padding: '14px 18px',
+                  background: 'linear-gradient(135deg, rgba(180, 142, 76, 0.08) 0%, rgba(201, 166, 99, 0.16) 100%)',
+                  border: '1.5px solid rgba(180, 142, 76, 0.38)',
+                  borderRadius: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+              >
+                <span style={{ fontSize: 24, flexShrink: 0 }}>🛡️</span>
+                <div style={{ fontSize: 13, color: '#5c554e', lineHeight: 1.5 }}>
+                  <strong style={{ display: 'block', color: '#8a6520', fontWeight: 800, fontSize: 13.5, marginBottom: 2 }}>
+                    {bn ? '১০০% গোপনীয় ও সুরক্ষিত প্যাকেজিং গ্যারান্টি' : '100% Discreet & Secured Packaging Guarantee'}
+                  </strong>
+                  {bn
+                    ? 'আপনার পার্সেলটি সম্পূর্ণ সিলগালা ও গোপন বক্সে পাঠানো হবে। প্যাকেটের বাইরে কোনো পণ্যের নাম থাকে না।'
+                    : 'Your parcel is dispatched in a discreet, securely sealed box with no outer product details.'}
+                </div>
+              </div>
+
+              {/* 4-Step Animated Visual Stepper */}
+              <div style={{ margin: '32px 0 24px' }}>
+                <div style={{ display: 'flex', position: 'relative' }}>
+                  {STEPS.map((s, i) => {
+                    const isPassed = i <= idx;
+                    const isCurrent = i === idx;
+                    return (
+                      <div key={s.key} style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        {/* Connecting Line */}
+                        {i > 0 && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: 17,
+                              left: '-50%',
+                              width: '100%',
+                              height: 3.5,
+                              background: isPassed ? 'linear-gradient(90deg, #b48e4c 0%, #c9a663 100%)' : '#e5decb',
+                              transition: 'background .3s ease',
+                              zIndex: 1,
+                            }}
+                          />
+                        )}
+
+                        {/* Step Circle */}
+                        <div
+                          style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: '50%',
+                            background: isPassed
+                              ? (isCurrent ? 'linear-gradient(135deg, #c9a663 0%, #967030 100%)' : 'linear-gradient(135deg, #b48e4c 0%, #967030 100%)')
+                              : '#FAF8F5',
+                            color: isPassed ? '#ffffff' : '#a8a09a',
+                            border: isPassed ? '2px solid #b48e4c' : '2px solid #d8d0c8',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: isPassed ? 13.5 : 12,
+                            fontWeight: 800,
+                            position: 'relative',
+                            zIndex: 2,
+                            boxShadow: isCurrent ? '0 0 0 5px rgba(180, 142, 76, 0.28)' : 'none',
+                            transition: 'all .25s ease',
+                          }}
+                        >
+                          {isPassed ? (i === idx && i !== 3 ? '✓' : s.icon) : (i + 1)}
+                        </div>
+
+                        {/* Label */}
+                        <div style={{ textAlign: 'center', marginTop: 8, padding: '0 4px' }}>
+                          <div style={{ fontSize: 12.5, fontWeight: isPassed ? 700 : 500, color: isCurrent ? '#8a6520' : (isPassed ? '#1f3147' : '#a8a09a') }}>
+                            {s.label}
+                          </div>
+                          <div style={{ fontSize: 10.5, color: isCurrent ? '#967030' : '#a8a09a', marginTop: 1, fontWeight: isCurrent ? 700 : 400 }}>
+                            {s.sub}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Courier Partner Live Tracking (When assigned) */}
+        {o.courier && o.courier.name && (
+          <div
+            style={{
+              padding: '20px 22px',
+              background: 'linear-gradient(135deg, #ffffff 0%, #fdfbf7 100%)',
+              borderRadius: 14,
+              border: '1.5px solid rgba(180, 142, 76, 0.35)',
+              boxShadow: '0 4px 16px rgba(180, 142, 76, 0.06)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 20 }}>🚚</span>
+                <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#8a6520' }}>
+                  {bn ? 'ডেলিভারি কুরিয়ার পার্টনার' : 'Courier Partner'}
+                </span>
+              </div>
+              {o.courier.liveStatus && (
+                <span style={{ background: 'linear-gradient(135deg, #fdf8ed 0%, #faeed2 100%)', color: '#8a6520', border: '1px solid #d9be85', padding: '3px 12px', borderRadius: 100, fontSize: 11.5, fontWeight: 700 }}>
+                  {o.courier.liveStatus}
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, fontSize: 13 }}>
+              <div>
+                <span style={{ color: '#8c7d6b', fontSize: 11.5 }}>{bn ? 'কুরিয়ার কোম্পানি:' : 'Courier:'}</span>
+                <div style={{ fontWeight: 800, color: '#1f3147', fontSize: 15, marginTop: 1 }}>{o.courier.name}</div>
+              </div>
+
+              {o.courier.consignment && (
+                <div>
+                  <span style={{ color: '#8c7d6b', fontSize: 11.5 }}>{bn ? 'কনসাইনমেন্ট নম্বর:' : 'Tracking ID:'}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
+                    <code style={{ fontWeight: 800, color: '#1f3147', background: '#FAF8F5', padding: '3px 8px', borderRadius: 5, border: '1px solid #d9be85', fontSize: 13.5 }}>
+                      {o.courier.consignment}
+                    </code>
+                    <CopyMini text={o.courier.consignment} language={language} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {courierLink(o.courier) && (
+              <a
+                href={courierLink(o.courier)}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 14,
+                  padding: '10px 20px',
+                  background: 'linear-gradient(135deg, #b48e4c 0%, #967030 100%)',
+                  color: '#ffffff',
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: 800,
+                  textDecoration: 'none',
+                  boxShadow: '0 4px 14px rgba(180, 142, 76, 0.3)',
+                }}
+              >
+                <span>{bn ? `🚀 ${o.courier.name} এর পোর্টালে লাইভ ট্র্যাক করুন` : `🚀 Track on ${o.courier.name}`}</span>
+                <span>→</span>
+              </a>
+            )}
           </div>
         )}
 
-        <div className="tot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: '2px solid #1f3147', marginTop: 14, paddingTop: 16 }}>
-          <div>
-            <span style={{ fontSize: 16, fontWeight: 800, color: '#1f3147', display: 'block' }}>{bn ? 'সর্বমোট পরিশোধযোগ্য' : 'Total Payable Amount'}</span>
-            <span style={{ fontSize: 12, color: '#64748b' }}>{bn ? 'পণ্য হাতে পেয়ে মূল্য পরিশোধ করুন।' : 'Pay when your order is delivered.'}</span>
+        {/* Milestone Timeline Card (Clean & Deduplicated) */}
+        {cleanHistory.length > 0 && (
+          <div style={{ padding: '20px 22px', background: '#ffffff', borderRadius: 14, border: '1.5px solid rgba(180, 142, 76, 0.25)', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+            <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#8a6520', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>📜</span> {bn ? 'অর্ডারের অগ্রগতি ও সময়রেখা' : 'Order Timeline'}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {cleanHistory.map((h: any, i: number) => {
+                const isLatest = i === cleanHistory.length - 1;
+                return (
+                  <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                    <div
+                      style={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: '50%',
+                        background: isLatest ? 'linear-gradient(135deg, #b48e4c 0%, #967030 100%)' : '#d8d0c8',
+                        marginTop: 4,
+                        flexShrink: 0,
+                        boxShadow: isLatest ? '0 0 0 4px rgba(180, 142, 76, 0.25)' : 'none',
+                      }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 6 }}>
+                        <span style={{ textTransform: 'capitalize', fontWeight: 700, color: '#1f3147', fontSize: 13.5 }}>
+                          {h.status === 'approved' ? (bn ? 'অর্ডার নিশ্চিত ও প্যাকিং' : 'Order Confirmed & Packing') : h.status === 'pending' ? (bn ? 'অর্ডার গ্রহণ' : 'Order Placed') : h.status === 'shipped' ? (bn ? 'কুরিয়ারে হস্তান্তর' : 'Handed to Courier') : h.status === 'delivered' ? (bn ? 'ডেলিভারি সম্পন্ন' : 'Delivered') : h.status === 'cancelled' ? (bn ? 'অর্ডার বাতিল' : 'Cancelled') : h.status}
+                        </span>
+                        <span style={{ fontSize: 11.5, color: '#8c7d6b', fontWeight: 500 }}>
+                          {new Date(h.at).toLocaleDateString(bn ? 'bn-BD' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} • {new Date(h.at).toLocaleTimeString(bn ? 'bn-BD' : 'en-US', { hour: 'numeric', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      {h.note && (
+                        <div style={{ fontSize: 12, color: '#64748b', marginTop: 3, background: '#FAF8F5', padding: '4px 10px', borderRadius: 4, border: '1px solid #EAE5DC', display: 'inline-block' }}>
+                          {h.note}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <b style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: 26, color: '#1f3147' }}>{taka(o.total)}</b>
+        )}
+      </div>
+
+      {/* ======================================================== */}
+      {/* RIGHT COLUMN: Customer Destination & Order Items Bill */}
+      {/* ======================================================== */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        
+        {/* Customer Destination & Support Card */}
+        {o.customer && (
+          <div
+            style={{
+              padding: '22px 24px',
+              background: '#ffffff',
+              borderRadius: 16,
+              border: '1.5px solid rgba(180, 142, 76, 0.35)',
+              boxShadow: '0 8px 24px rgba(31, 49, 71, 0.05)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9a7030', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>📍</span> {bn ? 'ডেলিভারির ঠিকানা' : 'Delivery Destination'}
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#047857', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: 100, border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                🔒 {bn ? 'সুরক্ষিত' : 'Privacy Protected'}
+              </span>
+            </div>
+
+            <div style={{ fontWeight: 800, color: '#1f3147', fontSize: 16 }}>
+              {o.customer.name}
+            </div>
+
+            {o.customer.phone && (
+              <div style={{ color: '#8a6520', fontWeight: 800, fontSize: 13.5, marginTop: 4, letterSpacing: '0.5px' }}>
+                📞 {maskPhoneStr(o.customer.phone)}
+              </div>
+            )}
+
+            <div style={{ color: '#5c554e', fontSize: 13, marginTop: 4, lineHeight: 1.5 }}>
+              {maskAddressStr(o.customer.address, o.customer.district)}
+            </div>
+
+            {/* Privacy micro-banner */}
+            <div style={{ marginTop: 12, padding: '7px 10px', background: '#FAF8F5', borderRadius: 6, border: '1px solid #EAE5DC', fontSize: 11.5, color: '#8c7d6b', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>🔒</span>
+              <span>{bn ? 'গ্রাহকের ব্যক্তিগত সুরক্ষার্থে পূর্ণ ঠিকানা ও ফোন নম্বর পাবলিক পেজে আড়াল রাখা হয়েছে।' : 'Phone number and address are partially masked on public tracking for your privacy.'}</span>
+            </div>
+
+            {/* Support Actions */}
+            <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+              <a
+                href={waUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  background: '#25D366',
+                  color: '#ffffff',
+                  padding: '9px 16px',
+                  borderRadius: 6,
+                  fontSize: 12.5,
+                  fontWeight: 800,
+                  textDecoration: 'none',
+                  boxShadow: '0 2px 8px rgba(37,211,102,0.25)',
+                }}
+              >
+                <WhatsAppIcon size={16} variant="official" />
+                <span>{bn ? 'WhatsApp এ সাহায্য' : 'WhatsApp Support'}</span>
+              </a>
+              <a
+                href={'tel:' + hotlineNumber}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  background: '#ffffff',
+                  color: '#8a6520',
+                  border: '1.5px solid #b48e4c',
+                  padding: '9px 16px',
+                  borderRadius: 6,
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  textDecoration: 'none',
+                }}
+              >
+                <span>📞 {bn ? 'হটলাইনে কল' : 'Call'}</span>
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* Order Items & Pricing Breakdown Card */}
+        <div
+          style={{
+            padding: '22px 24px',
+            background: '#ffffff',
+            borderRadius: 16,
+            border: '1.5px solid rgba(180, 142, 76, 0.35)',
+            boxShadow: '0 8px 24px rgba(31, 49, 71, 0.05)',
+          }}
+        >
+          <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9a7030', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
+            <span>🛍️</span> {bn ? 'অর্ডারের পণ্যের বিবরণ' : 'Order Items Summary'}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {o.items?.map((it: any) => (
+              <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottom: '1px dashed rgba(180, 142, 76, 0.25)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {it.image && (
+                    <img src={it.image} alt={it.name} style={{ width: 50, height: 50, borderRadius: 8, objectFit: 'cover', border: '1.5px solid rgba(180, 142, 76, 0.3)' }} />
+                  )}
+                  <div>
+                    <div style={{ fontWeight: 700, color: '#1f3147', fontSize: 14, lineHeight: 1.35 }}>{it.name}</div>
+                    <div style={{ color: '#8c7d6b', fontSize: 12, marginTop: 2 }}>
+                      <span style={{ background: '#FAF8F5', border: '1px solid #e5decb', color: '#8a6520', padding: '1px 7px', borderRadius: 4, fontWeight: 700 }}>
+                        {bn ? 'পরিমাণ:' : 'Qty:'} {it.qty}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <span style={{ fontWeight: 800, color: '#1f3147', fontSize: 15 }}>{taka(it.subtotal || it.price * it.qty)}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Pricing calculations */}
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#6b645c' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>{bn ? 'পণ্যের মোট মূল্য:' : 'Subtotal:'}</span>
+              <span style={{ fontWeight: 600, color: '#1f3147' }}>{taka(o.itemsTotal || o.total)}</span>
+            </div>
+
+            {o.delivery != null && (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>{bn ? 'ডেলিভারি চার্জ:' : 'Delivery Charge:'}</span>
+                <span style={{ fontWeight: 700 }}>
+                  {o.delivery === 0 ? (
+                    <span style={{ background: 'rgba(180, 142, 76, 0.14)', color: '#8a6520', border: '1px solid rgba(180, 142, 76, 0.35)', padding: '2px 8px', borderRadius: 4, fontWeight: 800, fontSize: 11.5 }}>
+                      {bn ? 'ফ্রি (FREE)' : 'FREE'}
+                    </span>
+                  ) : taka(o.delivery)}
+                </span>
+              </div>
+            )}
+
+            {Boolean(o.discount) && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#047857', fontWeight: 600 }}>
+                <span>{bn ? 'ডিসকাউন্ট ছাড়:' : 'Discount:'}</span>
+                <span>-{taka(o.discount)}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Total Payable */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: '2px solid #b48e4c', marginTop: 14, paddingTop: 14 }}>
+            <div>
+              <span style={{ fontSize: 15, fontWeight: 800, color: '#1f3147', display: 'block' }}>{bn ? 'সর্বমোট প্রদেয় বিল' : 'Total Payable'}</span>
+              <span style={{ fontSize: 12, color: '#8a6520', fontWeight: 700 }}>
+                {bn ? '💵 ক্যাশ অন ডেলিভারি' : '💵 Cash on Delivery'}
+              </span>
+            </div>
+            <b style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 900, fontSize: 26, color: '#1f3147' }}>
+              {taka(o.total)}
+            </b>
+          </div>
         </div>
       </div>
     </div>

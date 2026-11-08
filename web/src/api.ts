@@ -14,7 +14,19 @@ export type Category = {
 
 export function isWellnessOrExcludedCategory(slugOrName?: string | null): boolean {
   const s = String(slugOrName || '').toLowerCase().trim();
-  return s === 'wellness-corner' || s === 'warless-corner' || s === 'warlase-corner' || s.includes('wellness-corner') || s === 'adult' || s === 'intimate';
+  return (
+    s === 'wellness-corner' ||
+    s === 'warless-corner' ||
+    s === 'warlase-corner' ||
+    s.includes('wellness-corner') ||
+    s === 'for-man' ||
+    s === 'for-women' ||
+    s === 'finger-condom' ||
+    s === 'condom' ||
+    s === 'muster-b-toy' ||
+    s === 'adult' ||
+    s === 'intimate'
+  );
 }
 
 export function isWellnessOrExcludedProduct(p?: Partial<Product> | null): boolean {
@@ -91,6 +103,7 @@ export type ProductVariation = {
 
 export type Product = {
   id: string; slug: string; name: string; price: number; category: string; subCategory?: string;
+  categories?: string[];
   adult: boolean; tag: string; desc: string; size: string; image: string;
   images?: string[]; stock?: number | null; compareAt?: number; soldOut?: boolean;
   sku?: string; shortDesc?: string; longDesc?: string; weight?: string;
@@ -108,12 +121,22 @@ export type Product = {
 export type FraudDetectorSettings = {
   enabled: boolean;
   cooldownHours: number;
+  sameProductLimit?: number;
   maxOrdersPerDay: number;
+  maxOrdersPerIp?: number;
   minSecondsBetweenOrders: number;
   blockByPhone: boolean;
+  blockByIp?: boolean;
+  protectIncompleteOrders?: boolean;
+  applyOnLandingPages?: boolean;
   sameProductNotice: string;
+  sameProductNoticeBn?: string;
   maxOrdersNotice: string;
+  maxOrdersNoticeBn?: string;
+  ipLimitNotice?: string;
+  ipLimitNoticeBn?: string;
   rapidOrderNotice: string;
+  rapidOrderNoticeBn?: string;
 };
 
 export type SliderItem = {
@@ -327,7 +350,9 @@ export async function postReview(b: { productId: string; name: string; rating: n
 export function isSkincareSite(): boolean {
   if (typeof window === 'undefined') return false;
   const h = (window.location.hostname || '').toLowerCase();
-  return h.includes('secrate');
+  if (h.includes('secrate')) return true;
+  if (h.includes('metrroma')) return false;
+  return true;
 }
 
 export type MasterColor = {
@@ -390,6 +415,7 @@ export type Customer = {
   phone: string;
   name: string;
   email?: string;
+  picture?: string;
   ordersCount: number;
   totalSpent: number;
   tier: string;
@@ -452,6 +478,24 @@ export async function verifyCustomerOtp(
   });
   const d = await r.json();
   if (!r.ok) throw new Error(d.error || 'Invalid verification code');
+  if (d.token) setCustomerToken(d.token);
+  return d;
+}
+
+export async function authCustomerWithGoogle(
+  credential: string
+): Promise<{ ok: boolean; token: string; isNew?: boolean; customer: Customer }> {
+  const did = getDeviceId();
+  const r = await fetch('/api/customer/google', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-device-id': did
+    },
+    body: JSON.stringify({ credential, deviceId: did })
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || 'Google sign-in failed');
   if (d.token) setCustomerToken(d.token);
   return d;
 }

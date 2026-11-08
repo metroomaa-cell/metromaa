@@ -117,19 +117,122 @@ export function ecAdd(p: { id: string; name: string; price: number }, qty = 1) {
   } catch {}
 }
 
-// Begin checkout / InitiateCheckout
-export function ecBeginCheckout(value: number, items: { id: string; name: string; price: number; qty: number }[]) {
+export function getCookie(name: string): string | undefined {
+  if (typeof document === 'undefined' || !document.cookie) return undefined;
+  try {
+    const parts = document.cookie.split(';');
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i].trim();
+      if (p.startsWith(name + '=')) {
+        return decodeURIComponent(p.substring(name.length + 1));
+      }
+    }
+  } catch {}
+  return undefined;
+}
+
+export function formatE164Phone(rawPhone?: string): string {
+  if (!rawPhone) return '';
+  const digits = String(rawPhone).replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('880')) return '+' + digits;
+  if (digits.startsWith('01')) return '+880' + digits.slice(1);
+  if (digits.length === 10 && digits.startsWith('1')) return '+880' + digits;
+  return '+' + digits;
+}
+
+export type CustomerTrackingData = {
+  name?: string;
+  phone?: string;
+  city?: string;
+  address?: string;
+  email?: string;
+};
+
+export function buildUserData(c?: CustomerTrackingData) {
+  const fbp = getCookie('_fbp');
+  const fbc = getCookie('_fbc');
+  const e164 = formatE164Phone(c?.phone);
+  const nameParts = (c?.name || '').trim().split(/\s+/);
+  const firstName = nameParts[0] || '';
+  const lastName = nameParts.slice(1).join(' ') || '';
+
+  const uData: Record<string, any> = {
+    phone_number: e164 || undefined,
+    phone: e164 || undefined,
+    first_name: firstName || undefined,
+    last_name: lastName || undefined,
+    email: c?.email ? c.email.trim().toLowerCase() : undefined,
+    address: {
+      first_name: firstName || undefined,
+      last_name: lastName || undefined,
+      city: c?.city || undefined,
+      street: c?.address || undefined,
+      country: 'BD',
+    },
+    fbp: fbp || undefined,
+    fbc: fbc || undefined,
+  };
+  Object.keys(uData).forEach((k) => uData[k] === undefined && delete uData[k]);
+  return uData;
+}
+
+export function pushUserData(c: CustomerTrackingData) {
+  try {
+    if (isAdminContext()) return;
+    const uData = buildUserData(c);
+    dl({
+      event: 'user_data_update',
+      user_data: uData,
+      customer: uData,
+    });
+  } catch {}
+}
+
+// Begin checkout / InitiateCheckout with rich customer user_data for sGTM
+export function ecBeginCheckout(
+  value: number,
+  items: { id: string; name: string; price: number; qty: number }[],
+  customer?: CustomerTrackingData
+) {
   try {
     const eventId = uid('ic');
+    const uData = buildUserData(customer);
     dl({ ecommerce: null });
-    dl({ event: 'begin_checkout', event_id: eventId, eventID: eventId, ecommerce: { currency: CUR, value, items: items.map((l) => ({ item_id: l.id, item_name: l.name, price: l.price, quantity: l.qty })) } });
-    dl({ event: 'InitiateCheckout', event_id: eventId, eventID: eventId, value, currency: CUR, num_items: items.length });
+    dl({
+      event: 'begin_checkout',
+      event_id: eventId,
+      eventID: eventId,
+      user_data: uData,
+      customer: uData,
+      ecommerce: {
+        currency: CUR,
+        value,
+        items: items.map((l) => ({ item_id: l.id, item_name: l.name, price: l.price, quantity: l.qty })),
+      },
+    });
+    dl({
+      event: 'InitiateCheckout',
+      event_id: eventId,
+      eventID: eventId,
+      value,
+      currency: CUR,
+      num_items: items.length,
+      user_data: uData,
+      customer: uData,
+    });
     fbTrack('InitiateCheckout', { value, currency: CUR, num_items: items.length }, false, eventId);
   } catch {}
 }
 
-// Purchase
-export function ecPurchase(id: string, value: number, items: { id: string; name: string; price: number; qty: number }[], source?: string) {
+// Purchase with rich customer user_data & _fbp/_fbc for sGTM + Meta CAPI
+export function ecPurchase(
+  id: string,
+  value: number,
+  items: { id: string; name: string; price: number; qty: number }[],
+  source?: string,
+  customer?: CustomerTrackingData
+) {
   try {
     const numValue = Math.round((Number(value) || 0) * 100) / 100;
     const contents = (items || []).map((l) => ({
@@ -139,6 +242,7 @@ export function ecPurchase(id: string, value: number, items: { id: string; name:
     }));
     const contentIds = (items || []).map((i) => String(i.id));
     const numItems = (items || []).reduce((sum, i) => sum + (Number(i.qty) || 1), 0);
+    const uData = buildUserData(customer);
 
     dl({ ecommerce: null });
     dl({
@@ -149,6 +253,8 @@ export function ecPurchase(id: string, value: number, items: { id: string; name:
       currency: CUR,
       order_id: String(id),
       order_source: source || 'direct',
+      user_data: uData,
+      customer: uData,
       ecommerce: {
         transaction_id: String(id),
         currency: CUR,

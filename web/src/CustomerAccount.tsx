@@ -5,6 +5,7 @@ import {
   getCustomerMe,
   sendCustomerOtp,
   verifyCustomerOtp,
+  authCustomerWithGoogle,
   updateCustomerProfile,
   logoutCustomer,
   taka
@@ -112,6 +113,143 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
       return () => clearTimeout(t);
     }
   }, [countdown]);
+
+  const GOOGLE_CLIENT_ID = '768607828735-81q2voar33po1rc9qnvakheil5h8oeri.apps.googleusercontent.com';
+
+  const handleGoogleCredentialResponse = async (response: any) => {
+    if (!response || !response.credential) return;
+    setBusy(true);
+    setError('');
+    try {
+      const res = await authCustomerWithGoogle(response.credential);
+      await refreshCustomer();
+      const hasAddress = res.customer?.savedAddress?.address && res.customer.savedAddress.address.trim().length > 0;
+      const hasPhone = res.customer?.phone && res.customer.phone.trim().length > 0;
+      if (res.isNew || !hasAddress || !hasPhone) {
+        setNotice('Google sign-in successful! Please confirm your mobile number and delivery address.');
+        setAddrPhone(res.customer?.phone || '');
+        setStep('set_address');
+      } else {
+        onClose();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Google sign-in failed. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (step !== 'form') return;
+
+    let cancelled = false;
+    const initGsi = () => {
+      if (cancelled) return;
+      const g = (window as any).google?.accounts?.id;
+      if (!g) return;
+
+      try {
+        g.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleGoogleCredentialResponse,
+          auto_select: false,
+          cancel_on_tap_outside: true,
+        });
+
+        const slot = document.getElementById('google-signin-btn-container');
+        if (slot) {
+          slot.innerHTML = '';
+          g.renderButton(slot, {
+            theme: 'outline',
+            size: 'large',
+            type: 'standard',
+            text: 'continue_with',
+            shape: 'rectangular',
+            logo_alignment: 'left',
+            width: Math.min(360, window.innerWidth - 64),
+          });
+        }
+      } catch (err) {
+        console.warn('Google Identity error:', err);
+      }
+    };
+
+    initGsi();
+    const interval = setInterval(() => {
+      if ((window as any).google?.accounts?.id) {
+        initGsi();
+        clearInterval(interval);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [step, authTab]);
+
+  const triggerGoogleSignIn = () => {
+    const g = (window as any).google?.accounts?.id;
+    if (g) {
+      try {
+        g.prompt();
+      } catch (e) {
+        console.warn('Google prompt err:', e);
+      }
+    } else {
+      setError('Google Sign-In is initializing, please wait a moment...');
+    }
+  };
+
+  const renderGoogleSignInSection = () => (
+    <div style={{ marginTop: 14, marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, gap: 10 }}>
+        <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+        <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
+          or continue with
+        </span>
+        <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+      </div>
+
+      <div
+        id="google-signin-btn-container"
+        style={{ display: 'flex', justifyContent: 'center', minHeight: 44, width: '100%' }}
+      >
+        <button
+          type="button"
+          onClick={triggerGoogleSignIn}
+          disabled={busy}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            width: '100%',
+            maxWidth: 360,
+            height: 42,
+            background: '#ffffff',
+            color: '#3c4043',
+            border: '1px solid #dadce0',
+            borderRadius: 4,
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: busy ? 'not-allowed' : 'pointer',
+            boxShadow: '0 1px 2px rgba(60,64,67,0.1)',
+            transition: 'background-color .2s, box-shadow .2s',
+            fontFamily: 'Roboto, arial, sans-serif',
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z" fill="#4285F4"/>
+            <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+            <path d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" fill="#FBBC05"/>
+            <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z" fill="#EA4335"/>
+          </svg>
+          <span>Continue with Google</span>
+        </button>
+      </div>
+    </div>
+  );
 
   const formatTimer = (sec: number) => {
     if (sec <= 60) return `${sec}s`;
@@ -472,6 +610,8 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                     {busy ? 'Verifying account...' : 'Send Login Code'}
                   </button>
 
+                  {renderGoogleSignInSection()}
+
                   <div style={{ textAlign: 'center', fontSize: 13, color: '#64748b' }}>
                     Don't have an account yet?{' '}
                     <button
@@ -610,6 +750,8 @@ export function CustomerAuthModal({ onClose }: { onClose: () => void }) {
                   >
                     {busy ? 'Sending verification code...' : 'Create Account & Send Code'}
                   </button>
+
+                  {renderGoogleSignInSection()}
 
                   <div style={{ textAlign: 'center', fontSize: 13, color: '#64748b' }}>
                     Already have an account?{' '}

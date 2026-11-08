@@ -1,17 +1,18 @@
-import { NotificationWidgets } from './NotificationWidgets';
 import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { CartProvider, useCart, useRoute, go } from './cart';
+import { WishlistProvider, useWishlist, WishlistDrawer } from './wishlist';
 import { taka, getSettings, isSkincareSite, getCategories, isWellnessOrExcludedCategory, getCachedSettings, getCachedCategories } from './api';
 import { initGTM, initFB, dl, trackEngagement, initInteractionTracking } from './analytics';
 import { Home, Shop, ProductPage, Checkout, Confirm, Track, SearchOverlay, InfoPage } from './pages';
 import { CustomerProvider, useCustomer, CustomerHeaderIcon, CustomerAccountPage } from './CustomerAccount';
 import { WhatsAppIcon } from './icons';
 import { setStoreLanguage, setStoreCopyOverrides, tr, useStoreLanguage } from './language';
+import { NotificationWidgets } from './NotificationWidgets';
 const Admin = lazy(() => import('./admin').then((m) => ({ default: m.Admin })));
 const LoveLockLanding = lazy(() => import('./LoveLockLanding').then((m) => ({ default: m.LoveLockLanding })));
 
 function StoreLoading({ admin = false }: { admin?: boolean }) {
-  const brand = admin ? 'SECRATE ADMIN' : (isSkincareSite() ? 'SECRATE' : 'METRROMA');
+  const brand = admin ? 'SECRATE ADMIN' : 'SECRATE';
   return (
     <div className="store-loading" role="status" aria-live="polite">
       <div className="store-loading-card">
@@ -77,7 +78,7 @@ function Effects() {
   useEffect(() => {
     let active = true;
     const isSkin = isSkincareSite();
-    const defaultBrand = isSkin ? 'SECRATE' : 'METRROMA';
+    const defaultBrand = 'SECRATE';
 
     const setMetaName = (name: string, val: string) => {
       let m = document.head.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
@@ -113,10 +114,10 @@ function Effects() {
     }
 
     getSettings().then((s) => {
-      const brand = s.storeName && s.storeName !== 'dot.' ? s.storeName : defaultBrand;
+      const brand = s.storeName && s.storeName !== 'dot.' && s.storeName !== 'METRROMA' ? s.storeName : 'SECRATE';
       const t: any = isSkin
         ? {
-            home: `${brand} Bangladesh | Skincare, Beauty & Self-Care Products`,
+            home: `${brand} — For your personal world.`,
             shop: `Shop Skincare, Makeup, Hair Care & Personal Care in Bangladesh | ${brand}`,
             track: `Track Your Order — ${brand}`,
             checkout: `Checkout (Cash on Delivery) — ${brand}`,
@@ -147,7 +148,7 @@ function Effects() {
             document.title = category?.seoTitle || `Shop ${category?.name || 'Skincare'} Online in Bangladesh | ${brand}`;
             setMetaName('description', category?.seoDesc || `Browse ${category?.name || 'Skincare'} products in Bangladesh at ${brand}. Cash on Delivery across Bangladesh.`);
             setMetaName('keywords', category?.seoKeywords || `${(category?.name || 'skincare').toLowerCase()} bangladesh, ${(category?.name || 'skincare').toLowerCase()} price in bd, ${brand.toLowerCase()}`);
-            setCanonical(`${window.location.origin}/shop/${route.param}`);
+            setCanonical(`${window.location.origin}/categories/${route.param}`);
           }
         }).catch(() => {
           if (active) document.title = `${isSkin ? 'Shop Skincare' : 'Collection'} — ${brand}`;
@@ -162,7 +163,7 @@ function Effects() {
       if (route.name === 'shop' && route.param) {
         if (active) document.title = `${isSkin ? 'Shop Skincare' : 'Collection'} — ${defaultBrand}`;
       } else if (route.name !== 'product') {
-        document.title = isSkin ? 'SECRATE Bangladesh | Skincare & Self-Care' : 'METROMAA | Embrace the metro lifestyle';
+        document.title = 'SECRATE — For your personal world.';
       }
     });
 
@@ -177,7 +178,7 @@ function Effects() {
         'keywords',
         isSkin
           ? 'skincare bangladesh, beauty products bd, self-care products, secrate bangladesh'
-          : 'metrroma bangladesh, watches bd, sunglasses bd'
+          : 'skincare bangladesh, beauty products bd, self-care products, secrate bangladesh'
       );
     }
     return () => { active = false; };
@@ -246,10 +247,11 @@ function AnnouncementBar() {
 function Header({ onSearch }: { onSearch: () => void }) {
   const language = useStoreLanguage();
   const { count, setOpen } = useCart();
+  const { count: wishlistCount, setOpen: setWishlistOpen } = useWishlist();
   const { customer, openAuth } = useCustomer();
   const [menu, setMenu] = useState(false);
   const isSkin = isSkincareSite();
-  const [storeName, setStoreName] = useState(() => getCachedSettings()?.storeName || (isSkin ? 'SECRATE' : 'METRROMA'));
+  const [storeName, setStoreName] = useState(() => { const n = getCachedSettings()?.storeName; return n && n !== 'dot.' ? n : (isSkin ? 'SECRATE' : 'METRROMA'); });
   const [logo, setLogo] = useState(() => getCachedSettings()?.logo || (isSkin ? '' : '/uploads/logo_metrroma_gold_perfect.png'));
   const [cats, setCats] = useState<{ slug: string; name: string; parentSlug?: string }[]>(() => getCachedCategories());
   const [expandedMobileCat, setExpandedMobileCat] = useState<string | null>(null);
@@ -259,7 +261,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
 
   useEffect(() => {
     getSettings().then((s) => {
-      if (s.storeName && s.storeName !== 'dot.') setStoreName(s.storeName);
+      if (s.storeName && s.storeName !== 'dot.' && s.storeName !== 'METRROMA') setStoreName(s.storeName);
       else if (s.storeName === 'dot.' && isSkin) setStoreName('SECRATE');
       const activeLogo = (s.logo && !s.logo.includes('img_mvsqgtsqxzgig') && !s.logo.includes('img_mvddqd311xu5c'))
         ? s.logo
@@ -284,9 +286,10 @@ function Header({ onSearch }: { onSearch: () => void }) {
     return () => document.removeEventListener('click', onDocClick);
   }, []);
 
-  const mainCats = cats.filter((c) => !c.parentSlug);
-  const visibleCats = mainCats.slice(0, 3);
-  const dropdownCats = mainCats.slice(3);
+  const adultSubSlugs = new Set(['condom', 'for-man', 'for-women', 'muster-b-toy', 'finger-condom']);
+  const mainCats = cats.filter((c) => !c.parentSlug && !adultSubSlugs.has(c.slug));
+  const visibleCats = mainCats.slice(0, 4);
+  const dropdownCats = mainCats.slice(4);
 
   return (
     <>
@@ -306,16 +309,20 @@ function Header({ onSearch }: { onSearch: () => void }) {
                 <path d="M4 17h16" />
               </svg>
             </button>
-            <div className="tabaya-header-logo" onClick={() => nav('home')} style={{ display: 'inline-flex', alignItems: 'center' }}>
+            <div
+              className="tabaya-header-logo"
+              onClick={() => nav('home')}
+              style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}
+            >
               {logo ? (
                 <img
                   className="tabaya-header-logo-img"
                   src={logo}
-                  alt={storeName}
+                  alt={storeName || 'SECRATE'}
                   onError={() => setLogo('')}
                 />
               ) : (
-                <span>{storeName}</span>
+                <span>{storeName && storeName !== 'dot.' && storeName !== 'METRROMA' ? storeName : 'SECRATE'}</span>
               )}
             </div>
           </div>
@@ -354,7 +361,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
                       <button
                         type="button"
                         className="tabaya-nav-dropdown-btn"
-                        onClick={() => nav('shop/' + c.slug)}
+                        onClick={() => nav('categories/' + c.slug)}
                       >
                         <span>{tr(c.name, language)}</span>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -366,7 +373,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
                           <a
                             className={`tabaya-nav-dropdown-item ${route.name === 'shop' && route.param === c.slug ? 'active' : ''}`}
                             style={{ fontWeight: 700, borderBottom: '1px solid rgba(180,142,76,0.18)' }}
-                            onClick={() => nav('shop/' + c.slug)}
+                            onClick={() => nav('categories/' + c.slug)}
                           >
                             All {tr(c.name, language)}
                           </a>
@@ -375,7 +382,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
                           <li key={sc.slug}>
                             <a
                               className={`tabaya-nav-dropdown-item ${route.name === 'shop' && route.param === sc.slug ? 'active' : ''}`}
-                              onClick={() => nav('shop/' + sc.slug)}
+                              onClick={() => nav('categories/' + sc.slug)}
                             >
                               ↳ {tr(sc.name, language)}
                             </a>
@@ -389,7 +396,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
                   <li key={c.slug}>
                     <a
                       className={'tabaya-nav-item' + (isActive ? ' active' : '')}
-                      onClick={() => nav('shop/' + c.slug)}
+                      onClick={() => nav('categories/' + c.slug)}
                     >
                       {tr(c.name, language)}
                     </a>
@@ -423,7 +430,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
                             className={`tabaya-nav-dropdown-item ${route.name === 'shop' && route.param === c.slug ? 'active' : ''}`}
                             style={{ fontWeight: 600 }}
                             onClick={() => {
-                              nav('shop/' + c.slug);
+                              nav('categories/' + c.slug);
                               setCatDropdownOpen(false);
                             }}
                           >
@@ -435,7 +442,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
                               className={`tabaya-nav-dropdown-item ${route.name === 'shop' && route.param === sc.slug ? 'active' : ''}`}
                               style={{ paddingLeft: 26, fontSize: 12, opacity: 0.88 }}
                               onClick={() => {
-                                nav('shop/' + sc.slug);
+                                nav('categories/' + sc.slug);
                                 setCatDropdownOpen(false);
                               }}
                             >
@@ -448,15 +455,6 @@ function Header({ onSearch }: { onSearch: () => void }) {
                   </ul>
                 </li>
               )}
-
-              <li>
-                <a
-                  className={'tabaya-nav-item' + (route.name === 'track' ? ' active' : '')}
-                  onClick={() => nav('track')}
-                >
-                  {tr('Track Order', language)}
-                </a>
-              </li>
             </ul>
           </nav>
 
@@ -480,7 +478,38 @@ function Header({ onSearch }: { onSearch: () => void }) {
               </svg>
             </button>
 
+            <button
+              className={`tabaya-h-btn tabaya-h-track-btn ${route.name === 'track' ? 'active' : ''}`}
+              onClick={() => nav('track')}
+              aria-label={tr('Track Order', language)}
+              title={tr('Track Order', language)}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="1" y="3" width="15" height="13" rx="1" />
+                <polygon points="16 8 20 8 23 11 23 16 16 16 8" />
+                <circle cx="5.5" cy="18.5" r="2.5" />
+                <circle cx="18.5" cy="18.5" r="2.5" />
+              </svg>
+            </button>
+
             <CustomerHeaderIcon onNavigate={nav} />
+
+            <button
+              className="tabaya-h-btn tabaya-h-wishlist-btn"
+              onClick={() => setWishlistOpen(true)}
+              aria-label={tr('My Wishlist', language)}
+              title={tr('My Wishlist', language)}
+              style={{ position: 'relative' }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill={wishlistCount > 0 ? '#ef4444' : 'none'} stroke={wishlistCount > 0 ? '#ef4444' : 'currentColor'} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+              </svg>
+              {wishlistCount > 0 && (
+                <span className="tabaya-h-cart-badge" style={{ background: '#ef4444', color: '#fff' }}>
+                  {wishlistCount}
+                </span>
+              )}
+            </button>
 
             <button
               className="tabaya-h-btn tabaya-h-cart-btn"
@@ -547,7 +576,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
               <div key={mc.slug} style={{ display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <a
-                    onClick={() => nav('shop/' + mc.slug)}
+                    onClick={() => nav('categories/' + mc.slug)}
                     className="tabaya-mmenu-link"
                     style={{ flex: 1 }}
                   >
@@ -584,7 +613,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
                     {subCats.map((sc) => (
                       <a
                         key={sc.slug}
-                        onClick={() => nav('shop/' + sc.slug)}
+                        onClick={() => nav('categories/' + sc.slug)}
                         className="tabaya-mmenu-link"
                         style={{ fontSize: 13.5, padding: '7px 0', color: '#475569' }}
                       >
@@ -597,6 +626,13 @@ function Header({ onSearch }: { onSearch: () => void }) {
             );
           })}
           <a onClick={() => nav('track')} className="tabaya-mmenu-link">{tr('Track Order', language)}</a>
+          <a
+            onClick={() => { setWishlistOpen(true); setMenu(false); }}
+            className="tabaya-mmenu-link"
+            style={{ color: '#ef4444', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <span>❤️ {language === 'bn' ? 'আমার উইশলিস্ট' : 'My Wishlist'} ({wishlistCount})</span>
+          </a>
           <a
             onClick={() => { setOpen(true); setMenu(false); }}
             className="tabaya-mmenu-link"
@@ -619,18 +655,18 @@ function Footer() {
   const [phone, setPhone] = useState('+880 1878-374762');
   const [whatsapp, setWhatsapp] = useState('');
   const isSkin = isSkincareSite();
-  const [name, setName] = useState(isSkin ? 'SECRATE' : 'METRROMA');
+  const [name, setName] = useState('SECRATE');
   const [logo, setLogo] = useState('');
   const [cats, setCats] = useState<{ slug: string; name: string; adult?: boolean }[]>([]);
   useEffect(() => {
     getSettings().then((s) => {
       if (s.phone) setPhone(s.phone);
       if (s.whatsapp) setWhatsapp(s.whatsapp);
-      if (s.storeName && s.storeName !== 'dot.') setName(s.storeName);
+      if (s.storeName && s.storeName !== 'dot.' && s.storeName !== 'METRROMA') setName(s.storeName);
       else if (s.storeName === 'dot.' && isSkin) setName('SECRATE');
       const activeLogo = (s.logo && !s.logo.includes('img_mvsqgtsqxzgig') && !s.logo.includes('img_mvddqd311xu5c'))
         ? s.logo
-        : (isSkin ? '' : '/uploads/logo_metrroma_gold_perfect.png');
+        : '/uploads/logo_secrate_rich.webp';
       if (activeLogo) setLogo(activeLogo);
     }).catch(() => {});
     getCategories().then((cs) => {
@@ -646,11 +682,11 @@ function Footer() {
               {logo ? (
                 <img
                   src={logo}
-                  alt={name}
-                  style={{ maxHeight: 42, width: 'auto', objectFit: 'contain', display: 'block' }}
+                  alt={name || 'SECRATE'}
+                  style={{ maxHeight: 46, width: 'auto', objectFit: 'contain', display: 'block' }}
                 />
               ) : (
-                <span>{name}</span>
+                <span>{name && name !== 'dot.' && name !== 'METRROMA' ? name : 'SECRATE'}</span>
               )}
             </div>
             <p className="tabaya-footer-desc">
@@ -667,7 +703,7 @@ function Footer() {
             <h4>{tr('Collections', language)}</h4>
             <a onClick={() => go('shop')}>{tr(isSkin ? 'All Skincare & Essentials' : 'All Collections', language)}</a>
             {cats.filter((c: any) => !c.parentSlug && !c.adult && !isWellnessOrExcludedCategory(c.slug)).slice(0, 6).map((c) => (
-            <a key={c.slug} onClick={() => go('shop/' + c.slug)}>{tr(c.name, language)}</a>
+            <a key={c.slug} onClick={() => go('categories/' + c.slug)}>{tr(c.name, language)}</a>
             ))}
           </div>
           <div>
@@ -715,22 +751,7 @@ function Footer() {
           <span>{language === 'bn' ? `© ২০২৬ ${name}. সর্বস্বত্ব সংরক্ষিত।` : `© 2026 ${name}. All Rights Reserved.`}</span>
           <span>
             Designed & Developed by{' '}
-            <a
-              href="https://shakil.metrroma.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                color: '#b48e4c',
-                textDecoration: 'underline',
-                textUnderlineOffset: '3px',
-                fontWeight: 600,
-                transition: 'color 0.2s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#e2c58a')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = '#b48e4c')}
-            >
-              Shakil
-            </a>
+            <span style={{ color: '#b48e4c', fontWeight: 600 }}>Shakil</span>
           </span>
         </div>
       </div>
@@ -836,6 +857,7 @@ function MobileTabs() {
   const language = useStoreLanguage();
   const route = useRoute();
   const { count, setOpen } = useCart();
+  const { count: wishlistCount, setOpen: setWishlistOpen } = useWishlist();
   return (
     <nav className="tabbar" aria-label="Mobile Navigation">
       <a className={'tab' + (route.name === 'home' ? ' on' : '')} onClick={() => go('home')}>
@@ -859,6 +881,15 @@ function MobileTabs() {
         </span>
         <span className="tab-label">{tr('Shop', language)}</span>
       </a>
+      <a className="tab" onClick={() => setWishlistOpen(true)}>
+        <span className="tab-icon-wrap">
+          <svg viewBox="0 0 24 24" fill={wishlistCount > 0 ? '#ef4444' : 'none'} stroke={wishlistCount > 0 ? '#ef4444' : 'currentColor'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+          </svg>
+          {wishlistCount > 0 && <i className="badge" style={{ background: '#ef4444', color: '#fff' }}>{wishlistCount}</i>}
+        </span>
+        <span className="tab-label">{language === 'bn' ? 'পছন্দ' : 'Wishlist'}</span>
+      </a>
       <a className="tab" onClick={() => setOpen(true)}>
         <span className="tab-icon-wrap tabcart">
           <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
@@ -868,15 +899,6 @@ function MobileTabs() {
           {count > 0 && <i className="badge" key={count}>{count}</i>}
         </span>
         <span className="tab-label">{tr('Bag', language)}</span>
-      </a>
-      <a className={'tab' + (route.name === 'track' ? ' on' : '')} onClick={() => go('track')}>
-        <span className="tab-icon-wrap">
-          <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 20.5s-6-4.6-6-9.8a6 6 0 0 1 12 0c0 5.2-6 9.8-6 9.8Z" />
-            <circle cx="12" cy="10.5" r="2.2" />
-          </svg>
-        </span>
-        <span className="tab-label">{language === 'bn' ? 'ট্র্যাক' : 'Track'}</span>
       </a>
       <a className={'tab' + (route.name === 'account' ? ' on' : '')} onClick={() => go('account')}>
         <span className="tab-icon-wrap">
@@ -891,25 +913,236 @@ function MobileTabs() {
   );
 }
 
-function WhatsAppFloat() {
+function SmartWhatsAppChat() {
   const route = useRoute();
+  const language = useStoreLanguage();
   const [num, setNum] = useState('');
-  const isSkin = isSkincareSite();
-  const [brand, setBrand] = useState(isSkin ? 'SECRATE' : 'METRROMA');
+  const [brand, setBrand] = useState('SECRATE');
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [showTooltip, setShowTooltip] = useState(true);
+  const cardRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     getSettings().then((s) => {
       const wa = s.whatsapp || s.phone || '';
       setNum(wa);
-      if (s.storeName && s.storeName !== 'dot.') setBrand(s.storeName);
+      if (s.storeName && s.storeName !== 'dot.' && s.storeName !== 'METRROMA') setBrand(s.storeName);
     }).catch(() => {});
-  }, [isSkin]);
-  if (!num || route.name === 'product' || route.name === 'checkout') return null;
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
+        const toggleBtn = document.getElementById('secrate-wa-toggle-btn');
+        if (toggleBtn && toggleBtn.contains(e.target as Node)) return;
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  if (!num) return null;
   const clean = num.replace(/[^0-9]/g, '');
-  const href = `https://wa.me/${clean}?text=${encodeURIComponent(`Hello! I have an inquiry about ${brand}.`)}`;
+  const isBn = language === 'bn';
+
+  const defaultMsg = isBn 
+    ? `আসসালামু আলাইকুম ${brand}, আমার একটি জিজ্ঞাসা আছে।`
+    : `Hello ${brand}! I have an inquiry.`;
+
+  const handleSend = (customText?: string) => {
+    const msgToSend = (customText || text || defaultMsg).trim();
+    const url = `https://wa.me/${clean}?text=${encodeURIComponent(msgToSend)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setOpen(false);
+  };
+
+  const quickOptions = [
+    {
+      id: 'track',
+      icon: '📦',
+      label: isBn ? 'অর্ডার ট্র্যাকিং ও ডেলিভারি স্ট্যাটাস' : 'Track Order / Delivery Status',
+      msg: isBn
+        ? `আসসালামু আলাইকুম ${brand}, আমি আমার অর্ডারের ডেলিভারি স্ট্যাটাস জানতে চাই। আমার অর্ডার আইডি / ফোন নম্বর:`
+        : `Hello ${brand}, I would like to check the tracking status of my order. My Order ID / Phone:`,
+    },
+    {
+      id: 'skin',
+      icon: '✨',
+      label: isBn ? 'স্কিনকেয়ার ও প্রোডাক্ট পরামর্শ' : 'Skincare & Product Advice',
+      msg: isBn
+        ? `আসসালামু আলাইকুম ${brand}, আমার ত্বকের জন্য উপযুক্ত প্রোডাক্ট নির্বাচনে পরামর্শ প্রয়োজন।`
+        : `Hello ${brand}, I would like some advice on choosing the best product for my skin.`,
+    },
+    {
+      id: 'privacy',
+      icon: '🔒',
+      label: isBn ? 'গোপনীয়তা ও পার্সেল প্যাকেজিং' : 'Discreet & Safe Packaging',
+      msg: isBn
+        ? `আসসালামু আলাইকুম ${brand}, পার্সেল প্যাকেজিং কতটা গোপনীয় ও সুরক্ষিত থাকে জানতে চাই।`
+        : `Hello ${brand}, could you please let me know about your discreet packaging and delivery process?`,
+    },
+    {
+      id: 'order',
+      icon: '🛍️',
+      label: isBn ? 'হোয়াটসঅ্যাপে সরাসরি অর্ডার' : 'Order Directly via WhatsApp',
+      msg: isBn
+        ? (route.name === 'product' && route.param 
+            ? `আসসালামু আলাইকুম ${brand}, আমি এই প্রোডাক্টটি ("${route.param}") সরাসরি অর্ডার করতে চাই।`
+            : `আসসালামু আলাইকুম ${brand}, আমি একটি প্রোডাক্ট সরাসরি হোয়াটসঅ্যাপে অর্ডার করতে চাই।`)
+        : (route.name === 'product' && route.param
+            ? `Hello ${brand}, I would like to order "${route.param}" directly via WhatsApp.`
+            : `Hello ${brand}, I would like to place an order directly via WhatsApp.`),
+    },
+    {
+      id: 'agent',
+      icon: '💬',
+      label: isBn ? 'সরাসরি প্রতিনিধির সাথে কথা' : 'Speak with Support Representative',
+      msg: isBn
+        ? `আসসালামু আলাইকুম ${brand}, আমি সরাসরি কাস্টমার সাপোর্ট টিমের সাথে কথা বলতে চাই।`
+        : `Hello ${brand}, I would like to speak directly with a customer care representative.`,
+    },
+  ];
+
   return (
-    <a className="wafloat" href={href} target="_blank" rel="noopener noreferrer" aria-label="Chat with us on WhatsApp" title="WhatsApp Chat">
-      <WhatsAppIcon size={32} variant="official" />
-    </a>
+    <div className="secrate-smart-wa-wrap">
+      {/* Smart Chat Box Drawer */}
+      {open && (
+        <div ref={cardRef} className="secrate-wa-card" role="dialog" aria-modal="true">
+          {/* Header */}
+          <div className="secrate-wa-header">
+            <div className="secrate-wa-agent">
+              <div className="secrate-wa-avatar">
+                <WhatsAppIcon size={22} variant="official" />
+                <span className="secrate-wa-live-dot" />
+              </div>
+              <div className="secrate-wa-agent-info">
+                <div className="secrate-wa-title">
+                  {brand} Concierge
+                  <span className="secrate-wa-badge">✓</span>
+                </div>
+                <div className="secrate-wa-status">
+                  <span className="secrate-wa-green-pill" />
+                  {isBn ? 'অনলাইন · দ্রুত উত্তর দেওয়া হয়' : 'Active Now · Replies in 2m'}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="secrate-wa-close-btn"
+              onClick={() => setOpen(false)}
+              aria-label="Close chat"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="secrate-wa-body">
+            {/* Bot Greeting Bubble */}
+            <div className="secrate-wa-msg-bubble">
+              <div className="secrate-wa-msg-sender">{brand} Care</div>
+              <div className="secrate-wa-msg-text">
+                {isBn
+                  ? 'আসসালামু আলাইকুম! 🌸 SECRATE-এ আপনাকে স্বাগতম। আপনার যেকোনো প্রশ্ন, স্কিনকেয়ার পরামর্শ বা অর্ডারের জন্য নিচের যেকোনো অপশনে ট্যাপ করুন অথবা মেসেজ লিখুন:'
+                  : 'Hello! 🌸 Welcome to SECRATE. How can we help you today? Tap an option below or type your message:'}
+              </div>
+              <div className="secrate-wa-msg-time">{isBn ? 'এইমাত্র' : 'Just now'}</div>
+            </div>
+
+            {/* Quick Action Pills */}
+            <div className="secrate-wa-quick-title">
+              {isBn ? '⚡ দ্রুত সহায়তার অপশন:' : '⚡ Quick assistance options:'}
+            </div>
+            <div className="secrate-wa-quick-list">
+              {quickOptions.map((opt) => (
+                <button
+                  type="button"
+                  key={opt.id}
+                  className="secrate-wa-quick-btn"
+                  onClick={() => {
+                    setText(opt.msg);
+                    handleSend(opt.msg);
+                  }}
+                >
+                  <span className="secrate-wa-quick-icon">{opt.icon}</span>
+                  <span className="secrate-wa-quick-text">{opt.label}</span>
+                  <span className="secrate-wa-quick-arrow">›</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Footer Input Area */}
+          <div className="secrate-wa-footer">
+            <div className="secrate-wa-input-row">
+              <input
+                type="text"
+                className="secrate-wa-input"
+                placeholder={isBn ? 'আপনার প্রশ্ন বা মেসেজ লিখুন...' : 'Type your message here...'}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSend();
+                }}
+              />
+              <button
+                type="button"
+                className="secrate-wa-send-btn"
+                onClick={() => handleSend()}
+                aria-label="Send via WhatsApp"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13" />
+                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+              </button>
+            </div>
+            <div className="secrate-wa-trust">
+              <span>🔒 {isBn ? 'শতভাগ গোপনীয় ও সুরক্ষিত চ্যাট' : '100% Confidential & Secure Chat'}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Trigger Button with Tooltip */}
+      <div className="secrate-wa-trigger-container">
+        {showTooltip && !open && (
+          <div className="secrate-wa-tooltip" onClick={() => { setOpen(true); setShowTooltip(false); }}>
+            <span>{isBn ? 'সাহায্য প্রয়োজন? চ্যাট করুন 💬' : 'Need help? Chat with us 💬'}</span>
+            <button
+              type="button"
+              className="secrate-wa-tooltip-close"
+              onClick={(e) => { e.stopPropagation(); setShowTooltip(false); }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+        <button
+          id="secrate-wa-toggle-btn"
+          type="button"
+          className={`secrate-wa-fab ${open ? 'open' : ''}`}
+          onClick={() => {
+            setOpen((v) => !v);
+            setShowTooltip(false);
+          }}
+          aria-label="Toggle WhatsApp Smart Chat"
+          title="WhatsApp Concierge"
+        >
+          {open ? (
+            <span className="secrate-wa-fab-close">✕</span>
+          ) : (
+            <>
+              <WhatsAppIcon size={34} variant="official" />
+              <span className="secrate-wa-fab-badge" />
+            </>
+          )}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -986,8 +1219,9 @@ function Shell() {
       <main><div className="page-in" key={route.name + ':' + route.param}>{page}</div></main>
       <Footer />
       <CartDrawer />
+      <WishlistDrawer />
       <MobileTabs />
-      <WhatsAppFloat />
+      <SmartWhatsAppChat />
       <CartFab />
       <Toast />
       <NotificationWidgets />
@@ -1000,7 +1234,9 @@ export default function App() {
   return (
     <CustomerProvider>
       <CartProvider>
-        <Shell />
+        <WishlistProvider>
+          <Shell />
+        </WishlistProvider>
       </CartProvider>
     </CustomerProvider>
   );

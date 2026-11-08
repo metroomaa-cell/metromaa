@@ -107,7 +107,14 @@ function parseRoute() {
   // 2. Parse FIRST from pathname: e.g. /product/item, /shop/category, /page/slug, /checkout, /track, /wp-admin
   const pathParts = location.pathname.split('/').filter(Boolean);
   if (pathParts.length > 0) {
-    const n = normalize(pathParts[0]);
+    const rawFirst = pathParts[0].toLowerCase();
+    const n = normalize(rawFirst);
+    if ((rawFirst === 'shop' || rawFirst === 'category') && pathParts.length > 1) {
+      try {
+        const canonicalCatUrl = '/categories/' + pathParts.slice(1).join('/') + location.search;
+        window.history.replaceState(null, '', canonicalCatUrl);
+      } catch {}
+    }
     return { name: n, param: pathParts.slice(1).join('/') };
   }
 
@@ -138,6 +145,9 @@ export const go = (path: string) => {
   const parts = clean.split('/').filter(Boolean);
   if (parts[0] === 'admin') {
     parts[0] = 'wp-admin';
+  }
+  if ((parts[0] === 'shop' || parts[0] === 'category') && parts.length > 1) {
+    parts[0] = 'categories';
   }
   const target = parts.length > 0 ? '/' + parts.join('/') : '/';
   if (location.pathname !== target || location.hash) {
