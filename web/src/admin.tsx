@@ -1586,10 +1586,11 @@ function printSlips(list: any[]) {
     var hasPrinted = false;
     var currentMode = '75-100';
     function triggerPrint() {
-      if (hasPrinted) return;
-      hasPrinted = true;
-      window.print();
-      setTimeout(function() { hasPrinted = false; }, 2500);
+      try {
+        window.print();
+      } catch (e) {
+        console.error('Print trigger error:', e);
+      }
     }
     function cyclePaperMode() {
       var b = document.body;
@@ -1610,21 +1611,9 @@ function printSlips(list: any[]) {
         btn.innerHTML = '🏷️ Paper: <strong>Default (75×100mm)</strong>';
       }
     }
-    window.addEventListener('load', function() {
-      var waitFonts = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
-      var waitImages = Promise.all(
-        Array.from(document.images).map(function(img) {
-          if (img.complete) return Promise.resolve();
-          return new Promise(function(resolve) { img.onload = img.onerror = resolve; });
-        })
-      );
-      Promise.all([waitFonts, waitImages]).then(function() {
-        setTimeout(triggerPrint, 350);
-      }).catch(function() {
-        setTimeout(triggerPrint, 500);
-      });
-    });
-  <\/script></head><body><div class="top-toolbar no-print"><div class="info">📄 <strong>${list.length} Order Slip(s)</strong> &middot; Calibrated for 75&times;100mm (Zero Blank Pages)</div><div class="actions"><button class="top-btn" id="formatToggleBtn" onclick="cyclePaperMode()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;box-shadow:none;">🏷️ Paper: <strong>Default (75&times;100mm)</strong></button><button class="top-btn" onclick="triggerPrint()">🖨️ Print Slips / Save PDF</button><button class="top-btn-close" onclick="window.close()">✕ Close</button></div></div><div class="print-slips-wrapper">${slipsHtml}</div></body></html>`;
+    // Auto-trigger print reliably
+    setTimeout(triggerPrint, 400);
+  <\/script></head><body><div class="top-toolbar no-print"><div class="info">📄 <strong>${list.length} Order Slip(s)</strong> &middot; Calibrated for 75&times;100mm (Zero Blank Pages)</div><div class="actions"><button class="top-btn" id="formatToggleBtn" onclick="cyclePaperMode()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;box-shadow:none;">🏷️ Paper: <strong>Default (75&times;100mm)</strong></button><button class="top-btn" onclick="triggerPrint()" style="background:#22c55e;color:#000;font-weight:900;box-shadow:0 0 12px rgba(34,197,94,0.6);">🖨️ Print Slips / Save PDF</button><button class="top-btn-close" onclick="window.close()">✕ Close</button></div></div><div class="print-slips-wrapper">${slipsHtml}</div></body></html>`;
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
 }
