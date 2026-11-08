@@ -1047,28 +1047,38 @@ const SLIP_PRINT_CSS = `
   }
   html, body {
     width: 75mm !important;
+    max-width: 75mm !important;
+    height: auto !important;
+    min-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
+    overflow: hidden !important;
     background: #ffffff !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+  .print-slips-wrapper {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 75mm !important;
+  }
   .slip-page {
     width: 75mm !important;
-    height: 100mm !important;
-    max-height: 100mm !important;
+    max-width: 75mm !important;
+    height: 98mm !important;
+    max-height: 98mm !important;
     overflow: hidden !important;
-    margin: 0 !important;
+    margin: 0 auto !important;
     padding: 0 !important;
     box-sizing: border-box !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    page-break-after: always !important;
-    break-after: page !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
   }
-  .slip-page:last-child {
-    page-break-after: auto !important;
-    break-after: auto !important;
+  .slip-page + .slip-page {
+    page-break-before: always !important;
+    break-before: page !important;
   }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1083,30 +1093,85 @@ body, .slip-card, .customer-name, .customer-address, .item-line, .note-text {
   text-rendering: optimizeLegibility;
   font-feature-settings: "kern" 1, "liga" 1, "clig" 1;
 }
+body {
+  background: #0f172a;
+  margin: 0;
+  padding: 0;
+}
+.print-slips-wrapper {
+  width: 75mm;
+  margin: 16px auto;
+}
 .slip-page {
   width: 75mm;
   max-width: 75mm;
-  height: 100mm;
-  max-height: 100mm;
+  height: 98mm;
+  max-height: 98mm;
   overflow: hidden;
   background: #ffffff;
   box-sizing: border-box;
-  page-break-after: always;
-  break-after: page;
+  margin: 0 auto 14px auto;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  page-break-inside: avoid;
+  break-inside: avoid;
+  page-break-after: avoid;
+  break-after: avoid;
 }
-.slip-page:last-child {
-  page-break-after: auto;
-  break-after: auto;
+.slip-page + .slip-page {
+  page-break-before: always;
+  break-before: page;
 }
 .slip-card {
   width: 75mm;
   max-width: 75mm;
-  height: 100mm;
-  max-height: 100mm;
+  height: 98mm;
+  max-height: 98mm;
   background: #ffffff;
-  padding: 3mm 4mm 3mm 4mm;
+  padding: 2.5mm 3.5mm 2mm 3.5mm;
   box-sizing: border-box;
   overflow: hidden;
+}
+/* A4 Sheet layout for normal desktop printers */
+body.a4-mode {
+  background: #1e293b;
+  padding: 0;
+}
+body.a4-mode .print-slips-wrapper {
+  width: 210mm;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8mm;
+  justify-content: center;
+  margin: 16px auto;
+}
+body.a4-mode .slip-page {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  border: 1px dashed #94a3b8;
+  margin: 0;
+  page-break-before: auto !important;
+  break-before: auto !important;
+}
+body.a4-mode .slip-page:nth-child(4n + 1) {
+  page-break-before: always !important;
+  break-before: page !important;
+}
+@media print {
+  body.a4-mode {
+    width: 210mm !important;
+    background: #ffffff !important;
+    padding: 4mm !important;
+  }
+  body.a4-mode @page {
+    size: A4 portrait !important;
+    margin: 4mm !important;
+  }
+  body.a4-mode .print-slips-wrapper {
+    width: 210mm !important;
+    gap: 4mm !important;
+  }
+  body.a4-mode .slip-page {
+    border: 1px dashed #64748b !important;
+  }
 }
 .header-row {
   display: flex;
@@ -1321,7 +1386,7 @@ th.r,td.r{text-align:right}th.c,td.c{text-align:center}
 td.chk,th.chk{width:26px}td.chk i{display:inline-block;width:15px;height:15px;border:1.5px solid #bbb;border-radius:4px}
 .qrbox{text-align:center}.qrbox svg{display:block;width:120px;height:120px;margin:0 0 0 auto}.qrbox .qid{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:#444;margin-top:5px;letter-spacing:.02em}
 .qrline{display:flex;align-items:center;gap:7px;justify-content:flex-end;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#bbb;margin-bottom:5px}
-@media print{.pg{page-break-after:always;padding:14mm}.pg:last-child{page-break-after:auto}@page{size:A4;margin:0}}`;
+@media print{.pg{page-break-inside:avoid;break-inside:avoid;page-break-after:avoid;break-after:avoid;padding:14mm}.pg+.pg{page-break-before:always;break-before:page}@page{size:A4;margin:0}}`;
 
 function invoiceBody(o: any) {
   const rows = o.items.map((it: any, i: number) => `<tr><td class="c">${i + 1}</td><td><div style="display:flex;align-items:center;gap:8px">${it.image ? `<img src="${it.image}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;border:1px solid #eee;flex:none"/>` : ''}<span>${it.name}</span></div></td><td class="c">${it.qty}</td><td class="r">৳${it.price ?? Math.round(it.subtotal / it.qty)}</td><td class="r">৳${it.subtotal}</td></tr>`).join('');
@@ -1437,7 +1502,7 @@ function slipBody(o: any) {
 }
 function printDoc(title: string, inner: string) {
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const html = `<!doctype html><html><head><meta charset="utf-8"><base href="${origin}/"><title>${title}</title><style>${PRINT_CSS}</style></head><body>${inner}<script>window.onload=function(){window.print()}<\/script></body></html>`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><base href="${origin}/"><title>${title}</title><style>${PRINT_CSS}</style><script>window.onload=function(){window.print()}<\/script></head><body><div class="print-doc-wrap">${inner}</div></body></html>`;
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
 }
@@ -1459,7 +1524,23 @@ function printSlips(list: any[]) {
   .top-btn-close { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: #e2e8f0; padding: 7px 12px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer; }
   @media print { .top-toolbar { display: none !important; } }
   </style><script>
-    function triggerPrint() { window.print(); }
+    var hasPrinted = false;
+    function triggerPrint() {
+      if (hasPrinted) return;
+      hasPrinted = true;
+      window.print();
+      setTimeout(function() { hasPrinted = false; }, 2500);
+    }
+    function toggleA4Mode() {
+      var b = document.body;
+      var btn = document.getElementById('formatToggleBtn');
+      b.classList.toggle('a4-mode');
+      if (b.classList.contains('a4-mode')) {
+        btn.innerHTML = '📄 Paper: <strong>A4 Sheet (Multi-up)</strong>';
+      } else {
+        btn.innerHTML = '🏷️ Paper: <strong>POS Thermal (75×100mm)</strong>';
+      }
+    }
     window.addEventListener('load', function() {
       var waitFonts = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
       var waitImages = Promise.all(
@@ -1469,12 +1550,12 @@ function printSlips(list: any[]) {
         })
       );
       Promise.all([waitFonts, waitImages]).then(function() {
-        setTimeout(triggerPrint, 300);
+        setTimeout(triggerPrint, 350);
       }).catch(function() {
         setTimeout(triggerPrint, 500);
       });
     });
-  <\/script></head><body><div class="top-toolbar no-print"><div class="info">📄 <strong>${list.length} Order Slip(s)</strong> &middot; Size: <strong>75mm &times; 100mm (3&times;4&Prime; POS / A6)</strong></div><div class="actions"><button class="top-btn" onclick="triggerPrint()">🖨️ Print Slips / Save as PDF</button><button class="top-btn-close" onclick="window.close()">✕ Close</button></div></div>${slipsHtml}</body></html>`;
+  <\/script></head><body><div class="top-toolbar no-print"><div class="info">📄 <strong>${list.length} Order Slip(s)</strong> &middot; Ready (Zero Blank Pages)</div><div class="actions"><button class="top-btn" id="formatToggleBtn" onclick="toggleA4Mode()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;box-shadow:none;">🏷️ Paper: <strong>POS (75×100mm)</strong></button><button class="top-btn" onclick="triggerPrint()">🖨️ Print Slips / Save PDF</button><button class="top-btn-close" onclick="window.close()">✕ Close</button></div></div><div class="print-slips-wrapper">${slipsHtml}</div></body></html>`;
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
 }
