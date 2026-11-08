@@ -1,3 +1,4 @@
+process.env.TZ = 'Asia/Dhaka';
 import express from 'express';
 import cors from 'cors';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, lstatSync, unlinkSync, renameSync, rmSync, copyFileSync } from 'node:fs';
@@ -9,9 +10,10 @@ import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns';
 try { dns.setDefaultResultOrder('ipv4first'); } catch {}
-import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, saveColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, getCustomerByEmail, saveCustomer, syncCustomersFromOrders, initStorageProtection, getPersistentDataDirectory } from './store.js';
-import { getWhatsAppSettings, saveWhatsAppSettings, sendWhatsAppNotification, formatWhatsAppMessage } from './whatsapp_engine.js';
+import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, saveColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, getCustomerByEmail, saveCustomer, syncCustomersFromOrders, initStorageProtection, getPersistentDataDirectory, getAuditLogs, addAuditLog, getStaffActivity, updateStaffPresence, recordStaffKpiAction, getStaffMonitoringData, getBangladeshDate, getWaChatContacts, upsertWaChatContact, syncWhatsAppSessionContacts } from './store.js';
+import { getWhatsAppSettings, saveWhatsAppSettings, sendWhatsAppNotification, formatWhatsAppMessage, isNightConfirmationTime } from './whatsapp_engine.js';
 import { startWhatsAppSocket, getWhatsAppLiveStatus, requestPairingCode, sendBaileysMessage, waitForQrCode, clearWhatsAppSession } from './whatsapp_baileys.js';
+import { getVapidPublicKey, getPushPopupSettings, savePushPopupSettings, upsertPushSubscriber, linkSubscriberPhone, removePushSubscriber, getPushSubscriberStats, sendBroadcastPush, sendOrderPushNotifications } from './push_engine.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 initStorageProtection();
@@ -183,6 +185,20 @@ const withFlags = (p) => ({ ...p, soldOut: !!p.soldOut || (p.stock != null && p.
 
 const BD_PHONE = /^01[3-9]\d{8}$/;
 
+function isFakeBDPhone(phone) {
+  const p = cleanBDPhone(phone);
+  if (!/^01[3-9]\d{8}$/.test(p)) return true;
+  const rest = p.slice(3);
+  if (/(.)\1{5,}/.test(rest)) return true;
+  const fakes = [
+    '01712345678', '01812345678', '01912345678', '01612345678', '01512345678', '01312345678', '01412345678',
+    '01700000000', '01800000000', '01900000000', '01600000000', '01500000000', '01300000000', '01400000000',
+    '01711111111', '01811111111', '01911111111', '01611111111', '01722222222', '01822222222', '01922222222'
+  ];
+  if (fakes.includes(p)) return true;
+  return false;
+}
+
 // ---- incomplete / abandoned checkout capture (order appears after a valid checkout is started but not placed) ----
 const draftTimers = new Map(); // phone -> { timer, data }
 function cancelDraft(phone) {
@@ -334,7 +350,9 @@ function buildDraftOrder(data) {
     payment: 'cash_on_delivery',
     source: String(c.source || (landingPage ? 'l/' + landingPage.slug : 'direct')).slice(0, 60),
     landing: landingPage ? landingPage.slug : '',
-    recoveryUrl: `https://metrroma.com/checkout?recover=${draftId}`,
+    recoveryUrl: landingPage ? `https://metrroma.com/l/${landingPage.slug}?recover=${draftId}` : `https://metrroma.com/checkout?recover=${draftId}`,
+    deviceId: data.deviceId || '',
+    ip: data.ip || '',
     customer: {
       name: String(c.name || '').trim() || 'Customer',
       phone: String(c.phone || '').trim(),
@@ -361,8 +379,44 @@ app.post('/api/checkout/ping', (req, res) => {
   const phone = String(c.phone || '').trim().replace(/[-+ ]/g, '');
   if (!BD_PHONE.test(phone)) return res.status(204).end();
   const cleanPhone = phone.replace(/\D/g, '').slice(-11);
+  if (isFakeBDPhone(cleanPhone)) return res.status(204).end();
+
+  const rawDid = req.headers['x-device-id'] || b.deviceId || c.deviceId || '';
+  const deviceId = String(rawDid).trim();
+  const clientIp = getClientIp(req);
+
+  // Fraud protection on incomplete orders: don't create draft for blocked/duplicate users
+  const settings = getSettings();
+  const fd = settings.fraudDetector || {};
+  if (fd.enabled !== false && fd.protectIncompleteOrders !== false) {
+    const allOrders = getOrders() || [];
+    const nowMs = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const cooldownMs = (Number(fd.cooldownHours) || 24) * 60 * 60 * 1000;
+
+    // Check if customer already placed a real order within the day/cooldown window
+    const recentRealOrder = allOrders.find((o) => {
+      if (o.status === 'cancelled' || o.status === 'incomplete') return false;
+      const t = new Date(o.createdAt).getTime();
+      if (isNaN(t) || (nowMs - t) >= Math.max(cooldownMs, dayMs)) return false;
+      const isSamePhone = cleanBDPhone(o.customer?.phone) === cleanPhone;
+      const isSameDevice = !!(deviceId && o.deviceId && o.deviceId === deviceId);
+      const isSameIp = !!(fd.blockByIp !== false && clientIp && clientIp !== 'unknown_ip' && o.ip && o.ip === clientIp);
+      return isSamePhone || isSameDevice || isSameIp;
+    });
+
+    if (recentRealOrder) {
+      return res.status(204).end();
+    }
+  }
+
   const name = String(c.name || '').trim() || 'Customer';
   const data = {
+    deviceId,
+    ip: clientIp,
+    userAgent: req.get('user-agent') || '',
+    fbp: req.cookies?._fbp || req.body?.fbp || req.headers['x-fbp'] || '',
+    fbc: req.cookies?._fbc || req.body?.fbc || req.headers['x-fbc'] || '',
     customer: {
       name,
       phone: cleanPhone,
@@ -384,7 +438,7 @@ app.post('/api/checkout/ping', (req, res) => {
   const existing = draftTimers.get(cleanPhone);
   if (existing) {
     existing.data = data;
-    return res.json({ ok: true }); // refresh data while timer is running
+    return res.json({ ok: true });
   }
 
   const configuredDelayMinutes = Number(getWhatsAppSettings().triggers?.incomplete?.delayMinutes);
@@ -393,14 +447,17 @@ app.post('/api/checkout/ping', (req, res) => {
   entry.timer = setTimeout(() => {
     draftTimers.delete(cleanPhone);
     try {
-      // 1. If customer completed an actual order within the last 5 minutes, do not capture as abandoned
+      // 1. If customer completed an actual order, do not capture as abandoned
       const realOrder = getOrders().find((o) => o.status !== 'incomplete' && o.customer && String(o.customer.phone).replace(/\D/g, '').slice(-11) === cleanPhone && Date.now() - new Date(o.createdAt).getTime() < incompleteDelayMs + 240000);
       if (realOrder) return;
 
       const draft = buildDraftOrder(entry.data);
 
-      // 2. If an incomplete order already exists for this phone, update it with new items/info
-      const existingDraft = getOrders().find((o) => o.status === 'incomplete' && o.customer && String(o.customer.phone).replace(/\D/g, '').slice(-11) === cleanPhone);
+      // 2. If an incomplete order already exists for this phone or device, update it with new items/info
+      const existingDraft = getOrders().find((o) => o.status === 'incomplete' && (
+        (o.customer && String(o.customer.phone).replace(/\D/g, '').slice(-11) === cleanPhone) ||
+        (deviceId && o.deviceId && o.deviceId === deviceId)
+      ));
       if (existingDraft) {
         updateOrder(existingDraft.id, {
           customer: draft.customer,
@@ -411,6 +468,9 @@ app.post('/api/checkout/ping', (req, res) => {
           total: draft.total,
           source: draft.source,
           landing: draft.landing,
+          recoveryUrl: draft.recoveryUrl,
+          deviceId: draft.deviceId,
+          ip: draft.ip,
         });
       } else {
         addOrder(draft);
@@ -505,12 +565,22 @@ app.put('/api/settings', adminAuth, requireRole('owner', 'manager'), (req, res) 
     fraudDetector = {
       enabled: inFd.enabled !== false,
       cooldownHours: Math.max(1, Math.min(720, parseInt(inFd.cooldownHours, 10) || 24)),
-      maxOrdersPerDay: Math.max(1, Math.min(100, parseInt(inFd.maxOrdersPerDay, 10) || 5)),
+      sameProductLimit: Math.max(1, Math.min(50, parseInt(inFd.sameProductLimit, 10) || 1)),
+      maxOrdersPerDay: Math.max(1, Math.min(100, parseInt(inFd.maxOrdersPerDay, 10) || 1)),
+      maxOrdersPerIp: Math.max(1, Math.min(100, parseInt(inFd.maxOrdersPerIp, 10) || 2)),
       minSecondsBetweenOrders: Math.max(0, Math.min(600, parseInt(inFd.minSecondsBetweenOrders, 10) || 30)),
       blockByPhone: inFd.blockByPhone !== false,
+      blockByIp: inFd.blockByIp !== false,
+      protectIncompleteOrders: inFd.protectIncompleteOrders !== false,
+      applyOnLandingPages: inFd.applyOnLandingPages !== false,
       sameProductNotice: typeof inFd.sameProductNotice === 'string' && inFd.sameProductNotice.trim() ? inFd.sameProductNotice.trim() : (curFd.sameProductNotice || 'You have already placed an order for this item recently. Please wait before ordering again, or contact our support team.'),
+      sameProductNoticeBn: typeof inFd.sameProductNoticeBn === 'string' && inFd.sameProductNoticeBn.trim() ? inFd.sameProductNoticeBn.trim() : (curFd.sameProductNoticeBn || 'আপনি ইতিমধ্যে এই পণ্যটির জন্য একটি অর্ডার করেছেন। নতুন অর্ডারের জন্য অপেক্ষা করুন অথবা আমাদের সাথে যোগাযোগ করুন।'),
       maxOrdersNotice: typeof inFd.maxOrdersNotice === 'string' && inFd.maxOrdersNotice.trim() ? inFd.maxOrdersNotice.trim() : (curFd.maxOrdersNotice || 'You have reached the maximum daily order limit from this device. Please contact customer support for urgent orders.'),
+      maxOrdersNoticeBn: typeof inFd.maxOrdersNoticeBn === 'string' && inFd.maxOrdersNoticeBn.trim() ? inFd.maxOrdersNoticeBn.trim() : (curFd.maxOrdersNoticeBn || 'আপনার ডিভাইস থেকে আজকের সর্বোচ্চ অর্ডার সীমা পূর্ণ হয়েছে। প্রয়োজনীয় সহায়তায় যোগাযোগ করুন।'),
+      ipLimitNotice: typeof inFd.ipLimitNotice === 'string' && inFd.ipLimitNotice.trim() ? inFd.ipLimitNotice.trim() : (curFd.ipLimitNotice || 'Daily order limit reached from this network/IP address. Please contact customer support.'),
+      ipLimitNoticeBn: typeof inFd.ipLimitNoticeBn === 'string' && inFd.ipLimitNoticeBn.trim() ? inFd.ipLimitNoticeBn.trim() : (curFd.ipLimitNoticeBn || 'আপনার ইন্টারনেট নেটওয়ার্ক (IP) থেকে আজকের সর্বোচ্চ অর্ডারের সীমা অতিক্রম করেছে। সহায়তার জন্য যোগাযোগ করুন।'),
       rapidOrderNotice: typeof inFd.rapidOrderNotice === 'string' && inFd.rapidOrderNotice.trim() ? inFd.rapidOrderNotice.trim() : (curFd.rapidOrderNotice || 'Please wait a moment before submitting another order.'),
+      rapidOrderNoticeBn: typeof inFd.rapidOrderNoticeBn === 'string' && inFd.rapidOrderNoticeBn.trim() ? inFd.rapidOrderNoticeBn.trim() : (curFd.rapidOrderNoticeBn || 'অনুগ্রহ করে নতুন অর্ডার সাবমিট করার পূর্বে কিছুক্ষণ অপেক্ষা করুন।'),
     };
   }
   res.json(saveSettings({
@@ -580,7 +650,20 @@ app.get('/api/admin/app-apk/download', adminAuth, requireRole('owner', 'manager'
 
 app.get('/api/products', (req, res) => {
   let items = getCatalog().products;
-  if (req.query.category) items = items.filter((p) => p.category === req.query.category);
+  if (req.query.category) {
+    const qCat = String(req.query.category).trim();
+    const catalog = getCatalog();
+    const childSlugs = (catalog.categories || [])
+      .filter((c) => c.parentSlug === qCat)
+      .map((c) => c.slug);
+    const validSlugs = new Set([qCat, ...childSlugs]);
+    items = items.filter((p) => {
+      if (validSlugs.has(p.category)) return true;
+      if (p.subCategory && validSlugs.has(p.subCategory)) return true;
+      if (Array.isArray(p.categories) && p.categories.some((c) => validSlugs.has(c))) return true;
+      return false;
+    });
+  }
   if (req.query.q) {
     const q = String(req.query.q).trim().toLowerCase();
     const cleanHex = q.replace(/#/g, '');
@@ -604,6 +687,125 @@ app.get('/api/products/:slug', (req, res) => {
   const p = getCatalog().products.find((x) => x.slug === req.params.slug);
   if (!p) return res.status(404).json({ error: 'not found' });
   res.json(withFlags(p));
+});
+
+// ---- Facebook / Meta Product Catalog Feed (XML & CSV) ----
+function buildFeedAbsoluteUrl(path) {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  const clean = path.startsWith('/') ? path : '/' + path;
+  return `https://metrroma.com${clean}`;
+}
+
+function escapeXmlFeed(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function generateFacebookXmlFeed() {
+  const catalog = getCatalog();
+  const products = (catalog.products || []).filter((p) => !p.seoExclude);
+  const settings = getSettings();
+  const storeName = settings.storeName || 'METRROMA';
+
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+  xml += `<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0">\n`;
+  xml += `  <channel>\n`;
+  xml += `    <title><![CDATA[${storeName} Product Catalog]]></title>\n`;
+  xml += `    <link>https://metrroma.com</link>\n`;
+  xml += `    <description><![CDATA[Official Live Product Catalog for ${storeName}]]></description>\n`;
+
+  for (const p of products) {
+    const id = p.id;
+    const title = p.name || 'Product';
+    const rawDesc = p.desc || p.shortDesc || p.seoDesc || p.name || '';
+    const desc = rawDesc.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
+    const link = `https://metrroma.com/product/${encodeURIComponent(p.slug || p.id)}`;
+    const imageLink = buildFeedAbsoluteUrl(p.image || (p.images && p.images[0]) || '/uploads/banner_metrroma_desktop.webp');
+    const isOutOfStock = (p.stock != null && p.stock <= 0) || p.soldOut === true;
+    const availability = isOutOfStock ? 'out of stock' : 'in stock';
+
+    const originalPrice = p.compareAt && p.compareAt > p.price ? p.compareAt : p.price;
+    const priceStr = `${Number(originalPrice || 0).toFixed(2)} BDT`;
+    const salePriceStr = p.compareAt && p.compareAt > p.price ? `${Number(p.price || 0).toFixed(2)} BDT` : '';
+    const brand = 'METRROMA';
+    const category = p.category || 'Health & Beauty';
+
+    xml += `    <item>\n`;
+    xml += `      <g:id>${escapeXmlFeed(id)}</g:id>\n`;
+    xml += `      <g:title><![CDATA[${title}]]></g:title>\n`;
+    xml += `      <g:description><![CDATA[${desc}]]></g:description>\n`;
+    xml += `      <g:link>${escapeXmlFeed(link)}</g:link>\n`;
+    xml += `      <g:image_link>${escapeXmlFeed(imageLink)}</g:image_link>\n`;
+    if (Array.isArray(p.images) && p.images.length > 1) {
+      for (const extraImg of p.images.slice(1, 8)) {
+        if (extraImg && extraImg !== p.image) {
+          xml += `      <g:additional_image_link>${escapeXmlFeed(buildFeedAbsoluteUrl(extraImg))}</g:additional_image_link>\n`;
+        }
+      }
+    }
+    xml += `      <g:brand><![CDATA[${brand}]]></g:brand>\n`;
+    xml += `      <g:condition>new</g:condition>\n`;
+    xml += `      <g:availability>${availability}</g:availability>\n`;
+    xml += `      <g:price>${priceStr}</g:price>\n`;
+    if (salePriceStr) {
+      xml += `      <g:sale_price>${salePriceStr}</g:sale_price>\n`;
+    }
+    xml += `      <g:google_product_category><![CDATA[Health & Beauty]]></g:google_product_category>\n`;
+    xml += `      <g:product_type><![CDATA[${category}]]></g:product_type>\n`;
+    xml += `      <g:content_id>${escapeXmlFeed(id)}</g:content_id>\n`;
+    xml += `    </item>\n`;
+  }
+
+  xml += `  </channel>\n`;
+  xml += `</rss>`;
+  return xml;
+}
+
+function generateFacebookCsvFeed() {
+  const catalog = getCatalog();
+  const products = (catalog.products || []).filter((p) => !p.seoExclude);
+  const rows = [
+    ['id', 'title', 'description', 'availability', 'condition', 'price', 'sale_price', 'link', 'image_link', 'brand', 'google_product_category'].join(',')
+  ];
+
+  for (const p of products) {
+    const id = `"${String(p.id).replace(/"/g, '""')}"`;
+    const title = `"${String(p.name || '').replace(/"/g, '""')}"`;
+    const rawDesc = p.desc || p.shortDesc || p.seoDesc || p.name || '';
+    const desc = `"${rawDesc.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').replace(/"/g, '""').trim()}"`;
+    const isOutOfStock = (p.stock != null && p.stock <= 0) || p.soldOut === true;
+    const availability = isOutOfStock ? 'out of stock' : 'in stock';
+    const condition = 'new';
+    const originalPrice = p.compareAt && p.compareAt > p.price ? p.compareAt : p.price;
+    const price = `"${Number(originalPrice || 0).toFixed(2)} BDT"`;
+    const salePrice = p.compareAt && p.compareAt > p.price ? `"${Number(p.price || 0).toFixed(2)} BDT"` : '""';
+    const link = `"https://metrroma.com/product/${encodeURIComponent(p.slug || p.id)}"`;
+    const imageLink = `"${buildFeedAbsoluteUrl(p.image || (p.images && p.images[0]) || '/uploads/banner_metrroma_desktop.webp')}"`;
+    const brand = '"METRROMA"';
+    const cat = '"Health & Beauty"';
+
+    rows.push([id, title, desc, availability, condition, price, salePrice, link, imageLink, brand, cat].join(','));
+  }
+
+  return rows.join('\n');
+}
+
+app.get(['/api/feed/facebook.xml', '/api/feed/facebook', '/feed/facebook.xml', '/catalog.xml', '/products.xml'], (_req, res) => {
+  res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=1800');
+  res.send(generateFacebookXmlFeed());
+});
+
+app.get(['/api/feed/facebook.csv', '/feed/facebook.csv'], (_req, res) => {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=1800');
+  res.send(generateFacebookCsvFeed());
 });
 
 // ---- checkout (cash on delivery) ----
@@ -655,6 +857,7 @@ app.post('/api/orders', (req, res) => {
           variantId: variant.id,
           variantTitle: variant.title,
           name: itemName,
+          sku: variant.sku || (p && p.sku) || it.sku || '',
           price: variant.price,
           qty,
           subtotal: variant.price * qty,
@@ -672,13 +875,14 @@ app.post('/api/orders', (req, res) => {
         (it.name && it.name.includes(pk.title))
       );
       if (pkg) {
-        const p = catalog.find((x) => x.id === it.id) || catalog.find((x) => x.id === pkg.id);
+        const p = catalog.find((x) => x.id === it.id) || catalog.find((x) => x.id === pkg.id) || catalog.find((x) => (landingPage.productIds || []).includes(x.id));
         const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
         const name = it.name || pkg.title || landingPage.title;
         const image = it.image || pkg.image || landingPage.heroImage || '';
         lines.push({
           id: pkg.id,
           name,
+          sku: pkg.sku || (p && p.sku) || it.sku || '',
           price: pkg.price,
           qty,
           subtotal: pkg.price * qty,
@@ -722,9 +926,11 @@ app.post('/api/orders', (req, res) => {
     if (p.stock != null && p.stock < qty) return res.status(400).json({ error: `only ${p.stock} left of ${p.name}` });
 
     let itemPrice = p.price;
+    let itemSku = p.sku || '';
     if (it.variantId && Array.isArray(p.variations)) {
       const v = p.variations.find((x) => x.id === it.variantId);
       if (v && v.price) itemPrice = v.price;
+      if (v && v.sku) itemSku = v.sku;
     } else if (it.price && Number(it.price) > 0) {
       itemPrice = Number(it.price);
     }
@@ -742,6 +948,7 @@ app.post('/api/orders', (req, res) => {
       size: sizeStr,
       color: colorStr,
       name: itemName,
+      sku: it.sku || itemSku || '',
       price: itemPrice,
       qty,
       subtotal: itemPrice * qty,
@@ -752,93 +959,126 @@ app.post('/api/orders', (req, res) => {
   const itemsTotal = lines.reduce((s, l) => s + l.subtotal, 0);
   const settings = getSettings();
 
-  // Fraud Detector & Device / Phone Rate Limiting
+  // Fraud Detector & Multi-Level Device / IP / Phone Rate Limiting
   const fd = settings.fraudDetector || {};
   const rawDid = req.headers['x-device-id'] || req.body?.deviceId || c.deviceId || '';
   const deviceId = String(rawDid).trim();
-  const clientIp = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
+  const clientIp = getClientIp(req);
   const phoneClean = cleanBDPhone(c.phone);
-  if (!/^01[3-9]\d{8}$/.test(phoneClean)) {
-    return res.status(400).json({ error: 'অনুগ্রহ করে সঠিক ১১ ডিজিটের বাংলাদেশি মোবাইল নম্বর প্রদান করুন (যেমন: 017XXXXXXXX)' });
+
+  if (!/^01[3-9]\d{8}$/.test(phoneClean) || isFakeBDPhone(phoneClean)) {
+    return res.status(400).json({ error: 'অনুগ্রহ করে সঠিক ১১ ডিজিটের সক্রিয় বাংলাদেশি মোবাইল নম্বর প্রদান করুন (যেমন: 017XXXXXXXX)' });
   }
 
   if (fd.enabled !== false) {
-    const nowMs = Date.now();
-    const cooldownMs = (Number(fd.cooldownHours) || 24) * 60 * 60 * 1000;
-    const dayMs = 24 * 60 * 60 * 1000;
-    const minSecMs = (Number(fd.minSecondsBetweenOrders) || 30) * 1000;
-    const maxOrders = Number(fd.maxOrdersPerDay) || 5;
+    const isLanding = !!(landingSlug || c.landing);
+    if (isLanding && fd.applyOnLandingPages === false) {
+      // bypassed for landing pages only if explicitly disabled
+    } else {
+      const nowMs = Date.now();
+      const cooldownMs = (Number(fd.cooldownHours) || 24) * 60 * 60 * 1000;
+      const dayMs = 24 * 60 * 60 * 1000;
+      const minSecMs = (Number(fd.minSecondsBetweenOrders) || 30) * 1000;
+      const maxOrdersDevice = Number(fd.maxOrdersPerDay) || 1;
+      const maxOrdersIp = Number(fd.maxOrdersPerIp) || 2;
+      const maxSameProduct = Number(fd.sameProductLimit) || 1;
 
-    const allOrders = getOrders() || [];
-    const recentOrders = allOrders.filter((o) => {
-      if (o.status === 'cancelled' || o.status === 'incomplete') return false;
-      const t = new Date(o.createdAt).getTime();
-      return !isNaN(t) && (nowMs - t) < Math.max(cooldownMs, dayMs);
-    });
+      const allOrders = getOrders() || [];
+      const recentOrders = allOrders.filter((o) => {
+        if (o.status === 'cancelled' || o.status === 'incomplete') return false;
+        const t = new Date(o.createdAt).getTime();
+        return !isNaN(t) && (nowMs - t) < Math.max(cooldownMs, dayMs);
+      });
 
-    const incomingItemIds = new Set(lines.map((l) => String(l.id || l.variantId || '')));
-    const incomingLanding = String(landingSlug || c.landing || '').trim();
+      const incomingItemIds = new Set(lines.map((l) => String(l.id || l.variantId || '')));
+      const incomingLanding = String(landingSlug || c.landing || '').trim();
 
-    let ordersCount24h = 0;
-    let lastOrderTimeMs = 0;
-    let matchedSameProduct = false;
+      let deviceOrdersCount24h = 0;
+      let ipOrdersCount24h = 0;
+      let lastOrderTimeMs = 0;
+      let sameProductOrderCount = 0;
 
-    for (const o of recentOrders) {
-      const oTime = new Date(o.createdAt).getTime();
-      const isSameDevice = !!(deviceId && o.deviceId && o.deviceId === deviceId);
-      const isSamePhone = !!(fd.blockByPhone !== false && phoneClean && cleanBDPhone(o.customer?.phone) === phoneClean);
+      for (const o of recentOrders) {
+        const oTime = new Date(o.createdAt).getTime();
+        const oIp = o.ip || '';
+        const isSameDevice = !!(deviceId && o.deviceId && o.deviceId === deviceId);
+        const isSamePhone = !!(fd.blockByPhone !== false && phoneClean && cleanBDPhone(o.customer?.phone) === phoneClean);
+        const isSameIp = !!(fd.blockByIp !== false && clientIp && clientIp !== 'unknown_ip' && oIp && oIp === clientIp);
 
-      if (isSameDevice || isSamePhone) {
-        if ((nowMs - oTime) < dayMs) {
-          ordersCount24h++;
-        }
-        if (oTime > lastOrderTimeMs) {
-          lastOrderTimeMs = oTime;
-        }
-        if ((nowMs - oTime) < cooldownMs) {
-          const oLanding = String(o.landing || '').trim();
-          const oItems = Array.isArray(o.items) ? o.items : [];
-          const hasMatchingItem = oItems.some((it) => incomingItemIds.has(String(it.id || it.variantId || '')));
-          const hasMatchingLanding = !!(incomingLanding && oLanding && incomingLanding === oLanding);
-          if (hasMatchingItem || hasMatchingLanding) {
-            matchedSameProduct = true;
+        // Check rapid clicks from same device, phone, or IP
+        if (isSameDevice || isSamePhone || isSameIp) {
+          if (oTime > lastOrderTimeMs) {
+            lastOrderTimeMs = oTime;
           }
         }
+
+        // Count device / phone daily orders
+        if (isSameDevice || isSamePhone) {
+          if ((nowMs - oTime) < dayMs) {
+            deviceOrdersCount24h++;
+          }
+          if ((nowMs - oTime) < cooldownMs) {
+            const oLanding = String(o.landing || '').trim();
+            const oItems = Array.isArray(o.items) ? o.items : [];
+            const hasMatchingItem = oItems.some((it) => incomingItemIds.has(String(it.id || it.variantId || '')));
+            const hasMatchingLanding = !!(incomingLanding && oLanding && incomingLanding === oLanding);
+            if (hasMatchingItem || hasMatchingLanding) {
+              sameProductOrderCount++;
+            }
+          }
+        }
+
+        // Count IP daily orders separately
+        if (isSameIp && (nowMs - oTime) < dayMs) {
+          ipOrdersCount24h++;
+        }
       }
-    }
 
-    if (lastOrderTimeMs > 0 && (nowMs - lastOrderTimeMs) < minSecMs) {
-      return res.status(429).json({
-        error: fd.rapidOrderNotice || 'Please wait a moment before submitting another order.'
-      });
-    }
+      // 1. Rapid submission spam
+      if (lastOrderTimeMs > 0 && (nowMs - lastOrderTimeMs) < minSecMs) {
+        return res.status(429).json({
+          error: fd.rapidOrderNoticeBn || fd.rapidOrderNotice || 'অনুগ্রহ করে নতুন অর্ডার সাবমিট করার পূর্বে কিছুক্ষণ অপেক্ষা করুন।'
+        });
+      }
 
-    if (matchedSameProduct) {
-      return res.status(429).json({
-        error: fd.sameProductNotice || 'You have already placed an order for this item recently. Please wait before ordering again, or contact our support team.'
-      });
-    }
+      // 2. Same-Product Cooldown Limit
+      if (sameProductOrderCount >= maxSameProduct) {
+        return res.status(429).json({
+          error: fd.sameProductNoticeBn || fd.sameProductNotice || 'আপনি ইতিমধ্যে এই পণ্যটির জন্য একটি অর্ডার করেছেন। নতুন অর্ডারের জন্য অপেক্ষা করুন।'
+        });
+      }
 
-    if (ordersCount24h >= maxOrders) {
-      return res.status(429).json({
-        error: fd.maxOrdersNotice || 'You have reached the maximum daily order limit from this device. Please contact customer support for urgent orders.'
-      });
+      // 3. Daily Max Orders Per Device / Phone Limit
+      if (deviceOrdersCount24h >= maxOrdersDevice) {
+        return res.status(429).json({
+          error: fd.maxOrdersNoticeBn || fd.maxOrdersNotice || 'আপনার ডিভাইস থেকে আজকের সর্বোচ্চ অর্ডার সংখ্যা পূর্ণ হয়েছে।'
+        });
+      }
+
+      // 4. Daily Max Orders Per IP Address Limit
+      if (ipOrdersCount24h >= maxOrdersIp) {
+        return res.status(429).json({
+          error: fd.ipLimitNoticeBn || fd.ipLimitNotice || 'আপনার ইন্টারনেট নেটওয়ার্ক (IP) থেকে আজকের সর্বোচ্চ অর্ডারের সীমা অতিক্রম করেছে।'
+        });
+      }
     }
   }
 
   const area = c.area === 'outside' ? 'outside' : 'inside';
-  let delInside = settings.deliveryInside;
-  let delOutside = settings.deliveryOutside;
-  let isFreeDelivery = itemsTotal >= settings.freeShipThreshold;
+  let delInside = Number(settings.deliveryInside) || 80;
+  let delOutside = Number(settings.deliveryOutside) || 130;
+  let isFreeDelivery = false;
   if (landingPage) {
-    isFreeDelivery = landingPage.freeDelivery !== false;
+    isFreeDelivery = landingPage.freeDelivery === true;
     const insideCharge = landingPage.deliveryInside != null && landingPage.deliveryInside !== '' ? landingPage.deliveryInside : landingPage.customDeliveryInside;
     const outsideCharge = landingPage.deliveryOutside != null && landingPage.deliveryOutside !== '' ? landingPage.deliveryOutside : landingPage.customDeliveryOutside;
     if (insideCharge != null && insideCharge !== '') delInside = Number(insideCharge);
     if (outsideCharge != null && outsideCharge !== '') delOutside = Number(outsideCharge);
-  }
-  if (c.freeDelivery === true || c.shippingCost === 0 || req.body?.shipping?.cost === 0) {
-    isFreeDelivery = true;
+  } else {
+    isFreeDelivery = Boolean(settings.freeShipThreshold && itemsTotal >= settings.freeShipThreshold);
+    if (c.freeDelivery === true || c.shippingCost === 0 || req.body?.shipping?.cost === 0) {
+      isFreeDelivery = true;
+    }
   }
   const delivery = isFreeDelivery ? 0 : (area === 'outside' ? delOutside : delInside);
   let discount = 0, couponCode = '';
@@ -892,6 +1132,7 @@ app.post('/api/orders', (req, res) => {
     if (existingDraft) deleteOrder(existingDraft.id);
   } catch (_) {}
   notifyOrder(order, 'placed');
+  try { linkSubscriberPhone(deviceId, order.customer.phone); } catch (_) {}
   trackPurchase(order).catch(() => {}); // server-side FB CAPI + TikTok Events (best effort)
 
   // Link order to customer & mark welcome coupon used if applied
@@ -984,6 +1225,30 @@ app.get('/api/track', async (req, res) => {
     return res.status(404).json({ error: 'No order found with the provided details. Please check your Order ID or phone number.' });
   }
 
+  function maskPhoneForPrivacy(phone) {
+    if (!phone) return '';
+    const digits = String(phone).replace(/\D/g, '');
+    if (digits.length >= 10) {
+      const f = digits.slice(-11, -7) || digits.slice(0, 4);
+      const l = digits.slice(-3);
+      return f + '••••' + l;
+    }
+    return String(phone).slice(0, 3) + '••••' + String(phone).slice(-2);
+  }
+
+  function maskAddressForPrivacy(addr, dist) {
+    const full = [addr, dist].filter(Boolean).join(', ').trim();
+    if (!full) return 'সুরক্ষিত ডেলিভারি ঠিকানা 🔒';
+    const parts = full.split(/[,।\n]/).map((p) => p.trim()).filter(Boolean);
+    if (parts.length > 1) {
+      return parts[0] + ', •••••••• (🔒 সুরক্ষার্থে সম্পূর্ণ ঠিকানা আড়ালকৃত)';
+    }
+    if (full.length > 10) {
+      return full.slice(0, 8) + '•••••••• (🔒 সুরক্ষার্থে সম্পূর্ণ ঠিকানা আড়ালকৃত)';
+    }
+    return full + ' ••• (🔒)';
+  }
+
   try { order = await syncOrderCourier(order); } catch {}
   res.json({
     id: order.id,
@@ -997,8 +1262,8 @@ app.get('/api/track', async (req, res) => {
     total: order.total,
     customer: {
       name: order.customer?.name || '',
-      phone: order.customer?.phone || '',
-      address: order.customer?.address || '',
+      phone: maskPhoneForPrivacy(order.customer?.phone),
+      address: maskAddressForPrivacy(order.customer?.address, order.customer?.district),
       district: order.customer?.district || '',
       area: order.customer?.area || '',
     },
@@ -1008,7 +1273,7 @@ app.get('/api/track', async (req, res) => {
 });
 
 // ---- admin auth: owner master key + staff accounts with roles ----
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days; survives Node process restarts
+const SESSION_TTL_MS = 72 * 60 * 60 * 1000; // 72 hours (strictly matches Shakil Ecom app SESSION_DURATION_MS)
 const ADMIN_SESSIONS_FILE = join(getPersistentDataDirectory(), 'admin_sessions.json');
 const sessions = new Map(); // SHA-256 token hash -> { role, name, username, email, expiresAt }
 const pendingOtps = new Map(); // tempToken -> { username, role, name, otp, email, expiresAt }
@@ -1083,7 +1348,7 @@ function maskEmail(em) {
 }
 
 function resolveAuth(req) {
-  const token = req.get('x-admin-token') || '';
+  const token = req.get('x-admin-token') || req.query?.token || '';
   if (!token) return null;
   const key = sessionKey(token);
   const session = sessions.get(key);
@@ -1240,12 +1505,12 @@ function renderAdminVerificationHtml(otp) {
 }
 
 function getClientIp(req) {
-  const fwd = req.headers['x-forwarded-for'];
+  const fwd = req.headers['cf-connecting-ip'] || req.headers['x-real-ip'] || req.headers['x-forwarded-for'];
   if (fwd) {
     const list = String(fwd).split(',');
     if (list.length > 0 && list[0].trim()) return list[0].trim();
   }
-  return req.headers['x-real-ip'] || req.socket?.remoteAddress || req.ip || 'unknown';
+  return String(req.socket?.remoteAddress || req.ip || '').replace(/^::ffff:/, '').trim() || 'unknown_ip';
 }
 
 // Rate limiting for admin login: max 5 failed attempts per IP within 15 minutes
@@ -1290,7 +1555,7 @@ app.post('/api/admin/login', async (req, res) => {
   let user = null;
   const isOwner = (u === 'owner' || u === '') && checkOwnerPassword(p);
   if (isOwner) {
-    user = { role: 'owner', name: 'Owner', username: 'owner', email: getOwnerEmail(), allowedProducts: [] };
+    user = { role: 'owner', name: 'Owner', username: 'owner', email: getOwnerEmail(), allowedProducts: [], skipOtp: false };
   } else {
     user = getUsers().find((x) => x.username === u);
     if (!user || !checkPw(p, user)) {
@@ -1304,14 +1569,68 @@ app.post('/api/admin/login', async (req, res) => {
   const ig = getIntegrations();
   const emailActive = !!(ig.email?.enabled && (ig.email?.resendApiKey || ig.email?.host));
 
-  // If email is active and user has not opted out of OTP:
-  if (emailActive && !user.skipOtp) {
+  // Security Policy: OTP verification code strictly required for Owner and ALL Staff
+  if (emailActive) {
+    const targetEmail = user.role === 'owner'
+      ? getOwnerEmail().trim()
+      : String(user.email || '').trim();
+
+    if (!targetEmail || !targetEmail.includes('@')) {
+      return res.status(400).json({
+        error: 'এই স্টাফ অ্যাকাউন্টে নিজস্ব কোনো ইমেইল যুক্ত করা নেই। স্টোর অ্যাডমিনকে Staff প্যানেল থেকে আপনার ইমেইল যুক্ত করতে বলুন।'
+      });
+    }
+
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const tempToken = 't_' + randomBytes(16).toString('hex');
-    const targetEmail = (user.email || getOwnerEmail()).trim();
-    const ownerEmail = getOwnerEmail().trim();
     const st = getSettings();
-    const storeName = st.storeName || 'Store';
+    const storeName = (st.storeName && st.storeName !== 'dot.') ? st.storeName : 'METRROMA';
+
+    console.log(`[Admin Security OTP] Generated login verification code for ${user.username} (${targetEmail}): ${otp}`);
+
+    const emailRes = await sendEmail(
+      targetEmail,
+      `${storeName} Verification Code: ${otp}`,
+      renderSecurityOtpHtml({
+        storeName,
+        title: 'Admin Login Verification',
+        subtitle: `Hi <strong>${user.name || user.username}</strong>, enter this 6-digit verification code to sign in to your <strong>${storeName}</strong> account:`,
+        otp,
+        userName: user.name || user.username,
+        userEmail: targetEmail,
+        expiresMin: 10,
+        note: 'Never share this verification code with anyone.'
+      })
+    );
+
+    if (!emailRes.ok) {
+      console.warn(`[OTP] Direct delivery to ${targetEmail} failed (${emailRes.error}).`);
+      const isResendSandbox = String(emailRes.error || '').toLowerCase().includes('only send testing emails') || String(emailRes.error || '').toLowerCase().includes('not verified');
+      if (isResendSandbox && targetEmail !== getOwnerEmail()) {
+        const ownerEmail = getOwnerEmail();
+        console.log(`[OTP] Forwarding staff ${user.username} verification code to owner: ${ownerEmail}`);
+        await sendEmail(
+          ownerEmail,
+          `[Staff: ${user.name || user.username}] ${storeName} Verification Code: ${otp}`,
+          renderSecurityOtpHtml({
+            storeName,
+            title: `Staff Login Verification (${user.name || user.username})`,
+            subtitle: `Staff <strong>${user.name || user.username}</strong> (${targetEmail}) is signing in. Verification code:`,
+            otp,
+            userName: user.name || user.username,
+            userEmail: targetEmail,
+            expiresMin: 10,
+            note: 'Provide this code to your staff member to authorize sign in.'
+          })
+        );
+      } else {
+        return res.status(503).json({
+          error: isResendSandbox
+            ? `${targetEmail}-এ ভেরিফিকেশন কোড পাঠানো যায়নি কারণ ইমেইল ডোমেইন ভেরিফায়েড নয়।`
+            : `${targetEmail}-এ ভেরিফিকেশন কোড পাঠানো যায়নি (${emailRes.error || 'Email error'})।`
+        });
+      }
+    }
 
     pendingOtps.set(tempToken, {
       username: user.username,
@@ -1323,34 +1642,10 @@ app.post('/api/admin/login', async (req, res) => {
       expiresAt: Date.now() + 10 * 60 * 1000 // 10 minutes
     });
 
-    let deliveredEmail = targetEmail;
-
-    const emailRes = await sendEmail(
-      targetEmail,
-      `${storeName} Admin Verification Code`,
-      renderAdminVerificationHtml(otp)
-    );
-
-    // If delivery to team member failed (e.g. Resend unverified domain restriction: only sends to owner's registered email)
-    if (!emailRes.ok) {
-      console.warn(`[OTP] Direct delivery to ${targetEmail} failed (${emailRes.error}). Forwarding OTP to Store Owner: ${ownerEmail}`);
-      if (targetEmail.toLowerCase() !== ownerEmail.toLowerCase()) {
-        const fwdRes = await sendEmail(
-          ownerEmail,
-          `${storeName} Admin Verification Code`,
-          renderAdminVerificationHtml(otp)
-        );
-        if (fwdRes.ok) {
-          deliveredEmail = `${ownerEmail} (Forwarded to Owner)`;
-        }
-      }
-    }
-
     return res.json({
       otpRequired: true,
       tempToken,
-      emailMasked: deliveredEmail.includes('Forwarded to Owner') ? `Owner Inbox (${maskEmail(ownerEmail)})` : maskEmail(deliveredEmail),
-      notice: deliveredEmail.includes('Forwarded to Owner') ? `Verification code was delivered to Store Owner (${maskEmail(ownerEmail)}) because domain is in Resend test mode.` : undefined
+      emailMasked: maskEmail(targetEmail),
     });
   }
 
@@ -1422,29 +1717,30 @@ app.post('/api/admin/resend-otp', async (req, res) => {
   pendingOtps.set(tempToken, pending);
 
   const st = getSettings();
-  const storeName = st.storeName || 'Store';
-  const ownerEmail = getOwnerEmail().trim();
+  const storeName = (st.storeName && st.storeName !== 'dot.') ? st.storeName : 'METRROMA';
 
-  let emailRes = await sendEmail(
+  const emailRes = await sendEmail(
     pending.email,
-    `${storeName} Admin Verification Code`,
-    renderAdminVerificationHtml(otp)
+    `${storeName} Verification Code: ${otp}`,
+    renderSecurityOtpHtml({
+      storeName,
+      title: 'Admin Login Verification',
+      subtitle: `Hi <strong>${pending.name || pending.username}</strong>, here is your new 6-digit verification code:`,
+      otp,
+      userName: pending.name || pending.username,
+      userEmail: pending.email,
+      expiresMin: 10,
+      note: 'Never share this verification code with anyone.'
+    })
   );
 
-  let deliveredEmail = pending.email;
-  if (!emailRes.ok && pending.email.toLowerCase() !== ownerEmail.toLowerCase()) {
-    console.warn(`[OTP Resend] Delivery to ${pending.email} failed. Forwarding to Store Owner: ${ownerEmail}`);
-    const fwdRes = await sendEmail(
-      ownerEmail,
-      `${storeName} Admin Verification Code`,
-      renderAdminVerificationHtml(otp)
-    );
-    if (fwdRes.ok) {
-      deliveredEmail = `${ownerEmail} (Forwarded to Owner)`;
-    }
+  if (!emailRes.ok) {
+    return res.status(503).json({
+      error: `${pending.email}-এ ভেরিফিকেশন কোড পাঠানো যায়নি (${emailRes.error || 'Email delivery failed'})।`
+    });
   }
 
-  res.json({ ok: true, emailMasked: deliveredEmail.includes('Forwarded to Owner') ? `Owner Inbox (${maskEmail(ownerEmail)})` : maskEmail(deliveredEmail) });
+  res.json({ ok: true, emailMasked: maskEmail(pending.email) });
 });
 
 // 4. Forgot Password (requests OTP to reset password)
@@ -1458,7 +1754,10 @@ app.post('/api/admin/forgot-password', async (req, res) => {
   }
   if (!user) return res.status(404).json({ error: 'No admin account found with that username or email' });
 
-  const targetEmail = user.email || getOwnerEmail();
+  const targetEmail = user.role === 'owner' ? getOwnerEmail() : String(user.email || '').trim();
+  if (!targetEmail || !targetEmail.includes('@')) {
+    return res.status(400).json({ error: 'No email address is registered on this staff account. Please contact the store owner.' });
+  }
   const otp = String(Math.floor(100000 + Math.random() * 900000));
   const resetToken = 'r_' + randomBytes(16).toString('hex');
   const st = getSettings();
@@ -1579,7 +1878,10 @@ app.post('/api/admin/users', adminAuth, requireRole('owner'), async (req, res) =
   const allowedProducts = Array.isArray(b.allowedProducts) ? b.allowedProducts.map(String) : [];
   const password = String(b.password || '');
   const skipOtp = !!b.skipOtp;
-  if (!username || password.length < 8) return res.status(400).json({ error: 'username and an 8+ character password are required' });
+  if (!username || password.length < 4) return res.status(400).json({ error: 'Username and a 4+ character password are required' });
+  if (!skipOtp && (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))) {
+    return res.status(400).json({ error: 'স্টাফের নিজস্ব ভেরিফিকেশন কোডের জন্য একটি সঠিক ইমেইল ঠিকানা দেওয়া আবশ্যক।' });
+  }
   const users = getUsers();
   if (users.find((u) => u.username === username)) return res.status(400).json({ error: 'username already exists' });
   const { salt, hash } = makeHash(password);
@@ -1593,7 +1895,7 @@ app.post('/api/admin/users', adminAuth, requireRole('owner'), async (req, res) =
     const loginUrl = `${req.protocol}://${host}/admin`;
     sendEmail(
       email,
-      `Welcome to dot. Admin Team — Your Login Credentials`,
+      `Welcome to METRROMA Admin Team — Your Login Credentials`,
       `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:28px;background:#17120E;color:#ECE4D8;border-radius:18px;border:1px solid rgba(231,180,134,0.3);">
         <div style="font-size:24px;font-weight:700;margin-bottom:6px;color:#ECE4D8;">dot<span style="color:#E7B486;">.</span> <span style="font-size:14px;color:#A99E8E;font-weight:400;">staff onboarding</span></div>
@@ -1622,7 +1924,10 @@ app.patch('/api/admin/users/:id', adminAuth, requireRole('owner'), (req, res) =>
   if (b.role && ['manager', 'staff'].includes(b.role)) u.role = b.role;
   if (b.skipOtp != null) u.skipOtp = !!b.skipOtp;
   if (Array.isArray(b.allowedProducts)) u.allowedProducts = b.allowedProducts.map(String);
-  if (b.password && String(b.password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (!u.skipOtp && (!u.email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(u.email))) {
+    return res.status(400).json({ error: '2FA OTP চালু রাখতে স্টাফের নিজস্ব ইমেইল ঠিকানা অবশ্যই দিতে হবে।' });
+  }
+  if (b.password && String(b.password).length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters' });
   if (b.password) {
     const { salt, hash } = makeHash(String(b.password));
     u.salt = salt;
@@ -1630,6 +1935,35 @@ app.patch('/api/admin/users/:id', adminAuth, requireRole('owner'), (req, res) =>
   }
   saveUsers(users);
   res.json({ id: u.id, username: u.username, name: u.name, email: u.email || '', role: u.role, skipOtp: !!u.skipOtp, allowedProducts: Array.isArray(u.allowedProducts) ? u.allowedProducts : [] });
+});
+
+app.post('/api/admin/users/:id/test-otp', adminAuth, requireRole('owner'), async (req, res) => {
+  const u = getUsers().find((x) => x.id === req.params.id);
+  if (!u) return res.status(404).json({ error: 'Staff member not found' });
+  if (!u.email || !u.email.includes('@')) {
+    return res.status(400).json({ error: 'এই স্টাফের কোনো ইমেইল ঠিকানা সেভ করা নেই।' });
+  }
+  const st = getSettings();
+  const storeName = (st.storeName && st.storeName !== 'dot.') ? st.storeName : 'METRROMA';
+  const sampleOtp = String(Math.floor(100000 + Math.random() * 900000));
+  const out = await sendEmail(
+    u.email,
+    `${storeName} Staff Email Verification Test (${sampleOtp})`,
+    renderSecurityOtpHtml({
+      storeName,
+      title: 'Staff OTP Delivery Verified ✓',
+      subtitle: `Hi <strong>${u.name || u.username}</strong>, your staff email is properly connected! Future login verification codes will arrive directly in this inbox (${u.email}). Sample code:`,
+      otp: sampleOtp,
+      userName: u.name || u.username,
+      userEmail: u.email,
+      expiresMin: 10,
+      note: 'This was a test triggered by the Store Owner to confirm direct staff OTP delivery.'
+    })
+  );
+  if (!out.ok) {
+    return res.status(400).json({ error: out.error || 'Could not deliver test email' });
+  }
+  res.json({ ok: true, email: u.email });
 });
 
 app.delete('/api/admin/users/:id', adminAuth, requireRole('owner'), (req, res) => {
@@ -1661,12 +1995,15 @@ app.post('/api/admin/orders', adminAuth, requireRole('owner', 'manager'), (req, 
   if (!phoneClean || phoneClean.length < 11) {
     return res.status(400).json({ error: 'সঠিক ১১ ডিজিটের মোবাইল নম্বর প্রদান করুন' });
   }
+  const adminCatalog = getCatalog().products || [];
   const lines = Array.isArray(items) ? items.map((it) => {
     const qty = Math.max(1, parseInt(it.qty, 10) || 1);
     const price = Number(it.price) || 0;
+    const catProd = adminCatalog.find((x) => x.id === it.id);
     return {
       id: it.id || 'custom',
       name: String(it.name || 'Product').trim(),
+      sku: it.sku || (catProd && catProd.sku) || '',
       price,
       qty,
       subtotal: price * qty,
@@ -1741,7 +2078,7 @@ app.patch('/api/orders/:id', adminAuth, (req, res) => {
       return res.status(403).json({ error: 'Staff cannot cancel, return, or mark an order delivered' });
     }
   }
-  const before = getOrders().find((x) => x.id === req.params.id);
+  const before = getOrders().find((x) => x.id === req.params.id || x.id === 'DOT-' + req.params.id || 'DOT-' + x.id === req.params.id);
   if (!before) return res.status(404).json({ error: 'not found' });
   if (req.admin.role === 'staff' && Array.isArray(req.admin.allowedProducts) && req.admin.allowedProducts.length > 0) {
     const allowed = req.admin.allowedProducts;
@@ -1752,13 +2089,52 @@ app.patch('/api/orders/:id', adminAuth, (req, res) => {
   if (paymentStatus !== undefined && !['paid', 'unpaid'].includes(String(paymentStatus))) {
     return res.status(400).json({ error: 'paymentStatus must be paid or unpaid' });
   }
-  const o = updateOrder(req.params.id, { status, courier, adminNote, customer, items, delivery, discount, itemsTotal, total, paymentStatus });
+
+  const staffInfo = {
+    username: req.admin?.username || 'admin',
+    name: req.admin?.name || req.admin?.username || 'Staff',
+    role: req.admin?.role || 'staff'
+  };
+
+  const history = Array.isArray(before.history) ? [...before.history] : [];
+  if (status && before.status !== status) {
+    history.push({
+      status,
+      at: new Date().toISOString(),
+      note: adminNote || `Status changed from ${before.status} to ${status}`,
+      staff: staffInfo
+    });
+    recordStaffKpiAction(req.admin, 'ORDER_STATUS_CHANGED', {
+      orderId: before.id,
+      status,
+      amount: Number(before.total || 0),
+      note: adminNote || ''
+    });
+  } else if (adminNote && adminNote !== before.adminNote) {
+    history.push({
+      status: before.status,
+      at: new Date().toISOString(),
+      note: `Note: ${adminNote}`,
+      staff: staffInfo
+    });
+  }
+
+  const lastUpdatedBy = {
+    ...staffInfo,
+    at: new Date().toISOString()
+  };
+
+  const o = updateOrder(req.params.id, {
+    status, courier, adminNote, customer, items, delivery, discount, itemsTotal, total, paymentStatus,
+    history,
+    lastUpdatedBy
+  });
   if (status && before && before.status !== status) notifyOrder(o, 'status');
   res.json(o);
 });
 
 app.delete('/api/orders/:id', adminAuth, requireRole('owner', 'manager'), (req, res) => {
-  const before = getOrders().find((x) => x.id === req.params.id);
+  const before = getOrders().find((x) => x.id === req.params.id || x.id === 'DOT-' + req.params.id || 'DOT-' + x.id === req.params.id);
   if (!before) return res.status(404).json({ error: 'not found' });
   if (req.admin.role === 'staff' && Array.isArray(req.admin.allowedProducts) && req.admin.allowedProducts.length > 0) {
     const allowed = req.admin.allowedProducts;
@@ -1825,6 +2201,10 @@ function normalizeProduct(b) {
     price: Math.max(0, parseInt(b.price, 10) || 0),
     compareAt: Math.max(0, parseInt(b.compareAt, 10) || 0),
     category: String(b.category || '').trim(),
+    subCategory: String(b.subCategory || '').trim(),
+    categories: Array.isArray(b.categories)
+      ? Array.from(new Set(b.categories.map((c) => String(c).trim()).filter(Boolean)))
+      : (b.subCategory ? [String(b.category).trim(), String(b.subCategory).trim()].filter(Boolean) : [String(b.category).trim()].filter(Boolean)),
     adult: !!b.adult,
     tag: String(b.tag || '').trim(),
     desc: String(b.desc || '').trim(),
@@ -1848,11 +2228,12 @@ function normalizeProduct(b) {
 }
 
 app.post('/api/upload', adminAuth, requireRole('owner', 'manager'), (req, res) => {
-  const dataUrl = req.body?.dataUrl || req.body?.image || '';
-  const m = dataUrl.match(/^data:(?:image\/(png|jpe?g|webp|gif|avif|x-icon|vnd\.microsoft\.icon));base64,(.+)$/i);
+  const dataUrl = req.body?.dataUrl || req.body?.image || req.body?.data || '';
+  const m = dataUrl.match(/^data:(?:image\/(png|jpe?g|webp|gif|avif|svg\+xml|x-icon|vnd\.microsoft\.icon));base64,(.+)$/i);
   if (!m) return res.status(400).json({ error: 'invalid image' });
   let ext = m[1].toLowerCase();
   if (ext === 'jpeg') ext = 'jpg';
+  else if (ext === 'svg+xml') ext = 'svg';
   else if (ext.includes('icon')) ext = 'ico';
   const buf = Buffer.from(m[2], 'base64');
   if (buf.length > 6 * 1024 * 1024) return res.status(400).json({ error: 'image too large (max 6MB)' });
@@ -1920,6 +2301,16 @@ function getMediaUsageMap() {
     const st = getSettings();
     if (st.logo) add(st.logo, 'Store Logo', 'logo', 'Store Logo');
     if (st.favicon) add(st.favicon, 'Favicon', 'favicon', 'Favicon');
+  } catch {}
+
+  try {
+    const pp = getPushPopupSettings();
+    if (pp.promoPopup?.image) add(pp.promoPopup.image, 'Promo Popup', 'promo', 'Promo Popup Banner');
+    if (pp.pushPrompt?.icon) add(pp.pushPrompt.icon, 'Push Prompt', 'push_icon', 'Push Opt-in Icon');
+    if (pp.trustToast?.icon) add(pp.trustToast.icon, 'Trust Toast', 'trust_icon', 'Trust Toast Icon');
+    (pp.broadcastHistory || []).forEach((b) => {
+      if (b.image) add(b.image, 'Push Campaign', b.id || 'bc', b.title || 'Push Broadcast');
+    });
   } catch {}
 
   return map;
@@ -2233,48 +2624,198 @@ app.delete('/api/landings/:id', adminAuth, requireRole('owner', 'manager'), (req
   res.json({ ok: true });
 });
 
+// ---- self-hosted web push & smart on-site pop-ups ----
+app.get('/api/notifications/public', (_req, res) => {
+  const s = getPushPopupSettings();
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.json({
+    vapidPublicKey: getVapidPublicKey(),
+    promoPopup: s.promoPopup,
+    pushPrompt: s.pushPrompt,
+    trustToast: s.trustToast,
+  });
+});
+
+app.post('/api/push/subscribe', (req, res) => {
+  try {
+    const b = req.body || {};
+    const did = String(b.deviceId || req.get('x-device-id') || '').slice(0, 80);
+    const stats = upsertPushSubscriber({
+      subscription: b.subscription,
+      deviceId: did,
+      phone: b.phone || '',
+      isAdmin: false,
+      userAgent: req.get('user-agent') || '',
+    });
+    res.json({ ok: true, total: stats.total });
+  } catch (err) {
+    res.status(400).json({ error: String(err?.message || 'Subscription failed') });
+  }
+});
+
+app.post('/api/push/unsubscribe', (req, res) => {
+  const endpoint = String(req.body?.endpoint || '');
+  removePushSubscriber(endpoint);
+  res.json({ ok: true });
+});
+
+app.post('/api/push/link-phone', (req, res) => {
+  const did = String(req.body?.deviceId || req.get('x-device-id') || '').slice(0, 80);
+  const phone = String(req.body?.phone || '');
+  const linked = linkSubscriberPhone(did, phone);
+  res.json({ ok: true, linked });
+});
+
+app.get('/api/admin/notifications', adminAuth, requireRole('owner', 'manager'), (_req, res) => {
+  res.json({
+    vapidPublicKey: getVapidPublicKey(),
+    settings: getPushPopupSettings(),
+    stats: getPushSubscriberStats(),
+  });
+});
+
+app.put('/api/admin/notifications', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  const b = req.body || {};
+  const resetPromo = !!b.resetPromoDismissals;
+  const settings = savePushPopupSettings(
+    {
+      promoPopup: b.promoPopup,
+      pushPrompt: b.pushPrompt,
+      autoAlerts: b.autoAlerts,
+      trustToast: b.trustToast,
+    },
+    resetPromo
+  );
+  res.json({ ok: true, settings, stats: getPushSubscriberStats() });
+});
+
+app.post('/api/admin/push/subscribe-admin', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  try {
+    const b = req.body || {};
+    const did = String(b.deviceId || req.get('x-device-id') || '').slice(0, 80);
+    const stats = upsertPushSubscriber({
+      subscription: b.subscription,
+      deviceId: did,
+      isAdmin: true,
+      userAgent: req.get('user-agent') || '',
+    });
+    res.json({ ok: true, stats });
+  } catch (err) {
+    res.status(400).json({ error: String(err?.message || 'Could not enable admin push alerts') });
+  }
+});
+
+app.post('/api/admin/push/broadcast', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
+  try {
+    const b = req.body || {};
+    const result = await sendBroadcastPush({
+      title: b.title,
+      body: b.body,
+      image: b.image,
+      icon: b.icon,
+      url: b.url,
+      target: b.target === 'admin_test' ? 'admin_test' : 'all',
+      adminEndpoint: b.adminEndpoint || '',
+    });
+    res.json({
+      ...result,
+      stats: getPushSubscriberStats(),
+      broadcastHistory: getPushPopupSettings().broadcastHistory,
+    });
+  } catch (err) {
+    res.status(400).json({ error: String(err?.message || 'Broadcast failed') });
+  }
+});
+
 // ---- integrations: email (SMTP), bulk SMS (generic HTTP), couriers (generic templated API) ----
 function fillTpl(tpl, map) { return String(tpl || '').replace(/\{(\w+)\}/g, (_, k) => (map[k] != null ? String(map[k]) : '')); }
 async function sendEmail(to, subject, html) {
   const e = getIntegrations().email;
   if (!e || !e.enabled) return { ok: false, error: 'email not configured or disabled' };
+  const st = getSettings() || {};
+  const defaultBrand = (st.storeName && st.storeName !== 'dot.') ? st.storeName : 'METRROMA';
+  const fromName = (e.fromName && e.fromName !== 'dot.') ? e.fromName : defaultBrand;
 
-  // 1. Resend API (Preferred, ultra-fast & permanent)
-  if (e.provider === 'resend' || e.resendApiKey) {
+  const hasSmtp = !!(e.host && e.user && e.pass);
+  const hasResend = !!(e.resendApiKey || process.env.RESEND_API_KEY);
+
+  const trySmtp = async () => {
+    const host = String(e.host || '').trim();
+    const user = String(e.user || '').trim();
+    const isGmail = host.toLowerCase().includes('gmail.com');
+    const pass = isGmail ? String(e.pass || '').replace(/\s+/g, '') : String(e.pass || '');
+    const port = Number(e.port) || (isGmail ? 465 : 587);
+    const secure = port === 465 ? true : !!e.secure;
+    const senderAddr = (isGmail || !e.fromEmail || e.fromEmail.includes('dot.metromaa.com')) ? user : e.fromEmail;
+    try {
+      const tx = nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        auth: { user, pass },
+      });
+      await tx.sendMail({
+        from: `"${fromName}" <${senderAddr}>`,
+        to,
+        subject,
+        html,
+      });
+      return { ok: true, via: 'smtp' };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  };
+
+  const tryResend = async () => {
     const key = e.resendApiKey || process.env.RESEND_API_KEY;
     if (!key) return { ok: false, error: 'Resend API key missing' };
-    const fromName = e.fromName || 'dot.';
     let from = e.fromEmail ? `"${fromName}" <${e.fromEmail}>` : `"${fromName}" <onboarding@resend.dev>`;
     try {
       let r = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to, subject, html })
+        body: JSON.stringify({ from, to, subject, html }),
       });
       let d = await r.json();
-      if (!r.ok && d?.message && d.message.includes('domain is not verified')) {
+      if (!r.ok && d?.message && (d.message.includes('domain is not verified') || d.message.includes('not verified') || d.message.includes('validation_error'))) {
         from = `"${fromName}" <onboarding@resend.dev>`;
         r = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from, to, subject, html })
+          body: JSON.stringify({ from, to, subject, html }),
         });
         d = await r.json();
       }
       if (!r.ok) return { ok: false, error: d?.message || 'Resend delivery failed' };
-      return { ok: true, id: d?.id };
+      return { ok: true, id: d?.id, via: 'resend' };
     } catch (err) {
-      return { ok: false, error: String(err.message || err) };
+      return { ok: false, error: String(err?.message || err) };
     }
+  };
+
+  // Respect explicit SMTP selection first
+  if (e.provider === 'smtp') {
+    if (hasSmtp) {
+      const smtpRes = await trySmtp();
+      if (smtpRes.ok || !hasResend) return smtpRes;
+    }
+    if (hasResend) return await tryResend();
+    return { ok: false, error: 'SMTP host, email, and App Password are required' };
   }
 
-  // 2. Fallback to standard SMTP
-  if (!e.host || !e.user) return { ok: false, error: 'email not configured' };
-  try {
-    const tx = nodemailer.createTransport({ host: e.host, port: Number(e.port) || 587, secure: !!e.secure, auth: { user: e.user, pass: e.pass } });
-    await tx.sendMail({ from: `"${e.fromName || 'dot.'}" <${e.fromEmail || e.user}>`, to, subject, html });
-    return { ok: true };
-  } catch (err) { return { ok: false, error: String(err.message || err) }; }
+  // Otherwise try Resend first, and automatically fall back to SMTP if Resend is in sandbox/unverified mode
+  if (hasResend) {
+    const resendRes = await tryResend();
+    if (resendRes.ok) return resendRes;
+    if (hasSmtp) {
+      const smtpFallback = await trySmtp();
+      if (smtpFallback.ok) return smtpFallback;
+    }
+    return resendRes;
+  }
+
+  if (hasSmtp) return await trySmtp();
+  return { ok: false, error: 'Email provider not configured' };
 }
 async function sendSMS(phone, message) {
   const s = getIntegrations().sms;
@@ -2295,15 +2836,71 @@ async function notifyOrder(o, kind) {
       sendSMS(o.customer.phone, fillTpl(tpl, map)).catch(() => {});
     }
     if (ig.email.enabled && o.customer?.email) {
-      const subj = kind === 'placed' ? `dot. — order ${o.id} received` : `dot. — order ${o.id} is ${o.status}`;
+      const subj = kind === 'placed' ? `METRROMA — order ${o.id} received` : `METRROMA — order ${o.id} is ${o.status}`;
       sendEmail(o.customer.email, subj, `<p>Hi ${map.name},</p><p>Your order <b>${o.id}</b> is <b>${o.status}</b>.</p><p>Total: ${map.total} (cash on delivery)</p>${map.courier ? `<p>Courier: ${map.courier}</p>` : ''}<p>— dot.</p>`).catch(() => {});
     }
     // Automated WhatsApp message
     try {
-      const waEvent = o.status === 'incomplete' ? 'incomplete' : o.status === 'approved' ? 'approved' : o.status === 'shipped' ? 'shipped' : o.status === 'cancelled' ? 'cancelled' : null;
-      if (waEvent) {
-        sendWhatsAppNotification(o, waEvent).catch(() => {});
+      let waEvent = kind === 'exchange' ? 'exchange' : o.status === 'incomplete' ? 'incomplete' : o.status === 'approved' ? 'approved' : o.status === 'shipped' ? (o.isExchange ? 'exchange' : 'shipped') : o.status === 'delivered' ? 'delivered' : o.status === 'cancelled' ? 'cancelled' : null;
+      
+      // 24/7 Automated Interactive Order Confirmation (Day & Night with anti-ban natural delay)
+      if (kind === 'placed') {
+        const waCfg = getWhatsAppSettings()?.triggers?.night_confirmation || {};
+        const isEnabled = waCfg.enabled !== false;
+        if (isEnabled) {
+          const delayMin = Math.max(1, Math.min(30, Number(waCfg.delayMinutes) || 1));
+          const delayMs = (delayMin * 60 * 1000) + Math.floor(Math.random() * 25000);
+          console.log(`[Order Confirmation Anti-Ban] Order #${o.id} message scheduled in ${(delayMs / 1000).toFixed(0)}s...`);
+          setTimeout(() => {
+            sendWhatsAppNotification(o, 'night_confirmation').then((res) => {
+              if (res?.sent !== false) {
+                try {
+                  const ords = getOrders();
+                  const target = ords.find((x) => x.id === o.id);
+                  if (target) {
+                    target.nightConfirmationSent = true;
+                    target.nightConfirmationSentAt = new Date().toISOString();
+                    target.history = target.history || [];
+                    target.history.push({
+                      status: target.status,
+                      note: `Interactive order confirmation WhatsApp sent (after ${(delayMs / 1000).toFixed(0)}s anti-ban delay)`,
+                      at: new Date().toISOString(),
+                    });
+                    saveOrders(ords);
+                  }
+                } catch (_) {}
+              }
+            }).catch(() => {});
+          }, delayMs);
+          return;
+        }
       }
+
+      if (waEvent) {
+        sendWhatsAppNotification(o, waEvent).then((res) => {
+          if (waEvent === 'night_confirmation' && res?.sent !== false) {
+            try {
+              const ords = getOrders();
+              const target = ords.find((x) => x.id === o.id);
+              if (target) {
+                target.nightConfirmationSent = true;
+                target.nightConfirmationSentAt = new Date().toISOString();
+                target.history = target.history || [];
+                target.history.push({
+                  status: target.status,
+                  note: 'Night order confirmation message sent via WhatsApp (11 PM - 8 AM)',
+                  at: new Date().toISOString(),
+                });
+                saveOrders(ords);
+              }
+            } catch (_) {}
+          }
+        }).catch(() => {});
+      }
+    } catch (_) {}
+    // Automated Web Push Notification (Admin New Order + Discreet Customer Status)
+    try {
+      sendOrderPushNotifications(o, kind).catch(() => {});
     } catch (_) {}
   } catch {}
 }
@@ -2363,14 +2960,53 @@ function sanitizeCredential(name, val) {
   return s;
 }
 
-function getCourierTrackUrl(acc, consignment) {
+function getCourierTrackUrl(acc, consignment, phone) {
   if (!consignment) return '';
   const prov = String(acc?.provider || '').toLowerCase();
-  if (prov === 'pathao') return `https://pathao.com/courier/tracking/?consignment_id=${encodeURIComponent(consignment)}`;
+  if (prov === 'pathao') {
+    const p = phone ? cleanBDPhone(phone) : '';
+    return `https://merchant.pathao.com/tracking?consignment_id=${encodeURIComponent(consignment)}${p ? `&phone=${encodeURIComponent(p)}` : ''}`;
+  }
   if (prov === 'steadfast') return `https://steadfast.com.bd/track/${encodeURIComponent(consignment)}`;
   if (prov === 'carrybee') return `https://carrybee.com/tracking?consignment_id=${encodeURIComponent(consignment)}`;
   if (prov === 'redx') return `https://redx.com.bd/track-global-parcel/?trackingId=${encodeURIComponent(consignment)}`;
-  return acc?.trackUrl ? fillTpl(acc.trackUrl, { consignment }) : '';
+  return acc?.trackUrl ? fillTpl(acc.trackUrl, { consignment, phone: phone || '' }) : '';
+}
+
+function resolveItemSku(it, order) {
+  if (it?.sku && String(it.sku).trim()) return String(it.sku).trim();
+  const catalog = getCatalog()?.products || [];
+  const cleanId = String(it?.id || '').trim();
+  const baseId = it?.productId || (cleanId.startsWith('mm-') ? cleanId.split('-').slice(0, 2).join('-') : cleanId);
+  const p = catalog.find((x) => x.id === cleanId || x.id === baseId || x.slug === cleanId);
+  if (p) {
+    if (it?.variantId && Array.isArray(p.variations)) {
+      const v = p.variations.find((x) => x.id === it.variantId);
+      if (v?.sku && String(v.sku).trim()) return String(v.sku).trim();
+    }
+    if (p.sku && String(p.sku).trim()) return String(p.sku).trim();
+  }
+  if (order?.landing) {
+    const landings = getLandings() || [];
+    const lp = landings.find((l) => l.slug === order.landing);
+    if (lp) {
+      if (Array.isArray(lp.packages)) {
+        const pk = lp.packages.find((k) => k.id === cleanId || k.title === it?.name);
+        if (pk?.sku && String(pk.sku).trim()) return String(pk.sku).trim();
+      }
+      if (lp.sku && String(lp.sku).trim()) return String(lp.sku).trim();
+    }
+  }
+  if (order?.landing) {
+    return `${order.landing.toUpperCase().replace(/[^A-Z0-9]/g, '')}-${String(cleanId || '01').slice(-4)}`;
+  }
+  return `SKU-${String(cleanId || '01').replace(/^mm-|^prod-/, '').toUpperCase()}`;
+}
+
+function getOrderCourierSkuSummary(order) {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  if (!items.length) return 'SKU-PARCEL';
+  return items.map((it) => `${resolveItemSku(it, order)} x${it.qty || 1}`).join(', ');
 }
 
 async function bookCourier(acc, o) {
@@ -2397,11 +3033,11 @@ async function bookCourier(acc, o) {
         recipient_zone: parseInt(acc.zoneId || '1', 10),
         delivery_type: 48,
         item_type: 2,
-        special_instruction: o.customer?.note || 'Deliver discreetly',
+        special_instruction: [o.isExchange ? '[EXCHANGE PARCEL] কাস্টমার থেকে আগের পার্সেলটি রিসিভ করে এই নতুন পার্সেল দিন' : '', o.customer?.note, `SKU: ${getOrderCourierSkuSummary(o)}`].filter(Boolean).join(' | '),
         item_quantity: 1,
         item_weight: 0.5,
         amount_to_collect: codAmount,
-        item_description: o.items?.map((i) => `${i.name} x${i.qty}`).join(', ') || 'Order Parcel',
+        item_description: getOrderCourierSkuSummary(o),
       };
       const r = await fetch('https://api-hermes.pathao.com/aladdin/api/v1/orders', {
         method: 'POST',
@@ -2417,7 +3053,7 @@ async function bookCourier(acc, o) {
       if (!r.ok || !consignment) {
         return { ok: false, error: data.message || JSON.stringify(data.errors || data) };
       }
-      return { ok: true, status: 200, consignment, trackUrl: getCourierTrackUrl(acc, consignment), body: JSON.stringify(data) };
+      return { ok: true, status: 200, consignment, trackUrl: getCourierTrackUrl(acc, consignment, o?.customer?.phone), body: JSON.stringify(data) };
     } catch (err) {
       return { ok: false, error: String(err.message || err) };
     }
@@ -2445,7 +3081,7 @@ async function bookCourier(acc, o) {
       recipient_phone: cleanBDPhone(o.customer?.phone),
       recipient_address: fullAddr || 'Dhaka City, Dhaka',
       cod_amount: codAmount,
-      note: o.customer?.note || 'Deliver discreetly',
+      note: [o.isExchange ? '[EXCHANGE PARCEL] কাস্টমার থেকে আগের পার্সেল রিসিভ করে এই নতুন পার্সেল দিন' : '', o.customer?.note, `SKU: ${getOrderCourierSkuSummary(o)}`].filter(Boolean).join(' | '),
     };
     try {
       let r;
@@ -2485,7 +3121,7 @@ async function bookCourier(acc, o) {
       if (!r.ok || !consignment || data.status === 400 || data.status === 401) {
         return { ok: false, error: data.message || (data.errors ? JSON.stringify(data.errors) : text.slice(0, 300)) };
       }
-      return { ok: true, status: 200, consignment, trackUrl: getCourierTrackUrl(acc, consignment), body: text.slice(0, 400) };
+      return { ok: true, status: 200, consignment, trackUrl: getCourierTrackUrl(acc, consignment, o?.customer?.phone), body: text.slice(0, 400) };
     } catch (err) {
       return { ok: false, error: String(err.message || err) };
     }
@@ -2582,7 +3218,7 @@ async function bookCourier(acc, o) {
       item_weight: itemWeight,
       item_quantity: 1,
       collectable_amount: codAmount,
-      product_description: o.items?.map((i) => `${i.name} x${i.qty}`).join(', ') || 'Order Parcel',
+      product_description: getOrderCourierSkuSummary(o),
     };
 
     try {
@@ -2603,7 +3239,7 @@ async function bookCourier(acc, o) {
       if (!r.ok || !consignment || data.error) {
         return { ok: false, error: data.message || (data.errors ? JSON.stringify(data.errors) : text.slice(0, 300)) };
       }
-      return { ok: true, status: 200, consignment, trackUrl: getCourierTrackUrl(acc, consignment), body: text.slice(0, 400) };
+      return { ok: true, status: 200, consignment, trackUrl: getCourierTrackUrl(acc, consignment, o?.customer?.phone), body: text.slice(0, 400) };
     } catch (err) {
       return { ok: false, error: String(err.message || err) };
     }
@@ -2645,7 +3281,7 @@ async function bookCourier(acc, o) {
       if (!r.ok || !consignment) {
         return { ok: false, error: data.message || (data.errors ? JSON.stringify(data.errors) : text.slice(0, 300)) };
       }
-      return { ok: true, status: 200, consignment, trackUrl: getCourierTrackUrl(acc, consignment), body: text.slice(0, 400) };
+      return { ok: true, status: 200, consignment, trackUrl: getCourierTrackUrl(acc, consignment, o?.customer?.phone), body: text.slice(0, 400) };
     } catch (err) {
       return { ok: false, error: String(err.message || err) };
     }
@@ -2653,7 +3289,7 @@ async function bookCourier(acc, o) {
 
   // 5. CUSTOM / GENERIC FALLBACK
   if (!acc.bookUrl) return { ok: false, error: 'This courier account has no booking URL configured.' };
-  const map = { name: o.customer?.name || '', phone: cleanBDPhone(o.customer?.phone), address: o.customer?.address || '', amount: codAmount, cod: codAmount, invoice: o.id, id: o.id, note: o.customer?.note || '', apiKey: acc.apiKey || '', apiSecret: acc.apiSecret || '', items: o.items?.map((i) => `${i.name} x${i.qty}`).join(', ') || '' };
+  const map = { name: o.customer?.name || '', phone: cleanBDPhone(o.customer?.phone), address: o.customer?.address || '', amount: codAmount, cod: codAmount, invoice: o.id, id: o.id, note: o.customer?.note || '', apiKey: acc.apiKey || '', apiSecret: acc.apiSecret || '', items: getOrderCourierSkuSummary(o) };
   let headers = { 'Content-Type': 'application/json' };
   try { if (acc.bookHeaders) headers = { ...headers, ...JSON.parse(fillTpl(acc.bookHeaders, map)) }; } catch {}
   const method = (acc.bookMethod || 'POST').toUpperCase();
@@ -2665,7 +3301,7 @@ async function bookCourier(acc, o) {
     let consignment = '';
     if (acc.consignmentPath) consignment = acc.consignmentPath.split('.').reduce((v, k) => (v == null ? v : v[k]), data);
     consignment = String(consignment || data.consignment_id || data.tracking_code || data.consignment || '');
-    return { ok: r.ok, status: r.status, consignment, trackUrl: getCourierTrackUrl(acc, consignment), body: text.slice(0, 400) };
+    return { ok: r.ok, status: r.status, consignment, trackUrl: getCourierTrackUrl(acc, consignment, o?.customer?.phone), body: text.slice(0, 400) };
   } catch (err) { return { ok: false, error: String(err.message || err) }; }
 }
 
@@ -2676,8 +3312,8 @@ function mapCourierStatus(raw) {
   if (['return', 'returned', 'return_received', 'partial_delivered', 'rto', 'lost', 'damaged', 'delivery_failed', 'failed'].includes(s)) return 'return';
   if (['cancelled', 'canceled', 'cancel', 'rejected'].includes(s)) return 'cancelled';
   if (['hold', 'on_hold', 'rescheduled', 'delayed', 'pending_delivery'].includes(s)) return 'hold';
-  if (['shipped', 'in_transit', 'picked', 'picked_up', 'out_for_delivery', 'dispatched', 'at_hub', 'intransit', 'assigned', 'delivery_in_progress', 'at_the_sorting_hub', 'received_at_last_mile_hub', 'assigned_for_delivery', 'pickup'].includes(s)) return 'shipped';
-  if (['confirmed', 'accepted', 'approved', 'pickup_requested', 'assigned_for_pickup', 'in_review', 'pending', 'pickup_pending', 'pickup_assigned'].includes(s)) return 'confirmed';
+  if (['shipped', 'in_transit', 'picked', 'picked_up', 'out_for_delivery', 'dispatched', 'at_hub', 'intransit', 'assigned', 'delivery_in_progress', 'at_the_sorting_hub', 'received_at_last_mile_hub', 'assigned_for_delivery', 'pickup', 'pickup_requested', 'pickup_pending', 'pickup_assigned', 'assigned_for_pickup'].includes(s)) return 'shipped';
+  if (['confirmed', 'accepted', 'approved', 'in_review'].includes(s)) return 'confirmed';
   return '';
 }
 
@@ -2800,21 +3436,33 @@ async function syncOrderCourier(order, force) {
   const mappedStatus = r.mapped || mapCourierStatus(rawStatus);
   const riderNote = r.riderNote || c.riderNote || '';
 
+  let cleanTrackUrl = c.url || '';
+  if (!cleanTrackUrl || cleanTrackUrl.includes('pathao.com/courier/tracking/')) {
+    cleanTrackUrl = getCourierTrackUrl(acc, c.consignment, order.customer?.phone);
+  }
+
   const patch = {
     courier: {
       ...c,
+      url: cleanTrackUrl,
       liveStatus: rawStatus,
       riderNote: riderNote,
       lastSync: new Date().toISOString(),
     },
   };
 
-  const changed = mappedStatus && mappedStatus !== order.status;
+  let effectiveMapped = mappedStatus;
+  // Guard: Never demote an order from shipped/delivered back to confirmed/pending via courier sync
+  if ((order.status === 'shipped' || order.status === 'delivered') && (effectiveMapped === 'confirmed' || effectiveMapped === 'pending' || !effectiveMapped)) {
+    effectiveMapped = order.status;
+  }
+
+  const changed = effectiveMapped && effectiveMapped !== order.status;
   if (changed) {
-    patch.status = mappedStatus;
+    patch.status = effectiveMapped;
     const history = Array.isArray(order.history) ? [...order.history] : [];
     history.push({
-      status: mappedStatus,
+      status: effectiveMapped,
       at: new Date().toISOString(),
       note: riderNote ? `Courier (${c.name || 'Courier'}): ${rawStatus} · Note: ${riderNote}` : `Courier (${c.name || 'Courier'}): ${rawStatus}`,
     });
@@ -2833,6 +3481,39 @@ async function syncOrderCourier(order, force) {
   if (changed) notifyOrder(updated, 'status');
   return updated;
 }
+
+// Background Courier Auto-Sync Worker
+// Automatically queries Pathao, Steadfast, CarryBee, RedX for active shipments every 5 minutes
+let isAutoSyncingCouriers = false;
+async function runBackgroundCourierSync() {
+  if (isAutoSyncingCouriers) return;
+  isAutoSyncingCouriers = true;
+  try {
+    const orders = getOrders() || [];
+    // Active orders that are out with courier but not yet delivered / returned / cancelled
+    const activeOrders = orders.filter((o) => {
+      const st = String(o.status || '').toLowerCase();
+      const hasConsignment = !!(o.courier && o.courier.consignment);
+      return hasConsignment && ['shipped', 'confirmed', 'hold'].includes(st);
+    });
+
+    if (activeOrders.length === 0) return;
+    console.log(`[Courier Auto-Sync] Checking ${activeOrders.length} active shipments...`);
+
+    for (const order of activeOrders) {
+      try {
+        await syncOrderCourier(order, true);
+        await new Promise((r) => setTimeout(r, 500));
+      } catch (err) {
+        console.error(`[Courier Auto-Sync] Error syncing order #${order.id}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('[Courier Auto-Sync] Background task error:', err.message);
+  } finally {
+    isAutoSyncingCouriers = false;
+  }
+}
 function normPhone(p) { let d = String(p || '').replace(/\D/g, ''); if (d.length === 11 && d.startsWith('01')) d = '88' + d; return d; }
 // server-side conversions: Facebook CAPI + TikTok Events API (Purchase), shared event_id for browser dedup
 async function trackPurchase(order) {
@@ -2840,10 +3521,37 @@ async function trackPurchase(order) {
   const out = {};
   const eventId = String(order.id);
   const value = Math.round((Number(order.total) || 0) * 100) / 100;
-  const ph = createHash('sha256').update(normPhone(order.customer?.phone)).digest('hex');
+  const c = order.customer || {};
+  const rawP = String(c.phone || '').replace(/\D/g, '');
+  const e164 = rawP.startsWith('880') ? rawP : (rawP.startsWith('0') ? '88' + rawP : '880' + rawP);
+  const ph = e164 ? createHash('sha256').update(e164).digest('hex') : createHash('sha256').update(normPhone(c.phone)).digest('hex');
+
+  const nameParts = String(c.name || '').trim().toLowerCase().split(/\s+/);
+  const fn = nameParts[0] ? createHash('sha256').update(nameParts[0]).digest('hex') : undefined;
+  const ln = nameParts.slice(1).join(' ') ? createHash('sha256').update(nameParts.slice(1).join(' ')).digest('hex') : undefined;
+  const rawCity = String(c.district || c.area || c.city || '').trim().toLowerCase();
+  const ct = rawCity ? createHash('sha256').update(rawCity).digest('hex') : undefined;
+  const country = createHash('sha256').update('bd').digest('hex');
+  const em = c.email ? createHash('sha256').update(String(c.email).trim().toLowerCase()).digest('hex') : undefined;
+
   const ids = (order.items || []).map((i) => String(i.id));
   const numItems = (order.items || []).reduce((s, i) => s + (Number(i.qty) || 1), 0);
   const ts = Math.floor(Date.now() / 1000);
+  const sourceUrl = order.landing ? `https://metrroma.com/page/${order.landing}` : 'https://metrroma.com/';
+
+  const userData = {
+    ph: [ph],
+    country: [country],
+  };
+  if (fn) userData.fn = [fn];
+  if (ln) userData.ln = [ln];
+  if (ct) userData.ct = [ct];
+  if (em) userData.em = [em];
+  if (order.ip) userData.client_ip_address = order.ip;
+  if (order.userAgent) userData.client_user_agent = order.userAgent;
+  if (order.fbp) userData.fbp = order.fbp;
+  if (order.fbc) userData.fbc = order.fbc;
+
   try {
     if (tr.fbEnabled && tr.fbPixelId && tr.fbToken) {
       const body = {
@@ -2852,8 +3560,8 @@ async function trackPurchase(order) {
           event_time: ts,
           event_id: eventId,
           action_source: 'website',
-          event_source_url: 'https://dot.metromaa.com/',
-          user_data: { ph: [ph] },
+          event_source_url: sourceUrl,
+          user_data: userData,
           custom_data: {
             currency: 'BDT',
             value,
@@ -3471,17 +4179,20 @@ app.post('/api/admin/tracking/test', adminAuth, requireRole('owner', 'manager'),
 app.post('/api/admin/sms/test', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   const phone = String(req.body?.phone || '').trim();
   if (!BD_PHONE.test(phone)) return res.status(400).json({ error: 'enter a valid bd phone number' });
-  res.json(await sendSMS(phone, 'dot. test sms — your SMS integration works ✓'));
+  res.json(await sendSMS(phone, 'METRROMA test sms — your SMS integration works ✓'));
 });
 app.post('/api/admin/email/test', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   const to = String(req.body?.to || '').trim();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ error: 'enter a valid email address' });
-  res.json(await sendEmail(to, 'dot. test email ✓', '<p>Your dot. email integration works.</p>'));
+  res.json(await sendEmail(to, 'METRROMA test email ✓', '<p>Your METRROMA email integration works.</p>'));
 });
 app.post('/api/admin/courier/book', adminAuth, (req, res) => {
   const { orderId, accountId, courierName } = req.body || {};
-  const o = getOrders().find((x) => x.id === orderId);
+  const o = getOrders().find((x) => x.id === orderId || x.id === 'DOT-' + orderId || 'DOT-' + x.id === orderId);
   if (!o) return res.status(404).json({ error: 'order not found' });
+  if (!['approved', 'confirmed'].includes(String(o.status || '').toLowerCase())) {
+    return res.status(400).json({ error: 'শুধুমাত্র Approved বা Confirmed স্ট্যাটাসের অর্ডার কুরিয়ারে পাঠানো যাবে।' });
+  }
   const accs = getIntegrations().couriers || [];
   const target = (courierName || accountId || '').toLowerCase();
   const acc = accs.find((c) => c.id === accountId || c.label?.toLowerCase() === target || c.provider?.toLowerCase() === target);
@@ -3499,7 +4210,7 @@ app.post('/api/admin/courier/book', adminAuth, (req, res) => {
 
   bookCourier(acc, o).then((r) => {
     if (r.ok) {
-      const trackUrl = r.trackUrl || getCourierTrackUrl(acc, r.consignment);
+      const trackUrl = r.trackUrl || getCourierTrackUrl(acc, r.consignment, o?.customer?.phone);
       const courier = {
         name: acc.label || acc.provider || 'Courier',
         accountId: acc.id,
@@ -3509,13 +4220,160 @@ app.post('/api/admin/courier/book', adminAuth, (req, res) => {
         lastSync: new Date().toISOString(),
       };
       const history = Array.isArray(o.history) ? [...o.history] : [];
-      history.push({ status: 'shipped', at: new Date().toISOString(), note: `Booked via ${acc.label || acc.provider} #${r.consignment || ''}` });
-      const updated = updateOrder(o.id, { courier, status: 'shipped', history }) || o;
+      history.push({
+        status: 'shipped',
+        at: new Date().toISOString(),
+        note: `Booked via ${acc.label || acc.provider} #${r.consignment || ''}`,
+        staff: { username: req.admin.username, name: req.admin.name || req.admin.username, role: req.admin.role }
+      });
+      recordStaffKpiAction(req.admin, 'COURIER_BOOKED', {
+        orderId: o.id,
+        courier: acc.label || acc.provider,
+        consignment: r.consignment,
+        amount: Number(o.total || 0)
+      });
+      const updated = updateOrder(o.id, { courier, status: 'shipped', history, lastUpdatedBy: { username: req.admin.username, name: req.admin.name, role: req.admin.role, at: new Date().toISOString() } }) || o;
       notifyOrder(updated, 'status');
       return res.json({ ok: true, consignment: r.consignment, courier, status: 'shipped' });
     }
     res.json(r);
   }).catch((err) => res.status(500).json({ error: String(err.message || err) }));
+});
+
+// ---- Exchange Order Creation Endpoint ----
+app.post('/api/admin/orders/:id/exchange', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
+  try {
+    const origId = req.params.id;
+    const allOrders = getOrders();
+    const orig = allOrders.find((x) => x.id === origId || x.id === 'DOT-' + origId || 'DOT-' + x.id === origId);
+    if (!orig) return res.status(404).json({ error: 'Original order not found' });
+    if (orig.status !== 'delivered') {
+      return res.status(400).json({ error: 'Only delivered orders can be exchanged' });
+    }
+
+    const {
+      newItem,
+      exchangeReason = 'Size/Product change',
+      codAmount = 100,
+      courierName,
+      accountId,
+      autoBookCourier = true,
+    } = req.body || {};
+
+    if (!newItem || !newItem.name) {
+      return res.status(400).json({ error: 'Replacement item name is required' });
+    }
+
+    // Generate unique exchange order ID
+    let exId = `${orig.id}-EX`;
+    let counter = 2;
+    while (allOrders.some((x) => x.id === exId)) {
+      exId = `${orig.id}-EX${counter++}`;
+    }
+
+    const cleanCod = Math.max(0, Number(codAmount) || 0);
+    const itemQty = Math.max(1, Number(newItem.qty) || 1);
+    const itemPrice = Math.max(0, Number(newItem.price) || 0);
+
+    const riderInstruction = `[EXCHANGE PARCEL] কাস্টমার থেকে আগের পার্সেলটি রিসিভ করে এই নতুন পার্সেল হ্যান্ডওভার করুন। COD: ৳${cleanCod}`;
+
+    const exItem = {
+      id: newItem.id || ('ex-' + Date.now().toString(36)),
+      name: String(newItem.name).trim(),
+      price: itemPrice,
+      qty: itemQty,
+      sku: newItem.sku ? String(newItem.sku).trim() : '',
+      image: newItem.image || '',
+    };
+
+    const exOrder = {
+      id: exId,
+      originalOrderId: orig.id,
+      isExchange: true,
+      exchangeReason: String(exchangeReason || '').trim(),
+      createdAt: new Date().toISOString(),
+      source: 'exchange',
+      status: 'approved',
+      payment: 'cash_on_delivery',
+      paymentStatus: cleanCod > 0 ? 'unpaid' : 'paid',
+      customer: {
+        ...(orig.customer || {}),
+        note: riderInstruction,
+      },
+      items: [exItem],
+      itemsTotal: itemPrice * itemQty,
+      delivery: cleanCod,
+      discount: 0,
+      total: cleanCod, // Cash to collect from customer
+      history: [
+        {
+          status: 'approved',
+          at: new Date().toISOString(),
+          note: `Exchange order created from #${orig.id}. Reason: ${exchangeReason}`,
+        },
+      ],
+    };
+
+    // Auto-book with courier if requested
+    if (autoBookCourier) {
+      const accs = getIntegrations().couriers || [];
+      const target = String(courierName || accountId || '').toLowerCase();
+      const acc = accs.find((c) => c.id === accountId || c.label?.toLowerCase() === target || c.provider?.toLowerCase() === target) || accs[0];
+
+      if (acc) {
+        try {
+          const r = await bookCourier(acc, exOrder);
+          if (r.ok && r.consignment) {
+            const trackUrl = r.trackUrl || getCourierTrackUrl(acc, r.consignment, exOrder.customer?.phone);
+            exOrder.courier = {
+              name: acc.label || acc.provider || 'Courier',
+              accountId: acc.id,
+              consignment: r.consignment,
+              phone: acc.hotline || '',
+              url: trackUrl,
+              lastSync: new Date().toISOString(),
+            };
+            exOrder.status = 'shipped';
+            exOrder.history.push({
+              status: 'shipped',
+              at: new Date().toISOString(),
+              note: `Booked via ${acc.label || acc.provider} #${r.consignment}`,
+            });
+          }
+        } catch (cErr) {
+          console.warn('[Exchange Courier Booking Warning]:', cErr.message);
+        }
+      }
+    }
+
+    // Save exchange order to database
+    addOrder(exOrder);
+
+    // Update original order
+    const origHistory = Array.isArray(orig.history) ? [...orig.history] : [];
+    origHistory.push({
+      status: orig.status,
+      at: new Date().toISOString(),
+      note: `Exchange Order #${exOrder.id} created (Replacement: ${exItem.name}, COD: ৳${cleanCod}).`,
+    });
+    const updatedOrig = updateOrder(orig.id, {
+      exchangeOrderId: exOrder.id,
+      exchangeStatus: 'exchange_in_progress',
+      history: origHistory,
+    });
+
+    // Notify customer via WhatsApp
+    notifyOrder(exOrder, 'exchange');
+
+    return res.json({
+      ok: true,
+      exchangeOrder: exOrder,
+      originalOrder: updatedOrig || orig,
+    });
+  } catch (err) {
+    console.error('[Create Exchange Error]:', err);
+    res.status(500).json({ error: String(err.message || err) });
+  }
 });
 
 app.post('/api/admin/courier/sync', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
@@ -3717,7 +4575,7 @@ app.post('/api/admin/courier/pathao-test', adminAuth, requireRole('owner', 'mana
 // 1. BULK COURIER AUTO-BOOKING
 // ==========================================
 app.post('/api/admin/courier/bulk-book', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
-  const { orderIds = [], defaultCourierName } = req.body || {};
+  const { orderIds = [], defaultCourierName, courierMap = {} } = req.body || {};
   if (!Array.isArray(orderIds) || !orderIds.length) {
     return res.status(400).json({ error: 'No orders provided' });
   }
@@ -3727,21 +4585,26 @@ app.post('/api/admin/courier/bulk-book', adminAuth, requireRole('owner', 'manage
   const results = [];
 
   for (const id of orderIds) {
-    const o = allOrders.find((x) => x.id === id);
+    const o = allOrders.find((x) => x.id === id || x.id === 'DOT-' + id || 'DOT-' + x.id === id);
     if (!o) {
       results.push({ orderId: id, ok: false, error: 'Order not found' });
       continue;
     }
-    // If already booked with courier consignment, just ensure status is shipped
+    // If already booked with courier consignment, just ensure status is shipped (if approved/confirmed)
     if (o.courier?.consignment) {
-      if (o.status !== 'shipped') {
+      if (['approved', 'confirmed'].includes(String(o.status || '').toLowerCase())) {
         updateOrder(o.id, { status: 'shipped' });
       }
       results.push({ orderId: id, ok: true, alreadyBooked: true, consignment: o.courier.consignment, courier: o.courier });
       continue;
     }
+    if (!['approved', 'confirmed'].includes(String(o.status || '').toLowerCase())) {
+      results.push({ orderId: id, ok: false, error: 'Only Approved or Confirmed orders can be sent to courier' });
+      continue;
+    }
 
-    const courierTarget = (o.courier?.name || defaultCourierName || accs[0]?.label || accs[0]?.provider || 'Steadfast').toLowerCase();
+    const preferredCourier = courierMap[id] || (o.id && courierMap[o.id]) || o.courier?.name || defaultCourierName;
+    const courierTarget = (preferredCourier || accs[0]?.label || accs[0]?.provider || 'Steadfast').toLowerCase();
     const acc = accs.find((c) => c.label?.toLowerCase() === courierTarget || c.provider?.toLowerCase() === courierTarget) || accs[0];
     const isNative = ['pathao', 'steadfast', 'carrybee', 'redx'].includes(String(acc?.provider || '').toLowerCase());
 
@@ -3759,7 +4622,7 @@ app.post('/api/admin/courier/bulk-book', adminAuth, requireRole('owner', 'manage
     try {
       const r = await bookCourier(acc, o);
       if (r.ok) {
-        const trackUrl = r.trackUrl || getCourierTrackUrl(acc, r.consignment);
+        const trackUrl = r.trackUrl || getCourierTrackUrl(acc, r.consignment, o?.customer?.phone);
         const courier = {
           name: acc.label || acc.provider || 'Courier',
           accountId: acc.id,
@@ -3987,7 +4850,7 @@ app.get('/api/admin/finance/summary', adminAuth, requireRole('owner', 'manager')
 
 app.post('/api/admin/finance/toggle-payout', adminAuth, requireRole('owner', 'manager'), (req, res) => {
   const { orderId, received } = req.body || {};
-  const o = getOrders().find((x) => x.id === orderId);
+  const o = getOrders().find((x) => x.id === orderId || x.id === 'DOT-' + orderId || 'DOT-' + x.id === orderId);
   if (!o) return res.status(404).json({ error: 'Order not found' });
   const updated = updateOrder(orderId, {
     payoutReceived: !!received,
@@ -4077,11 +4940,416 @@ app.post('/api/admin/whatsapp/disconnect', adminAuth, requireRole('owner', 'mana
 });
 
 app.post('/api/admin/whatsapp/send', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
-  const { phone, message, orderId } = req.body || {};
-  if (!phone || !message) return res.status(400).json({ error: 'Phone and message are required' });
+  const { phone, message, orderId, imageUrl, eventType, delayMs } = req.body || {};
+  if (!phone || (!message && !imageUrl)) return res.status(400).json({ error: 'Phone and either message or image are required' });
   try {
-    const result = await sendBaileysMessage(phone, message, orderId, 'manual_broadcast');
+    const result = await sendBaileysMessage(phone, message || '', orderId || null, eventType || 'marketing_offer', imageUrl || null, delayMs || null);
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- 24/7 VPS Server-Side Background WhatsApp Broadcast Engine ----
+// This runs directly on the Linux server process so sending NEVER STOPS
+// even if admin shuts down PC, closes browser, or turns off the screen.
+let serverCampaign = {
+  id: null,
+  status: 'idle', // 'idle' | 'running' | 'paused' | 'stopped' | 'completed'
+  caption: '',
+  imageUrl: null,
+  delaySeconds: 5,
+  targets: [],
+  currentIndex: 0,
+  sentCount: 0,
+  failedCount: 0,
+  currentTarget: '',
+  startedAt: null,
+  finishedAt: null,
+  logs: []
+};
+
+let serverCampaignActive = false;
+
+async function runServerCampaignWorker() {
+  if (serverCampaignActive) return;
+  serverCampaignActive = true;
+
+  console.log('[Server Campaign] Background broadcast worker started.');
+
+  try {
+    while (serverCampaign && serverCampaign.status === 'running') {
+      if (serverCampaign.currentIndex >= serverCampaign.targets.length) {
+        serverCampaign.status = 'completed';
+        serverCampaign.finishedAt = Date.now();
+        serverCampaign.currentTarget = '';
+        console.log(`[Server Campaign] All ${serverCampaign.targets.length} messages sent successfully!`);
+        break;
+      }
+
+      const target = serverCampaign.targets[serverCampaign.currentIndex];
+      if (!target || !target.phone) {
+        serverCampaign.currentIndex++;
+        continue;
+      }
+
+      // Check if WhatsApp is currently connected
+      const liveStatus = getWhatsAppLiveStatus();
+      if (!liveStatus.connected) {
+        console.warn('[Server Campaign] WhatsApp disconnected! Pausing campaign until reconnected.');
+        serverCampaign.status = 'paused';
+        serverCampaign.currentTarget = '⚠️ হোয়াটসঅ্যাপ সংযোগ বিচ্ছিন্ন (নতুন নম্বর লিংক করে Resume চাপুন)';
+        break;
+      }
+
+      // Smart Anti-Ban: Every 25 messages, take a 45-second natural rest to prevent bulk spam flags
+      if (serverCampaign.sentCount > 0 && serverCampaign.sentCount % 25 === 0) {
+        console.log('[Server Campaign] Anti-Ban batch break: waiting 45s after 25 messages...');
+        serverCampaign.currentTarget = '🛡️ অ্যান্টি-ব্যান বিশ্রাম বিরতি (৪৫ সেকেন্ড অপেক্ষা)...';
+        let restElapsed = 0;
+        while (restElapsed < 45000 && serverCampaign.status === 'running') {
+          await new Promise(r => setTimeout(r, 1000));
+          restElapsed += 1000;
+        }
+        if (serverCampaign.status !== 'running') break;
+      }
+
+      serverCampaign.currentTarget = `${target.name || 'কাস্টমার'} (${target.phone})`;
+
+      // Subtle dynamic variation at the end so WhatsApp cannot flag identical message hashes
+      const subtleVariations = [' ✨', ' 🛍️', ' 🌸', ' 🚀', ' 🌟', ''];
+      const variation = subtleVariations[serverCampaign.sentCount % subtleVariations.length];
+
+      const personalizedMsg = ((serverCampaign.caption || '') + variation)
+        .replace(/\\n/g, '\n')
+        .replace(/\{name\}/g, target.name || 'সম্মানিত গ্রাহক')
+        .replace(/\{store\}/g, 'METRROMA')
+        .replace(/\{phone\}/g, target.phone);
+
+      try {
+        const res = await sendBaileysMessage(
+          target.phone,
+          personalizedMsg,
+          null,
+          'marketing_offer',
+          serverCampaign.imageUrl,
+          serverCampaign.delaySeconds * 1000
+        );
+
+        const bdTime = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka' });
+
+        if (res?.sent !== false) {
+          serverCampaign.sentCount++;
+          serverCampaign.logs.unshift({
+            phone: target.phone,
+            name: target.name || 'কাস্টমার',
+            time: bdTime,
+            status: 'success'
+          });
+        } else {
+          serverCampaign.failedCount++;
+          serverCampaign.logs.unshift({
+            phone: target.phone,
+            name: target.name || 'কাস্টমার',
+            time: bdTime,
+            status: 'failed',
+            error: res?.reason || 'Failed'
+          });
+        }
+      } catch (err) {
+        serverCampaign.failedCount++;
+        serverCampaign.logs.unshift({
+          phone: target.phone,
+          name: target.name || 'কাস্টমার',
+          time: new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka' }),
+          status: 'failed',
+          error: err?.message || 'Error'
+        });
+      }
+
+      serverCampaign.logs = serverCampaign.logs.slice(0, 100);
+      serverCampaign.currentIndex++;
+
+      // Background Human Delay on the VPS
+      if (serverCampaign.currentIndex < serverCampaign.targets.length && serverCampaign.status === 'running') {
+        const waitMs = (serverCampaign.delaySeconds || 5) * 1000 + Math.floor(Math.random() * 800);
+        let elapsed = 0;
+        while (elapsed < waitMs && serverCampaign.status === 'running') {
+          await new Promise(r => setTimeout(r, 400));
+          elapsed += 400;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[Server Campaign Worker Fatal]:', err);
+  } finally {
+    serverCampaignActive = false;
+    console.log('[Server Campaign] Worker cycle finished. Current status:', serverCampaign?.status);
+  }
+}
+
+app.get('/api/admin/whatsapp/campaign/status', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  res.json({ ok: true, campaign: serverCampaign });
+});
+
+app.post('/api/admin/whatsapp/campaign/start', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  const { targets, caption, imageUrl, delaySeconds } = req.body || {};
+  if (!Array.isArray(targets) || targets.length === 0) {
+    return res.status(400).json({ error: 'No targets specified' });
+  }
+
+  serverCampaign = {
+    id: 'camp_' + Date.now(),
+    status: 'running',
+    caption: caption || '',
+    imageUrl: imageUrl || null,
+    delaySeconds: Math.max(3, Number(delaySeconds) || 5),
+    targets,
+    currentIndex: 0,
+    sentCount: 0,
+    failedCount: 0,
+    currentTarget: '',
+    startedAt: Date.now(),
+    finishedAt: null,
+    logs: []
+  };
+
+  runServerCampaignWorker().catch((e) => console.error('[Server Campaign Trigger Error]:', e));
+  res.json({ ok: true, campaign: serverCampaign });
+});
+
+app.post('/api/admin/whatsapp/campaign/pause', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  if (serverCampaign && serverCampaign.status === 'running') {
+    serverCampaign.status = 'paused';
+  }
+  res.json({ ok: true, campaign: serverCampaign });
+});
+
+app.post('/api/admin/whatsapp/campaign/resume', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  if (serverCampaign && serverCampaign.status === 'paused') {
+    serverCampaign.status = 'running';
+    runServerCampaignWorker().catch((e) => console.error('[Server Campaign Resume Error]:', e));
+  }
+  res.json({ ok: true, campaign: serverCampaign });
+});
+
+app.post('/api/admin/whatsapp/campaign/stop', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  if (serverCampaign) {
+    serverCampaign.status = 'stopped';
+    serverCampaign.finishedAt = Date.now();
+    serverCampaign.currentTarget = '';
+  }
+  res.json({ ok: true, campaign: serverCampaign });
+});
+
+// WhatsApp Marketing Audiences (Segmentation for Bulk Offers)
+app.get('/api/admin/whatsapp/audiences', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  try {
+    const allCustomers = getCustomers() || [];
+    const allOrders = getOrders() || [];
+    const waChatContacts = getWaChatContacts() || [];
+
+    const uniqueMap = new Map();
+
+    // 1. WhatsApp Chat Contacts (Actual leads who messaged / interacted on WhatsApp)
+    waChatContacts.forEach(w => {
+      const rawPhone = String(w.phone || w.rawDigits || '').replace(/\D/g, '').slice(-11);
+      if (rawPhone && rawPhone.length >= 10 && rawPhone.startsWith('01')) {
+        uniqueMap.set(rawPhone, {
+          phone: rawPhone,
+          name: (w.name && w.name !== 'WhatsApp User' && w.name !== 'Valued Customer') ? w.name : 'হোয়াটসঅ্যাপ গ্রাহক',
+          totalSpent: Number(w.totalSpent) || 0,
+          ordersCount: Number(w.ordersCount) || 0,
+          lastOrderDate: w.lastChatAt || '',
+          lastChatAt: w.lastChatAt || '',
+          lastMessage: w.lastMessage || 'হোয়াটসঅ্যাপ চ্যাট হিস্ট্রি',
+          segment: (Number(w.ordersCount) > 0 ? 'customer' : 'wa_chat'),
+          isWaChat: true,
+          source: 'whatsapp_chat'
+        });
+      }
+    });
+
+    // 2. From customers collection
+    allCustomers.forEach(c => {
+      const rawPhone = String(c.phone || c.id || '').replace(/\D/g, '').slice(-11);
+      if (rawPhone && rawPhone.length >= 10 && rawPhone.startsWith('01')) {
+        const existing = uniqueMap.get(rawPhone);
+        if (existing) {
+          if (c.name && (!existing.name || existing.name === 'হোয়াটসঅ্যাপ গ্রাহক' || existing.name === 'WhatsApp User' || existing.name === 'Valued Customer')) {
+            existing.name = c.name;
+          }
+          if (c.totalSpent) existing.totalSpent = Math.max(existing.totalSpent, Number(c.totalSpent) || 0);
+          if (c.ordersCount) existing.ordersCount = Math.max(existing.ordersCount, Number(c.ordersCount) || 0);
+          if (existing.ordersCount > 0) existing.segment = 'customer';
+        } else {
+          uniqueMap.set(rawPhone, {
+            phone: rawPhone,
+            name: c.name || 'সম্মানিত কাস্টমার',
+            totalSpent: Number(c.totalSpent) || 0,
+            ordersCount: Number(c.ordersCount) || 0,
+            lastOrderDate: c.lastOrderDate || c.updatedAt || c.createdAt || '',
+            lastChatAt: '',
+            lastMessage: '',
+            segment: (c.ordersCount > 0 ? 'customer' : 'lead'),
+            isWaChat: false,
+            source: 'store_customer'
+          });
+        }
+      }
+    });
+
+    // 3. From orders collection to guarantee all order contacts are included
+    allOrders.forEach(o => {
+      const rawPhone = String(o.customer?.phone || '').replace(/\D/g, '').slice(-11);
+      if (rawPhone && rawPhone.length >= 10 && rawPhone.startsWith('01')) {
+        const existing = uniqueMap.get(rawPhone);
+        if (existing) {
+          if (o.customer?.name && (!existing.name || existing.name === 'হোয়াটসঅ্যাপ গ্রাহক' || existing.name === 'WhatsApp User' || existing.name === 'Valued Customer' || existing.name === 'সম্মানিত কাস্টমার')) {
+            existing.name = o.customer.name;
+          }
+          if (o.status !== 'incomplete' && o.status !== 'cancelled') {
+            existing.ordersCount = (existing.ordersCount || 0) + 1;
+            existing.totalSpent = (existing.totalSpent || 0) + (Number(o.total) || 0);
+            existing.segment = 'customer';
+          }
+          if (o.createdAt && (!existing.lastOrderDate || new Date(o.createdAt) > new Date(existing.lastOrderDate))) {
+            existing.lastOrderDate = o.createdAt;
+          }
+        } else {
+          const isSuccess = o.status !== 'incomplete' && o.status !== 'cancelled';
+          uniqueMap.set(rawPhone, {
+            phone: rawPhone,
+            name: o.customer?.name || 'সম্মানিত কাস্টমার',
+            totalSpent: isSuccess ? (Number(o.total) || 0) : 0,
+            ordersCount: isSuccess ? 1 : 0,
+            lastOrderDate: o.createdAt || '',
+            lastChatAt: '',
+            lastMessage: '',
+            segment: isSuccess ? 'customer' : (o.status === 'incomplete' ? 'incomplete' : 'lead'),
+            isWaChat: false,
+            source: 'store_order'
+          });
+        }
+      }
+    });
+
+    const audienceList = Array.from(uniqueMap.values());
+    res.json({
+      ok: true,
+      totalCount: audienceList.length,
+      customers: audienceList,
+      counts: {
+        all: audienceList.length,
+        buyers: audienceList.filter(c => c.ordersCount > 0).length,
+        incomplete: audienceList.filter(c => c.segment === 'incomplete' && c.ordersCount === 0).length,
+        wa_chats: audienceList.filter(c => c.isWaChat === true).length,
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Sync past chat logs/contacts from Baileys auth session files into WhatsApp Chat Leads
+app.post('/api/admin/whatsapp/sync-chats', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  try {
+    const result = syncWhatsAppSessionContacts();
+    const contacts = getWaChatContacts();
+    res.json({ ok: true, synced: result.synced || 0, totalContacts: contacts.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Export WhatsApp & Customer Contacts to CSV for Permanent Offline Backup (Anti-Ban Protection)
+app.get('/api/admin/whatsapp/export-contacts', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  try {
+    const waChatContacts = getWaChatContacts() || [];
+    const allCustomers = getCustomers() || [];
+    const allOrders = getOrders() || [];
+    const type = req.query.type || 'all';
+
+    const uniqueMap = new Map();
+
+    waChatContacts.forEach(w => {
+      const p = String(w.phone || w.rawDigits || '').replace(/\D/g, '').slice(-11);
+      if (p && p.length >= 10 && p.startsWith('01')) {
+        uniqueMap.set(p, {
+          phone: p,
+          name: (w.name && w.name !== 'WhatsApp User') ? w.name : 'হোয়াটসঅ্যাপ গ্রাহক',
+          ordersCount: Number(w.ordersCount) || 0,
+          totalSpent: Number(w.totalSpent) || 0,
+          lastActive: w.lastChatAt ? new Date(w.lastChatAt).toLocaleString('en-BD', { timeZone: 'Asia/Dhaka' }) : '',
+          source: 'WhatsApp Inbox Chat',
+          isWaChat: true
+        });
+      }
+    });
+
+    allCustomers.forEach(c => {
+      const p = String(c.phone || c.id || '').replace(/\D/g, '').slice(-11);
+      if (p && p.length >= 10 && p.startsWith('01')) {
+        const ex = uniqueMap.get(p);
+        if (ex) {
+          if (c.name && (!ex.name || ex.name === 'হোয়াটসঅ্যাপ গ্রাহক')) ex.name = c.name;
+          if (c.ordersCount) ex.ordersCount = Math.max(ex.ordersCount, Number(c.ordersCount) || 0);
+          if (c.totalSpent) ex.totalSpent = Math.max(ex.totalSpent, Number(c.totalSpent) || 0);
+        } else {
+          uniqueMap.set(p, {
+            phone: p,
+            name: c.name || 'কাস্টমার',
+            ordersCount: Number(c.ordersCount) || 0,
+            totalSpent: Number(c.totalSpent) || 0,
+            lastActive: c.lastOrderDate || '',
+            source: 'Website Customer',
+            isWaChat: false
+          });
+        }
+      }
+    });
+
+    allOrders.forEach(o => {
+      const p = String(o.customer?.phone || '').replace(/\D/g, '').slice(-11);
+      if (p && p.length >= 10 && p.startsWith('01')) {
+        const ex = uniqueMap.get(p);
+        if (ex) {
+          if (o.customer?.name && (!ex.name || ex.name === 'হোয়াটসঅ্যাপ গ্রাহক' || ex.name === 'কাস্টমার')) ex.name = o.customer.name;
+          if (o.status !== 'incomplete' && o.status !== 'cancelled') {
+            ex.ordersCount = (ex.ordersCount || 0) + 1;
+            ex.totalSpent = (ex.totalSpent || 0) + (Number(o.total) || 0);
+          }
+        }
+      }
+    });
+
+    let list = Array.from(uniqueMap.values());
+    if (type === 'wa_chats') {
+      list = list.filter(c => c.isWaChat);
+    } else if (type === 'buyers') {
+      list = list.filter(c => c.ordersCount > 0);
+    }
+
+    const rows = [
+      ['Phone Number', 'Customer Name', 'Total Orders', 'Total Spent (BDT)', 'Last Active Date', 'Source Channel']
+    ];
+    list.forEach(item => {
+      rows.push([
+        `"${item.phone}"`,
+        `"${String(item.name).replace(/"/g, '""')}"`,
+        item.ordersCount,
+        item.totalSpent,
+        `"${item.lastActive}"`,
+        `"${item.source}"`
+      ]);
+    });
+
+    const csvContent = '\uFEFF' + rows.map(r => r.join(',')).join('\r\n');
+    const filename = `METRROMA_Contacts_Backup_${type}_${new Date().toISOString().slice(0, 10)}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csvContent);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -4244,9 +5512,14 @@ app.all([
         },
       };
 
-      const changed = mapped && mapped !== o.status;
+      let effectiveMapped = mapped;
+      if ((o.status === 'shipped' || o.status === 'delivered') && (effectiveMapped === 'confirmed' || effectiveMapped === 'pending' || !effectiveMapped)) {
+        effectiveMapped = o.status;
+      }
+
+      const changed = effectiveMapped && effectiveMapped !== o.status;
       if (changed) {
-        patch.status = mapped;
+        patch.status = effectiveMapped;
         const history = Array.isArray(o.history) ? [...o.history] : [];
         history.push({
           status: mapped,
@@ -4426,12 +5699,16 @@ function customerAuth(req, res, next) {
 
 function enrichCustomer(cust) {
   if (!cust) return null;
-  const cleanPhone = String(cust.phone).replace(/\D/g, '').slice(-11);
+  const cleanPhone = String(cust.phone || '').replace(/\D/g, '').slice(-11);
+  const custEmail = String(cust.email || '').trim().toLowerCase();
   const allOrders = getOrders() || [];
   const myOrders = allOrders.filter((o) => {
     if (o.status === 'cancelled') return false;
     const oPhone = String(o.customer?.phone || '').replace(/\D/g, '').slice(-11);
-    return oPhone === cleanPhone;
+    const oEmail = String(o.customer?.email || '').trim().toLowerCase();
+    if (cleanPhone && oPhone && oPhone === cleanPhone) return true;
+    if (custEmail && oEmail && oEmail === custEmail) return true;
+    return false;
   });
 
   const deliveredOrders = myOrders.filter((o) => o.status === 'delivered');
@@ -4446,9 +5723,10 @@ function enrichCustomer(cust) {
 
   return {
     id: cust.id,
-    phone: cust.phone,
+    phone: cust.phone || '',
     name: cust.name || 'VIP Member',
     email: cust.email || '',
+    picture: cust.picture || '',
     ordersCount: myOrders.length,
     totalSpent,
     tier,
@@ -4709,6 +5987,88 @@ app.post('/api/customer/verify-otp', (req, res) => {
   });
 });
 
+// 2b. Authenticate with Google OAuth 2.0 / Identity Services
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '768607828735-81q2voar33po1rc9qnvakheil5h8oeri.apps.googleusercontent.com';
+
+app.post('/api/customer/google', async (req, res) => {
+  const credential = String(req.body?.credential || '').trim();
+  const deviceId = String(req.body?.deviceId || req.get('x-device-id') || '').trim();
+
+  if (!credential) {
+    return res.status(400).json({ error: 'Google credential token is required' });
+  }
+
+  try {
+    const gResp = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+    if (!gResp.ok) {
+      const errData = await gResp.json().catch(() => ({}));
+      return res.status(401).json({ error: errData.error_description || 'Invalid Google credential token' });
+    }
+
+    const payload = await gResp.json();
+
+    // Verify token audience matches our Client ID
+    const audMatch = payload.aud === GOOGLE_CLIENT_ID || payload.azp === GOOGLE_CLIENT_ID;
+    if (!audMatch) {
+      return res.status(401).json({ error: 'Google token audience mismatch' });
+    }
+
+    const email = String(payload.email || '').trim().toLowerCase();
+    if (!email) {
+      return res.status(400).json({ error: 'No email address found in Google account' });
+    }
+
+    const name = String(payload.name || '').trim().slice(0, 60);
+    const googleId = String(payload.sub || '');
+    const picture = String(payload.picture || '');
+
+    // Look up existing customer by email
+    let cust = getCustomerByEmail(email);
+    let isNew = false;
+
+    if (!cust) {
+      isNew = true;
+      cust = saveCustomer({
+        id: 'cust_' + randomUUID().slice(0, 8),
+        phone: '',
+        email,
+        name: name || 'VIP Member',
+        googleId,
+        picture,
+        deviceId,
+        savedAddress: { address: '', district: '', thana: '', area: 'outside' },
+        wishlist: [],
+        welcomeCouponUsed: false,
+      });
+    } else {
+      const updates = { ...cust };
+      if ((!cust.name || cust.name === 'VIP Member') && name) updates.name = name;
+      if (!cust.googleId && googleId) updates.googleId = googleId;
+      if (!cust.picture && picture) updates.picture = picture;
+      if (deviceId && !cust.deviceId) updates.deviceId = deviceId;
+      cust = saveCustomer(updates);
+    }
+
+    const token = 'cust_' + randomBytes(24).toString('hex');
+    customerSessions.set(token, {
+      id: cust.id,
+      phone: cust.phone || '',
+      email: cust.email,
+      expiresAt: Date.now() + CUST_SESSION_TTL,
+    });
+
+    res.json({
+      ok: true,
+      token,
+      isNew,
+      customer: enrichCustomer(cust),
+    });
+  } catch (err) {
+    console.error('Google auth error:', err);
+    res.status(500).json({ error: 'Failed to verify Google sign-in. Please try again.' });
+  }
+});
+
 // 3. Get currently logged in customer
 app.get('/api/customer/me', customerAuth, (req, res) => {
   res.json({ ok: true, customer: enrichCustomer(req.customer) });
@@ -4786,7 +6146,22 @@ app.get('/api/admin/customers', adminAuth, (req, res) => {
 // ---- serve built frontend in production ----
 const dist = join(__dir, '..', 'web', 'dist');
 if (existsSync(dist)) {
-  app.get(['/shakilecom', '/shakilecom.apk', '/ShakilEcom.apk'], (_req, res) => res.sendStatus(404));
+  app.get(['/shakilecom', '/shakilecom.apk', '/ShakilEcom.apk'], (_req, res) => {
+    const candidatePaths = [
+      join(__dir, '..', 'private', 'admin-apks', 'ShakilEcom.apk'),
+      join(__dir, 'data', 'private_apk', 'ShakilEcom.apk'),
+      '/var/www/dot/private/admin-apks/ShakilEcom.apk',
+      '/root/metrroma-backups/apks/ShakilEcom.apk'
+    ];
+    for (const p of candidatePaths) {
+      if (existsSync(p)) {
+        res.setHeader('Content-Disposition', 'attachment; filename="ShakilEcom.apk"');
+        res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+        return res.sendFile(p);
+      }
+    }
+    return res.status(404).send('ShakilEcom APK file not found');
+  });
   app.get(['/admin.html', '/admin'], (_req, res) => res.redirect(301, '/wp-admin'));
   const SEO_ORIGIN = 'https://metrroma.com';
   const xmlEscape = (value) => String(value ?? '').replace(/[<>&'\"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c]);
@@ -4824,7 +6199,10 @@ if (existsSync(dist)) {
   });
   app.use(express.static(dist, {
     setHeaders: (res, path) => {
-      if (path.endsWith('.html')) {
+      if (path.endsWith('sw.js')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Service-Worker-Allowed', '/');
+      } else if (path.endsWith('.html')) {
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
@@ -4854,12 +6232,12 @@ if (existsSync(dist)) {
       if (parts[0] === 'product' && parts[1]) {
         const slug = parts[1].toLowerCase();
         targetProduct = catalog.find((p) => p.slug?.toLowerCase() === slug || p.id === parts[1]);
-      } else if (parts.length === 1 && !['shop', 'checkout', 'confirm', 'track', 'wp-admin', 'account', 'admin', 'terms', 'privacy', 'refund', 'contact'].includes(parts[0])) {
+      } else if (parts.length === 1 && !['shop', 'categories', 'category', 'checkout', 'confirm', 'track', 'wp-admin', 'account', 'admin', 'terms', 'privacy', 'refund', 'contact'].includes(parts[0])) {
         const slug = parts[0].toLowerCase();
         targetProduct = catalog.find((p) => p.slug?.toLowerCase() === slug || p.id === parts[0] || (slug === 'love-forever' && p.id === 'mm-29267') || (slug === 'love-forever-gift-box' && p.id === 'mm-29267'));
       }
 
-      if (parts[0] === 'shop' && parts[1]) {
+      if (['categories', 'category', 'shop'].includes(parts[0]) && parts[1]) {
         targetCategory = (getCatalog().categories || []).find((category) => category.slug?.toLowerCase() === parts[1].toLowerCase()) || null;
       }
 
@@ -4904,7 +6282,7 @@ if (existsSync(dist)) {
       } else if (targetCategory) {
         const title = `${targetCategory.name} — METRROMA`;
         const description = String(targetCategory.blurb || `Shop ${targetCategory.name} from METRROMA. Authentic products with delivery across Bangladesh.`).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
-        const url = `${baseUrl}/shop/${encodeURIComponent(targetCategory.slug)}`;
+        const url = `${baseUrl}/categories/${encodeURIComponent(targetCategory.slug)}`;
         const categoryProducts = (getCatalog().products || []).filter((product) => product.category === targetCategory.slug && !product.archived && product.status !== 'draft' && product.published !== false);
         const listJsonLd = {
           '@context': 'https://schema.org', '@type': 'CollectionPage', name: title, description, url,
@@ -4933,4 +6311,161 @@ if (existsSync(dist)) {
 
 const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
-app.listen(PORT, HOST, () => console.log(`dot. api on http://${HOST}:${PORT}`));
+app.listen(PORT, HOST, () => {
+  console.log(`METRROMA api on http://${HOST}:${PORT}`);
+  // Start automated background courier status sync (initial run after 10s, then every 5 mins)
+  setTimeout(() => {
+    runBackgroundCourierSync().catch(() => {});
+    setInterval(runBackgroundCourierSync, 5 * 60 * 1000);
+  }, 10 * 1000);
+});
+
+
+export function formatStaffDailyReport(monitoringData) {
+  const staffList = monitoringData.staff || [];
+  const dateStr = monitoringData.date;
+  
+  let msg = `📊 *[METRROMA] স্টাফ দৈনিক পারফরম্যান্স রিপোর্ট*\n`;
+  msg += `📅 তারিখ: ${dateStr}\n`;
+  msg += `⏰ সময়: রাত ১১:০০ টা\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+  let totalConfirmedAll = 0;
+  let totalBookedAll = 0;
+  let topStaff = null;
+  let maxOrders = -1;
+
+  for (const s of staffList) {
+    if (s.role === 'owner' && s.activeSeconds === 0 && (s.ordersHandled?.total || 0) === 0) {
+      continue;
+    }
+    const activeHrs = Math.floor(s.activeSeconds / 3600);
+    const activeMins = Math.floor((s.activeSeconds % 3600) / 60);
+    const idleHrs = Math.floor(s.idleSeconds / 3600);
+    const idleMins = Math.floor((s.idleSeconds % 3600) / 60);
+
+    const activeStr = activeHrs > 0 ? `${activeHrs} ঘণ্টা ${activeMins} মি.` : `${activeMins} মিনিট`;
+    const idleStr = idleHrs > 0 ? `${idleHrs} ঘণ্টা ${idleMins} মি.` : `${idleMins} মিনিট`;
+
+    const statusEmoji = s.status === 'active' ? '🟢 Active (অনলাইন)' : s.status === 'idle' ? '🟡 Away (আইডল)' : '⚪ Offline (অফলাইন)';
+
+    const confirmed = s.ordersHandled?.confirmed || 0;
+    const cancelled = s.ordersHandled?.cancelled || 0;
+    const booked = s.couriersBooked || 0;
+    const rev = s.totalRevenueProcessed || 0;
+
+    totalConfirmedAll += confirmed;
+    totalBookedAll += booked;
+
+    if (confirmed > maxOrders && s.role !== 'owner') {
+      maxOrders = confirmed;
+      topStaff = s.name;
+    }
+
+    const firstLoginTime = s.firstLogin ? new Date(s.firstLogin).toLocaleTimeString('bn-BD', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit' }) : 'N/A';
+    const lastActiveTime = s.lastActive ? new Date(s.lastActive).toLocaleTimeString('bn-BD', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit' }) : 'N/A';
+
+    msg += `👤 *${s.name}* (${s.role.toUpperCase()})\n`;
+    msg += `  • স্ট্যাটাস: ${statusEmoji}\n`;
+    msg += `  • ⏱️ কাজের সময়: ${activeStr} (সক্রিয়) | আইডল: ${idleStr}\n`;
+    msg += `  • 🚪 প্রথম লগইন: ${firstLoginTime} | শেষ অ্যাক্টিভ: ${lastActiveTime}\n`;
+    msg += `  • 📦 প্রসেস করা অর্ডার: ${confirmed + cancelled} টি (কনফার্মড: ${confirmed}, বাতিল: ${cancelled})\n`;
+    msg += `  • 🚚 কুরিয়ার বুকিং: ${booked} টি\n`;
+    if (rev > 0) msg += `  • 💰 মোট প্রসেসড সেলস: ৳ ${rev.toLocaleString()}\n`;
+    msg += `\n`;
+  }
+
+  msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `📦 *মোট কনফার্মড পার্সেল:* ${totalConfirmedAll} টি\n`;
+  msg += `🚚 *মোট কুরিয়ারে বুকিং:* ${totalBookedAll} টি\n`;
+  if (topStaff) msg += `🏆 *আজকের সেরা পারফর্মার:* ${topStaff}\n`;
+  msg += `🔗 *লাইভ ড্যাশবোর্ড:* https://metrroma.com/wp-admin\n`;
+
+  return msg;
+}
+
+
+// ---- Staff Heartbeat & Presence ----
+app.post('/api/admin/heartbeat', adminAuth, (req, res) => {
+  const { active, currentPath } = req.body || {};
+  const ip = getClientIp(req);
+  const device = req.headers['user-agent'] || '';
+  updateStaffPresence(req.admin, {
+    active: active !== false,
+    currentPath: String(currentPath || '').slice(0, 100),
+    ip,
+    device
+  });
+  res.json({ ok: true, timestamp: Date.now() });
+});
+
+// ---- Staff Monitoring & Live KPI ----
+app.get('/api/admin/staff-monitoring', adminAuth, requireRole('owner', 'manager'), (_req, res) => {
+  res.json(getStaffMonitoringData());
+});
+
+// ---- Audit Logs ----
+app.get('/api/admin/audit-logs', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  const { staff, action, limit = 200 } = req.query || {};
+  let logs = getAuditLogs();
+  if (staff) {
+    const s = String(staff).toLowerCase();
+    logs = logs.filter(l => l.staff?.username?.toLowerCase() === s || l.staff?.name?.toLowerCase().includes(s));
+  }
+  if (action) {
+    const a = String(action).toUpperCase();
+    logs = logs.filter(l => l.action === a);
+  }
+  res.json(logs.slice(0, Math.min(500, parseInt(limit, 10) || 200)));
+});
+
+// ---- Send Daily Staff Performance Report to WhatsApp ----
+app.post('/api/admin/staff/send-daily-report', adminAuth, requireRole('owner'), async (req, res) => {
+  try {
+    const settings = getSettings();
+    const recipient = req.body?.phone || settings.whatsapp || settings.phone || '8801878374762';
+    const cleanPhone = String(recipient).replace(/\D/g, '');
+    if (!cleanPhone) {
+      return res.status(400).json({ error: 'No recipient phone number configured for Super Admin WhatsApp' });
+    }
+
+    const data = getStaffMonitoringData();
+    const reportText = formatStaffDailyReport(data);
+
+    // Send via Baileys WhatsApp
+    const r = await sendBaileysMessage(cleanPhone, reportText, null, 'staff_daily_report');
+    res.json({ ok: true, recipient: cleanPhone, sent: r?.sent !== false, message: reportText });
+  } catch (err) {
+    res.status(500).json({ error: String(err?.message || err) });
+  }
+});
+
+// ---- Automated Nightly Staff Performance WhatsApp Cron (23:00 / 11:00 PM BD Time) ----
+let lastNightlyReportDateSent = '';
+setInterval(async () => {
+  try {
+    const now = new Date();
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const bdTime = new Date(utc + (3600000 * 6)); // UTC+6
+    const hr = bdTime.getHours();
+    const min = bdTime.getMinutes();
+    const today = bdTime.toISOString().slice(0, 10);
+
+    // Trigger daily at 23:00 (11:00 PM BD time)
+    if (hr === 23 && min === 0 && lastNightlyReportDateSent !== today) {
+      lastNightlyReportDateSent = today;
+      const settings = getSettings();
+      const recipient = settings.whatsapp || settings.phone || '8801878374762';
+      const cleanPhone = String(recipient).replace(/\D/g, '');
+      if (cleanPhone) {
+        console.log(`[StaffMonitor] Auto-dispatching nightly report to ${cleanPhone}...`);
+        const data = getStaffMonitoringData();
+        const text = formatStaffDailyReport(data);
+        await sendBaileysMessage(cleanPhone, text, null, 'staff_daily_report_auto');
+        console.log('[StaffMonitor] Nightly report dispatched successfully via WhatsApp.');
+      }
+    }
+  } catch (e) {
+    console.error('[StaffMonitor] Nightly report error:', e.message);
+  }
+}, 60000);

@@ -1,9 +1,11 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import qrcode from 'qrcode-generator';
 import './admin.css';
 import { taka, getCategories, fetchMasterColors, createMasterColor, deleteMasterColor, autoDetectCategoryAndSub, isWellnessOrExcludedCategory, type MasterColor } from './api';
 import { WhatsAppIcon } from './icons';
 import { STORE_COPY_KEYS } from './language';
+import { PushPopupsAdmin } from './PushPopupsAdmin';
+import { exportOrdersExcel } from './exportOrdersExcel';
 
 const KEY = 'dot_admin';
 const getTok = () => localStorage.getItem(KEY) || '';
@@ -92,20 +94,13 @@ function OriginBadge({ source, style }: { source: string; style?: React.CSSPrope
   );
 }
 
-function exportCSV(orders: any[]) {
-  const head = ['id', 'date', 'name', 'phone', 'area', 'address', 'items', 'subtotal', 'delivery', 'discount', 'coupon', 'total', 'status'];
-  const rows = orders.map((o) => [
-    o.id, o.createdAt, o.customer.name, o.customer.phone, o.customer.area || '', o.customer.address,
-    o.items.map((it: any) => `${it.name} x${it.qty}`).join('; '),
-    o.itemsTotal ?? o.total, o.delivery ?? 0, o.discount ?? 0, o.coupon || '', o.total, o.status,
-  ]);
-  const esc = (v: any) => `"${String(v).replace(/"/g, '""')}"`;
-  const csv = [head, ...rows].map((r) => r.map(esc).join(',')).join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  a.download = 'dot-orders-' + new Date().toISOString().slice(0, 10) + '.csv';
-  a.click();
-  URL.revokeObjectURL(a.href);
+function exportCSV(
+  orders: any[],
+  prodMap?: Record<string, any>,
+  landingMap?: Record<string, any>,
+  filePrefix = 'metrroma-orders'
+) {
+  return exportOrdersExcel(orders, prodMap, landingMap, filePrefix);
 }
 
 export function getBase64ByteSize(b64: string): number {
@@ -714,11 +709,17 @@ function updateLiveSettingsCache() {
         if (s) liveStoreSettings = s;
       })
       .catch(() => {});
+    fetch('/api/products')
+      .then((r) => r.json())
+      .then((ps) => {
+        if (Array.isArray(ps) && typeof window !== 'undefined') (window as any).__CATALOG_CACHE = ps;
+      })
+      .catch(() => {});
   } catch {}
 }
 updateLiveSettingsCache();
 
-function code128Svg(text: string, height = 30): string {
+function code128Svg(text: string, height = 28, maxWidth = 220): string {
   const PATTERNS = [
     '212222','222122','222221','121223','121322','131222','122213','122312','132212','221213',
     '221312','231212','112232','122132','122231','113222','123122','123221','223211','221132',
@@ -756,14 +757,18 @@ function code128Svg(text: string, height = 30): string {
   for (let i = 0; i < bars.length; i++) {
     if (bars[i] === '1') rects += `<rect x="${i}" y="0" width="1" height="${height}" fill="#000000" />`;
   }
-  return `<svg viewBox="0 0 ${bars.length} ${height}" style="height:${height}px; max-width:130px; width:100%; display:block;" shape-rendering="crispEdges">${rects}</svg>`;
+  return `<svg viewBox="0 0 ${bars.length} ${height}" style="height:${height}px; max-width:${maxWidth}px; width:100%; display:block; margin:0 auto;" shape-rendering="crispEdges">${rects}</svg>`;
 }
 
-const SLIP_PRINT_CSS = `@page {
+const SLIP_PRINT_CSS = `
+@page {
   size: 75mm 100mm;
   margin: 0;
 }
 @media print {
+  .no-print {
+    display: none !important;
+  }
   @page {
     size: 75mm 100mm;
     margin: 0;
@@ -778,6 +783,9 @@ const SLIP_PRINT_CSS = `@page {
   }
   .slip-page {
     width: 75mm !important;
+    height: 100mm !important;
+    max-height: 100mm !important;
+    overflow: hidden !important;
     margin: 0 !important;
     padding: 0 !important;
     box-sizing: border-box !important;
@@ -792,17 +800,23 @@ const SLIP_PRINT_CSS = `@page {
   }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hind Siliguri", "Anek Bangla", Arial, sans-serif;
+body, .slip-card, .customer-name, .customer-address, .item-line, .note-text {
+  font-family: 'Hind Siliguri', 'Noto Sans Bengali', 'SolaimanLipi', 'Kalpurush', 'Anek Bangla', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
   background: #ffffff;
   color: #000000;
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1, "liga" 1, "clig" 1;
 }
 .slip-page {
   width: 75mm;
   max-width: 75mm;
+  height: 100mm;
+  max-height: 100mm;
+  overflow: hidden;
   background: #ffffff;
   box-sizing: border-box;
   page-break-after: always;
@@ -815,183 +829,198 @@ body {
 .slip-card {
   width: 75mm;
   max-width: 75mm;
+  height: 100mm;
+  max-height: 100mm;
   background: #ffffff;
-  padding: 3mm 4mm 2mm 4mm;
+  padding: 3mm 4mm 3mm 4mm;
   box-sizing: border-box;
+  overflow: hidden;
 }
 .header-row {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin: 0 0 3px 0;
+  margin: 0 0 1.5px 0;
   padding: 0;
 }
 .brand-name {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 900;
   color: #000000;
   line-height: 1.1;
   letter-spacing: -0.3px;
 }
 .brand-logo {
-  max-height: 26px;
-  max-width: 110px;
+  max-height: 24px;
+  max-width: 100px;
   object-fit: contain;
 }
 .invoice-block {
   text-align: right;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 .inv-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 900;
   color: #000000;
-  line-height: 1.1;
-  margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 .inv-meta {
-  font-size: 10px;
-  font-weight: 700;
-  color: #000000;
-  line-height: 1.25;
-  white-space: nowrap;
+  font-size: 9px;
+  color: #111111;
+  font-weight: 600;
 }
 .shipto-section {
-  margin-top: 3px;
+  border: 1.2px solid #000000;
+  border-radius: 4px;
+  padding: 2.5px 5px;
+  margin: 1.5px 0 2px 0;
+  background: #ffffff;
 }
 .shipto-header-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 3px;
+  border-bottom: 1px dashed #444444;
+  padding-bottom: 1.5px;
+  margin-bottom: 2px;
 }
 .section-title {
-  font-size: 11px;
+  font-size: 9.5px;
   font-weight: 900;
+  letter-spacing: 0.8px;
   color: #000000;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 .cod-amount {
-  font-size: 15.5px;
+  font-size: 14.5px;
   font-weight: 900;
   color: #000000;
-  letter-spacing: -0.2px;
-  white-space: nowrap;
+  letter-spacing: 0.2px;
 }
 .customer-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   color: #000000;
-  line-height: 1.35;
-  margin-bottom: 2px;
-  word-break: normal;
-  overflow-wrap: break-word;
+  line-height: 1.2;
 }
 .customer-phone {
-  font-size: 12.5px;
-  font-weight: 800;
+  font-size: 13.5px;
+  font-weight: 900;
   color: #000000;
-  line-height: 1.25;
-  margin-bottom: 2px;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.4px;
+  margin: 1px 0;
 }
 .customer-address {
-  font-size: 11.5px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 600;
   color: #000000;
-  line-height: 1.4;
-  word-break: normal;
-  overflow-wrap: break-word;
+  line-height: 1.2;
+  word-break: break-word;
 }
 .divider-line {
-  border-top: 1.5px solid #000000;
-  margin: 4.5px 0;
-  width: 100%;
+  border-top: 1px dashed #888888;
+  margin: 2px 0;
 }
 .items-section {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 2px 0;
+  align-items: center;
+  gap: 6px;
+  margin: 1.5px 0;
 }
 .items-list {
   flex: 1;
-  min-width: 0;
 }
 .items-title {
-  font-size: 10.5px;
+  font-size: 9px;
   font-weight: 900;
-  color: #000000;
-  text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 2px;
+  color: #000000;
+  margin-bottom: 1px;
 }
 .item-line {
-  font-size: 11.5px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 900;
   color: #000000;
-  line-height: 1.35;
-  margin-bottom: 2px;
-  word-break: normal;
-  overflow-wrap: break-word;
+  line-height: 1.2;
 }
 .qr-container {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
 }
 .qr-container svg {
-  width: 46px;
-  height: 46px;
-  display: block;
+  width: 40px;
+  height: 40px;
 }
-.footer-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 8px;
-  margin-top: 4px;
+.note-row {
+  font-size: 9.5px;
+  line-height: 1.25;
+  color: #111111;
+  margin: 1.5px 0 2px 0;
+  word-break: break-word;
 }
-.note-block {
-  flex: 1;
-  min-width: 0;
-}
-.note-title {
-  font-size: 10px;
-  font-weight: 900;
-  color: #000000;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  margin-bottom: 1px;
-}
-.note-text {
-  font-size: 10.5px;
-  font-weight: 700;
-  color: #000000;
-  line-height: 1.3;
-  word-break: normal;
-  overflow-wrap: break-word;
-}
-.barcode-block {
-  text-align: right;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  flex-shrink: 0;
-}
-.parcel-id-line {
-  font-size: 10.5px;
+.note-row .note-title {
   font-weight: 800;
   color: #000000;
-  line-height: 1.25;
-  margin-bottom: 2px;
-  white-space: nowrap;
-}`;
+}
+.note-row .note-text {
+  font-weight: 600;
+  color: #111111;
+}
+.courier-barcode-block {
+  text-align: center;
+  margin-top: 4px;
+  padding: 2px 0 0 0;
+}
+.tracking-title-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 900;
+  color: #000000;
+  letter-spacing: 0.2px;
+  margin-bottom: 1px;
+}
+.tracking-title-row .courier-badge {
+  text-transform: uppercase;
+  font-size: 9.5px;
+  letter-spacing: 0.5px;
+}
+.tracking-title-row .tracking-number-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+}
+.barcode-svg-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 1px 0;
+}
+.barcode-svg-wrap svg {
+  max-width: 215px;
+  width: 100%;
+  height: 24px;
+  margin: 0 auto;
+}
+.barcode-digits-row {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #000000;
+  margin-top: 0.5px;
+  text-align: center;
+}
+`;
 
 const PRINT_CSS = `*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .pg{width:210mm;padding:18mm 16mm;margin:0 auto}.pg+.pg{border-top:1px dashed #ccc}
@@ -1026,40 +1055,117 @@ function invoiceBody(o: any) {
   const rows = o.items.map((it: any, i: number) => `<tr><td class="c">${i + 1}</td><td><div style="display:flex;align-items:center;gap:8px">${it.image ? `<img src="${it.image}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;border:1px solid #eee;flex:none"/>` : ''}<span>${it.name}</span></div></td><td class="c">${it.qty}</td><td class="r">৳${it.price ?? Math.round(it.subtotal / it.qty)}</td><td class="r">৳${it.subtotal}</td></tr>`).join('');
   const cour = o.courier && o.courier.name ? `<div class="col"><div class="lbl">Courier</div><p class="nm">${o.courier.name}</p>${o.courier.consignment ? `<p>Tracking: ${o.courier.consignment}</p>` : ''}</div>` : '';
   const disc = o.discount ? `<div class="totrow"><span>Discount${o.coupon ? ' (' + o.coupon + ')' : ''}</span><span>&minus;৳${o.discount}</span></div>` : '';
-  return `<div class="pg"><div class="doc-top"><div><div class="brand">dot<span>.</span></div><div class="brand-sub">intimate self-care</div></div><div class="doc-meta"><div class="doc-title">INVOICE</div><div class="doc-id">${o.id}</div><div class="doc-date">${new Date(o.createdAt).toLocaleString()}</div></div></div><div class="cols"><div class="col"><div class="lbl">Deliver to</div><p class="nm">${o.customer.name}</p><p>${o.customer.phone}</p><p>${o.customer.address}${o.customer.area ? ' (' + o.customer.area + ' dhaka)' : ''}</p></div><div class="col"><div class="lbl">Payment</div><span class="pay">Cash on delivery</span></div>${cour}</div><table><thead><tr><th class="c">#</th><th>Item</th><th class="c">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody></table><div class="totbox"><div class="totrow"><span>Subtotal</span><span>৳${o.itemsTotal ?? o.total}</span></div><div class="totrow"><span>Delivery</span><span>${o.delivery ? '৳' + o.delivery : 'Free'}</span></div>${disc}<div class="totrow grand"><span>Total (COD)</span><span>৳${o.total}</span></div></div><div class="foot">Thank you for shopping with dot. &middot; Every order ships in plain, unbranded packaging.<br>This is a computer-generated invoice and needs no signature.</div></div>`;
+  return `<div class="pg"><div class="doc-top"><div><div class="brand">METRROMA</div><div class="brand-sub">For your personal world.</div></div><div class="doc-meta"><div class="doc-title">INVOICE</div><div class="doc-id">${o.id}</div><div class="doc-date">${new Date(o.createdAt).toLocaleString()}</div></div></div><div class="cols"><div class="col"><div class="lbl">Deliver to</div><p class="nm">${o.customer.name}</p><p>${o.customer.phone}</p><p>${o.customer.address}${o.customer.area ? ' (' + o.customer.area + ' dhaka)' : ''}</p></div><div class="col"><div class="lbl">Payment</div><span class="pay">Cash on delivery</span></div>${cour}</div><table><thead><tr><th class="c">#</th><th>Item</th><th class="c">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody></table><div class="totbox"><div class="totrow"><span>Subtotal</span><span>৳${o.itemsTotal ?? o.total}</span></div><div class="totrow"><span>Delivery</span><span>${o.delivery ? '৳' + o.delivery : 'Free'}</span></div>${disc}<div class="totrow grand"><span>Total (COD)</span><span>৳${o.total}</span></div></div><div class="foot">Thank you for shopping with METRROMA. &middot; Every order ships in plain, discreet packaging.<br>This is a computer-generated invoice and needs no signature.</div></div>`;
 }
-function slipBody(o: any) {
-  // Dynamic store logo from live settings - NO hardcoded logo!
-  const storeLogo = liveStoreSettings.logo || '';
-  const storeName = liveStoreSettings.storeName || 'METRROMA';
+function resolveItemSku(it: any, order?: any): string {
+  const rawSku = String(it?.sku || '').trim();
+  if (rawSku && !rawSku.toLowerCase().includes('default') && !rawSku.toLowerCase().includes('sku-') && !rawSku.startsWith('ex-')) {
+    return rawSku.toUpperCase();
+  }
 
-  const brandBlockHtml = storeLogo
-    ? `<img src="${storeLogo}" alt="${storeName}" class="brand-logo" />`
-    : `<div class="brand-name">${storeName}</div>`;
+  const itId = String(it?.id || '').trim();
+  const itName = String(it?.name || it?.title || '').trim().toLowerCase();
+  const src = String(order?.source || '').toLowerCase();
+
+  // Explicit item name matching (handles exchange notes like "LL8 hobe", "LL6.7", Bangla titles, etc.)
+  if (itName.includes('ll8') || itName.includes('ll-8') || itName.includes('৮ ইঞ্চি') || itName.includes('8 inch') || itId === 'pkg_mvxb6grh') return 'LL8';
+  if (itName.includes('ll6.7') || itName.includes('ll-6.7') || itName.includes('৬.৭') || itName.includes('6.7') || itId === 'pmv7bramh') return 'LL6.7';
+  if (itName.includes('ll5.7') || itName.includes('ll-5.7') || itName.includes('৫.৭') || itName.includes('5.7') || itId === 'lovelock-5-7') return 'LL5.7';
+  if (itName.includes('belt') || itName.includes('বেল্ট') || itName.includes('bc') || itId === 'pkg_mv9nk03y') return 'BC';
+  if (itName.includes('finger') || itName.includes('ফিঙ্গার') || itName.includes('fs-') || itName.includes('fs01') || itId.includes('finger') || src.includes('finger')) return 'FS-01';
+
+  // Check in cached catalog products
+  try {
+    const cat = (window as any).__CATALOG_CACHE || [];
+    if (Array.isArray(cat)) {
+      const match = cat.find((p: any) => p.id === itId || (p.name && itName && p.name.toLowerCase() === itName));
+      if (match && match.sku) return match.sku;
+    }
+  } catch {}
+
+  // Landing page source fallbacks
+  if (src.includes('love-lock') || src.includes('lovelock')) {
+    if (itName.includes('৮') || itName.includes('8')) return 'LL8';
+    if (itName.includes('৫') || itName.includes('5')) return 'LL5.7';
+    return 'LL6.7';
+  }
+
+  // Clean ID if meaningful
+  if (itId && !itId.startsWith('ex-') && !itId.startsWith('pkg_') && !itId.startsWith('prod_')) {
+    return itId.toUpperCase();
+  }
+
+  return 'LL6.7';
+}
+
+function resolveCourierBrand(rawName: string): string {
+  const s = String(rawName || '').toLowerCase().trim();
+  if (s.includes('pathao') || s.includes('meetup') || s.includes('p meetup') || s.includes('p-meetup')) return 'Pathao';
+  if (s.includes('steadfast')) return 'Steadfast';
+  if (s.includes('carrybee')) return 'CarryBee';
+  if (s.includes('redx')) return 'RedX';
+  if (s.includes('ecourier')) return 'eCourier';
+  if (s.includes('paperfly')) return 'Paperfly';
+  if (rawName && rawName.trim()) return rawName.trim();
+  return 'Courier';
+}
+
+function slipBody(o: any) {
+  // Dynamic store logo from live website settings - fully automatic!
+  const rawLogo = liveStoreSettings.logo || '';
+  const storeName = liveStoreSettings.storeName || 'METRROMA';
+  const fullLogoUrl = rawLogo ? (rawLogo.startsWith('http') ? rawLogo : (typeof window !== 'undefined' ? window.location.origin : '') + rawLogo) : '';
+
+  const brandBlockHtml = fullLogoUrl
+    ? `<img src="${fullLogoUrl}" alt="${storeName}" class="brand-logo" style="max-height:28px;max-width:120px;object-fit:contain;display:block;" onerror="this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='block';" /><div class="brand-name" style="display:none;font-size:18px;font-weight:900;">${storeName}</div>`
+    : `<div class="brand-name" style="font-size:18px;font-weight:900;">${storeName}</div>`;
 
   const dateStr = o.createdAt ? new Date(o.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
   const totalPayable = o.total || 0;
   
+  // Privacy SKU ONLY - Real SKU resolved without demo/default strings
   const itemsHtml = o.items && o.items.length > 0
-    ? o.items.map((it: any, idx: number) => `<div class="item-line">${idx + 1}. ${it.name} x ${it.qty}</div>`).join('')
-    : `<div class="item-line">1. Order Items x 1</div>`;
+    ? o.items.map((it: any) => {
+        const itemCode = resolveItemSku(it, o);
+        return `<div class="item-line" style="font-size:12.5px;font-weight:900;padding:2px 0;letter-spacing:0.3px;"><strong>SKU: ${itemCode}</strong> &times; ${it.qty || 1}</div>`;
+      }).join('')
+    : `<div class="item-line" style="font-size:12.5px;font-weight:900;"><strong>SKU: LL6.7</strong> &times; 1</div>`;
 
-  const courierName = o.courier && o.courier.name ? o.courier.name : '';
-  const trackingNo = o.courier && o.courier.consignment ? o.courier.consignment : '';
-  const parcelLabel = courierName ? `${courierName} Parcel ID:` : 'Parcel ID:';
-  const displayParcelId = trackingNo ? (trackingNo.startsWith('#') ? trackingNo : `#${trackingNo}`) : `#${o.id}`;
-  const barcodeValue = trackingNo ? trackingNo.replace('#', '') : String(o.id).replace('#', '');
+  const courierBrand = resolveCourierBrand(o.courier && o.courier.name ? o.courier.name : '');
+  const cleanTracking = String(o.courier && o.courier.consignment ? o.courier.consignment : '').replace(/^[#\s]+|[#\s]+$/g, '').trim();
+  const hasConsignment = Boolean(cleanTracking);
 
-  const qrData = trackingNo ? `https://merchant.pathao.com/tracking?consignment_id=${trackingNo}` : `ORD:${o.id}|TEL:${o.customer.phone}|COD:${totalPayable}`;
+  const displayCourierLabel = hasConsignment ? `${courierBrand} Consignment` : 'Order ID';
+  const displayTrackingId = hasConsignment ? cleanTracking : `#${o.id}`;
+  const barcodeValue = hasConsignment ? cleanTracking : String(o.id).replace(/[^a-zA-Z0-9]/g, '');
 
-  const rawAddress = o.customer.address || '';
-  const areaStr = o.customer.area ? ', ' + o.customer.area : '';
+  const liveTrackUrl = o.courier && o.courier.url ? o.courier.url : '';
+  const qrData = liveTrackUrl || (cleanTracking ? `https://merchant.pathao.com/tracking?consignment_id=${cleanTracking}` : `ORD:${o.id}|TEL:${o.customer?.phone || ''}|COD:${totalPayable}`);
+
+  const rawAddress = o.customer?.address || '';
+  const areaStr = o.customer?.area ? ', ' + o.customer.area : '';
   const cleanAddress = (rawAddress + areaStr).trim();
 
-  return `<div class="slip-page"><div class="slip-card"><div class="header-row"><div class="brand-block">${brandBlockHtml}</div><div class="invoice-block"><div class="inv-title">Invoice</div><div class="inv-meta">No: <strong>#${o.id}</strong></div><div class="inv-meta">Date: ${dateStr}</div></div></div><div class="shipto-section"><div class="shipto-header-row"><div class="section-title">SHIP TO</div><div class="cod-amount">COD: ${totalPayable} TK</div></div><div class="customer-name">${o.customer.name || 'N/A'}</div><div class="customer-phone">${o.customer.phone || ''}</div><div class="customer-address">${cleanAddress}</div></div><div class="divider-line"></div><div class="items-section"><div class="items-list"><div class="items-title">Items</div>${itemsHtml}</div><div class="qr-container">${qrSvg(qrData)}</div></div><div class="divider-line"></div><div class="footer-section"><div class="note-block"><div class="note-title">Note:</div>${o.customer.note ? `<div class="note-text">${o.customer.note}</div>` : '<div class="note-text">-</div>'}</div><div class="barcode-block"><div class="parcel-id-line">${parcelLabel} <strong>${displayParcelId}</strong></div>${code128Svg(barcodeValue, 24)}</div></div></div></div>`;
+  // Exchange Warning Banner
+  const isExchangeOrder = Boolean(o.isExchange || o.exchangeStatus === 'exchange_in_progress' || (o.id && String(o.id).toUpperCase().includes('-EX')));
+  const exchangeBanner = isExchangeOrder
+    ? `<div style="background:#000000;color:#ffffff;padding:2px 5px;border-radius:3px;margin:1.5px 0 2px 0;font-size:9.5px;font-weight:800;text-align:center;line-height:1.2;border:1px solid #000000;">⚠️ [EXCHANGE PARCEL] কাস্টমার থেকে আগের পার্সেলটি রিসিভ করে নতুন পার্সেল দিন!</div>`
+    : '';
+
+  // Clean note (do not repeat exchange text if already in exchange banner)
+  const rawNote = String(o.customer && o.customer.note ? o.customer.note : '').trim();
+  const isDuplicateExchange = rawNote.toUpperCase().includes('EXCHANGE') || rawNote.includes('আগের পার্সেলটি') || rawNote.includes('এক্সচেঞ্জ') || rawNote.includes('হ্যান্ডওভার');
+  const hasNote = rawNote && rawNote !== '-' && rawNote !== 'None' && (!isExchangeOrder || !isDuplicateExchange) && !isDuplicateExchange;
+
+  const noteSectionHtml = hasNote
+    ? `<div class="note-row"><span class="note-title">Note: </span><span class="note-text">${rawNote}</span></div><div class="divider-line"></div>`
+    : '';
+
+  return `<div class="slip-page"><div class="slip-card"><div class="header-row"><div class="brand-block">${brandBlockHtml}</div><div class="invoice-block"><div class="inv-title">Invoice</div><div class="inv-meta">No: <strong>#${o.id}</strong></div><div class="inv-meta">Date: ${dateStr}</div></div></div>${exchangeBanner}<div class="shipto-section"><div class="shipto-header-row"><div class="section-title">SHIP TO</div><div class="cod-amount" style="font-size:14.5px;font-weight:900;">COD: ৳${totalPayable}</div></div><div class="customer-name">${o.customer?.name || 'N/A'}</div><div class="customer-phone" style="font-size:13.5px;font-weight:900;letter-spacing:0.4px;margin-bottom:1px;">${o.customer?.phone || ''}${o.customer?.secondaryPhone ? ' / Alt: ' + o.customer.secondaryPhone : ''}</div><div class="customer-address">${cleanAddress}</div></div><div class="divider-line"></div><div class="items-section"><div class="items-list"><div class="items-title" style="font-size:9px;font-weight:900;letter-spacing:0.5px;">PACKING ITEMS (SKU ONLY)</div>${itemsHtml}</div><div class="qr-container">${qrSvg(qrData)}</div></div><div class="divider-line"></div>${noteSectionHtml}<div class="courier-barcode-block"><div class="tracking-title-row"><span class="courier-badge">${displayCourierLabel}:</span><span class="tracking-number-text">${displayTrackingId}</span></div><div class="barcode-svg-wrap">${code128Svg(barcodeValue, 24, 215)}</div><div class="barcode-digits-row">${displayTrackingId}</div></div></div></div>`;
 }
 function printDoc(title: string, inner: string) {
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${PRINT_CSS}</style></head><body>${inner}<script>window.onload=function(){window.print()}<\/script></body></html>`;
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const html = `<!doctype html><html><head><meta charset="utf-8"><base href="${origin}/"><title>${title}</title><style>${PRINT_CSS}</style></head><body>${inner}<script>window.onload=function(){window.print()}<\/script></body></html>`;
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
 }
@@ -1068,10 +1174,40 @@ function printInvoices(list: any[]) { if (list.length) printDoc('invoices', list
 function printSlips(list: any[]) {
   if (!list.length) return;
   updateLiveSettingsCache();
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const slipsHtml = list.map(slipBody).map(s => s.trim()).join('');
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Delivery Slips (${list.length})</title><style>${SLIP_PRINT_CSS}</style><script>window.onload=function(){window.print()}</script></head><body>${slipsHtml}</body></html>`;
+  const filename = list.length === 1 ? `metrroma-slip-${list[0].id}.pdf` : `metrroma-slips-${list.length}-orders.pdf`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><base href="${origin}/"><title>${filename}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800;900&display=swap"><style>${SLIP_PRINT_CSS}
+  .top-toolbar { position: sticky; top: 0; left: 0; right: 0; background: #0f172a; color: #ffffff; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 999999; font-family: 'Inter', 'Hind Siliguri', sans-serif; }
+  .top-toolbar .info { font-size: 13px; font-weight: 600; color: #cbd5e1; }
+  .top-toolbar .info strong { color: #ffffff; }
+  .top-toolbar .actions { display: flex; gap: 8px; align-items: center; }
+  .top-btn { background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 7px 16px; border-radius: 6px; font-weight: 700; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s; box-shadow: 0 2px 8px rgba(99,102,241,0.4); }
+  .top-btn:hover { opacity: 0.92; transform: translateY(-1px); }
+  .top-btn-close { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: #e2e8f0; padding: 7px 12px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer; }
+  @media print { .top-toolbar { display: none !important; } }
+  </style><script>
+    function triggerPrint() { window.print(); }
+    window.addEventListener('load', function() {
+      var waitFonts = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+      var waitImages = Promise.all(
+        Array.from(document.images).map(function(img) {
+          if (img.complete) return Promise.resolve();
+          return new Promise(function(resolve) { img.onload = img.onerror = resolve; });
+        })
+      );
+      Promise.all([waitFonts, waitImages]).then(function() {
+        setTimeout(triggerPrint, 300);
+      }).catch(function() {
+        setTimeout(triggerPrint, 500);
+      });
+    });
+  <\/script></head><body><div class="top-toolbar no-print"><div class="info">📄 <strong>${list.length} Order Slip(s)</strong> &middot; Size: <strong>75mm &times; 100mm (3&times;4&Prime; POS / A6)</strong></div><div class="actions"><button class="top-btn" onclick="triggerPrint()">🖨️ Print Slips / Save as PDF</button><button class="top-btn-close" onclick="window.close()">✕ Close</button></div></div>${slipsHtml}</body></html>`;
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
+}
+function downloadSlipsPdf(list: any[]) {
+  printSlips(list);
 }
 const fmt = (d: string) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const Badge = ({ s }: { s: string }) => <span className={'sa-badge b-' + s}>{s}</span>;
@@ -1107,7 +1243,7 @@ const I = {
 export function Admin() {
   const [authed, setAuthed] = useState(() => !!getTok());
   const [nav, setNav] = useState('dashboard');
-  const [store, setStore] = useState('dot.');
+  const [store, setStore] = useState('METRROMA');
   const [me, setMe] = useState<any>(null);
   const [orderTotal, setOrderTotal] = useState<number | null>(null);
   const [lastSeen, setLastSeen] = useState<number | null>(null);
@@ -1121,7 +1257,7 @@ export function Admin() {
   }, []);
   useEffect(() => {
     if (!authed) return;
-    fetch('/api/settings').then((r) => r.json()).then((s) => setStore(s.storeName || 'dot.')).catch(() => {});
+    fetch('/api/settings').then((r) => r.json()).then((s) => setStore(s.storeName || 'METRROMA')).catch(() => {});
     aFetch('/admin/me').then((r) => (r.ok ? r.json() : null)).then((m) => { if (m) setMe(m); else { localStorage.removeItem(KEY); setAuthed(false); } }).catch(() => {});
   }, [authed]);
   useEffect(() => {
@@ -1131,19 +1267,52 @@ export function Admin() {
       if (!o) return; const n = o.length;
       setOrderTotal(n);
       if (prevTotal.current === null) setLastSeen((ls) => (ls === null ? n : ls));
-      else if (n > prevTotal.current) { beep(); if (document.title.indexOf('🔴') < 0) document.title = '🔴 new order — dot. admin'; }
+      else if (n > prevTotal.current) { beep(); if (document.title.indexOf('🔴') < 0) document.title = '🔴 new order — METRROMA Admin'; }
       prevTotal.current = n;
     }).catch(() => {});
     check();
     const t = setInterval(check, 25000);
     return () => clearInterval(t);
   }, [authed]);
-  useEffect(() => { if (!authed) return; if (nav === 'orders' && orderTotal != null) { setLastSeen(orderTotal); document.title = 'dot. admin'; } }, [nav, orderTotal, authed]);
+  useEffect(() => { if (!authed) return; if (nav === 'orders' && orderTotal != null) { setLastSeen(orderTotal); document.title = 'METRROMA Admin'; } }, [nav, orderTotal, authed]);
+
+  // Real-time Staff Presence & Active Time Heartbeat
+  useEffect(() => {
+    if (!authed) return;
+    let lastActiveTime = Date.now();
+    const markActive = () => { lastActiveTime = Date.now(); };
+    window.addEventListener('mousemove', markActive, { passive: true });
+    window.addEventListener('keydown', markActive, { passive: true });
+    window.addEventListener('touchstart', markActive, { passive: true });
+    window.addEventListener('scroll', markActive, { passive: true });
+    window.addEventListener('click', markActive, { passive: true });
+
+    const sendPing = () => {
+      const isVisible = document.visibilityState !== 'hidden';
+      const isRecentlyActive = (Date.now() - lastActiveTime) < 120000;
+      const isActive = isVisible && isRecentlyActive;
+      aFetch('/admin/heartbeat', {
+        method: 'POST',
+        body: JSON.stringify({ active: isActive, currentPath: nav })
+      }).catch(() => {});
+    };
+
+    sendPing();
+    const interval = setInterval(sendPing, 30000);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('mousemove', markActive);
+      window.removeEventListener('keydown', markActive);
+      window.removeEventListener('touchstart', markActive);
+      window.removeEventListener('scroll', markActive);
+      window.removeEventListener('click', markActive);
+    };
+  }, [authed, nav]);
   if (!authed) return <Login onDone={() => setAuthed(true)} />;
   const role = me?.role || 'owner';
   const allowed = role === 'staff' ? ['dashboard', 'orders', 'scanner', 'customers']
-    : role === 'manager' ? ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings']
-      : ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'backup', 'customers', 'products', 'categories', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings'];
+    : role === 'manager' ? ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'push_popups', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings']
+      : ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'push_popups', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings'];
   if (role === 'manager' && !allowed.includes('reviews')) allowed.push('reviews');
   const cur = allowed.includes(nav) ? nav : 'dashboard';
   const newOrders = cur === 'orders' || lastSeen == null || orderTotal == null ? 0 : Math.max(0, orderTotal - lastSeen);
@@ -1225,6 +1394,7 @@ export function Admin() {
           {item('scanner', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1.5"/><line x1="7" y1="12" x2="17" y2="12"/></svg>, 'QR Scanner')}
           {item('finance', <FinanceIcon />, 'Finance & Ledger')}
           {item('whatsapp', <WhatsAppIcon size={18} variant="official" className="ci" />, 'WhatsApp Automation')}
+          {item('push_popups', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>, 'Push & Pop-ups')}
           {item('backup', <BackupIcon />, 'Backup & Restore')}
           {item('customers', I.customers, 'Customers')}
           {item('products', I.products, 'Products')}
@@ -1251,6 +1421,7 @@ export function Admin() {
         {cur === 'scanner' && <ScannerAdmin />}
         {cur === 'finance' && <FinanceAdmin />}
         {cur === 'whatsapp' && <WhatsAppAdmin />}
+        {cur === 'push_popups' && <PushPopupsAdmin />}
         {cur === 'backup' && <BackupAdmin />}
         {cur === 'customers' && <CustomersAdmin />}
         {cur === 'products' && <ProductsAdmin />}
@@ -2503,6 +2674,8 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
     }
   ]);
   const [selectedCatalogId, setSelectedCatalogId] = useState('');
+  const [productSearch, setProductSearch] = useState('');
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
 
   // Pricing
   const [delivery, setDelivery] = useState(0); // Free delivery default for landing promo
@@ -2517,12 +2690,72 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/api/products')
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setCatalog(data);
-      })
-      .catch(() => {});
+    Promise.all([
+      fetch('/api/products').then((r) => r.json()).catch(() => []),
+      fetch('/api/landings').then((r) => r.json()).catch(() => []),
+    ]).then(([prods, landings]) => {
+      const combined: any[] = [];
+      const seen = new Set();
+
+      // 1. Landing packages first (highest relevance for manual orders!)
+      if (Array.isArray(landings)) {
+        for (const L of landings) {
+          if (Array.isArray(L.packages)) {
+            for (const pkg of L.packages) {
+              if (pkg && !seen.has(pkg.id || pkg.title)) {
+                seen.add(pkg.id || pkg.title);
+                combined.push({
+                  id: pkg.id || `landing_${Math.random()}`,
+                  name: pkg.title || L.productTitle || L.title,
+                  price: Number(pkg.price || 0),
+                  sku: pkg.sku || '',
+                  category: 'Landing Promo / Wellness',
+                  image: pkg.image || L.heroImage || '/landing/package-6-7.jpg',
+                });
+              }
+            }
+          }
+        }
+      }
+
+      // 2. Catalog products
+      if (Array.isArray(prods)) {
+        for (const p of prods) {
+          if (p && !seen.has(p.id)) {
+            seen.add(p.id);
+            combined.push({
+              id: p.id,
+              name: p.name,
+              price: Number(p.price || 0),
+              sku: p.sku || '',
+              category: p.category || 'Store Product',
+              image: p.image || (Array.isArray(p.images) ? p.images[0] : ''),
+            });
+          }
+        }
+      }
+
+      // 3. Fallback popular adult wellness & sleeve items
+      const hotWellnessItems = [
+        { id: 'hot_ll67', name: 'যাদের পেনিস ৪ ইঞ্চি থেকে ৫.৫ ইঞ্চি তাদের জন্য ৬.৭ (লাভ লক কনডম)', price: 899, sku: 'LL6.7', category: 'Love Lock', image: '/uploads/img_mv7u70cc5edq0.jpg' },
+        { id: 'hot_ll57', name: '৩.৫ থেকে ৪ ইঞ্চি পেনিস এর জন্য সাইজ ৫.৭ (লাভ লক কনডম)', price: 1190, sku: 'LL5.7', category: 'Love Lock', image: '/uploads/img_mv9njraqylyt3.webp' },
+        { id: 'hot_ll8', name: '৬ ইঞ্চি পেনিস এর জন্য সাইজ ৮ (লাভ লক কনডম)', price: 1190, sku: 'LL8', category: 'Love Lock', image: '/uploads/img_mv7n9xfvjcfif.jpg' },
+        { id: 'hot_bc', name: 'Belt Condom ( Free Size )', price: 1800, sku: 'BC', category: 'Belt Condom', image: '/uploads/img_mvjrc118tfffg.webp' },
+        { id: 'hot_softcore', name: 'SoftCore Realistic Male Pleasure Cup', price: 3150, sku: 'CUP', category: 'Male Pleasure', image: '/uploads/img_mv7u70cc5edq0.jpg' },
+        { id: 'hot_dildo9', name: 'KOXTEN Up Down Remote Control Vibrator Realistic Dildo 9 inch', price: 3500, sku: 'DILDO9', category: 'Adult Wellness', image: '' },
+        { id: 'hot_finger_tiger', name: 'Tiger Tip Finger Sleeve', price: 799, sku: 'FINGER', category: 'Sleeve', image: '' },
+        { id: 'hot_finger_aspot', name: 'A-Spot Finger Condom', price: 899, sku: 'FINGER', category: 'Finger Condom', image: '' },
+        { id: 'hot_combo', name: 'লাভ লক ২ পিস স্পেশাল কম্বো', price: 1799, sku: 'COMBO', category: 'Combo Pack', image: '/landing/package-6-7.jpg' },
+      ];
+
+      for (const hot of hotWellnessItems) {
+        if (!seen.has(hot.id) && !combined.some((c) => (c.sku && c.sku === hot.sku) || c.name.toLowerCase().includes(hot.sku.toLowerCase()))) {
+          combined.push(hot);
+        }
+      }
+
+      setCatalog(combined);
+    });
   }, []);
 
   const handleAddressChange = (val: string) => {
@@ -2563,20 +2796,56 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
     setItems((prev) => [...prev, { ...presetItem }]);
   };
 
-  const handleAddCatalogProduct = () => {
-    if (!selectedCatalogId) return;
-    const prod = catalog.find((p) => p.id === selectedCatalogId);
+  const handleSelectProduct = (prod: any) => {
     if (!prod) return;
     setItems((prev) => [
       ...prev,
       {
-        id: prod.id,
+        id: prod.id || `item_${Date.now()}`,
         name: prod.name,
-        price: prod.price,
+        price: Number(prod.price || 0),
         qty: 1,
         image: prod.image || (Array.isArray(prod.images) ? prod.images[0] : ''),
       }
     ]);
+    setProductSearch('');
+    setShowProductDropdown(false);
+  };
+
+  const handleAddCustomItem = (customName?: string) => {
+    const title = (customName || productSearch || '').trim() || 'Custom Product';
+    setItems((prev) => [
+      ...prev,
+      {
+        id: `custom_${Date.now()}`,
+        name: title,
+        price: 0,
+        qty: 1,
+        image: '',
+      }
+    ]);
+    setProductSearch('');
+    setShowProductDropdown(false);
+  };
+
+  const filteredCatalog = useMemo(() => {
+    const q = (productSearch || '').toLowerCase().trim();
+    if (!q) {
+      return catalog.slice(0, 15);
+    }
+    return catalog.filter((p) => {
+      const name = (p.name || '').toLowerCase();
+      const sku = (p.sku || '').toLowerCase();
+      const cat = (p.category || '').toLowerCase();
+      return name.includes(q) || sku.includes(q) || cat.includes(q);
+    }).slice(0, 35);
+  }, [catalog, productSearch]);
+
+  const handleAddCatalogProduct = () => {
+    if (!selectedCatalogId) return;
+    const prod = catalog.find((p) => p.id === selectedCatalogId);
+    if (!prod) return;
+    handleSelectProduct(prod);
     setSelectedCatalogId('');
   };
 
@@ -2911,31 +3180,205 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 ))}
               </div>
 
-              {/* Add from Store Catalog */}
-              {catalog.length > 0 && (
+              {/* Product Search & Selection */}
+              <div style={{ position: 'relative', marginTop: 10 }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <select
-                    value={selectedCatalogId}
-                    onChange={(e) => setSelectedCatalogId(e.target.value)}
-                    style={{ flex: 1 }}
-                  >
-                    <option value="">-- Add another product from the catalog --</option>
-                    {catalog.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} — {taka(p.price)}
-                      </option>
-                    ))}
-                  </select>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: '#94a3b8', pointerEvents: 'none' }}>
+                      🔍
+                    </span>
+                    <input
+                      type="text"
+                      value={productSearch}
+                      onChange={(e) => {
+                        setProductSearch(e.target.value);
+                        setShowProductDropdown(true);
+                      }}
+                      onFocus={() => setShowProductDropdown(true)}
+                      placeholder="পণ্য বা SKU দিয়ে সার্চ করুন (e.g. Love lock, Belt, 6.7, 8, Cup, Dildo)..."
+                      style={{
+                        width: '100%',
+                        padding: '10px 34px 10px 34px',
+                        background: '#13111c',
+                        border: '1.5px solid rgba(167, 139, 250, 0.4)',
+                        borderRadius: 8,
+                        color: '#f8fafc',
+                        fontSize: 13,
+                        outline: 'none',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                      }}
+                    />
+                    {productSearch && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProductSearch('');
+                          setShowProductDropdown(false);
+                        }}
+                        style={{
+                          position: 'absolute',
+                          right: 10,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#94a3b8',
+                          cursor: 'pointer',
+                          padding: 4,
+                          fontSize: 13,
+                        }}
+                        title="Clear"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                   <button
                     type="button"
                     className="sa-btn secondary"
-                    disabled={!selectedCatalogId}
-                    onClick={handleAddCatalogProduct}
+                    onClick={() => handleAddCustomItem()}
+                    style={{ whiteSpace: 'nowrap', fontSize: 12, padding: '9px 12px' }}
+                    title="Add a custom item not in catalog"
                   >
-                    + Add Product
+                    + Custom Item
                   </button>
                 </div>
-              )}
+
+                {/* Autocomplete Dropdown List */}
+                {showProductDropdown && (
+                  <>
+                    <div
+                      onClick={() => setShowProductDropdown(false)}
+                      style={{ position: 'fixed', inset: 0, zIndex: 90 }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        marginTop: 6,
+                        background: '#1a1728',
+                        border: '1px solid rgba(167, 139, 250, 0.35)',
+                        borderRadius: 10,
+                        boxShadow: '0 16px 36px rgba(0,0,0,0.6)',
+                        maxHeight: 280,
+                        overflowY: 'auto',
+                        zIndex: 100,
+                        padding: 6,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, color: '#94a3b8', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 4 }}>
+                        <span style={{ fontWeight: 600 }}>
+                          {productSearch ? `সার্চ ফলাফল (${filteredCatalog.length})` : `জনপ্রিয় / ক্যাটালগ পণ্য (${catalog.length}) — ক্লিক করে যোগ করুন`}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowProductDropdown(false)}
+                          style={{ background: 'transparent', border: 'none', color: '#a78bfa', cursor: 'pointer', fontSize: 11 }}
+                        >
+                          বন্ধ করুন ✕
+                        </button>
+                      </div>
+
+                      {filteredCatalog.map((p) => (
+                        <div
+                          key={p.id}
+                          onClick={() => handleSelectProduct(p)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            padding: '8px 10px',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            borderBottom: '1px solid rgba(255,255,255,0.03)',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(124, 58, 237, 0.18)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          {p.image ? (
+                            <img
+                              src={p.image}
+                              alt=""
+                              style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', background: '#0b0914', border: '1px solid rgba(255,255,255,0.1)' }}
+                              onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                            />
+                          ) : (
+                            <div style={{ width: 36, height: 36, borderRadius: 6, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
+                              🛍️
+                            </div>
+                          )}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {p.name}
+                            </div>
+                            <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
+                              {p.sku && <span style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: 4 }}>SKU: {p.sku}</span>}
+                              {p.category && <span>{p.category}</span>}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: '#34d399' }}>
+                              {taka(p.price)}
+                            </span>
+                            <span style={{ background: '#7c3aed', color: '#fff', fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 5 }}>
+                              + যোগ করুন
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+
+                      {filteredCatalog.length === 0 && (
+                        <div style={{ padding: 14, textAlign: 'center', color: '#94a3b8', fontSize: 12.5 }}>
+                          <div>কোনো পণ্য মেলেনি: "{productSearch}"</div>
+                          <button
+                            type="button"
+                            onClick={() => handleAddCustomItem(productSearch)}
+                            className="sa-btn-subtle"
+                            style={{ marginTop: 8, fontSize: 12, padding: '4px 12px', background: 'rgba(124, 58, 237, 0.2)', border: '1px solid #7c3aed', color: '#c4b5fd' }}
+                          >
+                            + "{productSearch}" কাস্টম আইটেম হিসেবে যোগ করুন
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* Collapsible full dropdown for classic fallback */}
+                {catalog.length > 0 && (
+                  <details style={{ marginTop: 8, fontSize: 12, color: '#94a3b8' }}>
+                    <summary style={{ cursor: 'pointer', userSelect: 'none', padding: '2px 0' }}>
+                      অথবা ড্রপডাউন লিস্ট থেকে বেছে নিন ({catalog.length}টি পণ্য)
+                    </summary>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+                      <select
+                        value={selectedCatalogId}
+                        onChange={(e) => setSelectedCatalogId(e.target.value)}
+                        style={{ flex: 1, padding: '6px 8px', fontSize: 12 }}
+                      >
+                        <option value="">-- ড্রপডাউন থেকে পণ্য নির্বাচন করুন --</option>
+                        {catalog.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} — {taka(p.price)}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="sa-btn secondary"
+                        disabled={!selectedCatalogId}
+                        onClick={handleAddCatalogProduct}
+                        style={{ fontSize: 12, padding: '6px 10px' }}
+                      >
+                        + Add
+                      </button>
+                    </div>
+                  </details>
+                )}
+              </div>
             </div>
 
             {/* 4. Pricing Calculation */}
@@ -3046,6 +3489,9 @@ function OrdersAdmin() {
   const [sort, setSort] = useState('new');
   const [q, setQ] = useState('');
   const [sel, setSel] = useState<any>(null);
+  const [exchangeOrderTarget, setExchangeOrderTarget] = useState<any>(null);
+  const [allProductsList, setAllProductsList] = useState<any[]>([]);
+  const [accountsList, setAccountsList] = useState<any[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [picked, setPicked] = useState<Record<string, boolean>>({});
   const prevCount = useRef<number | null>(null);
@@ -3090,9 +3536,26 @@ function OrdersAdmin() {
     };
   }, []);
   const [prodMap, setProdMap] = useState<Record<string, any>>({});
-  useEffect(() => { fetch('/api/products').then((r) => r.json()).then((ps: any[]) => { const m: any = {}; ps.forEach((p) => (m[p.id] = p)); setProdMap(m); }).catch(() => {}); }, []);
+  const [landingMap, setLandingMap] = useState<Record<string, any>>({});
+  useEffect(() => {
+    fetch('/api/products').then((r) => r.json()).then((ps: any[]) => {
+      const arr = Array.isArray(ps) ? ps : [];
+      setAllProductsList(arr);
+      const m: any = {};
+      arr.forEach((p) => (m[p.id] = p));
+      setProdMap(m);
+    }).catch(() => {});
+    aFetch('/landings').then((r) => (r.ok ? r.json() : [])).then((lps: any[]) => { const lm: any = {}; (Array.isArray(lps) ? lps : []).forEach((lp) => { if (lp?.slug) lm[lp.slug] = lp; }); setLandingMap(lm); }).catch(() => {});
+  }, []);
   const [courierOpts, setCourierOpts] = useState<string[]>(COURIERS);
-  useEffect(() => { aFetch('/admin/integrations').then((r) => (r.ok ? r.json() : null)).then((d) => { const labels = (d?.couriers || []).filter((c: any) => c.enabled).map((c: any) => c.label).filter(Boolean); if (labels.length) setCourierOpts(labels); }).catch(() => {}); }, []);
+  useEffect(() => {
+    aFetch('/admin/integrations').then((r) => (r.ok ? r.json() : null)).then((d) => {
+      const couriers = (d?.couriers || []).filter((c: any) => c.enabled);
+      setAccountsList(couriers);
+      const labels = couriers.map((c: any) => c.label).filter(Boolean);
+      if (labels.length) setCourierOpts(labels);
+    }).catch(() => {});
+  }, []);
   const [syncingId, setSyncingId] = useState<string>('');
   const [syncingAll, setSyncingAll] = useState(false);
   const [selectedCourierMap, setSelectedCourierMap] = useState<Record<string, string>>({});
@@ -3106,7 +3569,7 @@ function OrdersAdmin() {
   };
 
   const handleSendToCourier = async (o: any) => {
-    const courierName = selectedCourierMap[o.id] || defaultCourierFor(o);
+    const courierName = selectedCourierMap[o.id] || o.courier?.name || defaultCourierFor(o);
     setBookingId(o.id);
     try {
       const r = await aFetch('/admin/courier/book', {
@@ -3164,7 +3627,9 @@ function OrdersAdmin() {
     const query = q.trim().toLowerCase();
     const now = Date.now();
     const list = (Array.isArray(orders) ? orders : []).filter((o) => {
-      if (filter !== 'all' && o.status !== filter) return false;
+      if (filter === 'exchange') {
+        if (!o.isExchange && o.exchangeStatus !== 'exchange_in_progress') return false;
+      } else if (filter !== 'all' && o.status !== filter) return false;
       if (range !== 'all' && now - new Date(o.createdAt).getTime() > parseInt(range, 10) * 86400000) return false;
       if (query && !(o.id + ' ' + (o.customer?.name || '') + ' ' + (o.customer?.phone || '') + ' ' + (o.source || '')).toLowerCase().includes(query)) return false;
       return true;
@@ -3181,12 +3646,19 @@ function OrdersAdmin() {
   const allChecked = paged.length > 0 && paged.every((o) => picked[o.id]);
   const toggleAll = () => { const n = { ...picked }; if (allChecked) paged.forEach((o) => delete n[o.id]); else paged.forEach((o) => (n[o.id] = true)); setPicked(n); };
   const bulkBookCouriers = async () => {
-    if (!pickedIds.length) return;
+    const eligibleIds = pickedIds.filter((id) => {
+      const ord = (Array.isArray(orders) ? orders : []).find((x) => x.id === id);
+      return ord && ['approved', 'confirmed'].includes(String(ord.status || '').toLowerCase());
+    });
+    if (!eligibleIds.length) {
+      alert('শুধুমাত্র Approved বা Confirmed স্ট্যাটাসের অর্ডার কুরিয়ারে পাঠানো যাবে।');
+      return;
+    }
     setSyncingAll(true);
     try {
       const res = await aFetch('/admin/courier/bulk-book', {
         method: 'POST',
-        body: JSON.stringify({ orderIds: pickedIds }),
+        body: JSON.stringify({ orderIds: eligibleIds, courierMap: selectedCourierMap }),
       }).then((r) => r.json());
       if (res.ok) {
         const successes = (res.results || []).filter((x: any) => x.ok).length;
@@ -3226,10 +3698,44 @@ function OrdersAdmin() {
   };
   const bulkCourier = async (name: string) => {
     if (!pickedIds.length || !name) return;
-    await Promise.all(pickedIds.map((id) => { const o = (Array.isArray(orders) ? orders : []).find((x) => x.id === id); const courier = { ...(o?.courier || {}), name }; return aFetch('/orders/' + id, { method: 'PATCH', body: JSON.stringify({ courier }) }); }));
-    setPicked({}); load();
+    // 1. Immediately update selectedCourierMap so the UI updates instantly!
+    setSelectedCourierMap((prev) => {
+      const next = { ...prev };
+      pickedIds.forEach((id) => { next[id] = name; });
+      return next;
+    });
+    // 2. Also update orders in React state immediately for instant feedback
+    setOrders((prev) => (Array.isArray(prev) ? prev : []).map((o) => {
+      if (pickedIds.includes(o.id)) {
+        return { ...o, courier: { ...(o.courier || {}), name } };
+      }
+      return o;
+    }));
+    // 3. Find matching account from accountsList if available
+    const acc = accountsList.find((a: any) => a.label === name || a.provider === name);
+    // 4. Save to backend
+    await Promise.all(
+      pickedIds.map((id) => {
+        const o = (Array.isArray(orders) ? orders : []).find((x) => x.id === id);
+        const courier = {
+          ...(o?.courier || {}),
+          name,
+          ...(acc?.id ? { accountId: acc.id } : {}),
+        };
+        return aFetch('/orders/' + id, { method: 'PATCH', body: JSON.stringify({ courier }) });
+      })
+    );
+    setToast(`${pickedIds.length} order(s) assigned to ${name}`);
+    setTimeout(() => setToast(''), 3000);
+    setPicked({});
+    load();
   };
-  const pickedOrders = (Array.isArray(orders) ? orders : []).filter((o) => picked[o.id]);
+  const pickedOrders = useMemo(() => {
+    const inShown = shown.filter((o) => picked[o.id]);
+    const shownSet = new Set(inShown.map((o) => o.id));
+    const extra = (Array.isArray(orders) ? orders : []).filter((o) => picked[o.id] && !shownSet.has(o.id));
+    return [...inShown, ...extra];
+  }, [shown, orders, picked]);
   const shownTotal = useMemo(() => shown.reduce((s, o) => s + o.total, 0), [shown]);
   const liveTotal = useMemo(() => shown.filter((o) => o.status !== 'cancelled').reduce((s, o) => s + o.total, 0), [shown]);
   const courierRatio = useMemo(() => {
@@ -3270,7 +3776,22 @@ function OrdersAdmin() {
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" className={syncingAll ? 'spin' : ''} style={{ width: 13, height: 13, marginRight: 6 }}><path d="M13.5 7a5.5 5.5 0 0 0-9.4-3L2 6" /><path d="M2.5 9a5.5 5.5 0 0 0 9.4 3L14 10" /><path d="M2 2.5V6h3.5M14 13.5V10h-3.5" /></svg>
             {syncingAll ? 'Syncing…' : 'Sync Couriers'}
           </button>
-          <button className="sa-btn ghost" onClick={() => exportCSV(Array.isArray(orders) ? orders : [])}>Export CSV</button>
+          <button
+            className="sa-btn ghost"
+            onClick={() =>
+              pickedOrders.length > 0
+                ? exportCSV(pickedOrders, prodMap, landingMap, `metrroma-selected-${pickedOrders.length}-orders`)
+                : exportCSV(shown, prodMap, landingMap, filter !== 'all' ? `metrroma-${filter}-orders` : 'metrroma-orders')
+            }
+            style={
+              pickedOrders.length > 0
+                ? { borderColor: 'rgba(139, 92, 246, 0.6)', background: 'rgba(139, 92, 246, 0.14)', color: '#ddd6fe', fontWeight: 700 }
+                : undefined
+            }
+            title={pickedOrders.length > 0 ? `Download CSV of ${pickedOrders.length} selected order(s)` : 'Download CSV of orders'}
+          >
+            {pickedOrders.length > 0 ? `📥 Export Selected CSV (${pickedOrders.length})` : '📥 Export CSV'}
+          </button>
         </div>
       </div>
       <div className="sa-toolbar">
@@ -3284,6 +3805,20 @@ function OrdersAdmin() {
               </button>
             );
           })}
+          {(() => {
+            const exCount = (Array.isArray(orders) ? orders : []).filter((o) => o.isExchange || o.exchangeStatus === 'exchange_in_progress').length;
+            return (
+              <button
+                type="button"
+                className={filter === 'exchange' ? 'on' : ''}
+                onClick={() => setFilter('exchange')}
+                style={filter === 'exchange' ? { background: 'rgba(168, 85, 247, 0.25)', borderColor: '#a855f7', color: '#e9d5ff' } : { borderColor: 'rgba(168, 85, 247, 0.4)', color: '#c084fc' }}
+              >
+                <span>🔄 Exchange</span>
+                <span className="sa-filter-count" style={{ background: 'rgba(168, 85, 247, 0.35)', color: '#fff' }}>{exCount}</span>
+              </button>
+            );
+          })()}
         </div>
         <div className="sa-rightctl">
           <select className="sa-mini" value={range} onChange={(e) => setRange(e.target.value)}><option value="all">All time</option><option value="1">Today</option><option value="7">7 days</option><option value="30">30 days</option></select>
@@ -3293,14 +3828,16 @@ function OrdersAdmin() {
       {pickedIds.length > 0 && (
         <div className="sa-bulk">
           <span>{pickedIds.length} selected</span>
-          <button
-            type="button"
-            onClick={bulkBookCouriers}
-            disabled={syncingAll}
-            style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#fff', fontWeight: 700, border: 'none', padding: '6px 14px', borderRadius: 8, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          >
-            🚚 Bulk Ship &amp; Book Courier
-          </button>
+          {pickedOrders.some((o) => ['approved', 'confirmed'].includes(String(o.status || '').toLowerCase()) && !(o.courier && o.courier.consignment)) && (
+            <button
+              type="button"
+              onClick={bulkBookCouriers}
+              disabled={syncingAll}
+              style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#fff', fontWeight: 700, border: 'none', padding: '6px 14px', borderRadius: 8, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              🚚 Bulk Ship &amp; Book Courier
+            </button>
+          )}
           <select className="bulksel" value="" onChange={(e) => { if (e.target.value) bulk(e.target.value); }}>
             <option value="">Change status…</option>
             {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -3309,9 +3846,81 @@ function OrdersAdmin() {
             <option value="">Assign courier…</option>
             {courierOpts.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
-          <button onClick={() => printSlips(pickedOrders)}>Print slip</button>
-          <button onClick={() => printInvoices(pickedOrders)}>Print invoice</button>
-          <button onClick={() => setPicked({})}>Clear</button>
+          <button
+            type="button"
+            onClick={() => exportCSV(pickedOrders, prodMap, landingMap, `metrroma-selected-${pickedOrders.length}-orders`)}
+            style={{ background: 'rgba(139, 92, 246, 0.2)', border: '1px solid rgba(139, 92, 246, 0.5)', color: '#e9d5ff', fontWeight: 700 }}
+          >
+            📥 Download CSV ({pickedOrders.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => downloadSlipsPdf(pickedOrders)}
+            style={{
+              background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+              color: '#ffffff',
+              border: 'none',
+              fontWeight: 700,
+              borderRadius: 8,
+              padding: '6px 14px',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: '0 2px 10px rgba(139, 92, 246, 0.35)',
+            }}
+            title="Download delivery slips as PDF for selected orders"
+          >
+            📄 Download PDF ({pickedOrders.length})
+          </button>
+          <button
+            onClick={() => printSlips(pickedOrders)}
+            style={{
+              background: 'rgba(139, 92, 246, 0.15)',
+              border: '1px solid rgba(139, 92, 246, 0.4)',
+              color: '#c4b5fd',
+              fontWeight: 600,
+              borderRadius: 8,
+              padding: '6px 12px',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            🖨️ Print Slips
+          </button>
+          <button
+            onClick={() => printInvoices(pickedOrders)}
+            style={{
+              background: 'rgba(139, 92, 246, 0.15)',
+              border: '1px solid rgba(139, 92, 246, 0.4)',
+              color: '#c4b5fd',
+              fontWeight: 600,
+              borderRadius: 8,
+              padding: '6px 12px',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            🧾 Print Invoices
+          </button>
+          <button
+            onClick={() => setPicked({})}
+            style={{
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              color: '#94a3b8',
+              fontWeight: 500,
+              borderRadius: 8,
+              padding: '6px 12px',
+              cursor: 'pointer',
+            }}
+          >
+            Clear
+          </button>
         </div>
       )}
       <div className="sa-summary">
@@ -3380,8 +3989,18 @@ function OrdersAdmin() {
                 <div style={{ fontSize: 10.5, color: '#64748b' }}>
                   {new Date(o.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                 </div>
-                <div style={{ marginTop: 2 }}>
+                <div style={{ marginTop: 2, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                   <OriginBadge source={o.source} style={{ fontSize: 10, padding: '2px 6px' }} />
+                  {o.isExchange && (
+                    <span style={{ fontSize: 9.5, background: 'rgba(168, 85, 247, 0.2)', color: '#c084fc', border: '1px solid rgba(168, 85, 247, 0.4)', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }} title={`Exchange for #${o.originalOrderId}`}>
+                      🔄 Exchange
+                    </span>
+                  )}
+                  {o.exchangeStatus === 'exchange_in_progress' && (
+                    <span style={{ fontSize: 9.5, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }} title={`Linked exchange: #${o.exchangeOrderId}`}>
+                      🔄 Exchanged
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -3403,6 +4022,11 @@ function OrdersAdmin() {
                     <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#94a3b8' }}>
                       {phone}
                     </span>
+                    {o.customer?.secondaryPhone && (
+                      <span style={{ fontSize: 11, color: '#38bdf8', fontFamily: 'monospace', background: 'rgba(56,189,248,0.12)', padding: '1px 5px', borderRadius: 4 }} title="Secondary / Alternate Phone">
+                        Alt: {o.customer.secondaryPhone}
+                      </span>
+                    )}
                     <a
                       href={`tel:${cleanPhone}`}
                       onClick={(e) => e.stopPropagation()}
@@ -3527,12 +4151,23 @@ function OrdersAdmin() {
                       </div>
                     )}
                   </div>
-                ) : (
+                ) : ['approved', 'confirmed'].includes(String(o.status || '').toLowerCase()) ? (
                   <div className="courier-send-wrap">
                     <select
                       className="courier-pick-sel"
-                      value={selectedCourierMap[o.id] || defaultCourierFor(o)}
-                      onChange={(e) => setSelectedCourierMap((prev) => ({ ...prev, [o.id]: e.target.value }))}
+                      value={selectedCourierMap[o.id] || o.courier?.name || defaultCourierFor(o)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedCourierMap((prev) => ({ ...prev, [o.id]: val }));
+                        setOrders((prev) => (Array.isArray(prev) ? prev : []).map((x) => (x.id === o.id ? { ...x, courier: { ...(x.courier || {}), name: val } } : x)));
+                        const acc = accountsList.find((a: any) => a.label === val || a.provider === val);
+                        const courier = {
+                          ...(o.courier || {}),
+                          name: val,
+                          ...(acc?.id ? { accountId: acc.id } : {}),
+                        };
+                        aFetch('/orders/' + o.id, { method: 'PATCH', body: JSON.stringify({ courier }) });
+                      }}
                     >
                       {courierOpts.map((c) => (
                         <option key={c} value={c}>{c}</option>
@@ -3557,6 +4192,10 @@ function OrdersAdmin() {
                       )}
                     </button>
                   </div>
+                ) : o.status !== 'cancelled' && o.courier?.name ? (
+                  <span className="courier-name">{o.courier.name}</span>
+                ) : (
+                  <span className="dim" style={{ fontSize: 12 }}>—</span>
                 )}
               </div>
 
@@ -3600,6 +4239,23 @@ function OrdersAdmin() {
                     </button>
                   </>
                 )}
+                {o.status === 'delivered' && !o.isExchange && !o.exchangeOrderId && (
+                  <button
+                    type="button"
+                    className="eye-btn eye-btn-ex"
+                    title="🔄 Create Exchange Order"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExchangeOrderTarget(o);
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="23 4 23 10 17 10"></polyline>
+                      <polyline points="1 20 1 14 7 14"></polyline>
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                  </button>
+                )}
                 <button className="eye-btn" title="View order details" onClick={() => setSel(o)}>
                   <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M1 9s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z" /><circle cx="9" cy="9" r="2.4" /></svg>
                 </button>
@@ -3610,7 +4266,7 @@ function OrdersAdmin() {
                   <a
                     className="eye-btn eye-btn-wa"
                     title={o.status === 'incomplete' ? "Send WhatsApp Recovery Message" : "WhatsApp customer"}
-                    href={`https://wa.me/88${cleanPhone}${o.status === 'incomplete' ? `?text=${encodeURIComponent(`আসসালামু আলাইকুম ${o.customer?.name || 'গ্রাহক'}! metrroma.com থেকে লক্ষ্য করলাম "${cleanItem.title || 'আমাদের পণ্য'}" এর অর্ডারটি আপনি সম্পন্ন করেননি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳${o.total}।`)}` : ''}`}
+                    href={`https://wa.me/88${cleanPhone}${o.status === 'incomplete' ? `?text=${encodeURIComponent(`আসসালামু আলাইকুম ${o.customer?.name || 'Sir/Mam'}! metrroma.com থেকে লক্ষ্য করলাম "${cleanItem.title || 'আমাদের পণ্য'}" এর অর্ডারটি আপনি সম্পন্ন করেননি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳${o.total}।`)}` : ''}`}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -3639,6 +4295,20 @@ function OrdersAdmin() {
             window.dispatchEvent(new CustomEvent('admin-orders-updated', { detail: newOrder }));
             load(true);
             setSel(newOrder);
+          }}
+        />
+      )}
+      {exchangeOrderTarget && (
+        <ExchangeOrderModal
+          originalOrder={exchangeOrderTarget}
+          allProducts={allProductsList}
+          accounts={accountsList}
+          onClose={() => setExchangeOrderTarget(null)}
+          onSuccess={(newExOrder) => {
+            setExchangeOrderTarget(null);
+            load(true);
+            setToast(`Exchange Order #${newExOrder.id} created successfully!`);
+            setTimeout(() => setToast(''), 4000);
           }}
         />
       )}
@@ -3877,7 +4547,257 @@ function MultiCourierFraudReport({ fraud }: { fraud: any }) {
   );
 }
 
+function ExchangeOrderModal({
+  originalOrder,
+  allProducts,
+  accounts,
+  onClose,
+  onSuccess,
+}: {
+  originalOrder: any;
+  allProducts: any[];
+  accounts: any[];
+  onClose: () => void;
+  onSuccess: (newOrder: any) => void;
+}) {
+  const [selectedProdId, setSelectedProdId] = useState('');
+  const [customName, setCustomName] = useState('');
+  const [customPrice, setCustomPrice] = useState<number>(0);
+  const [customQty, setCustomQty] = useState<number>(1);
+  const [codAmount, setCodAmount] = useState<number>(100);
+  const [exchangeReason, setExchangeReason] = useState('Customer requested size change / সাইজ পরিবর্তন');
+  const [courierName, setCourierName] = useState(accounts[0]?.label || accounts[0]?.provider || 'Pathao');
+  const [autoBookCourier, setAutoBookCourier] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const onSelectProduct = (prodId: string) => {
+    setSelectedProdId(prodId);
+    if (!prodId) return;
+    const p = allProducts.find((x) => x.id === prodId);
+    if (p) {
+      setCustomName(p.name || '');
+      setCustomPrice(Number(p.price) || 0);
+    }
+  };
+
+  const handleCreate = async () => {
+    if (!customName.trim()) {
+      setError('পণ্য বা সাইজের নাম নির্বাচন অথবা লিখুন।');
+      return;
+    }
+    setLoading(true);
+    setError('');
+
+    try {
+      const selectedProduct = allProducts.find((x) => x.id === selectedProdId);
+      const acc = accounts.find((a) => a.label === courierName || a.provider === courierName) || accounts[0];
+
+      const res = await aFetch(`/admin/orders/${originalOrder.id}/exchange`, {
+        method: 'POST',
+        body: JSON.stringify({
+          newItem: {
+            id: selectedProdId || undefined,
+            name: customName.trim(),
+            price: Number(customPrice) || 0,
+            qty: Number(customQty) || 1,
+            sku: selectedProduct?.sku || '',
+            image: selectedProduct?.image || selectedProduct?.images?.[0] || '',
+          },
+          exchangeReason: exchangeReason.trim(),
+          codAmount: Number(codAmount) || 0,
+          courierName: acc?.label || acc?.provider || courierName,
+          accountId: acc?.id,
+          autoBookCourier,
+        }),
+      }).then((r) => r.json());
+
+      if (res.ok && res.exchangeOrder) {
+        onSuccess(res.exchangeOrder);
+      } else {
+        setError(res.error || 'Failed to create exchange order');
+      }
+    } catch (e: any) {
+      setError(e?.message || 'Network error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const origItemsSummary = (originalOrder.items || []).map((i: any) => `${i.name || i.title || 'Product'} (x${i.qty || 1})`).join(', ');
+
+  return (
+    <div className="sa-modal-backdrop" onClick={onClose} style={{ zIndex: 12000 }}>
+      <div
+        className="sa-modal"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: 580, width: '92%', maxHeight: '90vh', overflowY: 'auto', background: '#13111c', border: '1px solid rgba(139, 92, 246, 0.4)', borderRadius: 14, padding: 24, boxShadow: '0 20px 40px rgba(0,0,0,0.6)' }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 24 }}>🔄</span>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 17, color: '#f8fafc', fontWeight: 700 }}>Create Exchange Order</h3>
+              <span style={{ fontSize: 12, color: '#94a3b8' }}>মূল অর্ডার: #{originalOrder.id}</span>
+            </div>
+          </div>
+          <button className="sa-om-close" onClick={onClose} type="button">×</button>
+        </div>
+
+        {error && (
+          <div style={{ padding: '10px 14px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 8, color: '#f87171', fontSize: 13, marginBottom: 16 }}>
+            ⚠️ {error}
+          </div>
+        )}
+
+        {/* Customer & Previous Product Info */}
+        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 12.5 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+            <span style={{ color: '#94a3b8' }}>গ্রাহক:</span>
+            <strong style={{ color: '#f1f5f9' }}>{originalOrder.customer?.name} ({originalOrder.customer?.phone})</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+            <span style={{ color: '#94a3b8' }}>ঠিকানা:</span>
+            <span style={{ color: '#cbd5e1', textAlign: 'right', maxWidth: 300 }}>{originalOrder.customer?.address}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: '#94a3b8' }}>আগের পণ্য:</span>
+            <span style={{ color: '#f59e0b', fontWeight: 600, textAlign: 'right', maxWidth: 300 }}>{origItemsSummary}</span>
+          </div>
+        </div>
+
+        {/* Replacement Product Selection */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
+            ১. নতুন কাঙ্ক্ষিত পণ্য বা সাইজ (Replacement Item):
+          </label>
+          <select
+            className="sa-search"
+            value={selectedProdId}
+            onChange={(e) => onSelectProduct(e.target.value)}
+            style={{ width: '100%', marginBottom: 8, background: '#1e1b2e', border: '1px solid rgba(255,255,255,0.15)' }}
+          >
+            <option value="">-- ক্যাটালগ থেকে পণ্য নির্বাচন করুন (বা নিচে সরাসরি লিখুন) --</option>
+            {allProducts.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} - ৳{p.price}
+              </option>
+            ))}
+          </select>
+          <input
+            className="sa-search"
+            placeholder="অথবা সরাসরি পণ্যের নাম বা সাইজ লিখুন (যেমন: লাভ লক সাইজ ৫.৭)..."
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+            style={{ width: '100%', background: '#1e1b2e', border: '1px solid rgba(255,255,255,0.15)' }}
+          />
+        </div>
+
+        {/* COD Amount / Delivery Fee */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
+            ২. কালেকশন অ্যামাউন্ট / এক্সচেঞ্জ ডেলিভারি চার্জ (৳ COD):
+          </label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+            <input
+              type="number"
+              className="sa-search"
+              value={codAmount}
+              onChange={(e) => setCodAmount(Number(e.target.value))}
+              style={{ width: 140, background: '#1e1b2e', border: '1px solid rgba(255,255,255,0.15)', fontWeight: 700, fontSize: 15 }}
+            />
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>টাকা (কুরিয়ার রাইডার কাস্টমার থেকে নিবে)</span>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[0, 80, 100, 120, 150].map((amt) => (
+              <button
+                key={amt}
+                type="button"
+                className="sa-btn ghost sa-mini"
+                style={{ padding: '3px 8px', fontSize: 11, background: codAmount === amt ? 'rgba(139, 92, 246, 0.3)' : undefined, borderColor: codAmount === amt ? '#8b5cf6' : undefined }}
+                onClick={() => setCodAmount(amt)}
+              >
+                {amt === 0 ? 'ফ্রি (৳০)' : `৳${amt}`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Exchange Reason */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
+            ৩. এক্সচেঞ্জের কারণ / নোট:
+          </label>
+          <input
+            className="sa-search"
+            value={exchangeReason}
+            onChange={(e) => setExchangeReason(e.target.value)}
+            placeholder="যেমন: সাইজ ছোট হয়েছিল / অন্য ভ্যারিয়েন্ট চাচ্ছে"
+            style={{ width: '100%', background: '#1e1b2e', border: '1px solid rgba(255,255,255,0.15)' }}
+          />
+        </div>
+
+        {/* Courier Selection */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
+            ৪. কুরিয়ার নির্বাচন:
+          </label>
+          <select
+            className="sa-search"
+            value={courierName}
+            onChange={(e) => setCourierName(e.target.value)}
+            style={{ width: '100%', background: '#1e1b2e', border: '1px solid rgba(255,255,255,0.15)' }}
+          >
+            {accounts.map((a) => (
+              <option key={a.id} value={a.label || a.provider}>
+                {a.label || a.provider}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Auto Book Checkbox */}
+        <div style={{ marginBottom: 16 }}>
+          <label className="sa-chk" style={{ fontSize: 13, fontWeight: 600, color: '#cbd5e1' }}>
+            <input
+              type="checkbox"
+              checked={autoBookCourier}
+              onChange={(e) => setAutoBookCourier(e.target.checked)}
+            />
+            <span>কুরিয়ারে সাথে সাথে পার্সেল স্বয়ংক্রিয়ভাবে বুক করুন</span>
+          </label>
+        </div>
+
+        {/* Rider Note Preview */}
+        <div style={{ background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: 8, padding: '10px 14px', marginBottom: 20, fontSize: 12, color: '#38bdf8' }}>
+          <strong>🛵 কুরিয়ার রাইডারের জন্য অটোমেটিক নির্দেশনা:</strong>
+          <div style={{ marginTop: 4, fontFamily: 'sans-serif', color: '#e0f2fe' }}>
+            [EXCHANGE PARCEL] কাস্টমার থেকে আগের পার্সেলটি রিসিভ করে এই নতুন পার্সেল হ্যান্ডওভার করুন। COD: ৳{codAmount}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button type="button" className="sa-btn ghost" onClick={onClose} disabled={loading}>
+            বাতিল
+          </button>
+          <button
+            type="button"
+            className="sa-btn primary"
+            style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)', border: 'none', fontWeight: 700, padding: '8px 18px' }}
+            onClick={handleCreate}
+            disabled={loading}
+          >
+            {loading ? 'এক্সচেঞ্জ তৈরি হচ্ছে…' : '🔄 Confirm & Dispatch Exchange'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; onClose: () => void; onSaved: () => void }) {
+  const [showExchangeModal, setShowExchangeModal] = useState(false);
   const [status, setStatus] = useState(o.status);
   const [cour, setCour] = useState(o.courier || { name: '', consignment: '', phone: '', url: '' });
   const [note, setNote] = useState(o.adminNote || '');
@@ -4115,6 +5035,17 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
             </div>
           </div>
           <div className="sa-om-head-acts">
+            {status === 'delivered' && !o.isExchange && !o.exchangeOrderId && (
+              <button
+                type="button"
+                className="sa-btn sa-mini"
+                style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)', color: '#fff', border: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                onClick={() => setShowExchangeModal(true)}
+                title="Create an exchange shipment for this customer"
+              >
+                🔄 Exchange Order
+              </button>
+            )}
             <button
               type="button"
               className={`sa-btn sa-mini ${isEditing ? 'primary' : 'ghost'}`}
@@ -4129,6 +5060,18 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
             <a className="sa-btn ghost sa-mini" href={'https://wa.me/88' + custPhone.replace(/\D/g, '')} target="_blank" rel="noreferrer" title="Chat on WhatsApp" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
               <WhatsAppIcon size={14} variant="official" /> WhatsApp
             </a>
+            <button
+              type="button"
+              className="sa-btn ghost sa-mini"
+              onClick={() => {
+                const pm: Record<string, any> = {};
+                (Array.isArray(allProducts) ? allProducts : []).forEach((p) => { if (p?.id) pm[p.id] = p; });
+                exportCSV([o], pm, undefined, `metrroma-order-${o.id}`);
+              }}
+              title="Download CSV for this order"
+            >
+              📥 CSV
+            </button>
             <button className="sa-btn ghost sa-mini" onClick={() => printInvoice(o)} title="Print invoice">
               🖨️ Print
             </button>
@@ -4141,6 +5084,65 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
           {saveMsg && (
             <div style={{ marginBottom: 12, padding: '8px 12px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: 8, color: '#34d399', fontSize: 13, fontWeight: 600 }}>
               {saveMsg}
+            </div>
+          )}
+
+          {/* Exchange Notification / Connection Banners */}
+          {o.isExchange && (
+            <div style={{
+              marginBottom: 16,
+              padding: '12px 16px',
+              borderRadius: 10,
+              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(99, 102, 241, 0.1) 100%)',
+              border: '1px solid rgba(139, 92, 246, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 22 }}>🔄</span>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#c4b5fd' }}>
+                    This is an Exchange Order (Original: #{o.originalOrderId})
+                  </div>
+                  <div style={{ fontSize: 12, color: '#a78bfa', marginTop: 2 }}>
+                    Courier has been instructed to collect the previous parcel from the customer and collect COD: ৳{o.total}.
+                  </div>
+                </div>
+              </div>
+              <span style={{ fontSize: 11, background: '#8b5cf6', color: '#fff', padding: '3px 10px', borderRadius: 999, fontWeight: 700 }}>
+                EXCHANGE
+              </span>
+            </div>
+          )}
+
+          {o.exchangeOrderId && (
+            <div style={{
+              marginBottom: 16,
+              padding: '12px 16px',
+              borderRadius: 10,
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(5, 150, 105, 0.08) 100%)',
+              border: '1px solid rgba(16, 185, 129, 0.35)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 20 }}>📦</span>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#6ee7b7' }}>
+                    Exchange Dispatched: Order #{o.exchangeOrderId}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#a7f3d0', marginTop: 2 }}>
+                    An exchange shipment has already been created for this order. Status: {o.exchangeStatus || 'in progress'}.
+                  </div>
+                </div>
+              </div>
+              <span style={{ fontSize: 11, background: '#10b981', color: '#fff', padding: '3px 10px', borderRadius: 999, fontWeight: 700 }}>
+                EXCHANGE CREATED
+              </span>
             </div>
           )}
 
@@ -4197,7 +5199,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                 {custPhone && (
                   <a
                     href={`https://wa.me/88${custPhone.replace(/\D/g, '')}?text=${encodeURIComponent(
-                      `আসসালামু আলাইকুম ${custName || 'প্রিয় গ্রাহক'}! metrroma.com থেকে লক্ষ্য করলাম আপনি "${items[0]?.name || 'আমাদের পণ্য'}" অর্ডার করার চেষ্টা করেছিলেন কিন্তু অর্ডারটি সম্পন্ন হয়নি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳${grandTotal}।`
+                      `আসসালামু আলাইকুম ${custName ? `${custName} Sir/Mam` : 'Sir/Mam'}! metrroma.com থেকে লক্ষ্য করলাম আপনি "${items[0]?.name || 'আমাদের পণ্য'}" অর্ডার করার চেষ্টা করেছিলেন কিন্তু অর্ডারটি সম্পন্ন হয়নি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳${grandTotal}।`
                     )}`}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -4288,7 +5290,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                     {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
                   </select>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                    {['pending', 'confirmed', 'shipped', 'delivered', 'hold', 'cancelled'].map((s) => (
+                    {['pending', 'approved', 'confirmed', 'shipped', 'delivered', 'hold', 'cancelled'].map((s) => (
                       <button
                         key={s}
                         type="button"
@@ -4444,13 +5446,19 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                 <span className="sa-om-v">{custAddress}</span>
               </div>
               {accounts.length > 0 && (
-                <div className="sa-om-courier-book">
-                  <select value={acc} onChange={(e) => setAcc(e.target.value)} className="sa-om-select">
-                    <option value="">One-click book via…</option>
-                    {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
-                  </select>
-                  <button type="button" className="sa-btn sa-mini" disabled={!acc} onClick={book}>Book Courier</button>
-                </div>
+                ['approved', 'confirmed'].includes(String(status || '').toLowerCase()) ? (
+                  <div className="sa-om-courier-book">
+                    <select value={acc} onChange={(e) => setAcc(e.target.value)} className="sa-om-select">
+                      <option value="">One-click book via…</option>
+                      {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+                    </select>
+                    <button type="button" className="sa-btn sa-mini" disabled={!acc} onClick={book}>Book Courier</button>
+                  </div>
+                ) : !cour.consignment ? (
+                  <div className="dim small" style={{ margin: '6px 0', padding: '6px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    ℹ️ কুরিয়ারে পাঠাতে অর্ডার স্ট্যাটাস <b>Approved</b> বা <b>Confirmed</b> করুন।
+                  </div>
+                ) : null
               )}
               {booking && <div className="dim small" style={{ margin: '4px 0' }}>{booking}</div>}
               <div className="sa-om-frow" style={{ marginTop: 8 }}>
@@ -4708,14 +5716,74 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
           </div>
         </div>
 
+        {/* Staff Activity & Order History Timeline */}
+        <div style={{ marginTop: 22, marginBottom: 12, padding: 18, background: '#120f20', borderRadius: 12, border: '1px solid rgba(139, 92, 246, 0.25)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(139,92,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
+                👤
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#f8fafc', letterSpacing: '0.2px' }}>
+                  Staff Activity &amp; Order Audit Trail
+                </h4>
+                <div style={{ fontSize: 11, color: '#94a3b8' }}>এই অর্ডারে কোন স্টাফ কখন কী কাজ করেছে তার বিবরণ</div>
+              </div>
+            </div>
+            {o.lastUpdatedBy && (
+              <span style={{ fontSize: 12, color: '#c084fc', background: 'rgba(139, 92, 246, 0.15)', padding: '4px 10px', borderRadius: 8, border: '1px solid rgba(139, 92, 246, 0.35)', fontWeight: 600 }}>
+                সর্বশেষ আপডেট করেছেন: <strong>{o.lastUpdatedBy.name || o.lastUpdatedBy.username}</strong> ({o.lastUpdatedBy.role})
+              </span>
+            )}
+          </div>
+
+          {Array.isArray(o.history) && o.history.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {o.history.map((h: any, idx: number) => {
+                const dateStr = h.at ? new Date(h.at).toLocaleString('bn-BD', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }) : '';
+                const staffName = h.staff?.name || h.staff?.username || (h.by ? h.by : '');
+                return (
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, fontSize: 12, padding: '9px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, borderLeft: '3px solid #8b5cf6' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
+                      <span style={{ minWidth: 90, color: '#94a3b8', fontSize: 11 }}>{dateStr}</span>
+                      <span style={{ color: '#e2e8f0' }}>
+                        <strong style={{ color: '#fff', textTransform: 'capitalize' }}>{h.status || 'Action'}:</strong> {h.note || 'Status updated'}
+                      </span>
+                    </div>
+                    {staffName ? (
+                      <div style={{ color: '#c084fc', fontSize: 11.5, fontWeight: 700, background: 'rgba(139,92,246,0.15)', padding: '2px 8px', borderRadius: 6 }}>
+                        👤 {staffName} {h.staff?.role && <span style={{ opacity: 0.7, fontWeight: 400 }}>({h.staff.role})</span>}
+                      </div>
+                    ) : (
+                      <span style={{ color: '#64748b', fontSize: 11 }}>System</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', padding: 8 }}>
+              এই অর্ডারে এখনও কোনো স্টাফ অ্যাক্টিভিটি রেকর্ড নেই। অর্ডারটি এসেছে: {originLabel(o.source)}
+            </div>
+          )}
+        </div>
+
         {/* Modal Footer */}
         <div className="sa-om-foot">
           <div className="sa-om-foot-left">
-            <button className="sa-btn ghost" onClick={() => printInvoice({ ...o, customer: { ...o.customer, name: custName, phone: custPhone, address: custAddress }, items, delivery, discount, total: grandTotal })}>
-              Print Invoice
+            <button
+              className="sa-btn"
+              style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)', color: '#fff', border: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}
+              onClick={() => downloadSlipsPdf([{ ...o, customer: { ...o.customer, name: custName, phone: custPhone, address: custAddress }, items, delivery, discount, total: grandTotal }])}
+              title="Download delivery slip as PDF"
+            >
+              📄 Download Slip PDF
             </button>
             <button className="sa-btn ghost" onClick={() => printSlips([{ ...o, customer: { ...o.customer, name: custName, phone: custPhone, address: custAddress }, items, delivery, discount, total: grandTotal }])}>
-              Print Packing Slip
+              Print Slip
+            </button>
+            <button className="sa-btn ghost" onClick={() => printInvoice({ ...o, customer: { ...o.customer, name: custName, phone: custPhone, address: custAddress }, items, delivery, discount, total: grandTotal })}>
+              Print Invoice
             </button>
           </div>
           <div className="sa-om-foot-right">
@@ -4726,6 +5794,20 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
           </div>
         </div>
       </div>
+
+      {showExchangeModal && (
+        <ExchangeOrderModal
+          originalOrder={o}
+          allProducts={allProducts}
+          accounts={accounts}
+          onClose={() => setShowExchangeModal(false)}
+          onSuccess={(newExOrder) => {
+            setShowExchangeModal(false);
+            window.dispatchEvent(new CustomEvent('admin-orders-updated', { detail: { id: newExOrder.id } }));
+            onSaved();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -4968,7 +6050,7 @@ function ProductsAdmin() {
   // Filtering & Sorting
   const query = q.trim().toLowerCase();
   const filteredProducts = products.filter((p) => {
-    const matchesCat = cat === 'all' || p.category === cat;
+    const matchesCat = cat === 'all' || p.category === cat || p.subCategory === cat || (Array.isArray(p.categories) && p.categories.includes(cat));
     const colNames = (p.colors || []).map((c: any) => (typeof c === 'string' ? c : c.name)).join(' ').toLowerCase();
     const colHexes = (p.colors || []).map((c: any) => (typeof c === 'object' && c.hex ? c.hex : '')).join(' ').toLowerCase();
     const cleanColHexes = colHexes.replace(/#/g, '');
@@ -5523,6 +6605,9 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
     if (!Array.isArray(base.images)) base.images = base.image ? [base.image] : [];
     if (!Array.isArray(base.variations)) base.variations = [];
     if (!Array.isArray(base.colors)) base.colors = [];
+    if (!Array.isArray(base.categories)) {
+      base.categories = Array.from(new Set([base.category, base.subCategory, ...(product?.categories || [])].filter(Boolean)));
+    }
     return base;
   });
   const [err, setErr] = useState('');
@@ -5901,8 +6986,15 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
     }
     setBusy(true);
     try {
+      const allSelectedCats = Array.from(new Set([
+        f.category,
+        f.subCategory,
+        ...(Array.isArray(f.categories) ? f.categories : [])
+      ].filter(Boolean)));
+
       const payload = {
         ...f,
+        categories: allSelectedCats,
         price: parseInt(f.price, 10) || 0,
         compareAt: f.compareAt ? parseInt(f.compareAt, 10) || 0 : 0,
         stock: f.stock === '' || f.stock === null ? null : parseInt(f.stock, 10),
@@ -6376,6 +7468,111 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
                     </button>
                   </div>
                 )}
+
+                {/* Multiple Categories & Sub-Categories Selection */}
+                <div style={{ marginTop: 14, background: 'rgba(15, 23, 42, 0.65)', border: '1px solid rgba(180, 142, 76, 0.25)', borderRadius: 10, padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 6 }}>
+                    <div>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span>🏷️</span> <span>Multiple Categories & Sub-Categories (একসাথে একাধিক ক্যাটাগরিতে যোগ করুন)</span>
+                      </span>
+                      <p style={{ margin: '3px 0 0', fontSize: 11.5, color: '#94a3b8' }}>
+                        এই প্রোডাক্টটি একই সাথে যেসব ক্যাটাগরি ও সাব-ক্যাটাগরিতে দেখাতে চান, ইচ্ছামতো টিক দিন:
+                      </p>
+                    </div>
+                    <span style={{ fontSize: 11, background: '#10b981', color: '#fff', padding: '3px 10px', borderRadius: 12, fontWeight: 700 }}>
+                      {(f.categories || []).length} Selected
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 300, overflowY: 'auto', paddingRight: 6 }}>
+                    {mainCatsList.map((mc: any) => {
+                      const childs = localCats.filter((c: any) => c.parentSlug === mc.slug);
+                      const isMainChecked = (f.categories || []).includes(mc.slug) || f.category === mc.slug;
+                      return (
+                        <div
+                          key={mc.slug}
+                          style={{
+                            background: isMainChecked ? 'rgba(180, 142, 76, 0.08)' : 'rgba(255, 255, 255, 0.02)',
+                            border: isMainChecked ? '1px solid rgba(180, 142, 76, 0.4)' : '1px solid rgba(255, 255, 255, 0.06)',
+                            borderRadius: 8,
+                            padding: '10px 12px',
+                          }}
+                        >
+                          {/* Parent Category Checkbox */}
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', margin: 0, fontWeight: 700, fontSize: 13, color: isMainChecked ? '#e2c58a' : '#f8fafc' }}>
+                            <input
+                              type="checkbox"
+                              checked={isMainChecked}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setF((s: any) => {
+                                  const cur = new Set(s.categories || [s.category, s.subCategory].filter(Boolean));
+                                  if (checked) cur.add(mc.slug);
+                                  else if (mc.slug !== s.category) cur.delete(mc.slug);
+                                  return { ...s, categories: Array.from(cur) };
+                                });
+                              }}
+                              style={{ width: 16, height: 16, accentColor: '#b48e4c', cursor: 'pointer' }}
+                            />
+                            <span>{mc.name}</span>
+                            {mc.slug === f.category && (
+                              <span style={{ fontSize: 10, background: 'rgba(180, 142, 76, 0.3)', color: '#e2c58a', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>Primary Main</span>
+                            )}
+                          </label>
+
+                          {/* Sub-Categories Pills */}
+                          {childs.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8, paddingLeft: 24 }}>
+                              {childs.map((sc: any) => {
+                                const isSubChecked = (f.categories || []).includes(sc.slug) || f.subCategory === sc.slug;
+                                return (
+                                  <label
+                                    key={sc.slug}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 6,
+                                      cursor: 'pointer',
+                                      padding: '4px 10px',
+                                      borderRadius: 6,
+                                      fontSize: 12,
+                                      background: isSubChecked ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.04)',
+                                      border: isSubChecked ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.08)',
+                                      color: isSubChecked ? '#a7f3d0' : '#cbd5e1',
+                                      fontWeight: isSubChecked ? 600 : 400,
+                                      transition: 'all 0.15s ease',
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSubChecked}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        setF((s: any) => {
+                                          const cur = new Set(s.categories || [s.category, s.subCategory].filter(Boolean));
+                                          if (checked) {
+                                            cur.add(sc.slug);
+                                            cur.add(mc.slug);
+                                          } else {
+                                            cur.delete(sc.slug);
+                                          }
+                                          return { ...s, categories: Array.from(cur) };
+                                        });
+                                      }}
+                                      style={{ width: 14, height: 14, accentColor: '#10b981', cursor: 'pointer' }}
+                                    />
+                                    <span>↳ {sc.name}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 <div style={{ marginTop: 12 }}>
                   <label style={{ display: 'block', marginBottom: 6 }}>Product Highlight Badge</label>
@@ -7357,7 +8554,6 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    getCategories().then((c) => setStoreCats(Array.isArray(c) ? c : [])).catch(() => {});
     fetch('/api/settings')
       .then((r) => r.json())
       .then(setF)
@@ -7367,12 +8563,22 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
   const fd = f?.fraudDetector || {
     enabled: true,
     cooldownHours: 24,
-    maxOrdersPerDay: 5,
+    sameProductLimit: 1,
+    maxOrdersPerDay: 1,
+    maxOrdersPerIp: 2,
     minSecondsBetweenOrders: 30,
     blockByPhone: true,
+    blockByIp: true,
+    protectIncompleteOrders: true,
+    applyOnLandingPages: true,
     sameProductNotice: 'You have already placed an order for this item recently. Please wait before ordering again, or contact our support team.',
+    sameProductNoticeBn: 'আপনি ইতিমধ্যে এই পণ্যটির জন্য একটি অর্ডার করেছেন। নতুন অর্ডারের জন্য অপেক্ষা করুন অথবা আমাদের সাথে যোগাযোগ করুন।',
     maxOrdersNotice: 'You have reached the maximum daily order limit from this device. Please contact customer support for urgent orders.',
+    maxOrdersNoticeBn: 'আপনার ডিভাইস থেকে আজকের সর্বোচ্চ অর্ডার সীমা পূর্ণ হয়েছে। প্রয়োজনীয় সহায়তায় যোগাযোগ করুন।',
+    ipLimitNotice: 'Daily order limit reached from this network/IP address. Please contact customer support.',
+    ipLimitNoticeBn: 'আপনার ইন্টারনেট নেটওয়ার্ক (IP) থেকে আজকের সর্বোচ্চ অর্ডারের সীমা অতিক্রম করেছে। সহায়তার জন্য যোগাযোগ করুন।',
     rapidOrderNotice: 'Please wait a moment before submitting another order.',
+    rapidOrderNoticeBn: 'অনুগ্রহ করে নতুন অর্ডার সাবমিট করার পূর্বে কিছুক্ষণ অপেক্ষা করুন।',
   };
 
   const setFd = (k: string, v: any) => {
@@ -7405,12 +8611,22 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
       fraudDetector: {
         enabled: true,
         cooldownHours: 24,
-        maxOrdersPerDay: 5,
+        sameProductLimit: 1,
+        maxOrdersPerDay: 1,
+        maxOrdersPerIp: 2,
         minSecondsBetweenOrders: 30,
         blockByPhone: true,
+        blockByIp: true,
+        protectIncompleteOrders: true,
+        applyOnLandingPages: true,
         sameProductNotice: 'You have already placed an order for this item recently. Please wait before ordering again, or contact our support team.',
+        sameProductNoticeBn: 'আপনি ইতিমধ্যে এই পণ্যটির জন্য একটি অর্ডার করেছেন। নতুন অর্ডারের জন্য অপেক্ষা করুন অথবা আমাদের সাথে যোগাযোগ করুন।',
         maxOrdersNotice: 'You have reached the maximum daily order limit from this device. Please contact customer support for urgent orders.',
+        maxOrdersNoticeBn: 'আপনার ডিভাইস থেকে আজকের সর্বোচ্চ অর্ডার সীমা পূর্ণ হয়েছে। প্রয়োজনীয় সহায়তায় যোগাযোগ করুন।',
+        ipLimitNotice: 'Daily order limit reached from this network/IP address. Please contact customer support.',
+        ipLimitNoticeBn: 'আপনার ইন্টারনেট নেটওয়ার্ক (IP) থেকে আজকের সর্বোচ্চ অর্ডারের সীমা অতিক্রম করেছে। সহায়তার জন্য যোগাযোগ করুন।',
         rapidOrderNotice: 'Please wait a moment before submitting another order.',
+        rapidOrderNoticeBn: 'অনুগ্রহ করে নতুন অর্ডার সাবমিট করার পূর্বে কিছুক্ষণ অপেক্ষা করুন।',
       },
     }));
   };
@@ -7426,7 +8642,7 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
             <div>
               <h1 style={{ margin: 0 }}>Fraud Detector &amp; Fake Order Protection</h1>
               <p className="dim" style={{ fontSize: 13, margin: '2px 0 0' }}>
-                Prevent fake, repeated, and bot orders with device fingerprinting and cooldown limits
+                Multi-level device fingerprinting, IP network limiting, and automated incomplete order protection
               </p>
             </div>
           </div>
@@ -7445,10 +8661,10 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
             <span style={{ fontSize: 22 }}>🛡️</span>
             <div>
               <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'var(--text)' }}>
-                Fraud Detector &amp; Device Blocker
+                Fraud Detector &amp; Multi-Level Device / IP Protection
               </h2>
               <p className="dim" style={{ fontSize: 12.5, margin: '3px 0 0' }}>
-                Per-product cooldown, daily order caps, and automated rapid spam blocking
+                Device limits, IP network limits, Landing Page enforcement, and incomplete lead spam shield
               </p>
             </div>
           </div>
@@ -7475,16 +8691,16 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
           </div>
         </div>
 
-        {/* Section 1: Rate Limiting & Cooldown */}
+        {/* Section 1: Order Cooldown & Limits */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#f59e0b', marginBottom: 12 }}>
-            ⏱️ Order Cooldown &amp; Limits
+            ⏱️ Order Cooldown &amp; Limits (অর্ডার সীমা ও সময়সীমা)
           </div>
           <div className="sa-sgrid">
             <label>
               Same-Product Cooldown (Hours)
               <span className="dim" style={{ display: 'block', fontSize: 11.5, fontWeight: 400, marginTop: 2, lineHeight: 1.3 }}>
-                Customer cannot re-order the <b>exact same product</b> from this device/phone within this period (e.g. 24 or 48 hours).
+                Customer cannot re-order the <b>exact same product</b> beyond limit within this period (e.g. 24h).
               </span>
               <input
                 type="number"
@@ -7497,17 +8713,47 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
             </label>
 
             <label>
+              Same-Product Order Limit
+              <span className="dim" style={{ display: 'block', fontSize: 11.5, fontWeight: 400, marginTop: 2, lineHeight: 1.3 }}>
+                Max times a device/phone can order <b>this same product</b> within cooldown period (default: 1).
+              </span>
+              <input
+                type="number"
+                min="1"
+                max="50"
+                value={fd.sameProductLimit ?? 1}
+                onChange={(e) => setFd('sameProductLimit', parseInt(e.target.value, 10) || 1)}
+                placeholder="1"
+              />
+            </label>
+
+            <label>
               Max Orders per Device / 24 Hours
               <span className="dim" style={{ display: 'block', fontSize: 11.5, fontWeight: 400, marginTop: 2, lineHeight: 1.3 }}>
-                Maximum allowed orders across <b>all products</b> from a single device in 24 hours (default: 5).
+                Max total orders across <b>all products</b> from a single device in 24 hours (default: 1).
               </span>
               <input
                 type="number"
                 min="1"
                 max="100"
-                value={fd.maxOrdersPerDay ?? 5}
-                onChange={(e) => setFd('maxOrdersPerDay', parseInt(e.target.value, 10) || 0)}
-                placeholder="5"
+                value={fd.maxOrdersPerDay ?? 1}
+                onChange={(e) => setFd('maxOrdersPerDay', parseInt(e.target.value, 10) || 1)}
+                placeholder="1"
+              />
+            </label>
+
+            <label>
+              Max Orders per IP / 24 Hours
+              <span className="dim" style={{ display: 'block', fontSize: 11.5, fontWeight: 400, marginTop: 2, lineHeight: 1.3 }}>
+                Max total orders allowed from the <b>same IP address / network</b> in 24 hours (default: 2).
+              </span>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={fd.maxOrdersPerIp ?? 2}
+                onChange={(e) => setFd('maxOrdersPerIp', parseInt(e.target.value, 10) || 1)}
+                placeholder="2"
               />
             </label>
 
@@ -7525,74 +8771,176 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
                 placeholder="30"
               />
             </label>
+          </div>
+        </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <span style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Phone Number Match Check</span>
-              <label className="sa-chk" style={{ fontSize: 13 }}>
+        {/* Section 2: Protection Switches */}
+        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#10b981', marginBottom: 12 }}>
+            🛡️ Protection Triggers &amp; Channels (সুরক্ষা নিয়ন্ত্রণ)
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
+              <label className="sa-chk" style={{ fontSize: 13, fontWeight: 600 }}>
                 <input
                   type="checkbox"
                   checked={fd.blockByPhone !== false}
                   onChange={(e) => setFd('blockByPhone', e.target.checked)}
                 />
-                Also check customer phone number
+                Phone Number Match Check
               </label>
-              <span className="dim" style={{ fontSize: 11.5, marginTop: 4 }}>
-                Prevents bypassing cooldown via Incognito mode or clearing browser cookies.
+              <span className="dim" style={{ display: 'block', fontSize: 11.5, marginTop: 4 }}>
+                Prevents bypassing limits by switching to incognito mode or clearing cookies.
+              </span>
+            </div>
+
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
+              <label className="sa-chk" style={{ fontSize: 13, fontWeight: 600 }}>
+                <input
+                  type="checkbox"
+                  checked={fd.blockByIp !== false}
+                  onChange={(e) => setFd('blockByIp', e.target.checked)}
+                />
+                IP Address Limit Check
+              </label>
+              <span className="dim" style={{ display: 'block', fontSize: 11.5, marginTop: 4 }}>
+                Enforces the 24-hour IP order cap using Cloudflare CF-Connecting-IP &amp; real client IP.
+              </span>
+            </div>
+
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
+              <label className="sa-chk" style={{ fontSize: 13, fontWeight: 600 }}>
+                <input
+                  type="checkbox"
+                  checked={fd.protectIncompleteOrders !== false}
+                  onChange={(e) => setFd('protectIncompleteOrders', e.target.checked)}
+                />
+                Incomplete Order Protection
+              </label>
+              <span className="dim" style={{ display: 'block', fontSize: 11.5, marginTop: 4 }}>
+                Filters fake numbers (01700000000...) and stops saving incomplete spam leads if limit is reached.
+              </span>
+            </div>
+
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
+              <label className="sa-chk" style={{ fontSize: 13, fontWeight: 600 }}>
+                <input
+                  type="checkbox"
+                  checked={fd.applyOnLandingPages !== false}
+                  onChange={(e) => setFd('applyOnLandingPages', e.target.checked)}
+                />
+                Apply on Landing Pages (/l/...)
+              </label>
+              <span className="dim" style={{ display: 'block', fontSize: 11.5, marginTop: 4 }}>
+                Strictly applies all Fraud Detector limits to one-page landing page checkouts.
               </span>
             </div>
           </div>
         </div>
 
-        {/* Section 2: English Warning Messages */}
+        {/* Section 3: Bilingual Warning Notices */}
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
             <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#60a5fa' }}>
-              💬 Warning Notices (English Warning Messages)
+              💬 Warning Notices (English &amp; বাংলা নোটিশ)
             </div>
             <span className="dim small">Shown to customers on the checkout page when an order is blocked</span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <label>
-              Same-Product Cooldown Warning (English)
-              <span className="dim" style={{ display: 'block', fontSize: 11.5, fontWeight: 400, marginTop: 2, marginBottom: 4 }}>
-                Shown when customer tries to order the same item again within the cooldown window:
-              </span>
-              <textarea
-                rows={2}
-                value={fd.sameProductNotice ?? ''}
-                onChange={(e) => setFd('sameProductNotice', e.target.value)}
-                placeholder="You have already placed an order for this item recently. Please wait before ordering again, or contact our support team."
-                style={{ width: '100%', resize: 'vertical', fontSize: 13 }}
-              />
-            </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Same Product Notice */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+              <label>
+                Same-Product Limit Warning (English)
+                <textarea
+                  rows={2}
+                  value={fd.sameProductNotice ?? ''}
+                  onChange={(e) => setFd('sameProductNotice', e.target.value)}
+                  placeholder="You have already placed an order for this item recently. Please wait before ordering again, or contact our support team."
+                  style={{ width: '100%', resize: 'vertical', fontSize: 13 }}
+                />
+              </label>
+              <label>
+                Same-Product Limit Warning (বাংলা)
+                <textarea
+                  rows={2}
+                  value={fd.sameProductNoticeBn ?? ''}
+                  onChange={(e) => setFd('sameProductNoticeBn', e.target.value)}
+                  placeholder="আপনি ইতিমধ্যে এই পণ্যটির জন্য একটি অর্ডার করেছেন। নতুন অর্ডারের জন্য অপেক্ষা করুন অথবা আমাদের সাথে যোগাযোগ করুন।"
+                  style={{ width: '100%', resize: 'vertical', fontSize: 13 }}
+                />
+              </label>
+            </div>
 
-            <label>
-              Daily Max Orders Limit Warning (English)
-              <span className="dim" style={{ display: 'block', fontSize: 11.5, fontWeight: 400, marginTop: 2, marginBottom: 4 }}>
-                Shown when the device exceeds the maximum allowed orders in 24 hours:
-              </span>
-              <textarea
-                rows={2}
-                value={fd.maxOrdersNotice ?? ''}
-                onChange={(e) => setFd('maxOrdersNotice', e.target.value)}
-                placeholder="You have reached the maximum daily order limit from this device. Please contact customer support for urgent orders."
-                style={{ width: '100%', resize: 'vertical', fontSize: 13 }}
-              />
-            </label>
+            {/* Daily Device Max Orders Notice */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+              <label>
+                Daily Device Limit Warning (English)
+                <textarea
+                  rows={2}
+                  value={fd.maxOrdersNotice ?? ''}
+                  onChange={(e) => setFd('maxOrdersNotice', e.target.value)}
+                  placeholder="You have reached the maximum daily order limit from this device. Please contact customer support for urgent orders."
+                  style={{ width: '100%', resize: 'vertical', fontSize: 13 }}
+                />
+              </label>
+              <label>
+                Daily Device Limit Warning (বাংলা)
+                <textarea
+                  rows={2}
+                  value={fd.maxOrdersNoticeBn ?? ''}
+                  onChange={(e) => setFd('maxOrdersNoticeBn', e.target.value)}
+                  placeholder="আপনার ডিভাইস থেকে আজকের সর্বোচ্চ অর্ডার সীমা পূর্ণ হয়েছে। প্রয়োজনীয় সহায়তায় যোগাযোগ করুন।"
+                  style={{ width: '100%', resize: 'vertical', fontSize: 13 }}
+                />
+              </label>
+            </div>
 
-            <label>
-              Rapid Submission Spam Warning (English)
-              <span className="dim" style={{ display: 'block', fontSize: 11.5, fontWeight: 400, marginTop: 2, marginBottom: 4 }}>
-                Shown if orders are submitted within a few seconds of each other:
-              </span>
-              <input
-                value={fd.rapidOrderNotice ?? ''}
-                onChange={(e) => setFd('rapidOrderNotice', e.target.value)}
-                placeholder="Please wait a moment before submitting another order."
-                style={{ width: '100%', fontSize: 13 }}
-              />
-            </label>
+            {/* IP Limit Notice */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+              <label>
+                IP Address Limit Warning (English)
+                <textarea
+                  rows={2}
+                  value={fd.ipLimitNotice ?? ''}
+                  onChange={(e) => setFd('ipLimitNotice', e.target.value)}
+                  placeholder="Daily order limit reached from this network/IP address. Please contact customer support."
+                  style={{ width: '100%', resize: 'vertical', fontSize: 13 }}
+                />
+              </label>
+              <label>
+                IP Address Limit Warning (বাংলা)
+                <textarea
+                  rows={2}
+                  value={fd.ipLimitNoticeBn ?? ''}
+                  onChange={(e) => setFd('ipLimitNoticeBn', e.target.value)}
+                  placeholder="আপনার ইন্টারনেট নেটওয়ার্ক (IP) থেকে আজকের সর্বোচ্চ অর্ডারের সীমা অতিক্রম করেছে। সহায়তার জন্য যোগাযোগ করুন।"
+                  style={{ width: '100%', resize: 'vertical', fontSize: 13 }}
+                />
+              </label>
+            </div>
+
+            {/* Rapid Submission Notice */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+              <label>
+                Rapid Spam Warning (English)
+                <input
+                  value={fd.rapidOrderNotice ?? ''}
+                  onChange={(e) => setFd('rapidOrderNotice', e.target.value)}
+                  placeholder="Please wait a moment before submitting another order."
+                  style={{ width: '100%', fontSize: 13 }}
+                />
+              </label>
+              <label>
+                Rapid Spam Warning (বাংলা)
+                <input
+                  value={fd.rapidOrderNoticeBn ?? ''}
+                  onChange={(e) => setFd('rapidOrderNoticeBn', e.target.value)}
+                  placeholder="অনুগ্রহ করে নতুন অর্ডার সাবমিট করার পূর্বে কিছুক্ষণ অপেক্ষা করুন।"
+                  style={{ width: '100%', fontSize: 13 }}
+                />
+              </label>
+            </div>
           </div>
         </div>
 
@@ -7638,6 +8986,7 @@ function SettingsAdmin() {
     active: true,
   });
   const [uploadingSlideImg, setUploadingSlideImg] = useState(false);
+  const [uploadingPrimaryHero, setUploadingPrimaryHero] = useState(false);
   const [editingSlideIdx, setEditingSlideIdx] = useState<number | null>(null);
   const [pickerTarget, setPickerTarget] = useState<{ title: string; currentImg: string; onSelect: (url: string) => void } | null>(null);
   const [storeCats, setStoreCats] = useState<any[]>([]);
@@ -7715,6 +9064,38 @@ function SettingsAdmin() {
       alert('Slide image upload failed: ' + (err.message || 'error'));
     } finally {
       setUploadingSlideImg(false);
+    }
+  };
+
+  const setPrimaryHeroImage = (url: string, isMobile = false) => {
+    setF((cur: any) => {
+      const curSliders = Array.isArray(cur?.sliders) && cur.sliders.length > 0 ? [...cur.sliders] : [{
+        id: 'metrroma-hero-1',
+        active: true,
+        image: '',
+        mobileImage: '',
+        title: '',
+        btnLink: 'shop'
+      }];
+      curSliders[0] = {
+        ...curSliders[0],
+        [isMobile ? 'mobileImage' : 'image']: url
+      };
+      return { ...cur, sliders: curSliders };
+    });
+  };
+
+  const onPrimaryHeroUpload = async (e: any, isMobile = false) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPrimaryHero(true);
+    try {
+      const url = await handleFileUpload(file);
+      setPrimaryHeroImage(url, isMobile);
+    } catch (err: any) {
+      alert('Hero banner upload failed: ' + (err.message || 'error'));
+    } finally {
+      setUploadingPrimaryHero(false);
     }
   };
 
@@ -7894,21 +9275,36 @@ function SettingsAdmin() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 20 }}>
           {/* 1. Store Logo */}
           <div className="sa-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 16, color: '#fff' }}>Store logo</h3>
-                <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8' }}>
-                  Used in storefront navigation bar, mobile menu & invoices.
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>Store Logo</h3>
+                  <span
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                      background: f.logo ? 'rgba(34, 197, 94, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                      color: f.logo ? '#4ade80' : '#94a3b8',
+                      border: '1px solid ' + (f.logo ? 'rgba(34, 197, 94, 0.3)' : 'rgba(148, 163, 184, 0.2)'),
+                    }}
+                  >
+                    {f.logo ? '● Live' : '○ Not Set'}
+                  </span>
+                </div>
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8', lineHeight: 1.4 }}>
+                  Main storefront header, mobile menu drawer &amp; customer invoices.
                 </p>
               </div>
               {f.logo && (
                 <button
                   type="button"
                   className="sa-btn ghost small"
-                  style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                  style={{ color: '#f87171', background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.25)', whiteSpace: 'nowrap', flexShrink: 0 }}
                   onClick={() => setF((s: any) => ({ ...s, logo: '' }))}
                 >
-                  Remove Logo
+                  Remove
                 </button>
               )}
             </div>
@@ -7916,15 +9312,15 @@ function SettingsAdmin() {
             {/* Preview Area */}
             <div
               style={{
-                height: 120,
+                height: 128,
                 borderRadius: 12,
-                background: '#0f0c1b',
-                border: '2px dashed rgba(255,255,255,0.12)',
+                background: '#0d0b14 radial-gradient(circle at center, rgba(139, 92, 246, 0.08) 0%, transparent 70%)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 overflow: 'hidden',
-                padding: 12,
+                padding: '16px 20px',
                 position: 'relative',
               }}
             >
@@ -7932,66 +9328,98 @@ function SettingsAdmin() {
                 <img
                   src={f.logo}
                   alt="Store Logo"
-                  style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }}
+                  style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', filter: 'drop-shadow(0 2px 10px rgba(0,0,0,0.5))' }}
                 />
               ) : (
-                <div style={{ textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                <div style={{ textAlign: 'center', color: '#64748b' }}>
                   <div style={{ fontSize: 24, marginBottom: 4 }}>🖼️</div>
-                  <div>No logo uploaded yet</div>
-                  <div style={{ fontSize: 11, color: '#475569' }}>Text name ({f.storeName || 'Store'}) is currently displayed</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>No logo image uploaded yet</div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Storefront displays styled text: <strong>{f.storeName || 'METRROMA'}</strong></div>
                 </div>
               )}
             </div>
 
             {/* Upload Buttons & Input */}
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="sa-btn"
-                style={{ cursor: 'pointer', flexShrink: 0, background: '#7c3aed', borderColor: '#7c3aed', color: '#fff', fontWeight: 600 }}
-                onClick={() => setPickerTarget({ title: 'Store Logo', currentImg: f.logo || '', onSelect: (url) => setF((s: any) => ({ ...s, logo: url })) })}
-              >
-                🖼️ Choose from Gallery
-              </button>
-              <label className="sa-btn ghost" style={{ cursor: 'pointer', flexShrink: 0 }}>
-                {uploadingLogo ? 'Uploading…' : '📁 Upload New File'}
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                  onChange={onLogoFileChange}
-                  style={{ display: 'none' }}
-                  disabled={uploadingLogo}
-                />
-              </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <label
+                  className="sa-btn small"
+                  style={{
+                    cursor: 'pointer',
+                    background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+                    color: '#fff',
+                    fontWeight: 600,
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    height: 38,
+                    borderRadius: 8,
+                  }}
+                >
+                  {uploadingLogo ? 'Uploading…' : '📁 Upload New File'}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    onChange={onLogoFileChange}
+                    style={{ display: 'none' }}
+                    disabled={uploadingLogo}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="sa-btn ghost small"
+                  style={{ flex: 1, height: 38, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                  onClick={() => setPickerTarget({ title: 'Store Logo', currentImg: f.logo || '', onSelect: (url) => setF((s: any) => ({ ...s, logo: url })) })}
+                >
+                  🖼️ Choose from Gallery
+                </button>
+              </div>
               <input
-                style={{ flex: 1, minWidth: 200, height: 38, padding: '0 12px', background: '#1c1830', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                style={{ width: '100%', height: 38, padding: '0 12px', background: '#181624', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', fontSize: 12.5 }}
                 value={f.logo || ''}
                 onChange={set('logo')}
-                placeholder="Or paste image URL (https://... or /uploads/...)"
+                placeholder="Or paste direct image URL (/uploads/... or https://...)"
               />
             </div>
-            <div style={{ fontSize: 11.5, color: '#64748b' }}>
-              💡 <strong>Tip:</strong> Transparent PNG or SVG logo looks best against dark/light headers. Recommended height: 40px – 80px.
+            <div style={{ fontSize: 11.5, color: '#71717a', lineHeight: 1.5 }}>
+              💡 <strong>Tip:</strong> Transparent PNG or WebP looks best against both dark and light headers. Recommended height: 40px – 80px.
             </div>
           </div>
 
           {/* 2. Site Favicon */}
           <div className="sa-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 16, color: '#fff' }}>Site icon / favicon</h3>
-                <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8' }}>
-                  The small icon shown in browser tabs, bookmarks & mobile shortcuts.
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>Site Icon / Favicon</h3>
+                  <span
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                      background: f.favicon ? 'rgba(34, 197, 94, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                      color: f.favicon ? '#4ade80' : '#94a3b8',
+                      border: '1px solid ' + (f.favicon ? 'rgba(34, 197, 94, 0.3)' : 'rgba(148, 163, 184, 0.2)'),
+                    }}
+                  >
+                    {f.favicon ? '● Live' : '○ Not Set'}
+                  </span>
+                </div>
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8', lineHeight: 1.4 }}>
+                  Small icon shown in browser tabs, bookmarks &amp; mobile home-screen shortcuts.
                 </p>
               </div>
               {f.favicon && (
                 <button
                   type="button"
                   className="sa-btn ghost small"
-                  style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                  style={{ color: '#f87171', background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.25)', whiteSpace: 'nowrap', flexShrink: 0 }}
                   onClick={() => setF((s: any) => ({ ...s, favicon: '' }))}
                 >
-                  Remove Favicon
+                  Remove
                 </button>
               )}
             </div>
@@ -8000,73 +9428,180 @@ function SettingsAdmin() {
             <div
               style={{
                 borderRadius: 12,
-                background: '#0f0c1b',
-                border: '1px solid rgba(255,255,255,0.1)',
-                padding: '14px 16px',
+                background: '#0d0b14',
+                border: '1px solid rgba(255,255,255,0.08)',
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+                height: 128,
+                justifyContent: 'center',
               }}
             >
-              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Browser Tab Preview:
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: 0.6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} />
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#eab308' }} />
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />
+                <span style={{ fontSize: 10.5, color: '#64748b', marginLeft: 8, textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: 700 }}>Browser Tab Preview</span>
               </div>
               <div
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 8,
-                  background: '#242038',
+                  background: '#1a1728',
                   padding: '7px 14px',
-                  borderRadius: '8px 8px 0 0',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  borderBottom: 'none',
-                  maxWidth: 240,
+                  borderRadius: 8,
+                  border: '1px solid rgba(139, 92, 246, 0.25)',
+                  maxWidth: 260,
                 }}
               >
                 {f.favicon ? (
                   <img
                     src={f.favicon}
                     alt="Favicon"
-                    style={{ width: 18, height: 18, objectFit: 'contain', borderRadius: 3 }}
+                    style={{ width: 18, height: 18, objectFit: 'contain', borderRadius: 4 }}
                   />
                 ) : (
                   <span style={{ fontSize: 14 }}>🌐</span>
                 )}
                 <span style={{ fontSize: 12, color: '#e2e8f0', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {f.storeName || 'METROMAA'} — Online Store
+                  {f.storeName || 'METRROMA'} — Online Store
                 </span>
-                <span style={{ color: '#64748b', fontSize: 11, marginLeft: 'auto' }}>×</span>
+                <span style={{ color: '#71717a', fontSize: 11, marginLeft: 'auto' }}>×</span>
               </div>
             </div>
 
             {/* Upload Buttons & Input */}
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="sa-btn"
-                style={{ cursor: 'pointer', flexShrink: 0, background: '#7c3aed', borderColor: '#7c3aed', color: '#fff', fontWeight: 600 }}
-                onClick={() => setPickerTarget({ title: 'Site Favicon', currentImg: f.favicon || '', onSelect: (url) => setF((s: any) => ({ ...s, favicon: url })) })}
-              >
-                🖼️ Choose from Gallery
-              </button>
-              <label className="sa-btn ghost" style={{ cursor: 'pointer', flexShrink: 0 }}>
-                {uploadingFavicon ? 'Uploading…' : '📁 Upload New File'}
-                <input
-                  type="file"
-                  accept="image/x-icon,image/png,image/svg+xml,image/webp,image/jpeg"
-                  onChange={onFaviconFileChange}
-                  style={{ display: 'none' }}
-                  disabled={uploadingFavicon}
-                />
-              </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <label
+                  className="sa-btn small"
+                  style={{
+                    cursor: 'pointer',
+                    background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+                    color: '#fff',
+                    fontWeight: 600,
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    height: 38,
+                    borderRadius: 8,
+                  }}
+                >
+                  {uploadingFavicon ? 'Uploading…' : '📁 Upload New File'}
+                  <input
+                    type="file"
+                    accept="image/x-icon,image/png,image/svg+xml,image/webp,image/jpeg"
+                    onChange={onFaviconFileChange}
+                    style={{ display: 'none' }}
+                    disabled={uploadingFavicon}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="sa-btn ghost small"
+                  style={{ flex: 1, height: 38, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                  onClick={() => setPickerTarget({ title: 'Site Favicon', currentImg: f.favicon || '', onSelect: (url) => setF((s: any) => ({ ...s, favicon: url })) })}
+                >
+                  🖼️ Choose from Gallery
+                </button>
+              </div>
               <input
-                style={{ flex: 1, minWidth: 200, height: 38, padding: '0 12px', background: '#1c1830', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                style={{ width: '100%', height: 38, padding: '0 12px', background: '#181624', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', fontSize: 12.5 }}
                 value={f.favicon || ''}
                 onChange={set('favicon')}
-                placeholder="Or paste icon URL (.png, .ico, .svg)"
+                placeholder="Or paste icon URL (.png, .ico, .svg, .webp)"
               />
             </div>
-            <div style={{ fontSize: 11.5, color: '#64748b' }}>
-              💡 <strong>Tip:</strong> Square image (32×32 or 64×64 pixels) in PNG, ICO or SVG format works best.
+            <div style={{ fontSize: 11.5, color: '#71717a', lineHeight: 1.5 }}>
+              💡 <strong>Tip:</strong> Square 32×32, 64×64 or 192×192 pixels in PNG, SVG or WebP format works best.
             </div>
+          </div>
+
+          {/* 3. Hero Sliders & Banners Quick Access Hub */}
+          <div
+            className="sa-card"
+            style={{
+              gridColumn: '1 / -1',
+              padding: '20px 24px',
+              background: 'linear-gradient(135deg, #161224 0%, #13101e 100%)',
+              border: '1px solid rgba(139, 92, 246, 0.28)',
+              borderRadius: 16,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 18,
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 260 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 18 }}>🎠</span>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>
+                  Homepage Hero Sliders &amp; Banners
+                </h3>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(139, 92, 246, 0.2)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.4)' }}>
+                  {sliders.length} Active Slides
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: 12.5, color: '#94a3b8', maxWidth: 640, lineHeight: 1.5 }}>
+                Desktop (1920×750) and Mobile (800×1000) banners are active with touch-swipe &amp; auto-rotation. Manage order, titles, CTA buttons, and slide graphics in the dedicated slider manager.
+              </p>
+              {/* Mini Slide Preview Strip */}
+              <div style={{ display: 'flex', gap: 10, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                {sliders.slice(0, 4).map((s, idx) => (
+                  <div
+                    key={s.id || idx}
+                    onClick={() => setTab('slider')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: '#0d0b14',
+                      padding: '4px 8px',
+                      borderRadius: 8,
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      cursor: 'pointer',
+                    }}
+                    title={'Slide #' + (idx + 1) + ': ' + (s.title || 'Banner')}
+                  >
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#a78bfa' }}>#{idx + 1}</span>
+                    {s.image && (
+                      <img src={s.image} alt="" style={{ width: 42, height: 20, objectFit: 'cover', borderRadius: 3 }} />
+                    )}
+                    {s.mobileImage && (
+                      <img src={s.mobileImage} alt="" style={{ width: 14, height: 20, objectFit: 'cover', borderRadius: 2, border: '1px solid rgba(139,92,246,0.5)' }} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="sa-btn"
+              onClick={() => setTab('slider')}
+              style={{
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+                color: '#fff',
+                padding: '11px 20px',
+                borderRadius: 10,
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: 'pointer',
+                boxShadow: '0 4px 15px rgba(109, 40, 217, 0.35)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <span>⚙️ Manage Sliders &amp; Banners</span>
+              <span style={{ fontSize: 15 }}>→</span>
+            </button>
           </div>
         </div>
       )}
@@ -8134,26 +9669,61 @@ function SettingsAdmin() {
                     #{idx + 1}
                   </span>
 
-                  {/* Thumbnail */}
-                  <div
-                    style={{
-                      width: 120,
-                      height: 68,
-                      borderRadius: 8,
-                      background: '#0f0c1b',
-                      overflow: 'hidden',
-                      flexShrink: 0,
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {s.image ? (
-                      <img src={s.image} alt={s.title || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <span style={{ fontSize: 20 }}>🖼️</span>
-                    )}
+                  {/* Desktop & Mobile Previews */}
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
+                    {/* Desktop Thumbnail */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'center' }}>
+                      <div
+                        style={{
+                          width: 104,
+                          height: 60,
+                          borderRadius: 6,
+                          background: '#0f0c1b',
+                          overflow: 'hidden',
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        title="Desktop Banner"
+                      >
+                        {s.image ? (
+                          <img src={s.image} alt="Desktop" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <span style={{ fontSize: 16 }}>🖥️</span>
+                        )}
+                      </div>
+                      <span style={{ fontSize: 9.5, color: '#94a3b8', fontWeight: 600 }}>🖥️ Desktop</span>
+                    </div>
+
+                    {/* Mobile Thumbnail */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'center' }}>
+                      <div
+                        style={{
+                          width: 46,
+                          height: 60,
+                          borderRadius: 6,
+                          background: '#0f0c1b',
+                          overflow: 'hidden',
+                          border: s.mobileImage ? '1px solid rgba(167, 139, 250, 0.5)' : '1px dashed rgba(255,255,255,0.2)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => openEditSlide(idx)}
+                        title={s.mobileImage ? 'Mobile Banner Uploaded' : 'Click to add Mobile Banner'}
+                      >
+                        {s.mobileImage ? (
+                          <img src={s.mobileImage} alt="Mobile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <span style={{ fontSize: 13, color: '#64748b' }}>+📱</span>
+                        )}
+                      </div>
+                      <span style={{ fontSize: 9.5, color: s.mobileImage ? '#a78bfa' : '#64748b', fontWeight: 600 }}>
+                        {s.mobileImage ? '📱 Mobile' : 'No mobile'}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Content Info */}
@@ -8250,7 +9820,7 @@ function SettingsAdmin() {
       {tab === 'store' && (
         <div className="sa-card" style={{ padding: 24 }}>
           <div className="sa-sgrid">
-            <label>Store name<input value={f.storeName || ''} onChange={set('storeName')} placeholder="dot." /></label>
+            <label>Store name<input value={f.storeName || ''} onChange={set('storeName')} placeholder="METRROMA" /></label>
             <label>Announcement text<input value={f.announce || ''} onChange={set('announce')} /></label>
             <label>WhatsApp number (with country code)<input value={f.whatsapp || ''} onChange={set('whatsapp')} placeholder="8801XXXXXXXXX" /></label>
             <label>Store phone<input value={f.phone || ''} onChange={set('phone')} placeholder="8801XXXXXXXXX" /></label>
@@ -8727,25 +10297,19 @@ function SettingsAdmin() {
                 </div>
               </div>
 
-              {/* Mobile Image (Optional) */}
-              <div>
-                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                  Mobile banner image (optional)
-                </label>
+              {/* Mobile Image (Dedicated & Full Preview) */}
+              <div style={{ background: '#0e0b1a', padding: 14, borderRadius: 10, border: '1px solid rgba(139, 92, 246, 0.25)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#a78bfa', margin: 0 }}>
+                    📱 Mobile banner image (Smartphone portrait view)
+                  </label>
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                    Recommended: 800×1000px, 750×1000px or 1080×1350px
+                  </span>
+                </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    className="sa-btn small"
-                    onClick={() => setPickerTarget({
-                      title: 'Mobile Banner Image',
-                      currentImg: slideForm.mobileImage || '',
-                      onSelect: (url) => setSlideForm((sf: any) => ({ ...sf, mobileImage: url }))
-                    })}
-                  >
-                    🖼️ Choose from Gallery
-                  </button>
-                  <label className="sa-btn ghost small" style={{ cursor: 'pointer', flexShrink: 0 }}>
-                    {uploadingSlideImg ? 'Uploading…' : '📁 Upload New File'}
+                  <label className="sa-btn small" style={{ cursor: 'pointer', flexShrink: 0, background: '#2563eb', color: '#fff', fontWeight: 600 }}>
+                    {uploadingSlideImg ? 'Uploading…' : '📁 Upload Mobile Photo'}
                     <input
                       type="file"
                       accept="image/*"
@@ -8754,13 +10318,45 @@ function SettingsAdmin() {
                       disabled={uploadingSlideImg}
                     />
                   </label>
+                  <button
+                    type="button"
+                    className="sa-btn ghost small"
+                    onClick={() => setPickerTarget({
+                      title: 'Mobile Banner Image',
+                      currentImg: slideForm.mobileImage || '',
+                      onSelect: (url) => setSlideForm((sf: any) => ({ ...sf, mobileImage: url }))
+                    })}
+                  >
+                    🖼️ Choose from Gallery
+                  </button>
+                  {slideForm.mobileImage && (
+                    <button
+                      type="button"
+                      className="sa-btn ghost small"
+                      style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                      onClick={() => setSlideForm((sf: any) => ({ ...sf, mobileImage: '' }))}
+                    >
+                      Remove Mobile Photo
+                    </button>
+                  )}
                   <input
                     style={{ flex: 1, minWidth: 200, height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
                     value={slideForm.mobileImage || ''}
                     onChange={(e) => setSlideForm((sf: any) => ({ ...sf, mobileImage: e.target.value }))}
-                    placeholder="Optional mobile image URL (e.g. 800x1000px)"
+                    placeholder="Mobile Image URL (e.g. /uploads/...)"
                   />
                 </div>
+                {slideForm.mobileImage && (
+                  <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div style={{ width: 90, height: 120, borderRadius: 8, overflow: 'hidden', border: '2px solid #8b5cf6', background: '#000', flexShrink: 0 }}>
+                      <img src={slideForm.mobileImage} alt="Mobile Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    </div>
+                    <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5 }}>
+                      <div style={{ color: '#4ade80', fontWeight: 600 }}>✓ Mobile banner is set!</div>
+                      Mobile visitors (phones &amp; small screens &le; 768px) will see this image instead of being forced to view the wide desktop image.
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Badge Text */}
@@ -8888,7 +10484,7 @@ const COURIER_PRESETS: Record<string, any> = {
   Pathao: {
     provider: 'Pathao',
     bookUrl: 'https://api-hermes.pathao.com/aladdin/api/v1/orders',
-    trackUrl: 'https://pathao.com/courier/tracking/?consignment_id={consignment}',
+    trackUrl: 'https://merchant.pathao.com/tracking?consignment_id={consignment}',
     statusUrl: 'https://api-hermes.pathao.com/aladdin/api/v1/orders/{consignment}/info',
   },
   Steadfast: {
@@ -9311,8 +10907,8 @@ function IntegrationsAdmin() {
           {(ig.email.provider || 'resend') === 'resend' ? (
             <>
               <label style={{ gridColumn: '1 / -1' }}>Resend API Key<input type="password" value={ig.email.resendApiKey || ''} onChange={(e) => setEmail('resendApiKey', e.target.value)} placeholder="re_..." /></label>
-              <label>From Name<input value={ig.email.fromName || ''} onChange={(e) => setEmail('fromName', e.target.value)} placeholder="dot." /></label>
-              <label>From Email<input value={ig.email.fromEmail || ''} onChange={(e) => setEmail('fromEmail', e.target.value)} placeholder="admin@dot.com" /></label>
+              <label>From Name<input value={ig.email.fromName || ''} onChange={(e) => setEmail('fromName', e.target.value)} placeholder="METRROMA" /></label>
+              <label>From Email<input value={ig.email.fromEmail || ''} onChange={(e) => setEmail('fromEmail', e.target.value)} placeholder="admin@metrroma.com" /></label>
             </>
           ) : (
             <>
@@ -9320,7 +10916,7 @@ function IntegrationsAdmin() {
               <label>Port<input value={ig.email.port ?? ''} onChange={(e) => setEmail('port', e.target.value)} placeholder="587" /></label>
               <label>Username<input value={ig.email.user || ''} onChange={(e) => setEmail('user', e.target.value)} placeholder="support@metrroma.com" /></label>
               <label>Password<input type="password" value={ig.email.pass || ''} onChange={(e) => setEmail('pass', e.target.value)} placeholder={ig.email.hasPass ? 'saved — leave to keep' : ''} /></label>
-              <label>From name<input value={ig.email.fromName || ''} onChange={(e) => setEmail('fromName', e.target.value)} placeholder="dot." /></label>
+              <label>From name<input value={ig.email.fromName || ''} onChange={(e) => setEmail('fromName', e.target.value)} placeholder="METRROMA" /></label>
               <label>From email<input value={ig.email.fromEmail || ''} onChange={(e) => setEmail('fromEmail', e.target.value)} placeholder="support@metrroma.com" /></label>
               <label className="sa-chk"><input type="checkbox" checked={!!ig.email.secure} onChange={(e) => setEmail('secure', e.target.checked)} /> Use SSL (port 465)</label>
             </>
@@ -10247,7 +11843,7 @@ function FinanceAdmin() {
 }
 
 // ==========================================
-// 2. WHATSAPP AUTOMATION HUB
+// 2. WHATSAPP AUTOMATION & MARKETING HUB
 // ==========================================
 function WhatsAppAdmin() {
   const [status, setStatus] = useState<any>({
@@ -10261,9 +11857,49 @@ function WhatsAppAdmin() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
+  
+  // Navigation Tabs: 'marketing' (default), 'bot', 'vision', 'logs'
+  const [activeTab, setActiveTab] = useState<'marketing' | 'bot' | 'vision' | 'logs'>('marketing');
+
+  // Single Quick Messenger
   const [manualPhone, setManualPhone] = useState('');
   const [broadcastMsg, setBroadcastMsg] = useState('');
+  const [singleImgUrl, setSingleImgUrl] = useState('');
   const [sendingMsg, setSendingMsg] = useState(false);
+
+  // Marketing & Bulk Offers Suite States
+  const [audienceData, setAudienceData] = useState<{
+    totalCount: number;
+    customers: any[];
+    counts: { all: number; buyers: number; incomplete: number; wa_chats: number };
+  }>({
+    totalCount: 0,
+    customers: [],
+    counts: { all: 0, buyers: 0, incomplete: 0, wa_chats: 0 },
+  });
+  const [audienceLoading, setAudienceLoading] = useState(false);
+  const [syncingChats, setSyncingChats] = useState(false);
+  const [selectedSegment, setSelectedSegment] = useState<'all' | 'buyers' | 'incomplete' | 'wa_chats' | 'custom'>('all');
+  const [selectedPhones, setSelectedPhones] = useState<string[]>([]);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customPhonesInput, setCustomPhonesInput] = useState('');
+
+  // Offer Creative States
+  const [offerImage, setOfferImage] = useState('/uploads/img_mv7u70cc5edq0.jpg');
+  const [offerCaption, setOfferCaption] = useState(
+    'সম্মানিত {name}!\n\nআমাদের স্টোর METRROMA-এ আপনার জন্য স্পেশাল অফার! 🔥\nসব প্রিমিয়াম প্রোডাক্টে আজ পাচ্ছেন ২০% ডিসকাউন্ট এবং ফ্রি হোম ডেলিভারি।\n\nঅর্ডার করতে এখনি ভিজিট করুন: https://metrroma.com\n\nঅথবা এই মেসেজের রিপ্লাইয়ে আপনার নাম, ফোন ও ঠিকানা লিখে পাঠালেই সরাসরি ক্যাশ অন ডেলিভারিতে অর্ডার কনফার্ম হয়ে যাবে! 🚀'
+  );
+  const [antiBanDelay, setAntiBanDelay] = useState(5);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  // Live Broadcast Runner States
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [broadcastPaused, setBroadcastPaused] = useState(false);
+  const [broadcastProgress, setBroadcastProgress] = useState({ sent: 0, failed: 0, total: 0, currentTarget: '' });
+  const [broadcastLogs, setBroadcastLogs] = useState<any[]>([]);
+  const broadcastAbortRef = useRef(false);
+  const broadcastPausedRef = useRef(false);
+
   // Pairing Modal States
   const [showPairModal, setShowPairModal] = useState(false);
   const [pairTab, setPairTab] = useState<'qr' | 'phone'>('qr');
@@ -10298,7 +11934,7 @@ function WhatsAppAdmin() {
         setStatus((prev: any) => {
           if (!prev?.connected && d?.connected) {
             setShowPairModal(false);
-            setToast(`🎉 WhatsApp Business connected successfully! (+${d.phone || ''})`);
+            setToast('🎉 WhatsApp Business connected successfully! (+' + (d.phone || '') + ')');
             setTimeout(() => setToast(''), 4500);
           }
           return d;
@@ -10310,7 +11946,44 @@ function WhatsAppAdmin() {
       });
   };
 
-  useEffect(() => { load(true); }, []);
+  const loadAudiences = () => {
+    setAudienceLoading(true);
+    aFetch('/admin/whatsapp/audiences')
+      .then(r => r.json())
+      .then(d => {
+        if (d && d.customers) {
+          setAudienceData({
+            totalCount: d.totalCount || d.customers.length,
+            customers: d.customers,
+            counts: d.counts || { all: d.customers.length, buyers: 0, incomplete: 0, wa_chats: 0 },
+          });
+          setSelectedPhones(d.customers.map((c: any) => c.phone));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setAudienceLoading(false));
+  };
+
+  const handleSyncChats = async () => {
+    setSyncingChats(true);
+    try {
+      const res = await aFetch('/admin/whatsapp/sync-chats', { method: 'POST' }).then(r => r.json());
+      if (res?.ok) {
+        setToast(`🎉 ${res.totalContacts || 0} টি হোয়াটসঅ্যাপ চ্যাট কন্ট্যাক্ট সফলভাবে সিঙ্ক হয়েছে!`);
+        setTimeout(() => setToast(''), 4500);
+        loadAudiences();
+      }
+    } catch (e: any) {
+      alert('সিঙ্ক ব্যর্থ: ' + (e?.message || 'Error'));
+    } finally {
+      setSyncingChats(false);
+    }
+  };
+
+  useEffect(() => { 
+    load(true); 
+    loadAudiences();
+  }, []);
 
   // Poll real Baileys status while modal is open or waiting for connection
   useEffect(() => {
@@ -10327,6 +12000,19 @@ function WhatsAppAdmin() {
       startSession(true);
     }
   }, [showPairModal, pairTab, status.connected, status.qrDataUrl]);
+
+  // Sync segment selection with selected phones
+  useEffect(() => {
+    if (selectedSegment === 'all') {
+      setSelectedPhones(audienceData.customers.map((c: any) => c.phone));
+    } else if (selectedSegment === 'buyers') {
+      setSelectedPhones(audienceData.customers.filter((c: any) => c.ordersCount > 0).map((c: any) => c.phone));
+    } else if (selectedSegment === 'incomplete') {
+      setSelectedPhones(audienceData.customers.filter((c: any) => c.segment === 'incomplete' && c.ordersCount === 0).map((c: any) => c.phone));
+    } else if (selectedSegment === 'wa_chats') {
+      setSelectedPhones(audienceData.customers.filter((c: any) => c.isWaChat || c.segment === 'wa_chat').map((c: any) => c.phone));
+    }
+  }, [selectedSegment, audienceData]);
 
   const saveWhatsAppPatch = async (patch: any) => {
     setSaving(true);
@@ -10370,6 +12056,17 @@ function WhatsAppAdmin() {
     }));
   };
 
+  const updateTriggerField = (key: string, field: string, val: any) => {
+    const current = status.triggers?.[key] || {};
+    setStatus((prev: any) => ({
+      ...prev,
+      triggers: {
+        ...prev.triggers,
+        [key]: { ...current, [field]: val }
+      }
+    }));
+  };
+
   const handleConnectPhone = async () => {
     if (!pairingPhoneInput.trim()) {
       alert('Please enter your WhatsApp phone number.');
@@ -10407,37 +12104,260 @@ function WhatsAppAdmin() {
     }
   };
 
+  // Export Contacts to CSV for Permanent Offline Backup (Anti-Ban Protection)
+  const [exportingCsv, setExportingCsv] = useState(false);
+  const exportContacts = async (targetType: string = 'all') => {
+    setExportingCsv(true);
+    setToast('⏳ কন্টাক্ট ডেটা প্রস্তুত করা হচ্ছে...');
+    try {
+      const res = await aFetch(`/admin/whatsapp/export-contacts?type=${targetType}`);
+      if (!res.ok) throw new Error('এক্সপোর্ট রেসপন্স ব্যর্থ হয়েছে');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `METRROMA_Contacts_Backup_${targetType}_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setToast('✅ কন্টাক্ট ব্যাকআপ ফাইল সফলভাবে ডাউনলোড হয়েছে!');
+      setTimeout(() => setToast(''), 4000);
+    } catch (err: any) {
+      alert('এক্সপোর্ট ব্যর্থ হয়েছে: ' + (err?.message || 'Error'));
+    } finally {
+      setExportingCsv(false);
+    }
+  };
+
+  // Image Upload for Offer Banner
+  const handleOfferImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const up = await uploadOptimizedImage(file);
+      if (up?.url) {
+        setOfferImage(up.url);
+        setToast('✅ অফার ব্যানার সফলভাবে আপলোড হয়েছে!');
+        setTimeout(() => setToast(''), 3000);
+      }
+    } catch (err: any) {
+      alert('ইমেজ আপলোড ব্যর্থ হয়েছে: ' + (err?.message || 'Error'));
+    } finally {
+      setUploadingImage(false);
+      e.target.value = '';
+    }
+  };
+
+  // Preset Template Setter
+  const applyPresetTemplate = (type: 'discount' | 'free_shipping' | 'vip' | 'cart_recovery') => {
+    if (type === 'discount') {
+      setOfferCaption(
+        'সম্মানিত {name}!\n\nআমাদের স্টোর METRROMA-এ আপনার জন্য মেগা ধামাকা অফার! 🔥\nসব প্রিমিয়াম প্রোডাক্টে আজ পাচ্ছেন ২০% ফ্ল্যাট ডিসকাউন্ট!\n\nকুপন কোড: METRROMA20\nশপ লিংক: https://metrroma.com\n\nঅথবা এই মেসেজের রিপ্লাইয়ে পছন্দের পণ্যের নাম বা ছবি পাঠালেই আমরা ক্যাশ অন ডেলিভারিতে পাঠিয়ে দেব! 🛍️'
+      );
+    } else if (type === 'free_shipping') {
+      setOfferCaption(
+        'প্রিয় {name},\n\nআজকের জন্য সারা বাংলাদেশে সম্পূর্ণ ফ্রি হোম ডেলিভারি! 🚚💨\nকোনো অগ্রিম পেমেন্ট ছাড়া পণ্য হাতে পেয়ে মূল্য পরিশোধ করুন।\n\nভিজিট করুন: https://metrroma.com\nঅর্ডার করতে এখানে সরাসরি রিপ্লাই করুন। ধন্যবাদ! ✨'
+      );
+    } else if (type === 'vip') {
+      setOfferCaption(
+        'সম্মানিত {name} Sir/Mam!\n\nআমাদের প্রিমিয়াম ও সিক্রেট কালেকশনে নতুন আইটেম যুক্ত হয়েছে! 👑\n১০০% প্রাইভেসি ও গোপন প্যাকেজিংয়ে নিরাপদ ডেলিভারি পেতে এখনি চেক করুন: https://metrroma.com\n\nআপনার যেকোনো প্রয়োজনে আমরা হোয়াটসঅ্যাপে সাথেই আছি।'
+      );
+    } else if (type === 'cart_recovery') {
+      setOfferCaption(
+        'সম্মানিত {name},\n\nআপনি METRROMA স্টোরে পছন্দের আইটেমটি অর্ডার করতে গিয়েছিলেন কিন্তু সম্পন্ন করেননি। 🛒\n\nআপনার অর্ডারটি সহজে কনফার্ম করতে আমরা দিচ্ছি স্পেশাল ফ্রি ডেলিভারি!\nঅর্ডার কনফার্ম করতে শুধু আপনার ঠিকানা লিখে এখানে রিপ্লাই করুন, অথবা ভিজিট করুন: https://metrroma.com'
+      );
+    }
+    setToast('✅ অফার টেমপ্লেট লোড হয়েছে!');
+    setTimeout(() => setToast(''), 2500);
+  };
+
+  // Test on Admin\'s own WhatsApp
+  const testOnMyPhone = async () => {
+    if (!status.connected) {
+      alert('⚠️ WhatsApp আগে কানেক্ট করুন (Scan QR Code)!');
+      return;
+    }
+    const myPhone = prompt('আপনার ব্যক্তিগত WhatsApp নম্বর লিখুন (উদা: 01878374762):', status.phone || '018');
+    if (!myPhone) return;
+
+    setToast('⏳ টেস্ট অফার মেসেজ পাঠানো হচ্ছে...');
+    try {
+      const testMsg = offerCaption
+        .replace(/\\n/g, '\n')
+        .replace(/\{name\}/g, 'সম্মানিত টেস্ট গ্রাহক')
+        .replace(/\{store\}/g, 'METRROMA')
+        .replace(/\{phone\}/g, myPhone);
+
+      const res = await aFetch('/admin/whatsapp/send', {
+        method: 'POST',
+        body: JSON.stringify({
+          phone: myPhone,
+          message: testMsg,
+          imageUrl: offerImage || null,
+          eventType: 'marketing_offer',
+          delayMs: 2000,
+        })
+      }).then(r => r.json());
+
+      if (res?.sent !== false) {
+        setToast('✅ টেস্ট অফার আপনার হোয়াটসঅ্যাপে পাঠানো হয়েছে!');
+        setTimeout(() => setToast(''), 4000);
+      } else {
+        alert('⚠️ টেস্ট পাঠানো ব্যর্থ: ' + (res?.reason || res?.error || 'Failed'));
+      }
+    } catch (err: any) {
+      alert('ত্রুটি: ' + err.message);
+    }
+  };
+
+  // Server-Side Background Campaign Status Polling (24/7 background worker)
+  const fetchCampaignStatus = useCallback(async () => {
+    try {
+      const res = await aFetch('/admin/whatsapp/campaign/status').then(r => r.json());
+      if (res?.ok && res.campaign) {
+        const c = res.campaign;
+        if (c.status === 'running') {
+          setIsBroadcasting(true);
+          setBroadcastPaused(false);
+        } else if (c.status === 'paused') {
+          setIsBroadcasting(true);
+          setBroadcastPaused(true);
+        } else {
+          setIsBroadcasting(false);
+          setBroadcastPaused(false);
+        }
+
+        if (c.status === 'running' || c.status === 'paused' || c.status === 'completed') {
+          setBroadcastProgress({
+            sent: c.sentCount || 0,
+            failed: c.failedCount || 0,
+            total: c.targets?.length || 0,
+            currentTarget: c.currentTarget || '',
+          });
+        }
+
+        if (Array.isArray(c.logs) && c.logs.length > 0) {
+          setBroadcastLogs(c.logs);
+        }
+      }
+    } catch (_) {}
+  }, []);
+
+  useEffect(() => {
+    fetchCampaignStatus();
+    const interval = setInterval(fetchCampaignStatus, isBroadcasting ? 2500 : 8000);
+    return () => clearInterval(interval);
+  }, [fetchCampaignStatus, isBroadcasting]);
+
+  // Run Bulk WhatsApp Broadcast via 24/7 Server Background Worker
+  const runBroadcast = async () => {
+    if (!status.connected) {
+      alert('⚠️ WhatsApp আগে কানেক্ট করুন (Scan QR Code)!');
+      return;
+    }
+    if (!offerCaption.trim() && !offerImage) {
+      alert('⚠️ অফার মেসেজ বা ছবি আবশ্যক!');
+      return;
+    }
+
+    let targets: { phone: string; name: string }[] = [];
+    if (selectedSegment === 'custom') {
+      const lines = customPhonesInput.split(/[\n,;]+/).map(s => s.trim().replace(/\D/g, '')).filter(p => p.length >= 10);
+      targets = lines.map(p => ({ phone: p, name: 'সম্মানিত গ্রাহক' }));
+    } else {
+      targets = audienceData.customers
+        .filter(c => selectedPhones.includes(c.phone))
+        .map(c => ({ phone: c.phone, name: c.name || 'সম্মানিত গ্রাহক' }));
+    }
+
+    if (targets.length === 0) {
+      alert('⚠️ কোনো কাস্টমার সিলেক্ট করা নেই!');
+      return;
+    }
+
+    if (!confirm('আপনি কি নিশ্চিত যে ' + targets.length + ' জন কাস্টমারকে এই অফার মেসেজ ও ছবি পাঠাতে চান?\n\n🛡️ এটি সরাসরি ক্লাউড সার্ভার ব্যাকগ্রাউন্ডে চলবে—আপনি স্ক্রিন বা কম্পিউটার বন্ধ করলেও মেসেজ পাঠানো থামবে না!')) {
+      return;
+    }
+
+    setToast('🚀 ক্লাউড সার্ভার ব্যাকগ্রাউন্ড ব্রডকাস্ট চালু হচ্ছে...');
+    try {
+      const res = await aFetch('/admin/whatsapp/campaign/start', {
+        method: 'POST',
+        body: JSON.stringify({
+          targets,
+          caption: offerCaption,
+          imageUrl: offerImage || null,
+          delaySeconds: antiBanDelay,
+        })
+      }).then(r => r.json());
+
+      if (res?.ok) {
+        setIsBroadcasting(true);
+        setBroadcastPaused(false);
+        setToast('✅ ক্লাউড সার্ভার ব্যাকগ্রাউন্ড ব্রডকাস্ট সফলভাবে চালু হয়েছে! এখন স্ক্রিন বা পিসি বন্ধ করলেও মেসেজ চলতে থাকবে।');
+        fetchCampaignStatus();
+      } else {
+        alert('ক্যাম্পেইন শুরু ব্যর্থ: ' + (res?.error || 'Error'));
+      }
+    } catch (e: any) {
+      alert('ত্রুটি: ' + e.message);
+    }
+  };
+
   const sendDirectMessage = async () => {
-    if (!manualPhone || !broadcastMsg) {
-      alert('Phone number and message text are required');
+    if (!manualPhone || (!broadcastMsg && !singleImgUrl)) {
+      alert('Phone number and message or image are required');
       return;
     }
     setSendingMsg(true);
     try {
       const res = await aFetch('/admin/whatsapp/send', {
         method: 'POST',
-        body: JSON.stringify({ phone: manualPhone, message: broadcastMsg })
+        body: JSON.stringify({ phone: manualPhone, message: broadcastMsg, imageUrl: singleImgUrl || null })
       }).then(r => r.json());
-      if (res.ok) {
+      if (res.ok || res.sent !== false) {
         setToast('Message dispatched!');
         setBroadcastMsg('');
+        setSingleImgUrl('');
         setTimeout(() => setToast(''), 3000);
         load();
+      } else {
+        alert('Send failed: ' + (res.error || res.reason || 'Failed'));
       }
-    } catch {}
+    } catch (e: any) {
+      alert('Error: ' + e.message);
+    }
     finally { setSendingMsg(false); }
   };
 
   const triggers = status.triggers || {};
   const waPreview = (key: string) => {
     const sample: Record<string, string> = {
-      name: 'সাকিব', store: 'METRROMA', items: 'Premium Gift Box', total: '৳1,200',
-      order_id: 'MM-2048', courier: 'Steadfast', consignment: 'SFD123456',
-      tracking_url: 'https://metrroma.com/track/MM-2048',
+      name: 'সাকিব', store: 'METRROMA', items: 'Love Lock Condom (Pack of 2)', total: '৳899',
+      order_id: 'DOT-2048', courier: 'Pathao', consignment: 'DM021126AP25',
+      tracking_url: 'https://merchant.pathao.com/tracking?consignment_id=DM021126AP25&phone=018XXXXXXXX',
+      store_tracking_url: 'https://metrroma.com/track?id=DOT-2048',
     };
-    return String(triggers[key]?.template || '').replace(/\{([^}]+)\}/g, (token: string, name: string) => sample[name] ?? token);
+    return String(triggers[key]?.template || '').replace(/\\{([^}]+)\\}/g, (token: string, name: string) => sample[name] ?? token);
   };
 
+  const quickHotProducts = [
+    { name: 'Magic Love Lock 6.7', img: '/uploads/img_mv7u70cc5edq0.jpg' },
+    { name: 'Magic Love Lock 5.7', img: '/uploads/img_mv9njraqylyt3.webp' },
+    { name: 'Magic Love Lock 8', img: '/uploads/img_mv7n9xfvjcfif.jpg' },
+    { name: 'Belt Condom Free Size', img: '/uploads/img_mvjrc118tfffg.webp' },
+  ];
+
+  const filteredCustomers = audienceData.customers.filter((c: any) => {
+    if (selectedSegment === 'buyers' && c.ordersCount <= 0) return false;
+    if (selectedSegment === 'incomplete' && (c.segment !== 'incomplete' || c.ordersCount > 0)) return false;
+    if (selectedSegment === 'wa_chats' && !c.isWaChat && c.segment !== 'wa_chat') return false;
+    if (!customerSearch.trim()) return true;
+    const q = customerSearch.toLowerCase();
+    return String(c.name || '').toLowerCase().includes(q) || String(c.phone || '').includes(q) || String(c.lastMessage || '').toLowerCase().includes(q);
+  });
 
   return (
     <>
@@ -10451,11 +12371,47 @@ function WhatsAppAdmin() {
           0%, 100% { transform: scale(1); opacity: 1; }
           50% { transform: scale(1.3); opacity: 0.6; }
         }
+        .wa-broadcast-grid {
+          display: grid;
+          grid-template-columns: minmax(330px, 1fr) minmax(350px, 1.15fr) minmax(310px, 0.85fr);
+          gap: 16px;
+          align-items: stretch;
+        }
+        @media (max-width: 1240px) {
+          .wa-broadcast-grid {
+            grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr) !important;
+          }
+          .wa-preview-col {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: center;
+          }
+        }
+        @media (max-width: 768px) {
+          .wa-broadcast-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+        .wa-custom-scrollbar::-webkit-scrollbar {
+          width: 5px;
+        }
+        .wa-custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.2);
+          border-radius: 4px;
+        }
+        .wa-custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.16);
+          border-radius: 4px;
+        }
+        .wa-custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(37, 211, 102, 0.4);
+        }
       `}</style>
 
+      {/* Top Header */}
       <div className="sa-top">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h1>WhatsApp Automation Hub</h1>
+          <h1>WhatsApp Marketing &amp; Automation Hub</h1>
           {status.connected ? (
             <span className="sa-badge" style={{ background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.3)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', animation: 'waPulseDot 1.6s infinite' }} /> Connected &amp; Active
@@ -10468,11 +12424,36 @@ function WhatsAppAdmin() {
             <span>{status.enabled === false ? 'Automation off' : 'Automation on'}</span>
           </label>
         </div>
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            type="button"
+            className="sa-btn ghost"
+            style={{ borderColor: 'rgba(56,189,248,0.4)', color: '#38bdf8', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            onClick={() => exportContacts('all')}
+            disabled={exportingCsv}
+            title="হোয়াটসঅ্যাপ ও স্টোরের সব কাস্টমার নম্বর এক্সেলে ডাউনলোড করে স্থায়ী ব্যাকআপ রাখুন (হোয়াটসঅ্যাপ ব্যান হলেও নম্বর সুরক্ষিত থাকবে)"
+          >
+            <span>📥</span>
+            <span>{exportingCsv ? 'এক্সপোর্ট হচ্ছে...' : 'কন্টাক্ট ব্যাকআপ (CSV)'}</span>
+          </button>
+          <button
+            className="sa-btn"
+            style={{ background: 'linear-gradient(135deg, #25D366 0%, #15803D 100%)', color: '#fff', fontWeight: 700, boxShadow: '0 2px 10px rgba(37,211,102,0.3)' }}
+            disabled={saving}
+            onClick={() => {
+              saveWhatsAppPatch({
+                triggers: status.triggers,
+                geminiApiKey: status.geminiApiKey || '',
+                visionMatcherEnabled: status.visionMatcherEnabled !== false,
+              });
+            }}
+          >
+            {saving ? 'Saving...' : '💾 Save Settings'}
+          </button>
           {status.connected ? (
             <button className="sa-btn ghost danger" onClick={handleDisconnect}>🔌 Disconnect WhatsApp</button>
           ) : (
-            <button className="sa-btn" style={{ background: '#25D366', color: '#000', fontWeight: 600 }} onClick={() => { setShowPairModal(true); if (!status.connected) startSession(true); }}>
+            <button className="sa-btn" style={{ background: '#25D366', color: '#000', fontWeight: 700 }} onClick={() => { setShowPairModal(true); if (!status.connected) startSession(true); }}>
               🔗 Link WhatsApp Device (QR)
             </button>
           )}
@@ -10485,179 +12466,1219 @@ function WhatsAppAdmin() {
         </div>
       )}
 
-      {/* Connection Card */}
-      <div className="sa-card" style={{ padding: 22, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+      {/* Connection Banner */}
+      <div className="sa-card" style={{ padding: 20, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, border: status.connected ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(234, 179, 8, 0.35)', background: status.connected ? 'rgba(34, 197, 94, 0.05)' : 'rgba(234, 179, 8, 0.06)' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 24 }}>📱</span>
+            <span style={{ fontSize: 24 }}>{status.connected ? '🟢' : '⚠️'}</span>
             <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#f8fafc' }}>
-              WhatsApp Web Live Gateway
+              WhatsApp Web Multi-Device Gateway
             </h2>
+            {status.connected && (
+              <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 999, background: 'rgba(34,197,94,0.2)', color: '#4ade80', fontWeight: 700 }}>
+                +{status.phone || 'Connected'}
+              </span>
+            )}
           </div>
           <p className="dim" style={{ fontSize: 13, margin: '6px 0 0', lineHeight: 1.6 }}>
             {status.connected
-              ? `✅ Active session linked to: +${status.phone || '8801878374762'} (${status.device || 'WhatsApp Web'}) · Auto-dispatching triggers.`
-              : 'Connect your WhatsApp Business app by scanning the QR code. Order approvals, shipping updates, and abandoned checkout messages will be sent automatically.'}
+              ? 'আপনার বিজনেস হোয়াটসঅ্যাপ সংযুক্ত রয়েছে। আপনি ওয়েবসাইট থেকে সরাসরি গ্রাহকদের কাছে ছবিসহ অফার মেসেজ ও বাল্ক ব্রডকাস্ট পাঠাতে পারবেন।'
+              : 'হোয়াটসঅ্যাপ সংযুক্ত নেই! ছবিসহ অফার বা অটোমেটিক মেসেজ পাঠাতে উপরে থাকা "Link WhatsApp Device (QR)" বাটনে ক্লিক করে মোবাইল দিয়ে QR স্ক্যান করুন।'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button
-            className="sa-btn ghost sa-mini"
-            onClick={() => {
-              const testPhone = prompt('Enter your phone number to test automated WhatsApp delivery:', status.phone || '018');
-              if (testPhone) {
-                const digits = testPhone.replace(/\D/g, '');
-                const internationalPhone = digits.startsWith('880') ? digits : digits.startsWith('0') ? `88${digits.slice(1)}` : digits;
-                const message = `TEST MESSAGE\n${waPreview('approved') || 'Your WhatsApp automation test message.'}`;
-                window.open(`https://wa.me/${internationalPhone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
-              }
-            }}
-          >
-            💬 Open Test Chat
+          <button className="sa-btn ghost sa-mini" onClick={testOnMyPhone} title="Send a test offer to your own WhatsApp number">
+            🧪 নিজের হোয়াটসঅ্যাপে টেস্ট করুন
           </button>
           {!status.connected && (
-            <button className="sa-btn sa-mini" style={{ background: '#25D366', color: '#000', fontWeight: 600 }} onClick={() => { setShowPairModal(true); if (!status.connected) startSession(true); }}>
-              📷 Scan QR Code
+            <button className="sa-btn sa-mini" style={{ background: '#25D366', color: '#000', fontWeight: 700 }} onClick={() => { setShowPairModal(true); if (!status.connected) startSession(true); }}>
+              📷 স্ক্যান করে লিংক করুন
             </button>
           )}
         </div>
       </div>
 
-      {/* 4 Automated Trigger Rules */}
-      <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: '#f8fafc' }}>
-        ⚡ Automated Customer Notifications
-      </h2>
-
-      <div className="wa-trigger-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16, marginBottom: 24 }}>
-        {/* 1. Incomplete Order Lead */}
-        <div className="sa-card" style={{ padding: 18 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <div>
-              <b style={{ fontSize: 14, color: '#f8fafc' }}>1. Incomplete Order Recovery</b>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>Send an automatic recovery message when a customer leaves checkout.</div>
-            </div>
-            <label className="sa-chk">
-              <input type="checkbox" checked={!!triggers.incomplete?.enabled} onChange={() => toggleTrigger('incomplete')} />
-              <span>{triggers.incomplete?.enabled ? 'Active' : 'Off'}</span>
-            </label>
-          </div>
-          <textarea
-            style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
-            value={triggers.incomplete?.template || ''}
-            onChange={(e) => updateTemplate('incomplete', e.target.value)}
-          />
-          <label className="wa-delay-control">Recovery message delay (minutes)
-            <input type="number" min={1} max={120} step={1} value={Math.max(1, Math.min(120, Number(triggers.incomplete?.delayMinutes) || 2))} onChange={(e) => {
-              const current = status.triggers?.incomplete || {};
-              setStatus((prev: any) => ({ ...prev, triggers: { ...prev.triggers, incomplete: { ...current, delayMinutes: Math.max(1, Math.min(120, Number(e.target.value) || 1)) } } }));
-            }} />
-          </label>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-            <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {store} {items} {total}'}</span>
-            <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
-          </div>
-          <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p>{waPreview('incomplete') || 'Write a template to preview the customer message.'}</p></div>
-        </div>
-
-        {/* 2. Order Approved */}
-        <div className="sa-card" style={{ padding: 18 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <div>
-              <b style={{ fontSize: 14, color: '#f8fafc' }}>2. Order Approved Confirmation</b>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>Send a message as soon as an order is confirmed or approved.</div>
-            </div>
-            <label className="sa-chk">
-              <input type="checkbox" checked={!!triggers.approved?.enabled} onChange={() => toggleTrigger('approved')} />
-              <span>{triggers.approved?.enabled ? 'Active' : 'Off'}</span>
-            </label>
-          </div>
-          <textarea
-            style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
-            value={triggers.approved?.template || ''}
-            onChange={(e) => updateTemplate('approved', e.target.value)}
-          />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-            <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {total} {store}'}</span>
-            <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
-          </div>
-          <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p>{waPreview('approved') || 'Write a template to preview the customer message.'}</p></div>
-        </div>
-
-        {/* 3. Order Shipped */}
-        <div className="sa-card" style={{ padding: 18 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <div>
-              <b style={{ fontSize: 14, color: '#f8fafc' }}>3. Order Shipped &amp; Tracking</b>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>Send a tracking notification when a parcel is registered with the courier.</div>
-            </div>
-            <label className="sa-chk">
-              <input type="checkbox" checked={!!triggers.shipped?.enabled} onChange={() => toggleTrigger('shipped')} />
-              <span>{triggers.shipped?.enabled ? 'Active' : 'Off'}</span>
-            </label>
-          </div>
-          <textarea
-            style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
-            value={triggers.shipped?.template || ''}
-            onChange={(e) => updateTemplate('shipped', e.target.value)}
-          />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-            <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {courier} {consignment} {tracking_url}'}</span>
-            <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
-          </div>
-          <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p>{waPreview('shipped') || 'Write a template to preview the customer message.'}</p></div>
-        </div>
-
-        {/* 4. Order Cancelled */}
-        <div className="sa-card" style={{ padding: 18 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <div>
-              <b style={{ fontSize: 14, color: '#f8fafc' }}>4. Order Cancelled Notice</b>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>Notify the customer with the reason when an order is cancelled.</div>
-            </div>
-            <label className="sa-chk">
-              <input type="checkbox" checked={!!triggers.cancelled?.enabled} onChange={() => toggleTrigger('cancelled')} />
-              <span>{triggers.cancelled?.enabled ? 'Active' : 'Off'}</span>
-            </label>
-          </div>
-          <textarea
-            style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
-            value={triggers.cancelled?.template || ''}
-            onChange={(e) => updateTemplate('cancelled', e.target.value)}
-          />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-            <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {store}'}</span>
-            <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
-          </div>
-          <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p>{waPreview('cancelled') || 'Write a template to preview the customer message.'}</p></div>
-        </div>
+      {/* 4 Main Tabs */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 12, overflowX: 'auto' }}>
+        <button
+          type="button"
+          className="sa-btn"
+          style={{
+            background: activeTab === 'marketing' ? 'linear-gradient(135deg, #25D366 0%, #15803D 100%)' : 'rgba(255,255,255,0.05)',
+            color: activeTab === 'marketing' ? '#fff' : '#cbd5e1',
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            boxShadow: activeTab === 'marketing' ? '0 2px 10px rgba(37,211,102,0.3)' : 'none',
+          }}
+          onClick={() => setActiveTab('marketing')}
+        >
+          <span style={{ fontSize: 16 }}>📢</span>
+          <span>ছবিসহ অফার ব্রডকাস্ট (Offer &amp; Marketing)</span>
+          <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, background: activeTab === 'marketing' ? 'rgba(0,0,0,0.35)' : '#25D366', color: '#fff', fontWeight: 800 }}>New</span>
+        </button>
+        <button
+          type="button"
+          className="sa-btn"
+          style={{
+            background: activeTab === 'bot' ? 'rgba(139, 92, 246, 0.25)' : 'rgba(255,255,255,0.05)',
+            color: activeTab === 'bot' ? '#c084fc' : '#cbd5e1',
+            border: activeTab === 'bot' ? '1px solid rgba(139, 92, 246, 0.45)' : '1px solid transparent',
+            fontWeight: 600,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+          onClick={() => setActiveTab('bot')}
+        >
+          <span>🤖</span>
+          <span>24/7 অটো-কনফার্মেশন ও বট</span>
+        </button>
+        <button
+          type="button"
+          className="sa-btn"
+          style={{
+            background: activeTab === 'vision' ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255,255,255,0.05)',
+            color: activeTab === 'vision' ? '#38bdf8' : '#cbd5e1',
+            border: activeTab === 'vision' ? '1px solid rgba(56, 189, 248, 0.45)' : '1px solid transparent',
+            fontWeight: 600,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+          onClick={() => setActiveTab('vision')}
+        >
+          <span>📸</span>
+          <span>Vision AI ছবি স্ক্যানার</span>
+        </button>
+        <button
+          type="button"
+          className="sa-btn"
+          style={{
+            background: activeTab === 'logs' ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)',
+            color: activeTab === 'logs' ? '#fff' : '#cbd5e1',
+            fontWeight: 600,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+          onClick={() => setActiveTab('logs')}
+        >
+          <span>📜</span>
+          <span>মেসেজ হিস্ট্রি ও কুইক সেন্ডার ({status.logs?.length || 0})</span>
+        </button>
       </div>
 
-      {/* Direct WhatsApp Quick Messenger */}
-      <div className="sa-card" style={{ padding: 20, marginBottom: 20 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#f8fafc' }}>
-          📤 Direct WhatsApp Messenger &amp; Marketing
-        </h2>
-        <p className="dim" style={{ fontSize: 13, margin: '4px 0 14px' }}>
-          Send a custom offer or message to any customer instantly.
-        </p>
-        <div className="wa-direct-grid" style={{ display: 'grid', gridTemplateColumns: '220px 1fr auto', gap: 12, alignItems: 'center' }}>
-          <input
-            className="sa-search"
-            placeholder="017xxxxxxxx"
-            value={manualPhone}
-            onChange={(e) => setManualPhone(e.target.value)}
-          />
-          <input
-            className="sa-search"
-            placeholder="Write a message (e.g. Here is your exclusive 20% discount coupon...)"
-            value={broadcastMsg}
-            onChange={(e) => setBroadcastMsg(e.target.value)}
-          />
-          <button className="sa-btn" disabled={sendingMsg} onClick={sendDirectMessage}>
-            {sendingMsg ? 'Sending…' : '🚀 Send Message'}
-          </button>
+      {/* ============================================================== */}
+      {/* TAB 1: WHATSAPP OFFER & MARKETING BROADCAST SUITE */}
+      {/* ============================================================== */}
+      {activeTab === 'marketing' && (
+        <div>
+          {/* Running Broadcast Progress Bar */}
+          {isBroadcasting && (
+            <div className="sa-card" style={{ padding: 18, marginBottom: 20, border: '1px solid rgba(37,211,102,0.5)', background: 'linear-gradient(180deg, rgba(37,211,102,0.12) 0%, rgba(15,23,42,0.8) 100%)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div>
+                  <b style={{ color: '#4ade80', fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', animation: 'waPulseDot 1.4s infinite' }} />
+                    {broadcastPaused ? '⏸️ ক্যাম্পেইন সাময়িক বিরতিতে আছে' : '🚀 ক্লাউড সার্ভার ব্যাকগ্রাউন্ড ব্রডকাস্ট চলছে (২৪/৭ অটো)'}
+                  </b>
+                  <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span>বর্তমান টার্গেট: <b style={{ color: '#fff' }}>{broadcastProgress.currentTarget || 'বিরতি চলছে (Anti-ban protection)...'}</b></span>
+                    <span style={{ color: '#38bdf8', fontSize: 11, background: 'rgba(56,189,248,0.15)', padding: '1px 6px', borderRadius: 4 }}>
+                      ☁️ স্ক্রিন বা কম্পিউটার বন্ধ রাখলেও মেসেজ পাঠানো থামবে না
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="sa-btn sa-mini"
+                    style={{ background: broadcastPaused ? '#25D366' : 'rgba(234,179,8,0.25)', color: broadcastPaused ? '#000' : '#fde047', border: '1px solid rgba(234,179,8,0.4)', fontWeight: 700 }}
+                    onClick={async () => {
+                      if (broadcastPaused) {
+                        await aFetch('/admin/whatsapp/campaign/resume', { method: 'POST' });
+                        setBroadcastPaused(false);
+                      } else {
+                        await aFetch('/admin/whatsapp/campaign/pause', { method: 'POST' });
+                        setBroadcastPaused(true);
+                      }
+                      fetchCampaignStatus();
+                    }}
+                  >
+                    {broadcastPaused ? '▶️ চালু করুন (Resume)' : '⏸️ সাময়িক বিরতি (Pause)'}
+                  </button>
+                  <button
+                    type="button"
+                    className="sa-btn danger sa-mini"
+                    onClick={async () => {
+                      if (confirm('আপনি কি ক্লাউড সার্ভার ক্যাম্পেইন বন্ধ করতে চান?')) {
+                        await aFetch('/admin/whatsapp/campaign/stop', { method: 'POST' });
+                        setIsBroadcasting(false);
+                        fetchCampaignStatus();
+                      }
+                    }}
+                  >
+                    🛑 বন্ধ করুন (Stop)
+                  </button>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div style={{ background: 'rgba(0,0,0,0.5)', height: 10, borderRadius: 999, overflow: 'hidden', marginBottom: 8 }}>
+                <div
+                  style={{
+                    background: 'linear-gradient(90deg, #25D366 0%, #10b981 100%)',
+                    height: '100%',
+                    width: (broadcastProgress.total > 0 ? (broadcastProgress.sent / broadcastProgress.total) * 100 : 0) + '%',
+                    transition: 'width 0.3s ease',
+                  }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#94a3b8' }}>
+                <span>সফল: <b style={{ color: '#4ade80' }}>{broadcastProgress.sent}</b> / {broadcastProgress.total}</span>
+                <span>ব্যর্থ: <b style={{ color: '#f87171' }}>{broadcastProgress.failed}</b></span>
+                <span>অগ্রগতি: <b>{broadcastProgress.total > 0 ? Math.round((broadcastProgress.sent / broadcastProgress.total) * 100) : 0}%</b></span>
+              </div>
+            </div>
+          )}
+
+          {/* 3-Panel Studio Layout: Audience | Creative Studio | Live Preview */}
+          <div className="wa-broadcast-grid">
+            
+            {/* ============================================================== */}
+            {/* Panel 1: Target Audience Selection */}
+            {/* ============================================================== */}
+            <div
+              className="sa-card"
+              style={{
+                padding: '18px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                minHeight: 640,
+                background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.8) 0%, rgba(15, 23, 42, 0.96) 100%)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: 14,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+              }}
+            >
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 10, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 7px', borderRadius: 6, background: 'rgba(56,189,248,0.2)', color: '#38bdf8', border: '1px solid rgba(56,189,248,0.3)' }}>
+                      ধাপ ১
+                    </span>
+                    <b style={{ fontSize: 14, color: '#f8fafc' }}>কাস্টমার অডিয়েন্স</b>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
+                    যাদের মেসেজ পাঠাবেন তাদের নির্বাচন করুন
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="sa-btn ghost sa-mini"
+                    onClick={() => {
+                      const targetType = selectedSegment === 'wa_chats' ? 'wa_chats' : (selectedSegment === 'buyers' ? 'buyers' : 'all');
+                      exportContacts(targetType);
+                    }}
+                    disabled={exportingCsv}
+                    title="সিলেক্টেড অডিয়েন্স বা সকল কাস্টমার নম্বর এক্সেলে ডাউনলোড করে কম্পিউটার ও সাইটে সুরক্ষিত রাখুন"
+                    style={{ color: '#38bdf8', borderColor: 'rgba(56,189,248,0.3)', background: 'rgba(56,189,248,0.08)', fontSize: 11, padding: '4px 8px' }}
+                  >
+                    {exportingCsv ? '⏳...' : '📥 CSV'}
+                  </button>
+                  <button
+                    type="button"
+                    className="sa-btn ghost sa-mini"
+                    onClick={handleSyncChats}
+                    disabled={syncingChats}
+                    title="সব সেশন ও চ্যাট থেকে হোয়াটসঅ্যাপ কন্ট্যাক্ট সিঙ্ক করুন"
+                    style={{ color: '#34d399', borderColor: 'rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.08)', fontSize: 11, padding: '4px 8px' }}
+                  >
+                    {syncingChats ? '⏳...' : '⚡ সিঙ্ক'}
+                  </button>
+                  <button
+                    type="button"
+                    className="sa-btn ghost sa-mini"
+                    onClick={loadAudiences}
+                    disabled={audienceLoading}
+                    style={{ fontSize: 11, padding: '4px 8px' }}
+                  >
+                    {audienceLoading ? '...' : '🔄'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Audience Segment Pills */}
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
+                {[
+                  { key: 'wa_chats', label: '💬 চ্যাট', count: audienceData.counts?.wa_chats || 0, color: '#34d399', bg: 'rgba(16,185,129,0.18)', border: '#10b981' },
+                  { key: 'buyers', label: '🛍️ ক্রেতা', count: audienceData.counts.buyers, color: '#38bdf8', bg: 'rgba(56,189,248,0.18)', border: '#38bdf8' },
+                  { key: 'all', label: '🎯 সকল', count: audienceData.counts.all, color: '#4ade80', bg: 'rgba(37,211,102,0.18)', border: '#25D366' },
+                  { key: 'incomplete', label: '⏳ লিড', count: audienceData.counts.incomplete, color: '#fbbf24', bg: 'rgba(251,191,36,0.18)', border: '#fbbf24' },
+                  { key: 'custom', label: '✍️ কাস্টম', count: null, color: '#d8b4fe', bg: 'rgba(168,85,247,0.18)', border: '#a855f7' },
+                ].map((tab) => {
+                  const active = selectedSegment === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        border: active ? ('1px solid ' + tab.border) : '1px solid rgba(255,255,255,0.08)',
+                        background: active ? tab.bg : 'rgba(0,0,0,0.25)',
+                        color: active ? tab.color : '#94a3b8',
+                        fontSize: 11,
+                        fontWeight: active ? 700 : 500,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
+                        transition: 'all 0.15s ease',
+                      }}
+                      onClick={() => setSelectedSegment(tab.key)}
+                    >
+                      <span>{tab.label}</span>
+                      {tab.count !== null && (
+                        <span style={{ fontSize: 10, opacity: 0.9, fontWeight: 700 }}>
+                          ({tab.count})
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Audience Body: Custom vs List */}
+              {selectedSegment === 'custom' ? (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  <label style={{ fontSize: 11, color: '#94a3b8', display: 'block', marginBottom: 6 }}>
+                    কাস্টমারদের ফোন নম্বর পেস্ট করুন (প্রতি লাইনে একটি অথবা কমা দিয়ে):
+                  </label>
+                  <textarea
+                    rows={12}
+                    style={{ flex: 1, width: '100%', minHeight: 380, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', padding: 10, fontSize: 12.5, fontFamily: 'monospace' }}
+                    placeholder={'01878374762\n01712345678\n019XXXXXXXX'}
+                    value={customPhonesInput}
+                    onChange={(e) => setCustomPhonesInput(e.target.value)}
+                  />
+                  <div style={{ fontSize: 11.5, color: '#38bdf8', marginTop: 8, fontWeight: 600 }}>
+                    মোট নম্বর পাওয়া গেছে: {customPhonesInput.split(/[\n,;]+/).map(s => s.trim().replace(/\D/g, '')).filter(p => p.length >= 10).length} টি
+                  </div>
+                </div>
+              ) : (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                  {/* Search & Bulk Select Controls */}
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+                    <input
+                      className="sa-search"
+                      style={{ flex: 1, padding: '5px 8px', fontSize: 11.5, background: 'rgba(0,0,0,0.35)', borderRadius: 6 }}
+                      placeholder="নাম বা ফোন নম্বর দিয়ে খুঁজুন..."
+                      value={customerSearch}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="sa-btn ghost sa-mini"
+                      style={{ fontSize: 10.5, padding: '4px 7px', whiteSpace: 'nowrap' }}
+                      onClick={() => {
+                        const allFilteredPhones = filteredCustomers.map((c: any) => c.phone);
+                        setSelectedPhones(Array.from(new Set([...selectedPhones, ...allFilteredPhones])));
+                      }}
+                    >
+                      সবাইকে সিলেক্ট
+                    </button>
+                    <button
+                      type="button"
+                      className="sa-btn ghost sa-mini"
+                      style={{ fontSize: 10.5, padding: '4px 7px', whiteSpace: 'nowrap' }}
+                      onClick={() => setSelectedPhones([])}
+                    >
+                      বাদ দিন
+                    </button>
+                  </div>
+
+                  {/* Customer Checklist */}
+                  <div className="wa-custom-scrollbar" style={{ flex: 1, minHeight: 400, maxHeight: 460, overflowY: 'auto', background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, padding: 6 }}>
+                    {filteredCustomers.length === 0 ? (
+                      <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 12 }}>
+                        কোনো কাস্টমার পাওয়া যায়নি।
+                      </div>
+                    ) : (
+                      filteredCustomers.map((c: any) => {
+                        const isChecked = selectedPhones.includes(c.phone);
+                        const initial = (c.name || 'ক')[0] || 'গ';
+                        return (
+                          <label
+                            key={c.phone}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '6px 8px',
+                              borderRadius: 6,
+                              background: isChecked ? 'rgba(37,211,102,0.07)' : 'transparent',
+                              border: isChecked ? '1px solid rgba(37,211,102,0.18)' : '1px solid transparent',
+                              cursor: 'pointer',
+                              fontSize: 11.5,
+                              marginBottom: 3,
+                              transition: 'background 0.12s ease',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, flex: 1 }}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedPhones([...selectedPhones, c.phone]);
+                                  } else {
+                                    setSelectedPhones(selectedPhones.filter(p => p !== c.phone));
+                                  }
+                                }}
+                                style={{ accentColor: '#25D366' }}
+                              />
+                              <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.02) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontSize: 10.5, fontWeight: 700, flexShrink: 0 }}>
+                                {initial}
+                              </div>
+                              <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }}>{c.name || 'সম্মানিত গ্রাহক'}</span>
+                                  <span style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 10.5 }}>{c.phone}</span>
+                                </div>
+                                {c.lastMessage ? (
+                                  <div style={{ fontSize: 10, color: '#64748b', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 190 }}>
+                                    &quot;{c.lastMessage}&quot;
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                              {(c.isWaChat || c.segment === 'wa_chat') ? (
+                                <span style={{ fontSize: 9.5, padding: '1px 5px', borderRadius: 999, background: 'rgba(16,185,129,0.2)', color: '#34d399', fontWeight: 700 }}>
+                                  💬 চ্যাট
+                                </span>
+                              ) : null}
+                              {c.ordersCount > 0 ? (
+                                <span style={{ fontSize: 9.5, padding: '1px 5px', borderRadius: 999, background: 'rgba(56,189,248,0.2)', color: '#38bdf8' }}>
+                                  {c.ordersCount} অর্ডার (৳{c.totalSpent})
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: 9.5, padding: '1px 5px', borderRadius: 999, background: 'rgba(234,179,8,0.15)', color: '#fbbf24' }}>
+                                  লিড
+                                </span>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Summary Footer */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#94a3b8', marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                    <span>মোট দৃশ্যমান: <b>{filteredCustomers.length} জন</b></span>
+                    <span style={{ background: 'rgba(37,211,102,0.15)', color: '#4ade80', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>
+                      সিলেক্ট: {selectedPhones.length} জন
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ============================================================== */}
+            {/* Panel 2: Creative & Message Studio (The 2nd Box) */}
+            {/* ============================================================== */}
+            <div
+              className="sa-card"
+              style={{
+                padding: '18px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                height: '100%',
+                minHeight: 640,
+                background: 'linear-gradient(180deg, rgba(16, 185, 129, 0.04) 0%, rgba(15, 23, 42, 0.96) 100%)',
+                border: '1px solid rgba(16, 185, 129, 0.28)',
+                borderRadius: 14,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+              }}
+            >
+              <div>
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 10, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 7px', borderRadius: 6, background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#fff' }}>
+                        ধাপ ২
+                      </span>
+                      <b style={{ fontSize: 14, color: '#f8fafc' }}>অফার ব্যানার ও বার্তা স্টুডিও</b>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
+                      ছবি, অফার বার্তা ও অ্যান্টি-ব্যান বিরতি সেট করুন
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 1: Offer Banner Image */}
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: 11.5, fontWeight: 700, color: '#cbd5e1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <span>🖼️ অফার ব্যানার / প্রোডাক্ট ছবি:</span>
+                    {offerImage ? (
+                      <button
+                        type="button"
+                        style={{ background: 'transparent', border: 'none', color: '#f87171', fontSize: 11, cursor: 'pointer', padding: 0 }}
+                        onClick={() => setOfferImage('')}
+                      >
+                        ❌ ছবি সরান
+                      </button>
+                    ) : null}
+                  </label>
+
+                  {/* Selected Image Thumbnail */}
+                  {offerImage ? (
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'rgba(0,0,0,0.35)', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(37,211,102,0.35)', marginBottom: 8 }}>
+                      <img
+                        src={offerImage}
+                        alt="Offer banner"
+                        style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)' }}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 11.5, color: '#4ade80', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span>✅ অফার ব্যানার যুক্ত হয়েছে</span>
+                        </div>
+                        <div style={{ fontSize: 10.5, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
+                          {offerImage}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* Upload Controls Row */}
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <label
+                      className="sa-btn"
+                      style={{
+                        background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                        color: '#fff',
+                        cursor: 'pointer',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        padding: '6px 12px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        whiteSpace: 'nowrap',
+                        borderRadius: 7,
+                      }}
+                    >
+                      <span>📁 {uploadingImage ? 'আপলোড হচ্ছে...' : 'কম্পিউটার/মোবাইল ছবি'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        disabled={uploadingImage}
+                        onChange={handleOfferImageUpload}
+                      />
+                    </label>
+                    <input
+                      style={{ flex: 1, minWidth: 0, padding: '6px 10px', borderRadius: 7, background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 11 }}
+                      placeholder="বা ছবির URL পেস্ট করুন..."
+                      value={offerImage}
+                      onChange={(e) => setOfferImage(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Quick Hot Products Pill Carousel */}
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: 10.5, color: '#94a3b8', marginBottom: 4 }}>🔥 দ্রুত টপ সেলিং প্রোডাক্ট ব্যানার:</div>
+                    <div style={{ display: 'flex', gap: 5, overflowX: 'auto', paddingBottom: 2 }}>
+                      {quickHotProducts.map((p) => (
+                        <button
+                          key={p.img}
+                          type="button"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '3px 7px',
+                            borderRadius: 6,
+                            border: offerImage === p.img ? '1px solid #25D366' : '1px solid rgba(255,255,255,0.08)',
+                            background: offerImage === p.img ? 'rgba(37,211,102,0.2)' : 'rgba(0,0,0,0.3)',
+                            color: '#cbd5e1',
+                            fontSize: 10.5,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                          }}
+                          onClick={() => setOfferImage(p.img)}
+                        >
+                          <img src={p.img} alt="" style={{ width: 16, height: 16, borderRadius: 3, objectFit: 'cover' }} />
+                          <span>{p.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: Preset Templates */}
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: '#cbd5e1', display: 'block', marginBottom: 5 }}>
+                    ✨ রেডিমেড অফার টেমপ্লেট:
+                  </label>
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                    <button type="button" className="sa-btn ghost sa-mini" style={{ fontSize: 10.5, padding: '3px 7px' }} onClick={() => applyPresetTemplate('discount')}>
+                      🔥 ২০% ডিসকাউন্ট
+                    </button>
+                    <button type="button" className="sa-btn ghost sa-mini" style={{ fontSize: 10.5, padding: '3px 7px' }} onClick={() => applyPresetTemplate('free_shipping')}>
+                      🚚 ফ্রি ডেলিভারি
+                    </button>
+                    <button type="button" className="sa-btn ghost sa-mini" style={{ fontSize: 10.5, padding: '3px 7px' }} onClick={() => applyPresetTemplate('vip')}>
+                      👑 ভিআইপি
+                    </button>
+                    <button type="button" className="sa-btn ghost sa-mini" style={{ fontSize: 10.5, padding: '3px 7px' }} onClick={() => applyPresetTemplate('cart_recovery')}>
+                      🛒 অসমাপ্ত অর্ডার
+                    </button>
+                  </div>
+                </div>
+
+                {/* Section 3: Message Caption Input */}
+                <div style={{ marginBottom: 10 }}>
+                  <textarea
+                    rows={5}
+                    style={{ width: '100%', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8, color: '#fff', padding: '9px 11px', fontSize: 12, lineHeight: 1.5, resize: 'vertical', minHeight: 110 }}
+                    value={offerCaption}
+                    onChange={(e) => setOfferCaption(e.target.value)}
+                    placeholder="অফার মেসেজ লিখুন..."
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', gap: 4 }}>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 10.5, color: '#94a3b8' }}>
+                      <span>ট্যাগ:</span>
+                      <button type="button" style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'pointer' }} onClick={() => setOfferCaption(prev => prev + ' {name}')}>
+                        {'{name}'}
+                      </button>
+                      <button type="button" style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'pointer' }} onClick={() => setOfferCaption(prev => prev + ' {store}')}>
+                        {'{store}'}
+                      </button>
+                      <button type="button" style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'pointer' }} onClick={() => setOfferCaption(prev => prev + ' https://metrroma.com')}>
+                        🌐 লিঙ্ক
+                      </button>
+                    </div>
+                    <span style={{ fontSize: 10, color: '#64748b' }}>{offerCaption.length} অক্ষর</span>
+                  </div>
+                </div>
+
+                {/* Section 4: Anti-Ban Human Speed Selector */}
+                <div style={{ background: 'rgba(34, 197, 94, 0.06)', border: '1px solid rgba(34, 197, 94, 0.2)', padding: '8px 10px', borderRadius: 8, marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                    <b style={{ fontSize: 11, color: '#4ade80', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span>🛡️ Anti-Ban স্মার্ট বিরতি (Human Delay):</span>
+                    </b>
+                    <span style={{ fontSize: 10, color: '#86efac' }}>স্বয়ংক্রিয় সেফটি গার্ড</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5 }}>
+                    {[
+                      { sec: 4, label: '⚡ ৪ সে.' },
+                      { sec: 8, label: '⚖️ ৮ সে.' },
+                      { sec: 15, label: '🛡️ ১৫ সে.' },
+                      { sec: 25, label: '🐢 ২৫ সে.' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.sec}
+                        type="button"
+                        style={{
+                          padding: '4px 3px',
+                          borderRadius: 6,
+                          border: antiBanDelay === opt.sec ? '1px solid #25D366' : '1px solid rgba(255,255,255,0.08)',
+                          background: antiBanDelay === opt.sec ? '#25D366' : 'rgba(0,0,0,0.3)',
+                          color: antiBanDelay === opt.sec ? '#000' : '#cbd5e1',
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          textAlign: 'center',
+                        }}
+                        onClick={() => setAntiBanDelay(opt.sec)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 5: Dispatch Buttons (Pinned to bottom of Box 2) */}
+              <div style={{ display: 'flex', gap: 8, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <button
+                  type="button"
+                  className="sa-btn"
+                  style={{
+                    flex: 2,
+                    background: 'linear-gradient(135deg, #25D366 0%, #15803D 100%)',
+                    color: '#fff',
+                    fontWeight: 700,
+                    padding: '10px 14px',
+                    fontSize: 13,
+                    boxShadow: '0 4px 15px rgba(37,211,102,0.35)',
+                    borderRadius: 8,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                  }}
+                  disabled={isBroadcasting}
+                  onClick={runBroadcast}
+                >
+                  <span>🚀 ব্রডকাস্ট শুরু করুন ({(selectedSegment === 'custom' ? customPhonesInput.split(/[\n,;]+/).filter(p => p.trim().length >= 10).length : selectedPhones.length)} জন)</span>
+                </button>
+                <button
+                  type="button"
+                  className="sa-btn ghost"
+                  style={{ flex: 1, padding: '10px 10px', fontSize: 11.5, borderRadius: 8, whiteSpace: 'nowrap' }}
+                  onClick={testOnMyPhone}
+                  title="Send a test message with image to your own WhatsApp"
+                >
+                  🧪 টেস্ট পাঠান
+                </button>
+              </div>
+            </div>
+
+            {/* ============================================================== */}
+            {/* Panel 3: Smartphone Live Preview */}
+            {/* ============================================================== */}
+            <div className="wa-preview-col" style={{ position: 'sticky', top: 20 }}>
+              <div style={{ background: '#0b141a', border: '2px solid rgba(255,255,255,0.12)', borderRadius: 28, overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.7)', maxWidth: 330, margin: '0 auto' }}>
+                
+                {/* Phone Notch & Header */}
+                <div style={{ background: '#111b21', padding: '12px 14px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#25D366', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontWeight: 800, fontSize: 15 }}>
+                    S
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#e9edef', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span>METRROMA Store</span>
+                      <span style={{ color: '#25D366', fontSize: 11 }}>✓</span>
+                    </div>
+                    <div style={{ fontSize: 10.5, color: '#25D366' }}>● Online</div>
+                  </div>
+                  <WhatsAppIcon size={18} variant="official" />
+                </div>
+
+                {/* Chat Body */}
+                <div style={{ background: '#0b141a', padding: '14px 10px', minHeight: 460, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>
+                  
+                  {/* Security notice bubble */}
+                  <div style={{ alignSelf: 'center', background: '#182229', color: '#ffd279', fontSize: 10, padding: '4px 10px', borderRadius: 8, marginBottom: 12, textAlign: 'center', maxWidth: '90%' }}>
+                    🔒 Messages are end-to-end encrypted.
+                  </div>
+
+                  {/* Outgoing Message Bubble */}
+                  <div
+                    style={{
+                      alignSelf: 'flex-end',
+                      maxWidth: '94%',
+                      background: '#005c4b',
+                      borderRadius: '10px 0 10px 10px',
+                      overflow: 'hidden',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                    }}
+                  >
+                    {/* Offer Image */}
+                    {offerImage ? (
+                      <div style={{ width: '100%', maxHeight: 180, overflow: 'hidden', background: '#000' }}>
+                        <img
+                          src={offerImage}
+                          alt="Offer"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                      </div>
+                    ) : null}
+
+                    {/* Caption */}
+                    <div style={{ padding: '8px 10px 4px' }}>
+                      <p style={{ margin: 0, fontSize: 12, color: '#e9edef', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                        {offerCaption.replace(/\\n/g, '\n').replace(/\{name\}/g, 'সাকিব').replace(/\{store\}/g, 'METRROMA').replace(/\{phone\}/g, '018XXXXXXXX')}
+                      </p>
+                      
+                      {/* Timestamp & Ticks */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                        <span style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.6)' }}>11:45 PM</span>
+                        <span style={{ fontSize: 11, color: '#53bdeb' }}>✓✓</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fake Input footer */}
+                <div style={{ background: '#111b21', padding: '8px 10px', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ flex: 1, background: '#2a3942', borderRadius: 20, padding: '5px 10px', fontSize: 11.5, color: '#8696a0' }}>
+                    Type a message
+                  </div>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#00a884', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ color: '#fff', fontSize: 12 }}>🎤</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ textAlign: 'center', marginTop: 10, fontSize: 11, color: '#64748b' }}>
+                📱 গ্রাহকের মোবাইলে হোয়াটসঅ্যাপে ঠিক এমন প্রিভিউ দেখাবে।
+              </div>
+            </div>
+          </div>
+
+          {/* Broadcast Execution Feed / Live Sending History */}
+          {broadcastLogs.length > 0 && (
+            <div className="sa-card" style={{ marginTop: 20, padding: 18, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <b style={{ fontSize: 13, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>📜 লাইভ সেন্ডিং হিস্ট্রি ({broadcastLogs.length})</span>
+                </b>
+                <button type="button" className="sa-btn ghost sa-mini" onClick={() => setBroadcastLogs([])}>ক্লিয়ার</button>
+              </div>
+              <div style={{ maxHeight: 180, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {broadcastLogs.map((log, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'rgba(0,0,0,0.25)', borderRadius: 6, fontSize: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span>{log.status === 'success' ? '✅' : '❌'}</span>
+                      <span style={{ color: '#fff', fontWeight: 600 }}>{log.name}</span>
+                      <span style={{ color: '#94a3b8', fontFamily: 'monospace' }}>{log.phone}</span>
+                    </div>
+                    <span style={{ color: '#64748b', fontSize: 11 }}>{log.time}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 2: 24/7 AUTO-BOT & ORDER TRIGGERS */}
+      {/* ============================================================== */}
+      {activeTab === 'bot' && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#f8fafc' }}>
+              ⚡ Automated Customer Notifications
+            </h2>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8', padding: '4px 10px', borderRadius: 999, border: '1px solid rgba(56, 189, 248, 0.25)', fontWeight: 600 }}>
+              <span>🛡️</span>
+              <span>Anti-Ban 30s Safe Throttle Active</span>
+            </span>
+          </div>
+
+          <div style={{ background: 'rgba(37, 211, 102, 0.08)', border: '1px solid rgba(37, 211, 102, 0.2)', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 12.5, color: '#4ade80', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>⏱️</span>
+            <span>হোয়াটসঅ্যাপ একাউন্ট নিরাপদ রাখতে প্রতিটি মেসেজ পাঠানোর মাঝে স্বয়ংক্রিয়ভাবে ন্যূনতম <strong>৩০ সেকেন্ড</strong> ব্যবধান বজায় রাখা হয়।</span>
+          </div>
+
+          <div className="wa-trigger-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16, marginBottom: 24 }}>
+            {/* 0. Night Order Auto-Confirmation & WhatsApp Bot */}
+            <div className="sa-card" style={{ padding: 18, border: '1px solid rgba(139, 92, 246, 0.45)', background: 'linear-gradient(180deg, rgba(139, 92, 246, 0.09) 0%, rgba(15, 23, 42, 0.7) 100%)', gridColumn: '1 / -1' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <b style={{ fontSize: 16, color: '#c084fc' }}>⚡ 24/7 Order Auto-Confirmation Bot (দিন-রাত ২৪ ঘণ্টা অটো কনফার্মেশন)</b>
+                    <span style={{ fontSize: 11, padding: '2px 9px', borderRadius: 999, background: 'rgba(168, 85, 247, 0.25)', color: '#d8b4fe', border: '1px solid rgba(168, 85, 247, 0.45)', fontWeight: 700 }}>
+                      1 = Auto Confirm | 2 = Auto Cancel
+                    </span>
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(34, 197, 94, 0.2)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.4)', fontWeight: 600 }}>
+                      Active in Bangladesh
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 4 }}>
+                    যেকোনো সময় কোনো কাস্টমার অর্ডার করলে স্বয়ংক্রিয়ভাবে এই মেসেজ যাবে। কাস্টমার রিপ্লাইয়ে <b>1</b> লিখলে অর্ডার স্বয়ংক্রিয়ভাবে <b>Approved</b> হবে, আর <b>2</b> লিখলে স্বয়ংক্রিয়ভাবে <b>Cancelled</b> হবে।
+                  </div>
+                </div>
+                <label className="sa-chk">
+                  <input type="checkbox" checked={triggers.night_confirmation?.enabled !== false} onChange={() => toggleTrigger('night_confirmation')} />
+                  <span style={{ fontWeight: 700, color: triggers.night_confirmation?.enabled !== false ? '#4ade80' : '#94a3b8' }}>
+                    {triggers.night_confirmation?.enabled !== false ? 'Active' : 'Off'}
+                  </span>
+                </label>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14, marginBottom: 14 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#4ade80', display: 'block', marginBottom: 4 }}>
+                    ⏰ অ্যাক্টিভ শিডিউল মোড:
+                  </label>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 14px', background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.35)', borderRadius: 8, color: '#4ade80', fontSize: 13, fontWeight: 700 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', animation: 'waPulseDot 1.6s infinite' }} />
+                    ২৪/৭ দিন-রাত সারাক্ষণ সক্রিয় (All Day 24 Hours)
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#cbd5e1', display: 'block', marginBottom: 4 }}>
+                    Target Order Status when Customer replies "1":
+                  </label>
+                  <select
+                    style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6, color: '#fff', padding: '5px 10px', fontSize: 12.5 }}
+                    value={triggers.night_confirmation?.confirmStatus || 'approved'}
+                    onChange={(e) => updateTriggerField('night_confirmation', 'confirmStatus', e.target.value)}
+                  >
+                    <option value="approved">Approved (Purple Tab - Recommended)</option>
+                    <option value="confirmed">Confirmed (Blue Tab)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#38bdf8', display: 'block', marginBottom: 4 }}>
+                    🛡️ Anti-Ban Order Delay (Minutes):
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                      type="number"
+                      min={1}
+                      max={30}
+                      style={{ width: 65, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(56,189,248,0.35)', borderRadius: 6, color: '#fff', padding: '4px 8px', fontSize: 13, textAlign: 'center' }}
+                      value={triggers.night_confirmation?.delayMinutes ?? 1}
+                      onChange={(e) => updateTriggerField('night_confirmation', 'delayMinutes', Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    />
+                    <span style={{ fontSize: 11.5, color: '#94a3b8' }}>মিনিট পর মেসেজ পাঠাবে (হিউম্যান ফিলিংস)</span>
+                  </div>
+                </div>
+              </div>
+
+              <textarea
+                style={{ width: '100%', minHeight: 95, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
+                value={triggers.night_confirmation?.template || ''}
+                onChange={(e) => updateTemplate('night_confirmation', e.target.value)}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {items} {total} {store}'}</span>
+                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save Template</button>
+              </div>
+              <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p style={{ whiteSpace: 'pre-wrap' }}>{waPreview('night_confirmation') || 'Write a template to preview the customer message.'}</p></div>
+            </div>
+
+            {/* 1. Order Approved */}
+            <div className="sa-card" style={{ padding: 18 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div>
+                  <b style={{ fontSize: 14, color: '#f8fafc' }}>1. Order Approved Notice</b>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>Sent when an admin or staff marks order as Approved.</div>
+                </div>
+                <label className="sa-chk">
+                  <input type="checkbox" checked={triggers.approved?.enabled !== false} onChange={() => toggleTrigger('approved')} />
+                  <span>{triggers.approved?.enabled !== false ? 'Active' : 'Off'}</span>
+                </label>
+              </div>
+              <textarea
+                style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
+                value={triggers.approved?.template || ''}
+                onChange={(e) => updateTemplate('approved', e.target.value)}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {items} {total} {store}'}</span>
+                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
+              </div>
+              <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p style={{ whiteSpace: 'pre-wrap' }}>{waPreview('approved') || 'Write a template to preview the customer message.'}</p></div>
+            </div>
+
+            {/* 2. Order Shipped */}
+            <div className="sa-card" style={{ padding: 18 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div>
+                  <b style={{ fontSize: 14, color: '#f8fafc' }}>2. Order Shipped &amp; Tracking</b>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>Sent with courier consignment ID &amp; tracking link.</div>
+                </div>
+                <label className="sa-chk">
+                  <input type="checkbox" checked={triggers.shipped?.enabled !== false} onChange={() => toggleTrigger('shipped')} />
+                  <span>{triggers.shipped?.enabled !== false ? 'Active' : 'Off'}</span>
+                </label>
+              </div>
+              <textarea
+                style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
+                value={triggers.shipped?.template || ''}
+                onChange={(e) => updateTemplate('shipped', e.target.value)}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {courier} {consignment} {tracking_url}'}</span>
+                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
+              </div>
+              <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p style={{ whiteSpace: 'pre-wrap' }}>{waPreview('shipped') || 'Write a template to preview the customer message.'}</p></div>
+            </div>
+
+            {/* 3. Order Delivered */}
+            <div className="sa-card" style={{ padding: 18 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div>
+                  <b style={{ fontSize: 14, color: '#f8fafc' }}>3. Order Delivered &amp; Review Request</b>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>Sent when courier confirms delivery.</div>
+                </div>
+                <label className="sa-chk">
+                  <input type="checkbox" checked={!!triggers.delivered?.enabled} onChange={() => toggleTrigger('delivered')} />
+                  <span>{triggers.delivered?.enabled ? 'Active' : 'Off'}</span>
+                </label>
+              </div>
+              <textarea
+                style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
+                value={triggers.delivered?.template || ''}
+                onChange={(e) => updateTemplate('delivered', e.target.value)}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {store}'}</span>
+                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
+              </div>
+              <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p style={{ whiteSpace: 'pre-wrap' }}>{waPreview('delivered') || 'Write a template to preview the customer message.'}</p></div>
+            </div>
+
+            {/* 4. Incomplete / Abandoned Cart */}
+            <div className="sa-card" style={{ padding: 18 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div>
+                  <b style={{ fontSize: 14, color: '#f8fafc' }}>4. Incomplete Checkout Recovery</b>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>Send discount reminder to customer who typed phone but didn&apos;t place order.</div>
+                </div>
+                <label className="sa-chk">
+                  <input type="checkbox" checked={!!triggers.incomplete?.enabled} onChange={() => toggleTrigger('incomplete')} />
+                  <span>{triggers.incomplete?.enabled ? 'Active' : 'Off'}</span>
+                </label>
+              </div>
+              <textarea
+                style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
+                value={triggers.incomplete?.template || ''}
+                onChange={(e) => updateTemplate('incomplete', e.target.value)}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {store}'}</span>
+                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
+              </div>
+              <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p style={{ whiteSpace: 'pre-wrap' }}>{waPreview('incomplete') || 'Write a template to preview the customer message.'}</p></div>
+            </div>
+
+            {/* 5. Order Cancelled */}
+            <div className="sa-card" style={{ padding: 18 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div>
+                  <b style={{ fontSize: 14, color: '#f8fafc' }}>5. Order Cancelled Notice</b>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>Notify customer when order is cancelled.</div>
+                </div>
+                <label className="sa-chk">
+                  <input type="checkbox" checked={!!triggers.cancelled?.enabled} onChange={() => toggleTrigger('cancelled')} />
+                  <span>{triggers.cancelled?.enabled ? 'Active' : 'Off'}</span>
+                </label>
+              </div>
+              <textarea
+                style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
+                value={triggers.cancelled?.template || ''}
+                onChange={(e) => updateTemplate('cancelled', e.target.value)}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {store}'}</span>
+                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
+              </div>
+              <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p style={{ whiteSpace: 'pre-wrap' }}>{waPreview('cancelled') || 'Write a template to preview the customer message.'}</p></div>
+            </div>
+          </div>
+
+          {/* WhatsApp Conversational Auto-Order Creator Card */}
+          <div className="sa-card" style={{ padding: 22, marginBottom: 20, border: '1px solid rgba(34, 197, 94, 0.35)', background: 'linear-gradient(180deg, rgba(34, 197, 94, 0.08) 0%, rgba(15, 23, 42, 0.6) 100%)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 20 }}>🤖</span>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#4ade80' }}>
+                    WhatsApp Conversational Auto-Order Creator
+                  </h2>
+                  <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 999, background: 'rgba(34, 197, 94, 0.2)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.4)', fontWeight: 700 }}>
+                    100% Accuracy 4-Tier Guard Active
+                  </span>
+                </div>
+                <p className="dim" style={{ fontSize: 13, margin: '6px 0 0', lineHeight: 1.6 }}>
+                  কাস্টমার হোয়াটসঅ্যাপ চ্যাটে কোনো প্রোডাক্টের জন্য নাম, ফোন ও ঠিকানা পাঠালে সিস্টেম স্বয়ংক্রিয়ভাবে পার্স করে কাস্টমারকে <b>Double Confirmation Slip</b> পাঠাবে। কাস্টমার নিজে দেখে <b>1</b> চাপলে স্বয়ংক্রিয়ভাবে ক্যাশ অন ডেলিভারি অর্ডার তৈরি হয়ে যাবে।
+                </p>
+              </div>
+              <button
+                className="sa-btn"
+                style={{ background: 'linear-gradient(135deg, #25D366 0%, #15803D 100%)', color: '#fff', fontWeight: 700 }}
+                disabled={saving}
+                onClick={() => saveTriggers(status.triggers)}
+              >
+                {saving ? 'Saving...' : '💾 Save Settings'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 3: VISION AI PRODUCT MATCHER */}
+      {/* ============================================================== */}
+      {activeTab === 'vision' && (
+        <div>
+          <div className="sa-card" style={{ padding: 22, marginBottom: 20, border: '1px solid rgba(56, 189, 248, 0.35)', background: 'linear-gradient(180deg, rgba(56, 189, 248, 0.08) 0%, rgba(15, 23, 42, 0.6) 100%)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 22 }}>📸</span>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#38bdf8' }}>
+                    100% Accurate Product Image &amp; Inquiry Bot (Vision AI)
+                  </h2>
+                  <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 999, background: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.4)', fontWeight: 700 }}>
+                    Zero-Guesswork Strict Verification
+                  </span>
+                  <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 999, background: 'rgba(217, 119, 6, 0.2)', color: '#fbbf24', border: '1px solid rgba(217, 119, 6, 0.4)', fontWeight: 700 }}>
+                    👑 Sir/Mam Protocol Active
+                  </span>
+                </div>
+                <p className="dim" style={{ fontSize: 13, margin: '6px 0 0', lineHeight: 1.6 }}>
+                  গ্রাহক হোয়াটসঅ্যাপে কোনো পণ্যের ছবি বা স্ক্রিনশট পাঠিয়ে <i>&quot;এই প্রোডাক্ট আছে নাকি?&quot;</i> জানতে চাইলে <b>Google Gemini Vision AI</b> ছবির মোড়ক ও ব্র্যান্ড নাম হুবহু স্ক্যান করে স্টকের সাথে মিলিয়ে উত্তর দেয়। স্টকে থাকলে রয়াল কার্ড ও অর্ডার করার অপশন যায়।
+                </p>
+              </div>
+              <button
+                className="sa-btn"
+                style={{ background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', color: '#fff', fontWeight: 700 }}
+                disabled={saving}
+                onClick={() => {
+                  saveWhatsAppPatch({
+                    geminiApiKey: status.geminiApiKey || '',
+                    visionMatcherEnabled: status.visionMatcherEnabled !== false,
+                  });
+                }}
+              >
+                {saving ? 'Saving...' : '💾 Save Vision Settings'}
+              </button>
+            </div>
+
+            <div style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+                <label style={{ fontSize: 12.5, fontWeight: 700, color: '#38bdf8' }}>
+                  🔑 Google Gemini Vision API Key:
+                </label>
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontSize: 12, color: '#38bdf8', textDecoration: 'underline', fontWeight: 600 }}
+                >
+                  👉 Get Free Gemini API Key from Google AI Studio ↗
+                </a>
+              </div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  type="password"
+                  placeholder="Paste your Google AI Studio API Key (AIzaSy...)"
+                  style={{ flex: 1, minWidth: 260, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(56, 189, 248, 0.35)', borderRadius: 8, color: '#fff', padding: '8px 12px', fontSize: 13 }}
+                  value={status.geminiApiKey || ''}
+                  onChange={(e) => setStatus((prev: any) => ({ ...prev, geminiApiKey: e.target.value }))}
+                />
+                <label className="sa-chk" style={{ marginLeft: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={status.visionMatcherEnabled !== false}
+                    onChange={(e) => setStatus((prev: any) => ({ ...prev, visionMatcherEnabled: e.target.checked }))}
+                  />
+                  <span style={{ fontWeight: 700, color: status.visionMatcherEnabled !== false ? '#4ade80' : '#94a3b8' }}>
+                    {status.visionMatcherEnabled !== false ? 'Vision Matcher Active' : 'Off'}
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 4: DISPATCH HISTORY & QUICK MESSENGER */}
+      {/* ============================================================== */}
+      {activeTab === 'logs' && (
+        <div>
+          {/* Quick Single Messenger with Image support */}
+          <div className="sa-card" style={{ padding: 20, marginBottom: 20 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#f8fafc' }}>
+              📤 Quick WhatsApp Direct Messenger
+            </h2>
+            <p className="dim" style={{ fontSize: 13, margin: '4px 0 14px' }}>
+              Send an instant custom offer or text message to any customer phone number.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr 180px auto', gap: 10, alignItems: 'center' }}>
+              <input
+                className="sa-search"
+                placeholder="017xxxxxxxx"
+                value={manualPhone}
+                onChange={(e) => setManualPhone(e.target.value)}
+              />
+              <input
+                className="sa-search"
+                placeholder="Message text..."
+                value={broadcastMsg}
+                onChange={(e) => setBroadcastMsg(e.target.value)}
+              />
+              <input
+                className="sa-search"
+                placeholder="Optional image URL..."
+                value={singleImgUrl}
+                onChange={(e) => setSingleImgUrl(e.target.value)}
+              />
+              <button className="sa-btn" disabled={sendingMsg} onClick={sendDirectMessage} style={{ background: '#25D366', color: '#000', fontWeight: 700 }}>
+                {sendingMsg ? 'Sending…' : '🚀 Send'}
+              </button>
+            </div>
+          </div>
+
+          {/* Logs Table */}
+          <div className="sa-card" style={{ padding: 20 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 14px', color: '#f8fafc' }}>
+              📜 Recent WhatsApp Dispatch Logs
+            </h2>
+            <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+              {(status.logs || []).length === 0 ? (
+                <div style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
+                  এখনও কোনো মেসেজ লগ রেকর্ড হয়নি।
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', textAlign: 'left' }}>
+                      <th style={{ padding: '8px 10px' }}>Time</th>
+                      <th style={{ padding: '8px 10px' }}>Phone</th>
+                      <th style={{ padding: '8px 10px' }}>Event</th>
+                      <th style={{ padding: '8px 10px' }}>Message Preview</th>
+                      <th style={{ padding: '8px 10px' }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(status.logs || []).map((l: any, idx: number) => (
+                      <tr key={l.id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                        <td style={{ padding: '8px 10px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                          {l.at ? new Date(l.at).toLocaleTimeString() : 'N/A'}
+                        </td>
+                        <td style={{ padding: '8px 10px', fontFamily: 'monospace', color: '#38bdf8' }}>
+                          {l.phone}
+                        </td>
+                        <td style={{ padding: '8px 10px', color: '#c084fc', textTransform: 'capitalize' }}>
+                          {l.eventType || 'broadcast'}
+                        </td>
+                        <td style={{ padding: '8px 10px', color: '#cbd5e1', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {l.message}
+                        </td>
+                        <td style={{ padding: '8px 10px' }}>
+                          <span style={{
+                            padding: '2px 8px',
+                            borderRadius: 999,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            background: l.status === 'delivered' ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)',
+                            color: l.status === 'delivered' ? '#4ade80' : '#f87171',
+                          }}>
+                            {l.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* WhatsApp Web Live Pairing Modal */}
       {showPairModal && (
@@ -11978,9 +14999,9 @@ function LandingsAdmin() {
       slug: 'offer-' + Math.random().toString(36).slice(2, 7),
       aliases: [],
       status: 'live',
-      freeDelivery: true,
-      deliveryInside: 70,
-      deliveryOutside: 120,
+      freeDelivery: false,
+      deliveryInside: 80,
+      deliveryOutside: 130,
       deliveryBannerText: '',
       themeColor: '#CB202D',
       buttonColor: '#E02836',
@@ -12103,6 +15124,137 @@ function LandingsAdmin() {
     const f = editItem;
     const setF = (fn: (prev: any) => any) => setEditItem((prev: any) => fn(prev));
 
+    const renderDeliverySettings = () => (
+      <div
+        style={{
+          marginBottom: 22,
+          padding: 18,
+          background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.09) 0%, rgba(21, 18, 36, 0.98) 100%)',
+          borderRadius: 12,
+          border: '1px solid rgba(139, 92, 246, 0.3)',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.25)'
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(139, 92, 246, 0.22)', border: '1px solid rgba(139, 92, 246, 0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
+              🚚
+            </div>
+            <div>
+              <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#f8fafc', letterSpacing: '0.2px' }}>
+                Delivery Charge &amp; Shipping Settings
+              </h4>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
+                এই ল্যান্ডিং পেজের জন্য ডেলিভারি চার্জ নির্ধারণ করুন
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 4, background: '#0e0c18', padding: 4, borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)' }}>
+            <button
+              type="button"
+              onClick={() => setF((s: any) => ({ ...s, freeDelivery: false }))}
+              style={{
+                padding: '7px 14px',
+                borderRadius: 6,
+                border: 'none',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                background: f.freeDelivery === false ? '#8b5cf6' : 'transparent',
+                color: f.freeDelivery === false ? '#fff' : '#94a3b8',
+                boxShadow: f.freeDelivery === false ? '0 2px 8px rgba(139, 92, 246, 0.4)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              🚚 Custom Delivery Charge
+            </button>
+            <button
+              type="button"
+              onClick={() => setF((s: any) => ({ ...s, freeDelivery: true }))}
+              style={{
+                padding: '7px 14px',
+                borderRadius: 6,
+                border: 'none',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                background: f.freeDelivery === true ? '#10b981' : 'transparent',
+                color: f.freeDelivery === true ? '#fff' : '#94a3b8',
+                boxShadow: f.freeDelivery === true ? '0 2px 8px rgba(16, 185, 129, 0.4)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              🎁 Free Delivery (৳0)
+            </button>
+          </div>
+        </div>
+
+        {f.freeDelivery === true ? (
+          <div style={{ padding: 14, background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 22 }}>🎁</span>
+            <div style={{ fontSize: 13, color: '#34d399' }}>
+              <strong>ফ্রি ডেলিভারি চালু আছে:</strong> এই ল্যান্ডিং পেজে কাস্টমারদের কোনো ডেলিভারি চার্জ দিতে হবে না (৳০)।
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginTop: 12, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
+                🏢 ঢাকার ভেতরে ডেলিভারি চার্জ (Inside Dhaka ৳)
+              </label>
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#a78bfa', fontSize: 14, fontWeight: 700 }}>৳</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={f.deliveryInside ?? 80}
+                  onChange={(e) => setF((s: any) => ({ ...s, deliveryInside: Math.max(0, parseInt(e.target.value, 10) || 0) }))}
+                  placeholder="80"
+                  style={{ width: '100%', padding: '9px 12px 9px 28px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(139, 92, 246, 0.35)', borderRadius: 6, fontSize: 14, fontWeight: 600 }}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>ডিফল্ট: ৳80 (বা আপনার পছন্দমতো চার্জ লিখুন)</div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
+                🚛 ঢাকার বাইরে ডেলিভারি চার্জ (Outside Dhaka ৳)
+              </label>
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#a78bfa', fontSize: 14, fontWeight: 700 }}>৳</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={f.deliveryOutside ?? 130}
+                  onChange={(e) => setF((s: any) => ({ ...s, deliveryOutside: Math.max(0, parseInt(e.target.value, 10) || 0) }))}
+                  placeholder="130"
+                  style={{ width: '100%', padding: '9px 12px 9px 28px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(139, 92, 246, 0.35)', borderRadius: 6, fontSize: 14, fontWeight: 600 }}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>ডিফল্ট: ৳130 (বা আপনার পছন্দমতো চার্জ লিখুন)</div>
+            </div>
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
+                📢 ডেলিভারি ব্যানার / নোটিশ টেক্সট (ঐচ্ছিক)
+              </label>
+              <input
+                value={f.deliveryBannerText || ''}
+                onChange={(e) => setF((s: any) => ({ ...s, deliveryBannerText: e.target.value }))}
+                placeholder={`সারা বাংলাদেশে দ্রুত ক্যাশ অন হোম ডেলিভারি! (ঢাকায় ৳${f.deliveryInside ?? 80}, ঢাকার বাইরে ৳${f.deliveryOutside ?? 130})`}
+                style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
+              />
+            </div>
+
+            <div style={{ gridColumn: '1 / -1', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: '#cbd5e1' }}>
+              <span>👁️ <strong>চেকআউট প্রিভিউ:</strong> কাস্টমার ঢাকার ভেতরে অর্ডার করলে <strong>৳{f.deliveryInside ?? 80}</strong> এবং ঢাকার বাইরে <strong>৳{f.deliveryOutside ?? 130}</strong> যোগ হবে।</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+
     return (
       <div style={{ paddingBottom: 60 }}>
         {/* Top Header */}
@@ -12169,7 +15321,7 @@ function LandingsAdmin() {
             { id: 'general', label: 'General' },
             { id: 'hero', label: 'Hero & Header' },
             { id: 'video', label: 'Video & Offer' },
-            { id: 'packages', label: 'Packages' },
+            { id: 'packages', label: 'Packages & Delivery' },
             { id: 'benefits', label: 'Benefits' },
             { id: 'usage', label: 'Usage Guide' },
             { id: 'reviews', label: 'Reviews' },
@@ -12599,68 +15751,18 @@ function LandingsAdmin() {
                 </div>
               </div>
 
-              <div style={{ marginTop: 10, padding: 16, background: '#151224', borderRadius: 10, border: '1px solid rgba(139, 92, 246, 0.25)' }}>
-                <label className="sa-chk" style={{ cursor: 'pointer', color: '#f8fafc', fontSize: 14, display: 'inline-flex', alignItems: 'center' }}>
-                  <input
-                    type="checkbox"
-                    checked={f.freeDelivery !== false}
-                    onChange={(e) => setF((s: any) => ({ ...s, freeDelivery: e.target.checked }))}
-                  />
-                  &nbsp; <strong>Enable Free Nationwide Delivery (৳0 delivery charge)</strong>
-                </label>
-                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4, paddingLeft: 22 }}>
-                  {f.freeDelivery !== false
-                    ? 'Orders from this landing page will have ৳0 delivery charge across Bangladesh.'
-                    : 'Free delivery is OFF. Customers will choose Inside Dhaka or Outside Dhaka delivery charge at checkout.'}
-                </div>
-
-                {f.freeDelivery === false && (
-                  <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
-                        🚚 Inside Dhaka Delivery Charge (৳)
-                      </label>
-                      <input
-                        type="number"
-                        value={f.deliveryInside ?? 70}
-                        onChange={(e) => setF((s: any) => ({ ...s, deliveryInside: Math.max(0, parseInt(e.target.value, 10) || 0) }))}
-                        placeholder="70"
-                        style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6 }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
-                        🚚 Outside Dhaka Delivery Charge (৳)
-                      </label>
-                      <input
-                        type="number"
-                        value={f.deliveryOutside ?? 120}
-                        onChange={(e) => setF((s: any) => ({ ...s, deliveryOutside: Math.max(0, parseInt(e.target.value, 10) || 0) }))}
-                        placeholder="120"
-                        style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6 }}
-                      />
-                    </div>
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
-                        Delivery CTA Banner Text (Optional)
-                      </label>
-                      <input
-                        value={f.deliveryBannerText || ''}
-                        onChange={(e) => setF((s: any) => ({ ...s, deliveryBannerText: e.target.value }))}
-                        placeholder={`সারা বাংলাদেশে ক্যাশ অন ডেলিভারি (ঢাকায় ৳${f.deliveryInside ?? 70}, ঢাকার বাইরে ৳${f.deliveryOutside ?? 120})`}
-                        style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6 }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
+              {renderDeliverySettings()}
             </div>
           </div>
         )}
 
-        {/* TAB 4: CHECKOUT PACKAGES */}
+        {/* TAB 4: CHECKOUT PACKAGES & SHIPPING */}
         {tab === 'packages' && (
           <div className="sa-card" style={{ padding: 24 }}>
+            {renderDeliverySettings()}
+
+            <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.08)', margin: '20px 0' }} />
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: 16, color: '#f8fafc' }}>Checkout packages &amp; sizes</h3>
@@ -12675,6 +15777,7 @@ function LandingsAdmin() {
                   const newPkg = {
                     id: 'pkg_' + Date.now().toString(36),
                     title: 'New package / size',
+                    sku: '',
                     price: 999,
                     originalPrice: 1500,
                     image: '',
@@ -12720,7 +15823,7 @@ function LandingsAdmin() {
                     </button>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
                     <div style={{ gridColumn: 'span 2' }}>
                       <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
                         Package name &amp; description
@@ -12737,6 +15840,25 @@ function LandingsAdmin() {
                         }}
                         placeholder="e.g. Starter skincare bundle"
                         style={{ width: '100%', padding: '8px 10px', background: '#100e1a', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6 }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, color: '#f59e0b', fontWeight: 600, marginBottom: 4 }}>
+                        Package SKU (কুরিয়ার কোড)
+                      </label>
+                      <input
+                        value={pkg.sku || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setF((s: any) => {
+                            const pkgs = [...(s.packages || [])];
+                            pkgs[idx] = { ...pkgs[idx], sku: val };
+                            return { ...s, packages: pkgs };
+                          });
+                        }}
+                        placeholder="e.g. LL-6.7"
+                        style={{ width: '100%', padding: '8px 10px', background: '#100e1a', color: '#f59e0b', fontWeight: 600, border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: 6 }}
                       />
                     </div>
 
@@ -13610,7 +16732,11 @@ function LandingsAdmin() {
                       className="sa-btn ghost"
                       style={{ marginRight: 8, padding: '4px 10px', fontSize: 12 }}
                       onClick={() => {
-                        setEditItem(JSON.parse(JSON.stringify(item)));
+                        const cloned = JSON.parse(JSON.stringify(item));
+                        if (cloned.deliveryInside == null) cloned.deliveryInside = 80;
+                        if (cloned.deliveryOutside == null) cloned.deliveryOutside = 130;
+                        if (cloned.freeDelivery == null) cloned.freeDelivery = false;
+                        setEditItem(cloned);
                         setTab('general');
                       }}
                     >
@@ -14782,6 +17908,68 @@ function CustomersAdmin() {
 }
 
 function StaffAdmin() {
+  // Sub-tabs & Monitoring states
+  const [staffTab, setStaffTab] = useState<'monitor' | 'team' | 'audit' | 'whatsapp'>('monitor');
+  const [monitoring, setMonitoring] = useState<any>(null);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditStaffFilter, setAuditStaffFilter] = useState('');
+  const [auditActionFilter, setAuditActionFilter] = useState('');
+  const [reportPhone, setReportPhone] = useState('8801878374762');
+  const [sendingReport, setSendingReport] = useState(false);
+  const [reportSentMsg, setReportSentMsg] = useState('');
+  const [reportPreviewMsg, setReportPreviewMsg] = useState('');
+
+  const fetchMonitoring = () => {
+    aFetch('/admin/staff-monitoring')
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => {
+        if (d) {
+          setMonitoring(d);
+          if (Array.isArray(d.recentAuditLogs)) setAuditLogs(d.recentAuditLogs);
+        }
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchMonitoring();
+    const interval = setInterval(fetchMonitoring, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadFilteredAuditLogs = () => {
+    let url = '/admin/audit-logs?limit=250';
+    if (auditStaffFilter) url += '&staff=' + encodeURIComponent(auditStaffFilter);
+    if (auditActionFilter) url += '&action=' + encodeURIComponent(auditActionFilter);
+    aFetch(url)
+      .then((r) => r.ok ? r.json() : [])
+      .then((d) => setAuditLogs(Array.isArray(d) ? d : []))
+      .catch(() => setAuditLogs([]));
+  };
+
+  useEffect(() => {
+    if (staffTab === 'audit') loadFilteredAuditLogs();
+  }, [staffTab, auditStaffFilter, auditActionFilter]);
+
+  const sendWhatsAppReportNow = async () => {
+    setSendingReport(true);
+    setReportSentMsg('');
+    try {
+      const res = await aFetch('/admin/staff/send-daily-report', {
+        method: 'POST',
+        body: JSON.stringify({ phone: reportPhone })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to dispatch WhatsApp report');
+      setReportSentMsg(`✅ আজকের পারফরম্যান্স রিপোর্ট সফলভাবে ${data.recipient} নম্বরে হোয়াটসঅ্যাপে পাঠানো হয়েছে!`);
+      if (data.message) setReportPreviewMsg(data.message);
+    } catch (e: any) {
+      alert(e.message || 'Error sending report');
+    } finally {
+      setSendingReport(false);
+    }
+  };
+
   const [list, setList] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [f, setF] = useState<any>({ username: '', name: '', email: '', password: '', role: 'staff', accessAll: true, allowedProducts: [] });
@@ -14802,12 +17990,82 @@ function StaffAdmin() {
   const [editBusy, setEditBusy] = useState(false);
   const [editErr, setEditErr] = useState('');
 
+  // Staff Direct Email Delivery (SMTP / Sender) state
+  const [emailCfg, setEmailCfg] = useState<any>(null);
+  const [smtpGmail, setSmtpGmail] = useState('');
+  const [smtpAppPass, setSmtpAppPass] = useState('');
+  const [smtpSaving, setSmtpSaving] = useState(false);
+  const [testingUserId, setTestingUserId] = useState('');
+
   const load = () => {
     aFetch('/admin/users').then((r) => (r.ok ? r.json() : [])).then((d) => setList(Array.isArray(d) ? d : [])).catch(() => setList([]));
     fetch('/api/products').then((r) => (r.ok ? r.json() : [])).then((d) => setProducts(Array.isArray(d) ? d : [])).catch(() => setProducts([]));
     aFetch('/admin/integrations').then((r) => r.json()).then((ig) => {
-      if (ig?.email?.adminEmail) setOwnerEmail(ig.email.adminEmail);
+      if (ig?.email) {
+        setEmailCfg(ig.email);
+        if (ig.email.adminEmail) setOwnerEmail(ig.email.adminEmail);
+        setSmtpGmail(ig.email.user || ig.email.adminEmail || '');
+      }
     }).catch(() => {});
+  };
+
+  const saveQuickGmailSmtp = async () => {
+    if (!smtpGmail.trim() || !smtpGmail.includes('@')) {
+      setErr('অনুগ্রহ করে একটি সঠিক Gmail ঠিকানা দিন।');
+      return;
+    }
+    if (!smtpAppPass.trim() && !emailCfg?.hasPass) {
+      setErr('অনুগ্রহ করে Gmail-এর 16-অক্ষরের App Password দিন।');
+      return;
+    }
+    setSmtpSaving(true);
+    setErr('');
+    setMsg('');
+    try {
+      const nextEmail: any = {
+        ...(emailCfg || {}),
+        enabled: true,
+        provider: 'smtp',
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        user: smtpGmail.trim(),
+        fromName: 'METRROMA',
+        fromEmail: smtpGmail.trim(),
+      };
+      if (smtpAppPass.trim()) {
+        nextEmail.pass = smtpAppPass.replace(/\s+/g, '');
+      }
+      const r = await aFetch('/admin/integrations', {
+        method: 'PUT',
+        body: JSON.stringify({ email: nextEmail }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Failed to save SMTP');
+      setEmailCfg(d.email);
+      setSmtpAppPass('');
+      setMsg('✅ Gmail SMTP সফলভাবে চালু হয়েছে! এখন থেকে সকল স্টাফ তাদের নিজ নিজ ইমেইলেই ভেরিফিকেশন কোড পাবেন। নিচে "✉️ Test OTP" চেপে চেক করতে পারেন।');
+    } catch (e: any) {
+      setErr(e.message || 'SMTP সেভ করা যায়নি');
+    } finally {
+      setSmtpSaving(false);
+    }
+  };
+
+  const sendStaffTestOtp = async (u: any) => {
+    setTestingUserId(u.id);
+    setErr('');
+    setMsg('');
+    try {
+      const r = await aFetch(`/admin/users/${u.id}/test-otp`, { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Failed to send test OTP');
+      setMsg(`✅ টেস্ট ভেরিফিকেশন কোড সরাসরি ${u.name}-এর নিজস্ব ইমেইলে (${d.email}) পাঠানো হয়েছে!`);
+    } catch (e: any) {
+      setErr(e.message || 'টেস্ট ইমেইল পাঠানো যায়নি');
+    } finally {
+      setTestingUserId('');
+    }
   };
   useEffect(() => { load(); }, []);
 
@@ -14883,10 +18141,434 @@ function StaffAdmin() {
 
   return (
     <>
-      <div className="sa-top">
-        <h1>Team &amp; Security Management</h1>
-        <button className="sa-btn ghost" onClick={() => setPwModal(true)}>🔑 Change Master Password</button>
+      <div className="sa-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span>👥</span> Staff Management, Live Monitoring &amp; Audit Hub
+          </h1>
+          <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>
+            রিয়েল-টাইম স্টাফ অ্যাক্টিভিটি ট্র্যাকিং, কর্মঘণ্টা, কেপিআই পারফরম্যান্স ও সুপার এডমিন রিপোর্ট
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="sa-btn" style={{ background: '#10b981', borderColor: '#10b981', fontWeight: 600, fontSize: 12.5 }} onClick={() => setStaffTab('whatsapp')}>
+            📱 WhatsApp Daily Report
+          </button>
+          <button className="sa-btn ghost" onClick={() => setPwModal(true)}>🔑 Change Master Password</button>
+        </div>
       </div>
+
+      {/* Sub Tabs */}
+      <div style={{ display: 'flex', gap: 6, margin: '16px 0 22px', borderBottom: '1px solid rgba(255,255,255,0.1)', overflowX: 'auto', paddingBottom: 2 }}>
+        {[
+          { id: 'monitor', label: '📊 Live Monitor & KPI', badge: 'Live' },
+          { id: 'audit', label: '📜 Detailed Audit Logs' },
+          { id: 'whatsapp', label: '📱 WhatsApp Reports' },
+          { id: 'team', label: '👥 Team Accounts & Access' }
+        ].map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setStaffTab(t.id as any)}
+            style={{
+              padding: '10px 18px',
+              background: staffTab === t.id ? '#1e1b34' : 'transparent',
+              border: 'none',
+              borderBottom: staffTab === t.id ? '2px solid #8b5cf6' : '2px solid transparent',
+              color: staffTab === t.id ? '#fff' : '#94a3b8',
+              fontWeight: staffTab === t.id ? 700 : 500,
+              fontSize: 13.5,
+              cursor: 'pointer',
+              borderRadius: '6px 6px 0 0',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <span>{t.label}</span>
+            {t.badge && (
+              <span style={{ fontSize: 10, background: '#10b981', color: '#fff', padding: '2px 7px', borderRadius: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                {t.badge}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* TAB 1: LIVE MONITOR & KPI */}
+      {staffTab === 'monitor' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Top KPI Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14 }}>
+            <div className="sa-card" style={{ padding: 18, border: '1px solid rgba(16, 185, 129, 0.3)', background: 'linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(19,17,28,0.95) 100%)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Online Staff Now</span>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }}></span>
+              </div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: '#34d399', marginTop: 8 }}>
+                {(monitoring?.staff || []).filter((s: any) => s.status === 'active').length} <span style={{ fontSize: 13, fontWeight: 500, color: '#94a3b8' }}>Active · {(monitoring?.staff || []).filter((s: any) => s.status === 'idle').length} Idle</span>
+              </div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>Auto-refreshed every 15s</div>
+            </div>
+
+            <div className="sa-card" style={{ padding: 18, border: '1px solid rgba(139, 92, 246, 0.3)', background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(19,17,28,0.95) 100%)' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Today Confirmed Orders</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: '#a78bfa', marginTop: 8 }}>
+                {(monitoring?.staff || []).reduce((acc: number, s: any) => acc + (s.ordersHandled?.confirmed || 0), 0)} <span style={{ fontSize: 13, fontWeight: 500, color: '#94a3b8' }}>Parcels</span>
+              </div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>Processed by staff team today</div>
+            </div>
+
+            <div className="sa-card" style={{ padding: 18, border: '1px solid rgba(59, 130, 246, 0.3)', background: 'linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(19,17,28,0.95) 100%)' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Today Courier Bookings</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: '#60a5fa', marginTop: 8 }}>
+                {(monitoring?.staff || []).reduce((acc: number, s: any) => acc + (s.couriersBooked || 0), 0)} <span style={{ fontSize: 13, fontWeight: 500, color: '#94a3b8' }}>Dispatched</span>
+              </div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>Steadfast, Pathao &amp; Native</div>
+            </div>
+
+            <div className="sa-card" style={{ padding: 18, border: '1px solid rgba(245, 158, 11, 0.3)', background: 'linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(19,17,28,0.95) 100%)' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Processed Sales</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#fbbf24', marginTop: 8 }}>
+                ৳ {(monitoring?.staff || []).reduce((acc: number, s: any) => acc + (s.totalRevenueProcessed || 0), 0).toLocaleString()}
+              </div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>Gross order value confirmed</div>
+            </div>
+          </div>
+
+          {/* Live Staff Presence Cards */}
+          <div className="sa-card" style={{ padding: 22 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, color: '#fff', fontWeight: 700 }}>🟢 Live Staff Presence &amp; Real-time Working Hours</h3>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>কোন স্টাফ বর্তমানে অনলাইনে আছে, কখন লগইন করেছে এবং মোট কতক্ষণ সক্রিয় ছিল</div>
+              </div>
+              <button type="button" className="sa-btn ghost sa-mini" onClick={fetchMonitoring}>🔄 Refresh</button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+              {(monitoring?.staff || []).map((s: any) => {
+                const activeHrs = Math.floor(s.activeSeconds / 3600);
+                const activeMins = Math.floor((s.activeSeconds % 3600) / 60);
+                const idleHrs = Math.floor(s.idleSeconds / 3600);
+                const idleMins = Math.floor((s.idleSeconds % 3600) / 60);
+                const isOnline = s.status === 'active';
+                const isIdle = s.status === 'idle';
+
+                return (
+                  <div
+                    key={s.username}
+                    style={{
+                      padding: 16,
+                      background: '#141122',
+                      borderRadius: 12,
+                      border: isOnline
+                        ? '1px solid rgba(16, 185, 129, 0.4)'
+                        : isIdle
+                        ? '1px solid rgba(245, 158, 11, 0.4)'
+                        : '1px solid rgba(255,255,255,0.08)',
+                      boxShadow: isOnline ? '0 4px 18px rgba(16, 185, 129, 0.1)' : 'none'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 10, background: '#1e1b34', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: '#a78bfa' }}>
+                          {s.name ? s.name[0].toUpperCase() : 'U'}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{s.name}</div>
+                          <div style={{ fontSize: 11, color: '#94a3b8' }}>@{s.username} · <span style={{ textTransform: 'uppercase', color: '#c084fc', fontWeight: 600 }}>{s.role}</span></div>
+                        </div>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          background: isOnline ? 'rgba(16, 185, 129, 0.18)' : isIdle ? 'rgba(245, 158, 11, 0.18)' : 'rgba(255,255,255,0.06)',
+                          color: isOnline ? '#34d399' : isIdle ? '#fbbf24' : '#94a3b8',
+                          border: isOnline ? '1px solid rgba(16, 185, 129, 0.35)' : isIdle ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid rgba(255,255,255,0.1)'
+                        }}
+                      >
+                        {isOnline ? '🟢 Online' : isIdle ? '🟡 Away (Idle)' : '⚪ Offline'}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, background: '#0e0c18', padding: 12, borderRadius: 8, marginBottom: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 10.5, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Active Hours</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: '#34d399', marginTop: 2 }}>
+                          {activeHrs > 0 ? `${activeHrs}h ${activeMins}m` : `${activeMins}m`}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10.5, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Idle / Away</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: '#fbbf24', marginTop: 2 }}>
+                          {idleHrs > 0 ? `${idleHrs}h ${idleMins}m` : `${idleMins}m`}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: 11.5, color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div>🚪 <strong>First Login:</strong> {s.firstLogin ? new Date(s.firstLogin).toLocaleTimeString('bn-BD', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit' }) : 'আজকে লগইন করেনি'}</div>
+                      <div>⚡ <strong>Last Active:</strong> {s.lastActive ? new Date(s.lastActive).toLocaleTimeString('bn-BD', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'N/A'}</div>
+                      {s.currentPath && <div>📍 <strong>Currently Viewing:</strong> <code style={{ color: '#c084fc' }}>{s.currentPath}</code></div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Today's KPI Performance Leaderboard */}
+          <div className="sa-card" style={{ padding: 22 }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: 16, color: '#fff', fontWeight: 700 }}>🏆 Today's Staff KPI &amp; Performance Scorecard</h3>
+            <div className="sa-table-wrap">
+              <table className="sa-table">
+                <thead>
+                  <tr>
+                    <th>Staff Member</th>
+                    <th>Status</th>
+                    <th>Working Hours</th>
+                    <th>Confirmed Orders</th>
+                    <th>Cancelled</th>
+                    <th>Couriers Booked</th>
+                    <th>Processed Sales</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(monitoring?.staff || []).map((s: any) => {
+                    const activeHrs = Math.floor(s.activeSeconds / 3600);
+                    const activeMins = Math.floor((s.activeSeconds % 3600) / 60);
+                    const isOnline = s.status === 'active';
+                    const isIdle = s.status === 'idle';
+
+                    return (
+                      <tr key={s.username}>
+                        <td>
+                          <div style={{ fontWeight: 700, color: '#f8fafc' }}>{s.name}</div>
+                          <div style={{ fontSize: 11, color: '#94a3b8' }}>@{s.username} · {s.role}</div>
+                        </td>
+                        <td>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              background: isOnline ? 'rgba(16, 185, 129, 0.15)' : isIdle ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255,255,255,0.06)',
+                              color: isOnline ? '#34d399' : isIdle ? '#fbbf24' : '#94a3b8'
+                            }}
+                          >
+                            {isOnline ? '🟢 Active' : isIdle ? '🟡 Away' : '⚪ Offline'}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 600, color: '#34d399' }}>{activeHrs > 0 ? `${activeHrs}h ${activeMins}m` : `${activeMins}m`}</span>
+                          <span style={{ fontSize: 11, color: '#64748b', marginLeft: 6 }}>(Idle: {Math.round(s.idleSeconds / 60)}m)</span>
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 700, color: '#34d399', fontSize: 14 }}>✓ {s.ordersHandled?.confirmed || 0}</span>
+                        </td>
+                        <td>
+                          <span style={{ color: (s.ordersHandled?.cancelled || 0) > 0 ? '#f87171' : '#64748b', fontWeight: 600 }}>✕ {s.ordersHandled?.cancelled || 0}</span>
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 700, color: '#60a5fa' }}>🚚 {s.couriersBooked || 0}</span>
+                        </td>
+                        <td>
+                          <strong style={{ color: '#fbbf24' }}>৳ {(s.totalRevenueProcessed || 0).toLocaleString()}</strong>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: DETAILED AUDIT LOGS */}
+      {staffTab === 'audit' && (
+        <div className="sa-card" style={{ padding: 22 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16, color: '#fff', fontWeight: 700 }}>📜 Staff Actions &amp; System Audit Trail</h3>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>কোন স্টাফ কখন কোন অর্ডারে কী কাজ করেছে তার সম্পূর্ণ লগ</div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <select
+                value={auditStaffFilter}
+                onChange={(e) => setAuditStaffFilter(e.target.value)}
+                style={{ padding: '6px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 12 }}
+              >
+                <option value="">All Staff Members</option>
+                {(monitoring?.staff || []).map((s: any) => (
+                  <option key={s.username} value={s.username}>{s.name} (@{s.username})</option>
+                ))}
+              </select>
+
+              <select
+                value={auditActionFilter}
+                onChange={(e) => setAuditActionFilter(e.target.value)}
+                style={{ padding: '6px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 12 }}
+              >
+                <option value="">All Actions</option>
+                <option value="ORDER_STATUS_CHANGED">Status Changed</option>
+                <option value="COURIER_BOOKED">Courier Booked</option>
+                <option value="WHATSAPP_SENT">WhatsApp Sent</option>
+              </select>
+
+              <button type="button" className="sa-btn ghost sa-mini" onClick={loadFilteredAuditLogs}>🔄 Reload</button>
+            </div>
+          </div>
+
+          <div className="sa-table-wrap">
+            <table className="sa-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Staff</th>
+                  <th>Action</th>
+                  <th>Summary</th>
+                  <th>Target Order</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditLogs.map((log: any) => (
+                  <tr key={log.id}>
+                    <td style={{ fontSize: 11.5, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                      {log.timestamp ? new Date(log.timestamp).toLocaleString('bn-BD', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }) : 'N/A'}
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 600, color: '#f8fafc' }}>👤 {log.staff?.name || log.staff?.username}</div>
+                      <div style={{ fontSize: 10.5, color: '#c084fc' }}>({log.staff?.role || 'staff'})</div>
+                    </td>
+                    <td>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: 4,
+                          background: log.action === 'ORDER_STATUS_CHANGED' ? 'rgba(16, 185, 129, 0.15)' : log.action === 'COURIER_BOOKED' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(139, 92, 246, 0.15)',
+                          color: log.action === 'ORDER_STATUS_CHANGED' ? '#34d399' : log.action === 'COURIER_BOOKED' ? '#60a5fa' : '#c084fc'
+                        }}
+                      >
+                        {log.action}
+                      </span>
+                    </td>
+                    <td style={{ color: '#e2e8f0', fontSize: 13 }}>
+                      {log.summary || 'Action performed'}
+                    </td>
+                    <td>
+                      {log.targetId ? (
+                        <code style={{ color: '#a78bfa', background: '#0e0c18', padding: '2px 6px', borderRadius: 4 }}>
+                          #{log.targetId}
+                        </code>
+                      ) : (
+                        <span style={{ color: '#64748b' }}>—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {auditLogs.length === 0 && <div className="sa-empty">No audit logs recorded for this filter.</div>}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: WHATSAPP REPORTS */}
+      {staffTab === 'whatsapp' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div className="sa-card" style={{ padding: 22, border: '1px solid rgba(16, 185, 129, 0.3)', background: 'linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(19,17,28,0.95) 100%)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+              <div style={{ width: 42, height: 42, borderRadius: 10, background: 'rgba(16,185,129,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+                📱
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>
+                  Super Admin Daily WhatsApp Reporting
+                </h3>
+                <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
+                  প্রতিদিন রাত ১১:০০ টায় স্বয়ংক্রিয়ভাবে সুপার এডমিনের হোয়াটসঅ্যাপে পুরো দিনের স্টাফদের পারফরম্যান্স সামারি পৌঁছে যাবে।
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: 14, background: 'rgba(16, 185, 129, 0.12)', borderRadius: 8, border: '1px solid rgba(16, 185, 129, 0.25)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 20 }}>🟢</span>
+              <div style={{ fontSize: 13, color: '#34d399' }}>
+                <strong>Automated Nightly Report Active:</strong> প্রতিদিন রাত <strong>২৩:০০ (11:00 PM BD Time)</strong> এ সার্ভার থেকে অটোমেটিক মেসেজ পাঠানো হবে।
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14, alignItems: 'end' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
+                  Super Admin WhatsApp Number (Country Code সহ)
+                </label>
+                <input
+                  value={reportPhone}
+                  onChange={(e) => setReportPhone(e.target.value)}
+                  placeholder="88018XXXXXXXX"
+                  style={{ width: '100%', padding: '10px 14px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 6, fontSize: 14, fontWeight: 600 }}
+                />
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  className="sa-btn"
+                  disabled={sendingReport}
+                  onClick={sendWhatsAppReportNow}
+                  style={{ padding: '10px 20px', background: '#10b981', borderColor: '#10b981', color: '#fff', fontWeight: 700, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                >
+                  {sendingReport ? 'পাঠানো হচ্ছে…' : "🚀 Send Today's Report to WhatsApp Now"}
+                </button>
+              </div>
+            </div>
+
+            {reportSentMsg && (
+              <div style={{ marginTop: 14, padding: 12, background: 'rgba(16,185,129,0.15)', border: '1px solid #10b981', borderRadius: 8, color: '#34d399', fontWeight: 600, fontSize: 13 }}>
+                {reportSentMsg}
+              </div>
+            )}
+          </div>
+
+          {/* Report Preview */}
+          <div className="sa-card" style={{ padding: 22 }}>
+            <h4 style={{ margin: '0 0 12px', fontSize: 14, color: '#fff', fontWeight: 700 }}>👁️ WhatsApp Message Preview</h4>
+            <div style={{ background: '#0e0c18', padding: 16, borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', fontFamily: 'monospace', fontSize: 13, color: '#e2e8f0', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+              {reportPreviewMsg || `📊 *[METRROMA] স্টাফ দৈনিক পারফরম্যান্স রিপোর্ট*
+📅 তারিখ: ${new Date().toLocaleDateString('bn-BD', { timeZone: 'Asia/Dhaka', day: 'numeric', month: 'long', year: 'numeric' })}
+⏰ সময়: রাত ১১:০০ টা
+━━━━━━━━━━━━━━━━━━━━
+
+👤 *Rocky (STAFF)*
+  • স্ট্যাটাস: 🟢 Active (অনলাইন)
+  • ⏱️ কাজের সময়: ৪ ঘণ্টা ২০ মিনিট (সক্রিয়) | আইডল: ২৫ মিনিট
+  • 📦 প্রসেস করা অর্ডার: ৩৮ টি (কনফার্মড: ৩৫, বাতিল: ৩)
+  • 🚚 কুরিয়ার বুকিং: ৩৪ টি
+  • 💰 মোট প্রসেসড সেলস: ৳ ৩৮,৫০০
+
+━━━━━━━━━━━━━━━━━━━━
+🏆 *আজকের সেরা পারফর্মার:* Rocky
+🔗 *লাইভ ড্যাশবোর্ড:* https://metrroma.com/wp-admin`}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: TEAM ACCOUNTS & ACCESS */}
+      {staffTab === 'team' && (
+        <div>
+
 
       {/* Owner Security Status Card */}
       <div className="sa-card" style={{ padding: 22, marginBottom: 20, border: '1px solid rgba(139,92,246,0.3)', background: 'linear-gradient(180deg, rgba(139,92,246,0.08) 0%, rgba(19,17,28,0.95) 100%)' }}>
@@ -14922,15 +18604,131 @@ function StaffAdmin() {
             )}
           </div>
           <div>
-            <div style={{ fontSize: 11.5, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Email Sender</div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: '#e2e8f0', marginTop: 3 }}><code>admin@metrroma.com</code></div>
+            <div style={{ fontSize: 11.5, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Staff OTP Sender</div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: (emailCfg?.enabled && (emailCfg?.resendApiKey || (emailCfg?.provider === 'smtp' && emailCfg?.hasPass))) ? '#4ade80' : '#facc15', marginTop: 3 }}>
+              {emailCfg?.enabled && (emailCfg?.provider === 'resend' || emailCfg?.resendApiKey)
+                ? `✓ Resend API (${emailCfg.fromEmail || 'code@metrroma.com'})`
+                : emailCfg?.provider === 'smtp' && emailCfg?.hasPass
+                ? `✓ Gmail SMTP (${emailCfg.user})`
+                : '⚠ Email Integration Disabled'}
+            </div>
           </div>
           <div>
-            <div style={{ fontSize: 11.5, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Session Security</div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: '#4ade80', marginTop: 3 }}>48-Hour Auto-Lock Active</div>
+            <div style={{ fontSize: 11.5, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Staff OTP Policy</div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: '#4ade80', marginTop: 3 }}>Direct to Staff's Own Email ✓</div>
           </div>
         </div>
       </div>
+
+      {/* Email Integration & Staff OTP Status Card */}
+      {emailCfg?.enabled && (emailCfg?.provider === 'resend' || emailCfg?.resendApiKey) ? (
+        <div
+          className="sa-card"
+          style={{
+            padding: 20,
+            marginBottom: 20,
+            border: '1px solid rgba(34, 197, 94, 0.35)',
+            background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(19, 17, 28, 0.95) 100%)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(34, 197, 94, 0.2)', border: '1px solid rgba(34, 197, 94, 0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+                ✉️
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <h3 style={{ margin: 0, fontSize: 15.5, fontWeight: 700, color: '#fff' }}>
+                    Staff OTP &amp; Email Delivery via Resend API
+                  </h3>
+                  <span className="sa-badge" style={{ background: 'rgba(34,197,94,0.18)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.35)' }}>
+                    Active ✓ ({emailCfg?.fromEmail || 'code@metrroma.com'})
+                  </span>
+                </div>
+                <p className="dim" style={{ margin: '4px 0 0', fontSize: 12.5, lineHeight: 1.5 }}>
+                  স্টাফরা লগইন করার সময় তাদের নিজস্ব ইমেইলে <strong>Resend API</strong>-এর মাধ্যমে <code>{emailCfg?.fromEmail || 'code@metrroma.com'}</code> থেকে তাৎক্ষণিক ভেরিফিকেশন কোড (OTP) পৌঁছাবে। Integrations মেনু থেকে এটি সক্রিয় ও কনফিগার করা আছে।
+                </p>
+              </div>
+            </div>
+            <div>
+              <button
+                type="button"
+                className="sa-btn ghost sa-mini"
+                disabled={!!testingUserId}
+                onClick={() => {
+                  const targetUser = list.find((u) => u.email) || { id: 'test', name: 'Admin', email: ownerEmail };
+                  sendStaffTestOtp(targetUser);
+                }}
+              >
+                {testingUserId ? 'পাঠানো হচ্ছে…' : '✉️ Send Test OTP Email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div
+          className="sa-card"
+          style={{
+            padding: 20,
+            marginBottom: 20,
+            border: emailCfg?.provider === 'smtp' && emailCfg?.hasPass
+              ? '1px solid rgba(34, 197, 94, 0.3)'
+              : '1px solid rgba(250, 204, 21, 0.4)',
+            background: emailCfg?.provider === 'smtp' && emailCfg?.hasPass
+              ? 'rgba(34, 197, 94, 0.05)'
+              : 'rgba(250, 204, 21, 0.06)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 15.5, fontWeight: 700, color: '#fff' }}>
+                ✉️ সকল স্টাফের নিজস্ব ইমেইলে OTP পাঠানোর মেইল সেটআপ (Gmail SMTP)
+              </h3>
+              <p className="dim" style={{ margin: '4px 0 0', fontSize: 12.5, lineHeight: 1.5 }}>
+                প্রতিটি স্টাফ যেন লগইনের সময় তার <b>নিজের Gmail/ইমেইলে</b> ভেরিফিকেশন কোড পান, তার জন্য এখানে আপনার স্টোরের Gmail ও <b>16-অক্ষরের Google App Password</b> দিয়ে সেভ করুন।
+              </p>
+            </div>
+            {emailCfg?.provider === 'smtp' && emailCfg?.hasPass && (
+              <span className="sa-badge" style={{ background: 'rgba(34,197,94,0.18)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.35)' }}>
+                ✓ Active ({emailCfg.user})
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, alignItems: 'end' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 12.5, color: '#cbd5e1' }}>
+              Sender Gmail Address
+              <input
+                type="email"
+                value={smtpGmail}
+                onChange={(e) => setSmtpGmail(e.target.value)}
+                placeholder="e.g. metroomaa@gmail.com"
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 12.5, color: '#cbd5e1' }}>
+              Google 16-Digit App Password
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={smtpAppPass}
+                onChange={(e) => setSmtpAppPass(e.target.value)}
+                placeholder={emailCfg?.hasPass ? 'Saved ✓ (paste new to update)' : 'xxxx xxxx xxxx xxxx'}
+              />
+            </label>
+            <div>
+              <button
+                type="button"
+                className="sa-btn"
+                disabled={smtpSaving}
+                onClick={saveQuickGmailSmtp}
+                style={{ width: '100%', padding: '10px 18px' }}
+              >
+                {smtpSaving ? 'সেভ হচ্ছে…' : '⚡ Save & Enable Staff Email OTP'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add New Team Member Form */}
       <div className="sa-card" style={{ padding: 22, marginBottom: 20 }}>
@@ -14948,8 +18746,8 @@ function StaffAdmin() {
               <input autoComplete="new-password" name="staff_uname" placeholder="e.g. tanvir" value={f.username} onChange={(e) => setF((s: any) => ({ ...s, username: e.target.value }))} required />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#cbd5e1' }}>
-              Staff Email (for Login OTP)
-              <input type="email" autoComplete="new-password" name="staff_email" placeholder="e.g. tanvir@gmail.com" value={f.email} onChange={(e) => setF((s: any) => ({ ...s, email: e.target.value }))} />
+              Staff Own Email (for Login OTP) {!f.skipOtp ? '*' : ''}
+              <input type="email" autoComplete="new-password" name="staff_email" placeholder="e.g. tanvir@gmail.com" value={f.email} onChange={(e) => setF((s: any) => ({ ...s, email: e.target.value }))} required={!f.skipOtp} />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: '#cbd5e1' }}>
               Password (min. 4 chars) *
@@ -15079,6 +18877,18 @@ function StaffAdmin() {
                     )}
                   </td>
                   <td className="r">
+                    {u.email && (
+                      <button
+                        type="button"
+                        className="sa-link"
+                        disabled={testingUserId === u.id}
+                        style={{ marginRight: 10, color: '#38bdf8' }}
+                        onClick={() => sendStaffTestOtp(u)}
+                        title={`Send test verification code to ${u.email}`}
+                      >
+                        {testingUserId === u.id ? 'Sending…' : '✉️ Test OTP'}
+                      </button>
+                    )}
                     <button className="sa-link" style={{ marginRight: 10, color: '#a78bfa' }} onClick={() => setEditUser({ ...u, accessAll: !u.allowedProducts || u.allowedProducts.length === 0, allowedProducts: u.allowedProducts || [], password: '' })}>
                       Edit Access
                     </button>
@@ -15181,6 +18991,9 @@ function StaffAdmin() {
       )}
 
       {/* Change Password Modal */}
+        </div>
+      )}
+
       {pwModal && (
         <div className="sa-modal" onClick={() => setPwModal(false)}>
           <div className="sa-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>

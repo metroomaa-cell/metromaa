@@ -34,6 +34,10 @@ if (!EXTERNAL_DIR) {
 }
 if (!EXTERNAL_DIR) EXTERNAL_DIR = join(DATA_DIR, 'persistent');
 const BACKUPS_DIR = join(EXTERNAL_DIR, 'backups');
+const WA_CHAT_CONTACTS = join(EXTERNAL_DIR, 'wa_chat_contacts.json');
+const AUDIT_LOGS = join(EXTERNAL_DIR, 'audit_logs.json');
+const STAFF_ACTIVITY = join(EXTERNAL_DIR, 'staff_activity.json');
+
 
 function copyMissingTree(sourceDir, targetDir) {
   if (!existsSync(sourceDir) || !statSync(sourceDir).isDirectory()) return 0;
@@ -966,4 +970,462 @@ export function initStorageProtection() {
   } catch (err) {
     console.error('[StorageProtection] Startup check error:', err.message);
   }
+}
+
+
+export function getBangladeshDate(d = new Date()) {
+  const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+  const bdTime = new Date(utc + (3600000 * 6)); // UTC+6
+  return bdTime.toISOString().slice(0, 10); // 'YYYY-MM-DD'
+}
+
+export function getAuditLogs() {
+  const list = readSafe(EXT_AUDIT_LOGS, PERSISTENT_AUDIT_LOGS, AUDIT_LOGS, [], BACKUP_AUDIT_LOGS);
+  return Array.isArray(list) ? list : [];
+}
+
+export function saveAuditLogs(logs) {
+  const clean = Array.isArray(logs) ? logs.slice(0, 5000) : [];
+  writeSafe(EXT_AUDIT_LOGS, PERSISTENT_AUDIT_LOGS, AUDIT_LOGS, clean, 'audit_logs', BACKUP_AUDIT_LOGS);
+}
+
+export function addAuditLog({ staff, action, targetType = 'order', targetId = '', summary = '', details = {} }) {
+  const entry = {
+    id: 'log_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    timestamp: new Date().toISOString(),
+    staff: {
+      username: staff?.username || 'system',
+      name: staff?.name || staff?.username || 'System',
+      role: staff?.role || 'system',
+    },
+    action,
+    targetType,
+    targetId,
+    summary,
+    details
+  };
+  const logs = getAuditLogs();
+  logs.unshift(entry);
+  saveAuditLogs(logs);
+  return entry;
+}
+
+export function getStaffActivity() {
+  const data = readSafe(EXT_STAFF_ACTIVITY, PERSISTENT_STAFF_ACTIVITY, STAFF_ACTIVITY, {}, BACKUP_STAFF_ACTIVITY);
+  return (data && typeof data === 'object' && !Array.isArray(data)) ? data : {};
+}
+
+export function saveStaffActivity(data) {
+  writeSafe(EXT_STAFF_ACTIVITY, PERSISTENT_STAFF_ACTIVITY, STAFF_ACTIVITY, data || {}, 'staff_activity', BACKUP_STAFF_ACTIVITY);
+}
+
+// ---- WhatsApp Chat Contacts (Everyone who ever messaged on WhatsApp) ----
+
+export function getWaChatContacts() {
+  const list = readSafe(EXT_WA_CONTACTS, PERSISTENT_WA_CONTACTS, WA_CONTACTS, [], BACKUP_WA_CONTACTS);
+  return Array.isArray(list) ? list : [];
+}
+
+export function saveWaChatContacts(contacts) {
+  const clean = Array.isArray(contacts) ? contacts.slice(0, 10000) : [];
+  writeSafe(EXT_WA_CONTACTS, PERSISTENT_WA_CONTACTS, WA_CONTACTS, clean, 'wa_chat_contacts', BACKUP_WA_CONTACTS);
+}
+
+export function upsertWaChatContact({ phone, name = '', lastMessage = '', isIncoming = true }) {
+  if (!phone) return null;
+  const rawDigits = String(phone).replace(/\D/g, '');
+  if (!rawDigits || rawDigits.length < 10) return null;
+
+  // Standardize BD phone to 01XXXXXXXXX or international digits
+  let standardPhone = rawDigits;
+  if (rawDigits.startsWith('880')) {
+    standardPhone = '0' + rawDigits.slice(3);
+  } else if (rawDigits.startsWith('88') && rawDigits.length === 13) {
+    standardPhone = '0' + rawDigits.slice(2);
+  } else if (!rawDigits.startsWith('0') && rawDigits.length === 10) {
+    standardPhone = '0' + rawDigits;
+  }
+
+  const contacts = getWaChatContacts();
+  const index = contacts.findIndex(c => c.phone === standardPhone || (c.rawDigits && c.rawDigits === rawDigits));
+  const now = new Date().toISOString();
+
+  let entry = null;
+  if (index >= 0) {
+    const existing = contacts[index];
+    entry = {
+      ...existing,
+      name: (name && name !== 'WhatsApp User' && name !== 'Unknown') ? name : existing.name,
+      lastChatAt: now,
+      lastMessage: lastMessage ? String(lastMessage).slice(0, 200) : existing.lastMessage,
+      messageCount: (existing.messageCount || 1) + 1,
+      lastDirection: isIncoming ? 'incoming' : 'outgoing',
+    };
+    contacts[index] = entry;
+  } else {
+    entry = {
+      phone: standardPhone,
+      rawDigits,
+      name: name && name !== 'WhatsApp User' && name !== 'Unknown' ? name : 'WhatsApp User',
+      firstChatAt: now,
+      lastChatAt: now,
+      lastMessage: lastMessage ? String(lastMessage).slice(0, 200) : '',
+      messageCount: 1,
+      lastDirection: isIncoming ? 'incoming' : 'outgoing',
+      source: 'whatsapp_chat',
+    };
+    contacts.unshift(entry);
+  }
+
+  saveWaChatContacts(contacts);
+  return entry;
+}
+
+// Sync all historical WhatsApp chat contacts from Baileys auth session storage (LID mappings & device lists)
+
+export function syncWhatsAppSessionContacts(authDirOverride = null) {
+  try {
+    let authDir = authDirOverride;
+    if (!authDir) {
+      const candidates = [
+        join(EXTERNAL_DIR, 'wa_auth_info'),
+        '/var/www/secrate_persistent_data/wa_auth_info',
+        join(DATA_DIR, 'wa_auth_info')
+      ];
+      for (const c of candidates) {
+        if (existsSync(c) && statSync(c).isDirectory()) {
+          authDir = c;
+          break;
+        }
+      }
+    }
+    if (!authDir || !existsSync(authDir)) {
+      return { ok: false, message: 'Auth dir not found', synced: 0 };
+    }
+
+    const files = readdirSync(authDir);
+    const waNumbers = new Map();
+
+    for (const f of files) {
+      const fullPath = join(authDir, f);
+      let stat;
+      try { stat = statSync(fullPath); } catch (_) { continue; }
+      const mtime = stat.mtime;
+
+      let phoneFound = null;
+      if (f.startsWith('lid-mapping-') && f.endsWith('_reverse.json')) {
+        try {
+          const content = readFileSync(fullPath, 'utf8').trim();
+          const val = JSON.parse(content);
+          if (typeof val === 'string' && val.length >= 10) phoneFound = val;
+        } catch (_) {}
+      } else if (f.startsWith('lid-mapping-') && !f.includes('reverse')) {
+        const raw = f.replace('lid-mapping-', '').replace('.json', '');
+        if (raw.startsWith('8801') || raw.startsWith('01')) phoneFound = raw;
+      } else if (f.startsWith('device-list-')) {
+        const raw = f.replace('device-list-', '').replace('.json', '');
+        if (raw.startsWith('8801') || raw.startsWith('01')) phoneFound = raw;
+      }
+
+      if (phoneFound) {
+        let clean = phoneFound.replace(/\D/g, '');
+        if (clean.startsWith('880')) clean = '0' + clean.slice(3);
+        else if (!clean.startsWith('0') && clean.length === 10) clean = '0' + clean;
+
+        if (clean.length === 11 && clean.startsWith('01')) {
+          if (!waNumbers.has(clean) || waNumbers.get(clean).mtime < mtime) {
+            waNumbers.set(clean, { phone: clean, mtime, rawDigits: '88' + clean });
+          }
+        }
+      }
+    }
+
+    if (waNumbers.size === 0) {
+      return { ok: true, synced: 0, total: 0 };
+    }
+
+    // Map existing orders & customers for verified customer names
+    const orders = getOrders() || [];
+    const customers = getCustomers() || [];
+    const phoneToCust = new Map();
+
+    customers.forEach(c => {
+      const p = String(c.phone || c.id || '').replace(/\D/g, '').slice(-11);
+      if (p && p.length >= 10 && p.startsWith('01')) {
+        phoneToCust.set(p, {
+          name: c.name || '',
+          ordersCount: Number(c.ordersCount) || 0,
+          totalSpent: Number(c.totalSpent) || 0
+        });
+      }
+    });
+
+    orders.forEach(o => {
+      const p = String(o.customer?.phone || '').replace(/\D/g, '').slice(-11);
+      if (p && p.length >= 10 && p.startsWith('01')) {
+        const ex = phoneToCust.get(p) || { name: '', ordersCount: 0, totalSpent: 0 };
+        if (!ex.name && o.customer?.name) ex.name = o.customer.name;
+        if (o.status !== 'incomplete' && o.status !== 'cancelled') {
+          ex.ordersCount++;
+          ex.totalSpent += (Number(o.total) || 0);
+        }
+        phoneToCust.set(p, ex);
+      }
+    });
+
+    const existingContacts = getWaChatContacts();
+    const existingMap = new Map();
+    existingContacts.forEach(c => {
+      const p = String(c.phone || c.rawDigits || '').replace(/\D/g, '').slice(-11);
+      if (p) existingMap.set(p, c);
+    });
+
+    const updated = [];
+    for (const [phone, data] of waNumbers.entries()) {
+      const cust = phoneToCust.get(phone);
+      const prev = existingMap.get(phone);
+
+      let name = '';
+      if (cust && cust.name && cust.name !== 'Valued Customer' && cust.name !== 'সম্মানিত কাস্টমার') {
+        name = cust.name;
+      } else if (prev && prev.name && prev.name !== 'WhatsApp User' && prev.name !== 'Valued Customer' && prev.name !== 'সম্মানিত কাস্টমার') {
+        name = prev.name;
+      } else {
+        name = 'হোয়াটসঅ্যাপ গ্রাহক';
+      }
+
+      const lastChatAt = prev?.lastChatAt || data.mtime.toISOString();
+      const firstChatAt = prev?.firstChatAt || data.mtime.toISOString();
+
+      updated.push({
+        phone,
+        rawDigits: data.rawDigits,
+        name,
+        firstChatAt,
+        lastChatAt,
+        lastMessage: prev?.lastMessage && !prev.lastMessage.startsWith('Order #') ? prev.lastMessage : 'হোয়াটসঅ্যাপ ইনবক্স চ্যাট হিস্ট্রি',
+        messageCount: prev?.messageCount || 1,
+        ordersCount: cust?.ordersCount || 0,
+        totalSpent: cust?.totalSpent || 0,
+        lastDirection: prev?.lastDirection || 'incoming',
+        source: 'whatsapp_chat',
+        isWaChat: true
+      });
+    }
+
+    updated.sort((a, b) => new Date(b.lastChatAt).getTime() - new Date(a.lastChatAt).getTime());
+    saveWaChatContacts(updated);
+    return { ok: true, synced: updated.length, total: updated.length };
+  } catch (err) {
+    console.error('[syncWhatsAppSessionContacts error]:', err);
+    return { ok: false, error: err.message, synced: 0 };
+  }
+}
+
+// In-Memory Presence Tracker (real-time live ping)
+const liveStaffPresence = new Map();
+
+export function updateStaffPresence(staff, { active = true, currentPath = '', ip = '', device = '' } = {}) {
+  if (!staff || !staff.username) return;
+  const username = String(staff.username).toLowerCase();
+  const now = Date.now();
+  const dateKey = getBangladeshDate();
+
+  const prev = liveStaffPresence.get(username) || {
+    username,
+    name: staff.name || username,
+    role: staff.role || 'staff',
+    firstSeen: new Date().toISOString(),
+    lastPing: now,
+    status: active ? 'active' : 'idle',
+    currentPath: currentPath || 'dashboard',
+    ip,
+    device
+  };
+
+  const elapsedSeconds = prev.lastPing ? Math.min(60, Math.max(0, Math.round((now - prev.lastPing) / 1000))) : 30;
+
+  liveStaffPresence.set(username, {
+    ...prev,
+    name: staff.name || username,
+    role: staff.role || 'staff',
+    lastPing: now,
+    status: active ? 'active' : 'idle',
+    currentPath: currentPath || prev.currentPath,
+    ip: ip || prev.ip,
+    device: device || prev.device
+  });
+
+  // Accumulate today's daily activity
+  const allActivity = getStaffActivity();
+  if (!allActivity[dateKey]) allActivity[dateKey] = {};
+  const day = allActivity[dateKey];
+
+  if (!day[username]) {
+    day[username] = {
+      username,
+      name: staff.name || username,
+      role: staff.role || 'staff',
+      firstLogin: new Date().toISOString(),
+      lastActive: new Date().toISOString(),
+      activeSeconds: 0,
+      idleSeconds: 0,
+      ordersHandled: {
+        confirmed: 0,
+        cancelled: 0,
+        approved: 0,
+        hold: 0,
+        shipped: 0,
+        total: 0
+      },
+      couriersBooked: 0,
+      whatsappSent: 0,
+      totalRevenueProcessed: 0
+    };
+  }
+
+  const staffRecord = day[username];
+  staffRecord.lastActive = new Date().toISOString();
+  if (active) {
+    staffRecord.activeSeconds = (staffRecord.activeSeconds || 0) + elapsedSeconds;
+  } else {
+    staffRecord.idleSeconds = (staffRecord.idleSeconds || 0) + elapsedSeconds;
+  }
+
+  saveStaffActivity(allActivity);
+}
+
+export function recordStaffKpiAction(staff, actionType, { orderId = '', status = '', amount = 0, courier = '', note = '' } = {}) {
+  if (!staff || !staff.username) return;
+  const username = String(staff.username).toLowerCase();
+  const dateKey = getBangladeshDate();
+  const allActivity = getStaffActivity();
+  if (!allActivity[dateKey]) allActivity[dateKey] = {};
+  const day = allActivity[dateKey];
+
+  if (!day[username]) {
+    day[username] = {
+      username,
+      name: staff.name || username,
+      role: staff.role || 'staff',
+      firstLogin: new Date().toISOString(),
+      lastActive: new Date().toISOString(),
+      activeSeconds: 0,
+      idleSeconds: 0,
+      ordersHandled: { confirmed: 0, cancelled: 0, approved: 0, hold: 0, shipped: 0, total: 0 },
+      couriersBooked: 0,
+      whatsappSent: 0,
+      totalRevenueProcessed: 0
+    };
+  }
+
+  const record = day[username];
+  record.lastActive = new Date().toISOString();
+
+  if (actionType === 'ORDER_STATUS_CHANGED') {
+    record.ordersHandled.total = (record.ordersHandled.total || 0) + 1;
+    const s = String(status).toLowerCase();
+    if (s === 'confirmed') {
+      record.ordersHandled.confirmed = (record.ordersHandled.confirmed || 0) + 1;
+      if (amount > 0) record.totalRevenueProcessed = (record.totalRevenueProcessed || 0) + amount;
+    } else if (s === 'cancelled') {
+      record.ordersHandled.cancelled = (record.ordersHandled.cancelled || 0) + 1;
+    } else if (s === 'approved') {
+      record.ordersHandled.approved = (record.ordersHandled.approved || 0) + 1;
+    } else if (s === 'hold') {
+      record.ordersHandled.hold = (record.ordersHandled.hold || 0) + 1;
+    } else if (s === 'shipped') {
+      record.ordersHandled.shipped = (record.ordersHandled.shipped || 0) + 1;
+    }
+  } else if (actionType === 'COURIER_BOOKED') {
+    record.couriersBooked = (record.couriersBooked || 0) + 1;
+  } else if (actionType === 'WHATSAPP_SENT') {
+    record.whatsappSent = (record.whatsappSent || 0) + 1;
+  }
+
+  saveStaffActivity(allActivity);
+
+  let summary = '';
+  if (actionType === 'ORDER_STATUS_CHANGED') {
+    summary = `Changed order #${orderId} status to ${status.toUpperCase()}`;
+  } else if (actionType === 'COURIER_BOOKED') {
+    summary = `Booked courier (${courier}) for order #${orderId}`;
+  } else if (actionType === 'WHATSAPP_SENT') {
+    summary = `Sent WhatsApp message for order #${orderId}`;
+  } else {
+    summary = note || actionType;
+  }
+
+  addAuditLog({
+    staff,
+    action: actionType,
+    targetType: 'order',
+    targetId: orderId,
+    summary,
+    details: { status, amount, courier, note }
+  });
+}
+
+export function getStaffMonitoringData() {
+  const now = Date.now();
+  const dateKey = getBangladeshDate();
+  const allActivity = getStaffActivity();
+  const todayRecords = allActivity[dateKey] || {};
+
+  const users = getUsers() || [];
+  const monitoringList = [];
+
+  const allStaffCandidates = [
+    { username: 'owner', name: 'Store Owner', role: 'owner' },
+    ...users.map(u => ({ username: u.username, name: u.name || u.username, role: u.role || 'staff', id: u.id }))
+  ];
+
+  for (const cand of allStaffCandidates) {
+    const un = cand.username.toLowerCase();
+    const live = liveStaffPresence.get(un);
+    const dayStat = todayRecords[un] || {
+      firstLogin: null,
+      lastActive: null,
+      activeSeconds: 0,
+      idleSeconds: 0,
+      ordersHandled: { confirmed: 0, cancelled: 0, approved: 0, hold: 0, shipped: 0, total: 0 },
+      couriersBooked: 0,
+      whatsappSent: 0,
+      totalRevenueProcessed: 0
+    };
+
+    let status = 'offline';
+    if (live) {
+      const diffSec = Math.round((now - live.lastPing) / 1000);
+      if (diffSec <= 90) {
+        status = live.status === 'idle' ? 'idle' : 'active';
+      } else {
+        status = 'offline';
+      }
+    }
+
+    monitoringList.push({
+      username: cand.username,
+      name: cand.name,
+      role: cand.role,
+      status,
+      lastPing: live ? live.lastPing : null,
+      currentPath: live ? live.currentPath : '',
+      firstLogin: dayStat.firstLogin,
+      lastActive: dayStat.lastActive,
+      activeSeconds: dayStat.activeSeconds || 0,
+      idleSeconds: dayStat.idleSeconds || 0,
+      ordersHandled: dayStat.ordersHandled || { confirmed: 0, cancelled: 0, approved: 0, hold: 0, shipped: 0, total: 0 },
+      couriersBooked: dayStat.couriersBooked || 0,
+      whatsappSent: dayStat.whatsappSent || 0,
+      totalRevenueProcessed: dayStat.totalRevenueProcessed || 0
+    });
+  }
+
+  return {
+    date: dateKey,
+    timestamp: new Date().toISOString(),
+    staff: monitoringList,
+    recentAuditLogs: getAuditLogs().slice(0, 100)
+  };
 }

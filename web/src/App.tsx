@@ -1,3 +1,4 @@
+import { NotificationWidgets } from './NotificationWidgets';
 import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { CartProvider, useCart, useRoute, go } from './cart';
 import { taka, getSettings, isSkincareSite, getCategories, isWellnessOrExcludedCategory, getCachedSettings, getCachedCategories } from './api';
@@ -989,6 +990,7 @@ function Shell() {
       <WhatsAppFloat />
       <CartFab />
       <Toast />
+      <NotificationWidgets />
       <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
     </>
   );

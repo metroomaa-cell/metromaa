@@ -12,6 +12,7 @@
     "express": "^4.19.2",
     "nodemailer": "10.1.7",
     "pino": "^9.4.0",
-    "qrcode": "^1.5.3"
+    "qrcode": "^1.5.3",
+    "web-push": "^3.6.7"
   }
 }
