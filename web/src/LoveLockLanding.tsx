@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { placeOrder, getSettings, taka, getDeviceId, isSkincareSite } from './api';
-import { dl, ecView, ecAdd, ecBeginCheckout, ecPurchase } from './analytics';
+import { placeOrder, getSettings, taka, getDeviceId, isSkincareSite, getTrafficAttribution } from './api';
+import { dl, ecView, ecAdd, ecBeginCheckout, ecPurchase, pushUserData } from './analytics';
 import { go } from './cart';
 import { WhatsAppIcon } from './icons';
 
@@ -197,7 +197,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
   useEffect(() => {
     if (!cfg) return;
-    const brand = isSkincareSite() ? 'METROMA' : 'METRROMA';
+    const brand = 'SECRATE';
     const lTitle = `${cfg.headline || cfg.title} — ${brand}`;
     document.title = lTitle;
     const q = new URLSearchParams(location.search);
@@ -241,7 +241,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
   const subtotal = Number(currentItem.price || 0) * currentQty;
 
   // Dynamic Delivery Charge Calculation
-  const isFreeDelivery = cfg ? cfg.freeDelivery !== false : true;
+  const isFreeDelivery = Boolean(cfg?.freeDelivery === true);
   const delInside = Number(cfg?.deliveryInside ?? cfg?.customDeliveryInside ?? storeDelInside ?? 80);
   const delOutside = Number(cfg?.deliveryOutside ?? cfg?.customDeliveryOutside ?? storeDelOutside ?? 130);
   const shippingCost = isFreeDelivery ? 0 : shippingZone === 'inside' ? delInside : delOutside;
@@ -320,8 +320,35 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
   useEffect(() => {
     if (!cfg || !currentItem) return;
     const phoneCheck = cleanAndValidateBDPhone(phone);
+    const cleanPhone = phoneCheck.isValid ? phoneCheck.clean : phone.replace(/\D/g, '');
+
+    // Live push customer user_data to dataLayer for sGTM / Meta Advanced Matching
+    if (cleanPhone.length >= 7 || name.trim().length >= 2) {
+      pushUserData({
+        name: name.trim(),
+        phone: cleanPhone,
+        address: address.trim(),
+        city: shippingZone === 'inside' ? 'Dhaka' : 'Outside Dhaka',
+      });
+    }
+
     if (!phoneCheck.isValid) return;
-    const cleanPhone = phoneCheck.clean;
+
+    // Fire rich InitiateCheckout with customer user_data once phone is valid
+    if (!checkoutTrackedRef.current) {
+      checkoutTrackedRef.current = true;
+      ecBeginCheckout(
+        total,
+        [{ id: currentItem.id, name: currentItem.title, price: currentItem.price, qty: currentQty }],
+        {
+          name: name.trim(),
+          phone: cleanPhone,
+          address: address.trim(),
+          city: shippingZone === 'inside' ? 'Dhaka' : 'Outside Dhaka',
+        }
+      );
+    }
+
     const t = setTimeout(() => {
       fetch('/api/checkout/ping', {
         method: 'POST',
@@ -335,6 +362,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
               id: currentItem.id,
               qty: currentQty,
               name: currentItem.title,
+              sku: currentItem.sku || cfg?.sku || '',
               price: currentItem.price,
               image: currentItem.image || cfg.heroImage,
               color: selectedColor || '',
@@ -389,6 +417,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
           {
             id: currentItem.id,
             name: currentItem.title,
+            sku: currentItem.sku || cfg?.sku || '',
             price: currentItem.price,
             qty: currentQty,
             image: currentItem.image || cfg?.heroImage,
@@ -402,22 +431,29 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
           address: address.trim(),
           area: shippingZone,
           landing: cfg?.slug || slug,
-          source: `landing_${cfg?.slug || slug}`,
+          source: getTrafficAttribution().channel !== 'direct' ? getTrafficAttribution().channel : 'facebook',
           freeDelivery: isFreeDelivery,
           shippingCost,
         },
+        attribution: getTrafficAttribution(),
         shipping: {
           cost: shippingCost,
           method: isFreeDelivery ? 'free' : shippingZone,
         },
       });
 
-      // 4. Pixel + CAPI Dual Deduplicated Purchase Tracking
+      // 4. Pixel + CAPI Dual Deduplicated Purchase Tracking with rich customer user_data
       ecPurchase(
         res.id,
         res.total ?? total,
         [{ id: currentItem.id, name: currentItem.title, price: currentItem.price, qty: currentQty }],
-        `landing_${cfg?.slug || slug}`
+        `landing_${cfg?.slug || slug}`,
+        {
+          name: name.trim(),
+          phone: cleanPhone,
+          address: address.trim(),
+          city: shippingZone === 'inside' ? 'Dhaka' : 'Outside Dhaka',
+        }
       );
 
       // Navigate to order confirmation
@@ -840,7 +876,14 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
                           )}
 
                           <div className="ll-card-content">
-                            <div className="ll-card-title">{prod.title}</div>
+                            <div className="ll-card-title">
+                                {prod.title}
+                                {prod.sku && (
+                                  <span style={{ display: 'inline-block', marginLeft: 8, fontSize: 11, background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.25)', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
+                                    SKU: {prod.sku}
+                                  </span>
+                                )}
+                              </div>
 
                             <div className="ll-card-footer">
                               <div className="ll-stepper">

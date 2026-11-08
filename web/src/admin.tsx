@@ -55,41 +55,313 @@ function suggestCourier(district: string) {
   const d = district.toLowerCase();
   return ['dhaka', 'gazipur', 'narayanganj', 'savar', 'gulshan', 'dhanmondi', 'uttara', 'mirpur'].some((x) => d.includes(x)) ? 'Pathao' : 'Steadfast';
 }
-function originLabel(src: string) {
-  const s = (src || 'direct').toLowerCase();
-  if (s.includes('phone') || s === 'phone_call') return 'Phone Call';
-  if (s.includes('whatsapp') || s === 'wa') return 'WhatsApp';
-  if (s.includes('facebook') || s === 'fb') return 'Facebook';
-  if (s.includes('instagram') || s === 'ig') return 'Instagram';
-  if (s.includes('tiktok')) return 'TikTok';
-  if (s.includes('google')) return 'Google';
-  if (s.includes('youtube')) return 'YouTube';
-  if (s.includes('landing')) return 'Landing Page';
-  if (s === 'direct' || s === '') return 'Direct';
-  return src;
+function FacebookIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#1877F2" style={{ flexShrink: 0 }}>
+      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+    </svg>
+  );
 }
 
-function OriginBadge({ source, style }: { source: string; style?: React.CSSProperties }) {
-  const s = (source || 'direct').toLowerCase();
-  if (s.includes('whatsapp') || s === 'wa') {
-    return (
-      <span className="origin-chip origin-wa" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, ...style }}>
-        <WhatsAppIcon size={13} variant="official" />
-        <span>WhatsApp</span>
-      </span>
-    );
-  }
-  if (s.includes('phone') || s === 'phone_call') {
-    return (
-      <span className="origin-chip origin-phone" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, ...style }}>
-        <span>📞</span>
-        <span>Phone Call</span>
-      </span>
-    );
-  }
+function TikTokIcon({ size = 12 }: { size?: number }) {
   return (
-    <span className="origin-chip" style={style}>
-      {originLabel(source)}
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#22d3ee" style={{ flexShrink: 0 }}>
+      <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/>
+    </svg>
+  );
+}
+
+function GoogleIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+      <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.86c2.26-2.09 3.685-5.17 3.685-9.09z"/>
+      <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.28v3.09C3.25 21.3 7.31 24 12 24z"/>
+      <path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.28C.46 8.24 0 10.06 0 12s.46 3.76 1.28 5.38l3.99-3.09z"/>
+      <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.25 2.7 1.28 6.62l3.99 3.09c.95-2.85 3.6-4.96 6.73-4.96z"/>
+    </svg>
+  );
+}
+
+function ChatGPTIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#10a37f" style={{ flexShrink: 0 }}>
+      <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 8.788a4.485 4.485 0 0 1 2.366-1.973v5.679a.776.776 0 0 0 .392.68l5.814 3.355-2.02 1.169a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 8.788zm16.597 3.855l-5.833-3.387L15.119 8.1a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 10.12V7.788a.088.088 0 0 1 .038-.063l4.84-2.796a4.504 4.504 0 0 1 6.654 4.882zM7.47 14.152l-2.02-1.164a.08.08 0 0 1-.038-.057V7.348a4.5 4.5 0 0 1 7.375-3.453l-.142.08-4.778 2.758a.795.795 0 0 0-.393.681v6.738zm1.996-2.164l3.137-1.808 3.132 1.808v3.617l-3.132 1.808-3.137-1.808v-3.617z"/>
+    </svg>
+  );
+}
+
+function InstagramIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#f472b6" style={{ flexShrink: 0 }}>
+      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+    </svg>
+  );
+}
+
+export function resolveOrderSource(orderOrSource: any): {
+  channel: string;
+  label: string;
+  subLabel?: string;
+  isPaid: boolean;
+  color: string;
+  bg: string;
+  border: string;
+  iconType: 'facebook' | 'tiktok' | 'google' | 'instagram' | 'chatgpt' | 'claude' | 'perplexity' | 'copilot' | 'gemini' | 'youtube' | 'yahoo' | 'whatsapp' | 'phone' | 'direct';
+} {
+  let src = '';
+  let landing = '';
+  let attr: any = null;
+
+  if (typeof orderOrSource === 'string') {
+    src = orderOrSource;
+  } else if (orderOrSource && typeof orderOrSource === 'object') {
+    src = orderOrSource.source || '';
+    landing = orderOrSource.landing || '';
+    attr = orderOrSource.attribution || null;
+  }
+
+  const s = (src || '').toLowerCase();
+  const ch = (attr?.channel || '').toLowerCase();
+  const med = (attr?.medium || '').toLowerCase();
+  const ref = (attr?.referrer || '').toLowerCase();
+
+  // 1. WhatsApp
+  if (ch === 'whatsapp' || s.includes('whatsapp') || s === 'wa') {
+    return {
+      channel: 'whatsapp',
+      label: 'WhatsApp',
+      isPaid: false,
+      color: '#4ade80',
+      bg: 'rgba(37, 211, 102, 0.15)',
+      border: 'rgba(37, 211, 102, 0.35)',
+      iconType: 'whatsapp',
+    };
+  }
+
+  // 2. Phone Call
+  if (ch === 'phone' || s.includes('phone') || s === 'phone_call') {
+    return {
+      channel: 'phone',
+      label: 'Phone Call',
+      isPaid: false,
+      color: '#fbbf24',
+      bg: 'rgba(245, 158, 11, 0.15)',
+      border: 'rgba(245, 158, 11, 0.35)',
+      iconType: 'phone',
+    };
+  }
+
+  // 3. Facebook / Meta Ads
+  if (ch === 'facebook' || s.includes('facebook') || s === 'fb' || ref.includes('facebook') || s.includes('eventsmanager.facebook')) {
+    const isPaid = med === 'cpc' || med.includes('ad') || attr?.clickId || !s.includes('referral');
+    return {
+      channel: 'facebook',
+      label: isPaid ? 'Facebook Ads' : 'Facebook',
+      subLabel: landing ? `l/${landing}` : undefined,
+      isPaid,
+      color: '#60a5fa',
+      bg: 'rgba(24, 119, 242, 0.16)',
+      border: 'rgba(24, 119, 242, 0.4)',
+      iconType: 'facebook',
+    };
+  }
+
+  // 4. TikTok
+  if (ch === 'tiktok' || s.includes('tiktok') || s === 'tt' || ref.includes('tiktok')) {
+    const isPaid = med === 'cpc' || med.includes('video') || med.includes('ad') || attr?.clickId;
+    return {
+      channel: 'tiktok',
+      label: isPaid ? 'TikTok Ads' : 'TikTok',
+      subLabel: landing ? `l/${landing}` : undefined,
+      isPaid,
+      color: '#22d3ee',
+      bg: 'rgba(0, 242, 254, 0.14)',
+      border: 'rgba(0, 242, 254, 0.4)',
+      iconType: 'tiktok',
+    };
+  }
+
+  // 5. Google / Google Ads
+  if (ch === 'google' || s.includes('google') || ref.includes('google')) {
+    const isPaid = med === 'cpc' || med.includes('ad') || attr?.clickId;
+    return {
+      channel: 'google',
+      label: isPaid ? 'Google Ads' : 'Google Search',
+      subLabel: landing ? `l/${landing}` : undefined,
+      isPaid,
+      color: '#f87171',
+      bg: 'rgba(234, 67, 53, 0.14)',
+      border: 'rgba(234, 67, 53, 0.35)',
+      iconType: 'google',
+    };
+  }
+
+  // 6. Instagram
+  if (ch === 'instagram' || s.includes('instagram') || s === 'ig' || ref.includes('instagram')) {
+    return {
+      channel: 'instagram',
+      label: 'Instagram Ads',
+      subLabel: landing ? `l/${landing}` : undefined,
+      isPaid: true,
+      color: '#f472b6',
+      bg: 'rgba(225, 48, 108, 0.16)',
+      border: 'rgba(225, 48, 108, 0.4)',
+      iconType: 'instagram',
+    };
+  }
+
+  // 7. Yahoo
+  if (ch === 'yahoo' || s.includes('yahoo') || ref.includes('yahoo')) {
+    return {
+      channel: 'yahoo',
+      label: 'Yahoo',
+      subLabel: landing ? `l/${landing}` : undefined,
+      isPaid: false,
+      color: '#c084fc',
+      bg: 'rgba(168, 85, 247, 0.16)',
+      border: 'rgba(168, 85, 247, 0.4)',
+      iconType: 'yahoo',
+    };
+  }
+
+  // 8. AI Chatbots (ChatGPT, Claude, Perplexity, Copilot, Gemini)
+  if (ch === 'chatgpt' || s.includes('chatgpt') || s.includes('openai') || ref.includes('chatgpt') || ref.includes('openai')) {
+    return {
+      channel: 'chatgpt',
+      label: 'ChatGPT (AI)',
+      isPaid: false,
+      color: '#34d399',
+      bg: 'rgba(16, 163, 127, 0.16)',
+      border: 'rgba(16, 163, 127, 0.4)',
+      iconType: 'chatgpt',
+    };
+  }
+  if (ch === 'claude' || s.includes('claude') || s.includes('anthropic') || ref.includes('claude')) {
+    return {
+      channel: 'claude',
+      label: 'Claude (AI)',
+      isPaid: false,
+      color: '#fbbf24',
+      bg: 'rgba(217, 119, 6, 0.16)',
+      border: 'rgba(217, 119, 6, 0.4)',
+      iconType: 'claude',
+    };
+  }
+  if (ch === 'perplexity' || s.includes('perplexity') || ref.includes('perplexity')) {
+    return {
+      channel: 'perplexity',
+      label: 'Perplexity (AI)',
+      isPaid: false,
+      color: '#2dd4bf',
+      bg: 'rgba(20, 184, 166, 0.16)',
+      border: 'rgba(20, 184, 166, 0.4)',
+      iconType: 'perplexity',
+    };
+  }
+  if (ch === 'copilot' || s.includes('copilot') || s.includes('bing') || ref.includes('copilot') || ref.includes('bing')) {
+    return {
+      channel: 'copilot',
+      label: 'Copilot / Bing',
+      isPaid: false,
+      color: '#38bdf8',
+      bg: 'rgba(56, 189, 248, 0.16)',
+      border: 'rgba(56, 189, 248, 0.4)',
+      iconType: 'copilot',
+    };
+  }
+  if (ch === 'gemini' || s.includes('gemini') || ref.includes('gemini')) {
+    return {
+      channel: 'gemini',
+      label: 'Gemini (AI)',
+      isPaid: false,
+      color: '#818cf8',
+      bg: 'rgba(99, 102, 241, 0.16)',
+      border: 'rgba(99, 102, 241, 0.4)',
+      iconType: 'gemini',
+    };
+  }
+
+  // 9. YouTube
+  if (ch === 'youtube' || s.includes('youtube') || ref.includes('youtube') || ref.includes('youtu.be')) {
+    return {
+      channel: 'youtube',
+      label: 'YouTube',
+      isPaid: false,
+      color: '#f87171',
+      bg: 'rgba(239, 68, 68, 0.16)',
+      border: 'rgba(239, 68, 68, 0.4)',
+      iconType: 'youtube',
+    };
+  }
+
+  // 10. Landing page orders (Historical & Active fallback)
+  // When an ad campaign sends users to a landing page, it represents Facebook Ads
+  if (s.startsWith('landing_') || s.startsWith('l/') || s.includes('lovelock') || landing) {
+    const cleanLanding = (landing || s.replace(/^landing_/, '').replace(/^l\//, '')).trim();
+    return {
+      channel: 'facebook',
+      label: 'Facebook Ads',
+      subLabel: cleanLanding ? `l/${cleanLanding}` : undefined,
+      isPaid: true,
+      color: '#60a5fa',
+      bg: 'rgba(24, 119, 242, 0.16)',
+      border: 'rgba(24, 119, 242, 0.4)',
+      iconType: 'facebook',
+    };
+  }
+
+  // 11. Direct / Organic / Fallback
+  return {
+    channel: 'direct',
+    label: s && s !== 'direct' ? s : 'Direct / Organic',
+    isPaid: false,
+    color: '#94a3b8',
+    bg: 'rgba(148, 163, 184, 0.12)',
+    border: 'rgba(148, 163, 184, 0.25)',
+    iconType: 'direct',
+  };
+}
+
+function originLabel(srcOrOrder: any): string {
+  const info = resolveOrderSource(srcOrOrder);
+  return info.label;
+}
+
+function OriginBadge({ source, order, style }: { source?: string; order?: any; style?: React.CSSProperties }) {
+  const info = resolveOrderSource(order || source);
+
+  let iconElem: React.ReactNode = null;
+  if (info.iconType === 'facebook') iconElem = <FacebookIcon size={12} />;
+  else if (info.iconType === 'tiktok') iconElem = <TikTokIcon size={12} />;
+  else if (info.iconType === 'google') iconElem = <GoogleIcon size={12} />;
+  else if (info.iconType === 'chatgpt') iconElem = <ChatGPTIcon size={12} />;
+  else if (info.iconType === 'instagram') iconElem = <InstagramIcon size={12} />;
+  else if (info.iconType === 'whatsapp') iconElem = <WhatsAppIcon size={12} variant="official" />;
+  else if (info.iconType === 'phone') iconElem = <span style={{ fontSize: 11 }}>📞</span>;
+  else if (info.iconType === 'yahoo') iconElem = <span style={{ fontWeight: 900, color: '#c084fc', fontSize: 10 }}>Y!</span>;
+  else if (info.iconType === 'claude' || info.iconType === 'perplexity' || info.iconType === 'copilot') iconElem = <span style={{ fontSize: 11 }}>🤖</span>;
+  else if (info.iconType === 'gemini') iconElem = <span style={{ fontSize: 11 }}>✨</span>;
+  else if (info.iconType === 'youtube') iconElem = <span style={{ fontSize: 11 }}>▶️</span>;
+  else iconElem = <span style={{ fontSize: 11 }}>🌐</span>;
+
+  return (
+    <span
+      className="origin-chip"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        background: info.bg,
+        border: `1px solid ${info.border}`,
+        color: info.color,
+        fontWeight: 600,
+        borderRadius: 4,
+        ...style,
+      }}
+      title={`Traffic Source: ${info.label}${info.subLabel ? ` · Landing: ${info.subLabel}` : ''}`}
+    >
+      {iconElem}
+      <span>{info.label}</span>
     </span>
   );
 }
@@ -98,7 +370,7 @@ function exportCSV(
   orders: any[],
   prodMap?: Record<string, any>,
   landingMap?: Record<string, any>,
-  filePrefix = 'metrroma-orders'
+  filePrefix = 'secrate-orders'
 ) {
   return exportOrdersExcel(orders, prodMap, landingMap, filePrefix);
 }
@@ -1055,7 +1327,7 @@ function invoiceBody(o: any) {
   const rows = o.items.map((it: any, i: number) => `<tr><td class="c">${i + 1}</td><td><div style="display:flex;align-items:center;gap:8px">${it.image ? `<img src="${it.image}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;border:1px solid #eee;flex:none"/>` : ''}<span>${it.name}</span></div></td><td class="c">${it.qty}</td><td class="r">৳${it.price ?? Math.round(it.subtotal / it.qty)}</td><td class="r">৳${it.subtotal}</td></tr>`).join('');
   const cour = o.courier && o.courier.name ? `<div class="col"><div class="lbl">Courier</div><p class="nm">${o.courier.name}</p>${o.courier.consignment ? `<p>Tracking: ${o.courier.consignment}</p>` : ''}</div>` : '';
   const disc = o.discount ? `<div class="totrow"><span>Discount${o.coupon ? ' (' + o.coupon + ')' : ''}</span><span>&minus;৳${o.discount}</span></div>` : '';
-  return `<div class="pg"><div class="doc-top"><div><div class="brand">METRROMA</div><div class="brand-sub">For your personal world.</div></div><div class="doc-meta"><div class="doc-title">INVOICE</div><div class="doc-id">${o.id}</div><div class="doc-date">${new Date(o.createdAt).toLocaleString()}</div></div></div><div class="cols"><div class="col"><div class="lbl">Deliver to</div><p class="nm">${o.customer.name}</p><p>${o.customer.phone}</p><p>${o.customer.address}${o.customer.area ? ' (' + o.customer.area + ' dhaka)' : ''}</p></div><div class="col"><div class="lbl">Payment</div><span class="pay">Cash on delivery</span></div>${cour}</div><table><thead><tr><th class="c">#</th><th>Item</th><th class="c">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody></table><div class="totbox"><div class="totrow"><span>Subtotal</span><span>৳${o.itemsTotal ?? o.total}</span></div><div class="totrow"><span>Delivery</span><span>${o.delivery ? '৳' + o.delivery : 'Free'}</span></div>${disc}<div class="totrow grand"><span>Total (COD)</span><span>৳${o.total}</span></div></div><div class="foot">Thank you for shopping with METRROMA. &middot; Every order ships in plain, discreet packaging.<br>This is a computer-generated invoice and needs no signature.</div></div>`;
+  return `<div class="pg"><div class="doc-top"><div><div class="brand">SECRATE</div><div class="brand-sub">For your personal world.</div></div><div class="doc-meta"><div class="doc-title">INVOICE</div><div class="doc-id">${o.id}</div><div class="doc-date">${new Date(o.createdAt).toLocaleString()}</div></div></div><div class="cols"><div class="col"><div class="lbl">Deliver to</div><p class="nm">${o.customer.name}</p><p>${o.customer.phone}</p><p>${o.customer.address}${o.customer.area ? ' (' + o.customer.area + ' dhaka)' : ''}</p></div><div class="col"><div class="lbl">Payment</div><span class="pay">Cash on delivery</span></div>${cour}</div><table><thead><tr><th class="c">#</th><th>Item</th><th class="c">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody></table><div class="totbox"><div class="totrow"><span>Subtotal</span><span>৳${o.itemsTotal ?? o.total}</span></div><div class="totrow"><span>Delivery</span><span>${o.delivery ? '৳' + o.delivery : 'Free'}</span></div>${disc}<div class="totrow grand"><span>Total (COD)</span><span>৳${o.total}</span></div></div><div class="foot">Thank you for shopping with SECRATE. &middot; Every order ships in plain, discreet packaging.<br>This is a computer-generated invoice and needs no signature.</div></div>`;
 }
 function resolveItemSku(it: any, order?: any): string {
   const rawSku = String(it?.sku || '').trim();
@@ -1113,7 +1385,7 @@ function resolveCourierBrand(rawName: string): string {
 function slipBody(o: any) {
   // Dynamic store logo from live website settings - fully automatic!
   const rawLogo = liveStoreSettings.logo || '';
-  const storeName = liveStoreSettings.storeName || 'METRROMA';
+  const storeName = liveStoreSettings.storeName || 'SECRATE';
   const fullLogoUrl = rawLogo ? (rawLogo.startsWith('http') ? rawLogo : (typeof window !== 'undefined' ? window.location.origin : '') + rawLogo) : '';
 
   const brandBlockHtml = fullLogoUrl
@@ -1176,7 +1448,7 @@ function printSlips(list: any[]) {
   updateLiveSettingsCache();
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const slipsHtml = list.map(slipBody).map(s => s.trim()).join('');
-  const filename = list.length === 1 ? `metrroma-slip-${list[0].id}.pdf` : `metrroma-slips-${list.length}-orders.pdf`;
+  const filename = list.length === 1 ? `secrate-slip-${list[0].id}.pdf` : `secrate-slips-${list.length}-orders.pdf`;
   const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><base href="${origin}/"><title>${filename}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800;900&display=swap"><style>${SLIP_PRINT_CSS}
   .top-toolbar { position: sticky; top: 0; left: 0; right: 0; background: #0f172a; color: #ffffff; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 999999; font-family: 'Inter', 'Hind Siliguri', sans-serif; }
   .top-toolbar .info { font-size: 13px; font-weight: 600; color: #cbd5e1; }
@@ -1243,7 +1515,7 @@ const I = {
 export function Admin() {
   const [authed, setAuthed] = useState(() => !!getTok());
   const [nav, setNav] = useState('dashboard');
-  const [store, setStore] = useState('METRROMA');
+  const [store, setStore] = useState('SECRATE');
   const [me, setMe] = useState<any>(null);
   const [orderTotal, setOrderTotal] = useState<number | null>(null);
   const [lastSeen, setLastSeen] = useState<number | null>(null);
@@ -1257,7 +1529,7 @@ export function Admin() {
   }, []);
   useEffect(() => {
     if (!authed) return;
-    fetch('/api/settings').then((r) => r.json()).then((s) => setStore(s.storeName || 'METRROMA')).catch(() => {});
+    fetch('/api/settings').then((r) => r.json()).then((s) => setStore(s.storeName || 'SECRATE')).catch(() => {});
     aFetch('/admin/me').then((r) => (r.ok ? r.json() : null)).then((m) => { if (m) setMe(m); else { localStorage.removeItem(KEY); setAuthed(false); } }).catch(() => {});
   }, [authed]);
   useEffect(() => {
@@ -1267,14 +1539,14 @@ export function Admin() {
       if (!o) return; const n = o.length;
       setOrderTotal(n);
       if (prevTotal.current === null) setLastSeen((ls) => (ls === null ? n : ls));
-      else if (n > prevTotal.current) { beep(); if (document.title.indexOf('🔴') < 0) document.title = '🔴 new order — METRROMA Admin'; }
+      else if (n > prevTotal.current) { beep(); if (document.title.indexOf('🔴') < 0) document.title = '🔴 new order — SECRATE Admin'; }
       prevTotal.current = n;
     }).catch(() => {});
     check();
     const t = setInterval(check, 25000);
     return () => clearInterval(t);
   }, [authed]);
-  useEffect(() => { if (!authed) return; if (nav === 'orders' && orderTotal != null) { setLastSeen(orderTotal); document.title = 'METRROMA Admin'; } }, [nav, orderTotal, authed]);
+  useEffect(() => { if (!authed) return; if (nav === 'orders' && orderTotal != null) { setLastSeen(orderTotal); document.title = 'SECRATE Admin'; } }, [nav, orderTotal, authed]);
 
   // Real-time Staff Presence & Active Time Heartbeat
   useEffect(() => {
@@ -2188,10 +2460,11 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
 
   // Sales Channel & Ad Attribution
   const channelStats = useMemo(() => {
-    const map: Record<string, { label: string; rev: number; count: number }> = {};
+    const map: Record<string, { label: string; rev: number; count: number; color?: string }> = {};
     activeOrders.forEach((o) => {
-      const src = originLabel(o.source);
-      if (!map[src]) map[src] = { label: src, rev: 0, count: 0 };
+      const info = resolveOrderSource(o);
+      const src = info.label;
+      if (!map[src]) map[src] = { label: src, rev: 0, count: 0, color: info.color };
       map[src].rev += o.total;
       map[src].count++;
     });
@@ -2443,7 +2716,7 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
                     <span className="mono">{taka(ch.rev)} ({pct}%)</span>
                   </div>
                   <div className="channel-bar-bg">
-                    <div className="channel-bar-fill" style={{ width: `${pct}%` }} />
+                    <div className="channel-bar-fill" style={{ width: `${pct}%`, background: ch.color || 'var(--primary)' }} />
                   </div>
                 </div>
               );
@@ -3780,8 +4053,8 @@ function OrdersAdmin() {
             className="sa-btn ghost"
             onClick={() =>
               pickedOrders.length > 0
-                ? exportCSV(pickedOrders, prodMap, landingMap, `metrroma-selected-${pickedOrders.length}-orders`)
-                : exportCSV(shown, prodMap, landingMap, filter !== 'all' ? `metrroma-${filter}-orders` : 'metrroma-orders')
+                ? exportCSV(pickedOrders, prodMap, landingMap, `secrate-selected-${pickedOrders.length}-orders`)
+                : exportCSV(shown, prodMap, landingMap, filter !== 'all' ? `secrate-${filter}-orders` : 'secrate-orders')
             }
             style={
               pickedOrders.length > 0
@@ -3848,7 +4121,7 @@ function OrdersAdmin() {
           </select>
           <button
             type="button"
-            onClick={() => exportCSV(pickedOrders, prodMap, landingMap, `metrroma-selected-${pickedOrders.length}-orders`)}
+            onClick={() => exportCSV(pickedOrders, prodMap, landingMap, `secrate-selected-${pickedOrders.length}-orders`)}
             style={{ background: 'rgba(139, 92, 246, 0.2)', border: '1px solid rgba(139, 92, 246, 0.5)', color: '#e9d5ff', fontWeight: 700 }}
           >
             📥 Download CSV ({pickedOrders.length})
@@ -3989,8 +4262,24 @@ function OrdersAdmin() {
                 <div style={{ fontSize: 10.5, color: '#64748b' }}>
                   {new Date(o.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                 </div>
-                <div style={{ marginTop: 2, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  <OriginBadge source={o.source} style={{ fontSize: 10, padding: '2px 6px' }} />
+                <div style={{ marginTop: 3, display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <OriginBadge order={o} style={{ fontSize: 10, padding: '2px 7px' }} />
+                  {o.landing && (
+                    <span
+                      style={{
+                        fontSize: 9.5,
+                        background: 'rgba(139, 92, 246, 0.12)',
+                        color: '#c084fc',
+                        border: '1px solid rgba(139, 92, 246, 0.3)',
+                        padding: '1px 5px',
+                        borderRadius: 4,
+                        fontWeight: 600,
+                      }}
+                      title={`Landing Page: /l/${o.landing}`}
+                    >
+                      🎯 {o.landing.replace(/^landing_/, '').replace(/^l\//, '')}
+                    </span>
+                  )}
                   {o.isExchange && (
                     <span style={{ fontSize: 9.5, background: 'rgba(168, 85, 247, 0.2)', color: '#c084fc', border: '1px solid rgba(168, 85, 247, 0.4)', padding: '1px 5px', borderRadius: 4, fontWeight: 700 }} title={`Exchange for #${o.originalOrderId}`}>
                       🔄 Exchange
@@ -4266,7 +4555,7 @@ function OrdersAdmin() {
                   <a
                     className="eye-btn eye-btn-wa"
                     title={o.status === 'incomplete' ? "Send WhatsApp Recovery Message" : "WhatsApp customer"}
-                    href={`https://wa.me/88${cleanPhone}${o.status === 'incomplete' ? `?text=${encodeURIComponent(`আসসালামু আলাইকুম ${o.customer?.name || 'Sir/Mam'}! metrroma.com থেকে লক্ষ্য করলাম "${cleanItem.title || 'আমাদের পণ্য'}" এর অর্ডারটি আপনি সম্পন্ন করেননি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳${o.total}।`)}` : ''}`}
+                    href={`https://wa.me/88${cleanPhone}${o.status === 'incomplete' ? `?text=${encodeURIComponent(`আসসালামু আলাইকুম ${o.customer?.name || 'Sir/Mam'}! secrate.shop থেকে লক্ষ্য করলাম "${cleanItem.title || 'আমাদের পণ্য'}" এর অর্ডারটি আপনি সম্পন্ন করেননি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳${o.total}।`)}` : ''}`}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -5066,7 +5355,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
               onClick={() => {
                 const pm: Record<string, any> = {};
                 (Array.isArray(allProducts) ? allProducts : []).forEach((p) => { if (p?.id) pm[p.id] = p; });
-                exportCSV([o], pm, undefined, `metrroma-order-${o.id}`);
+                exportCSV([o], pm, undefined, `secrate-order-${o.id}`);
               }}
               title="Download CSV for this order"
             >
@@ -5199,7 +5488,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                 {custPhone && (
                   <a
                     href={`https://wa.me/88${custPhone.replace(/\D/g, '')}?text=${encodeURIComponent(
-                      `আসসালামু আলাইকুম ${custName ? `${custName} Sir/Mam` : 'Sir/Mam'}! metrroma.com থেকে লক্ষ্য করলাম আপনি "${items[0]?.name || 'আমাদের পণ্য'}" অর্ডার করার চেষ্টা করেছিলেন কিন্তু অর্ডারটি সম্পন্ন হয়নি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳${grandTotal}।`
+                      `আসসালামু আলাইকুম ${custName ? `${custName} Sir/Mam` : 'Sir/Mam'}! secrate.shop থেকে লক্ষ্য করলাম আপনি "${items[0]?.name || 'আমাদের পণ্য'}" অর্ডার করার চেষ্টা করেছিলেন কিন্তু অর্ডারটি সম্পন্ন হয়নি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳${grandTotal}।`
                     )}`}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -5493,11 +5782,47 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
 
             {/* ORDER ATTRIBUTION & NOTES */}
             <div className="sa-om-card">
-              <div className="sa-om-card-h">ORDER ATTRIBUTION &amp; NOTES</div>
+              <div className="sa-om-card-h">MARKETING ATTRIBUTION &amp; SOURCE</div>
               <div className="sa-om-kv">
-                <span className="sa-om-k">Origin / Source</span>
-                <span className="sa-om-v"><span className="sa-tag-source">🌐 {originLabel(o.source)}</span></span>
+                <span className="sa-om-k">Traffic Source</span>
+                <span className="sa-om-v">
+                  <OriginBadge order={o} style={{ fontSize: 11, padding: '3px 8px' }} />
+                </span>
               </div>
+              {o.landing && (
+                <div className="sa-om-kv">
+                  <span className="sa-om-k">Landing Page</span>
+                  <span className="sa-om-v">
+                    <span style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#c084fc', border: '1px solid rgba(139, 92, 246, 0.3)', padding: '2px 8px', borderRadius: 4, fontSize: 12, fontWeight: 600 }}>
+                      🎯 /l/{o.landing.replace(/^landing_/, '').replace(/^l\//, '')}
+                    </span>
+                  </span>
+                </div>
+              )}
+              {o.attribution?.medium && (
+                <div className="sa-om-kv">
+                  <span className="sa-om-k">Ad Medium</span>
+                  <span className="sa-om-v" style={{ color: '#94a3b8', fontSize: 12 }}>
+                    {o.attribution.medium}
+                  </span>
+                </div>
+              )}
+              {o.attribution?.campaign && (
+                <div className="sa-om-kv">
+                  <span className="sa-om-k">Campaign</span>
+                  <span className="sa-om-v" style={{ color: '#94a3b8', fontSize: 12 }}>
+                    {o.attribution.campaign}
+                  </span>
+                </div>
+              )}
+              {o.attribution?.referrer && (
+                <div className="sa-om-kv">
+                  <span className="sa-om-k">Referrer URL</span>
+                  <span className="sa-om-v" style={{ color: '#64748b', fontSize: 11, wordBreak: 'break-all' }}>
+                    {o.attribution.referrer}
+                  </span>
+                </div>
+              )}
               <div className="sa-om-kv">
                 <span className="sa-om-k">Customer Note</span>
                 {isEditing ? (
@@ -9070,7 +9395,7 @@ function SettingsAdmin() {
   const setPrimaryHeroImage = (url: string, isMobile = false) => {
     setF((cur: any) => {
       const curSliders = Array.isArray(cur?.sliders) && cur.sliders.length > 0 ? [...cur.sliders] : [{
-        id: 'metrroma-hero-1',
+        id: 'secrate-hero-1',
         active: true,
         image: '',
         mobileImage: '',
@@ -9334,7 +9659,7 @@ function SettingsAdmin() {
                 <div style={{ textAlign: 'center', color: '#64748b' }}>
                   <div style={{ fontSize: 24, marginBottom: 4 }}>🖼️</div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>No logo image uploaded yet</div>
-                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Storefront displays styled text: <strong>{f.storeName || 'METRROMA'}</strong></div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Storefront displays styled text: <strong>{f.storeName || 'SECRATE'}</strong></div>
                 </div>
               )}
             </div>
@@ -9466,7 +9791,7 @@ function SettingsAdmin() {
                   <span style={{ fontSize: 14 }}>🌐</span>
                 )}
                 <span style={{ fontSize: 12, color: '#e2e8f0', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {f.storeName || 'METRROMA'} — Online Store
+                  {f.storeName || 'SECRATE'} — Online Store
                 </span>
                 <span style={{ color: '#71717a', fontSize: 11, marginLeft: 'auto' }}>×</span>
               </div>
@@ -9820,7 +10145,7 @@ function SettingsAdmin() {
       {tab === 'store' && (
         <div className="sa-card" style={{ padding: 24 }}>
           <div className="sa-sgrid">
-            <label>Store name<input value={f.storeName || ''} onChange={set('storeName')} placeholder="METRROMA" /></label>
+            <label>Store name<input value={f.storeName || ''} onChange={set('storeName')} placeholder="SECRATE" /></label>
             <label>Announcement text<input value={f.announce || ''} onChange={set('announce')} /></label>
             <label>WhatsApp number (with country code)<input value={f.whatsapp || ''} onChange={set('whatsapp')} placeholder="8801XXXXXXXXX" /></label>
             <label>Store phone<input value={f.phone || ''} onChange={set('phone')} placeholder="8801XXXXXXXXX" /></label>
@@ -10527,7 +10852,7 @@ function CourierWebhookBox({
   const prov = (c.provider || 'courier').toLowerCase();
   const secret = c.webhookSecret || '';
   const headerValue = c.headerValue || '40489fe0-9386-4fc9-8e92-2b2fcb9d451c';
-  const accountUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/webhooks/${prov}/${c.id}` : `https://metrroma.com/api/webhooks/${prov}/${c.id}`;
+  const accountUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/webhooks/${prov}/${c.id}` : `https://secrate.shop/api/webhooks/${prov}/${c.id}`;
 
   const copy = (txt: string, cb: (v: boolean) => void) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -10907,17 +11232,17 @@ function IntegrationsAdmin() {
           {(ig.email.provider || 'resend') === 'resend' ? (
             <>
               <label style={{ gridColumn: '1 / -1' }}>Resend API Key<input type="password" value={ig.email.resendApiKey || ''} onChange={(e) => setEmail('resendApiKey', e.target.value)} placeholder="re_..." /></label>
-              <label>From Name<input value={ig.email.fromName || ''} onChange={(e) => setEmail('fromName', e.target.value)} placeholder="METRROMA" /></label>
-              <label>From Email<input value={ig.email.fromEmail || ''} onChange={(e) => setEmail('fromEmail', e.target.value)} placeholder="admin@metrroma.com" /></label>
+              <label>From Name<input value={ig.email.fromName || ''} onChange={(e) => setEmail('fromName', e.target.value)} placeholder="SECRATE" /></label>
+              <label>From Email<input value={ig.email.fromEmail || ''} onChange={(e) => setEmail('fromEmail', e.target.value)} placeholder="admin@secrate.shop" /></label>
             </>
           ) : (
             <>
               <label>SMTP host<input value={ig.email.host || ''} onChange={(e) => setEmail('host', e.target.value)} placeholder="smtp.hostinger.com" /></label>
               <label>Port<input value={ig.email.port ?? ''} onChange={(e) => setEmail('port', e.target.value)} placeholder="587" /></label>
-              <label>Username<input value={ig.email.user || ''} onChange={(e) => setEmail('user', e.target.value)} placeholder="support@metrroma.com" /></label>
+              <label>Username<input value={ig.email.user || ''} onChange={(e) => setEmail('user', e.target.value)} placeholder="support@secrate.shop" /></label>
               <label>Password<input type="password" value={ig.email.pass || ''} onChange={(e) => setEmail('pass', e.target.value)} placeholder={ig.email.hasPass ? 'saved — leave to keep' : ''} /></label>
-              <label>From name<input value={ig.email.fromName || ''} onChange={(e) => setEmail('fromName', e.target.value)} placeholder="METRROMA" /></label>
-              <label>From email<input value={ig.email.fromEmail || ''} onChange={(e) => setEmail('fromEmail', e.target.value)} placeholder="support@metrroma.com" /></label>
+              <label>From name<input value={ig.email.fromName || ''} onChange={(e) => setEmail('fromName', e.target.value)} placeholder="SECRATE" /></label>
+              <label>From email<input value={ig.email.fromEmail || ''} onChange={(e) => setEmail('fromEmail', e.target.value)} placeholder="support@secrate.shop" /></label>
               <label className="sa-chk"><input type="checkbox" checked={!!ig.email.secure} onChange={(e) => setEmail('secure', e.target.checked)} /> Use SSL (port 465)</label>
             </>
           )}
@@ -11887,7 +12212,7 @@ function WhatsAppAdmin() {
   // Offer Creative States
   const [offerImage, setOfferImage] = useState('/uploads/img_mv7u70cc5edq0.jpg');
   const [offerCaption, setOfferCaption] = useState(
-    'সম্মানিত {name}!\n\nআমাদের স্টোর METRROMA-এ আপনার জন্য স্পেশাল অফার! 🔥\nসব প্রিমিয়াম প্রোডাক্টে আজ পাচ্ছেন ২০% ডিসকাউন্ট এবং ফ্রি হোম ডেলিভারি।\n\nঅর্ডার করতে এখনি ভিজিট করুন: https://metrroma.com\n\nঅথবা এই মেসেজের রিপ্লাইয়ে আপনার নাম, ফোন ও ঠিকানা লিখে পাঠালেই সরাসরি ক্যাশ অন ডেলিভারিতে অর্ডার কনফার্ম হয়ে যাবে! 🚀'
+    'সম্মানিত {name}!\n\nআমাদের স্টোর SECRATE-এ আপনার জন্য স্পেশাল অফার! 🔥\nসব প্রিমিয়াম প্রোডাক্টে আজ পাচ্ছেন ২০% ডিসকাউন্ট এবং ফ্রি হোম ডেলিভারি।\n\nঅর্ডার করতে এখনি ভিজিট করুন: https://secrate.shop\n\nঅথবা এই মেসেজের রিপ্লাইয়ে আপনার নাম, ফোন ও ঠিকানা লিখে পাঠালেই সরাসরি ক্যাশ অন ডেলিভারিতে অর্ডার কনফার্ম হয়ে যাবে! 🚀'
   );
   const [antiBanDelay, setAntiBanDelay] = useState(5);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -12116,7 +12441,7 @@ function WhatsAppAdmin() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `METRROMA_Contacts_Backup_${targetType}_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `SECRATE_Contacts_Backup_${targetType}_${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -12154,19 +12479,19 @@ function WhatsAppAdmin() {
   const applyPresetTemplate = (type: 'discount' | 'free_shipping' | 'vip' | 'cart_recovery') => {
     if (type === 'discount') {
       setOfferCaption(
-        'সম্মানিত {name}!\n\nআমাদের স্টোর METRROMA-এ আপনার জন্য মেগা ধামাকা অফার! 🔥\nসব প্রিমিয়াম প্রোডাক্টে আজ পাচ্ছেন ২০% ফ্ল্যাট ডিসকাউন্ট!\n\nকুপন কোড: METRROMA20\nশপ লিংক: https://metrroma.com\n\nঅথবা এই মেসেজের রিপ্লাইয়ে পছন্দের পণ্যের নাম বা ছবি পাঠালেই আমরা ক্যাশ অন ডেলিভারিতে পাঠিয়ে দেব! 🛍️'
+        'সম্মানিত {name}!\n\nআমাদের স্টোর SECRATE-এ আপনার জন্য মেগা ধামাকা অফার! 🔥\nসব প্রিমিয়াম প্রোডাক্টে আজ পাচ্ছেন ২০% ফ্ল্যাট ডিসকাউন্ট!\n\nকুপন কোড: SECRATE20\nশপ লিংক: https://secrate.shop\n\nঅথবা এই মেসেজের রিপ্লাইয়ে পছন্দের পণ্যের নাম বা ছবি পাঠালেই আমরা ক্যাশ অন ডেলিভারিতে পাঠিয়ে দেব! 🛍️'
       );
     } else if (type === 'free_shipping') {
       setOfferCaption(
-        'প্রিয় {name},\n\nআজকের জন্য সারা বাংলাদেশে সম্পূর্ণ ফ্রি হোম ডেলিভারি! 🚚💨\nকোনো অগ্রিম পেমেন্ট ছাড়া পণ্য হাতে পেয়ে মূল্য পরিশোধ করুন।\n\nভিজিট করুন: https://metrroma.com\nঅর্ডার করতে এখানে সরাসরি রিপ্লাই করুন। ধন্যবাদ! ✨'
+        'প্রিয় {name},\n\nআজকের জন্য সারা বাংলাদেশে সম্পূর্ণ ফ্রি হোম ডেলিভারি! 🚚💨\nকোনো অগ্রিম পেমেন্ট ছাড়া পণ্য হাতে পেয়ে মূল্য পরিশোধ করুন।\n\nভিজিট করুন: https://secrate.shop\nঅর্ডার করতে এখানে সরাসরি রিপ্লাই করুন। ধন্যবাদ! ✨'
       );
     } else if (type === 'vip') {
       setOfferCaption(
-        'সম্মানিত {name} Sir/Mam!\n\nআমাদের প্রিমিয়াম ও সিক্রেট কালেকশনে নতুন আইটেম যুক্ত হয়েছে! 👑\n১০০% প্রাইভেসি ও গোপন প্যাকেজিংয়ে নিরাপদ ডেলিভারি পেতে এখনি চেক করুন: https://metrroma.com\n\nআপনার যেকোনো প্রয়োজনে আমরা হোয়াটসঅ্যাপে সাথেই আছি।'
+        'সম্মানিত {name} Sir/Mam!\n\nআমাদের প্রিমিয়াম ও সিক্রেট কালেকশনে নতুন আইটেম যুক্ত হয়েছে! 👑\n১০০% প্রাইভেসি ও গোপন প্যাকেজিংয়ে নিরাপদ ডেলিভারি পেতে এখনি চেক করুন: https://secrate.shop\n\nআপনার যেকোনো প্রয়োজনে আমরা হোয়াটসঅ্যাপে সাথেই আছি।'
       );
     } else if (type === 'cart_recovery') {
       setOfferCaption(
-        'সম্মানিত {name},\n\nআপনি METRROMA স্টোরে পছন্দের আইটেমটি অর্ডার করতে গিয়েছিলেন কিন্তু সম্পন্ন করেননি। 🛒\n\nআপনার অর্ডারটি সহজে কনফার্ম করতে আমরা দিচ্ছি স্পেশাল ফ্রি ডেলিভারি!\nঅর্ডার কনফার্ম করতে শুধু আপনার ঠিকানা লিখে এখানে রিপ্লাই করুন, অথবা ভিজিট করুন: https://metrroma.com'
+        'সম্মানিত {name},\n\nআপনি SECRATE স্টোরে পছন্দের আইটেমটি অর্ডার করতে গিয়েছিলেন কিন্তু সম্পন্ন করেননি। 🛒\n\nআপনার অর্ডারটি সহজে কনফার্ম করতে আমরা দিচ্ছি স্পেশাল ফ্রি ডেলিভারি!\nঅর্ডার কনফার্ম করতে শুধু আপনার ঠিকানা লিখে এখানে রিপ্লাই করুন, অথবা ভিজিট করুন: https://secrate.shop'
       );
     }
     setToast('✅ অফার টেমপ্লেট লোড হয়েছে!');
@@ -12187,7 +12512,7 @@ function WhatsAppAdmin() {
       const testMsg = offerCaption
         .replace(/\\n/g, '\n')
         .replace(/\{name\}/g, 'সম্মানিত টেস্ট গ্রাহক')
-        .replace(/\{store\}/g, 'METRROMA')
+        .replace(/\{store\}/g, 'SECRATE')
         .replace(/\{phone\}/g, myPhone);
 
       const res = await aFetch('/admin/whatsapp/send', {
@@ -12335,10 +12660,10 @@ function WhatsAppAdmin() {
   const triggers = status.triggers || {};
   const waPreview = (key: string) => {
     const sample: Record<string, string> = {
-      name: 'সাকিব', store: 'METRROMA', items: 'Love Lock Condom (Pack of 2)', total: '৳899',
+      name: 'সাকিব', store: 'SECRATE', items: 'Love Lock Condom (Pack of 2)', total: '৳899',
       order_id: 'DOT-2048', courier: 'Pathao', consignment: 'DM021126AP25',
       tracking_url: 'https://merchant.pathao.com/tracking?consignment_id=DM021126AP25&phone=018XXXXXXXX',
-      store_tracking_url: 'https://metrroma.com/track?id=DOT-2048',
+      store_tracking_url: 'https://secrate.shop/track?id=DOT-2048',
     };
     return String(triggers[key]?.template || '').replace(/\\{([^}]+)\\}/g, (token: string, name: string) => sample[name] ?? token);
   };
@@ -13064,7 +13389,7 @@ function WhatsAppAdmin() {
                       <button type="button" style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'pointer' }} onClick={() => setOfferCaption(prev => prev + ' {store}')}>
                         {'{store}'}
                       </button>
-                      <button type="button" style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'pointer' }} onClick={() => setOfferCaption(prev => prev + ' https://metrroma.com')}>
+                      <button type="button" style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'pointer' }} onClick={() => setOfferCaption(prev => prev + ' https://secrate.shop')}>
                         🌐 লিঙ্ক
                       </button>
                     </div>
@@ -13159,7 +13484,7 @@ function WhatsAppAdmin() {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: '#e9edef', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span>METRROMA Store</span>
+                      <span>SECRATE Store</span>
                       <span style={{ color: '#25D366', fontSize: 11 }}>✓</span>
                     </div>
                     <div style={{ fontSize: 10.5, color: '#25D366' }}>● Online</div>
@@ -13200,7 +13525,7 @@ function WhatsAppAdmin() {
                     {/* Caption */}
                     <div style={{ padding: '8px 10px 4px' }}>
                       <p style={{ margin: 0, fontSize: 12, color: '#e9edef', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                        {offerCaption.replace(/\\n/g, '\n').replace(/\{name\}/g, 'সাকিব').replace(/\{store\}/g, 'METRROMA').replace(/\{phone\}/g, '018XXXXXXXX')}
+                        {offerCaption.replace(/\\n/g, '\n').replace(/\{name\}/g, 'সাকিব').replace(/\{store\}/g, 'SECRATE').replace(/\{phone\}/g, '018XXXXXXXX')}
                       </p>
                       
                       {/* Timestamp & Ticks */}
@@ -17800,7 +18125,7 @@ function CustomersAdmin() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `metrroma_customers_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `secrate_customers_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -18030,7 +18355,7 @@ function StaffAdmin() {
         port: 465,
         secure: true,
         user: smtpGmail.trim(),
-        fromName: 'METRROMA',
+        fromName: 'SECRATE',
         fromEmail: smtpGmail.trim(),
       };
       if (smtpAppPass.trim()) {
@@ -18545,7 +18870,7 @@ function StaffAdmin() {
           <div className="sa-card" style={{ padding: 22 }}>
             <h4 style={{ margin: '0 0 12px', fontSize: 14, color: '#fff', fontWeight: 700 }}>👁️ WhatsApp Message Preview</h4>
             <div style={{ background: '#0e0c18', padding: 16, borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', fontFamily: 'monospace', fontSize: 13, color: '#e2e8f0', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
-              {reportPreviewMsg || `📊 *[METRROMA] স্টাফ দৈনিক পারফরম্যান্স রিপোর্ট*
+              {reportPreviewMsg || `📊 *[SECRATE] স্টাফ দৈনিক পারফরম্যান্স রিপোর্ট*
 📅 তারিখ: ${new Date().toLocaleDateString('bn-BD', { timeZone: 'Asia/Dhaka', day: 'numeric', month: 'long', year: 'numeric' })}
 ⏰ সময়: রাত ১১:০০ টা
 ━━━━━━━━━━━━━━━━━━━━
@@ -18559,7 +18884,7 @@ function StaffAdmin() {
 
 ━━━━━━━━━━━━━━━━━━━━
 🏆 *আজকের সেরা পারফর্মার:* Rocky
-🔗 *লাইভ ড্যাশবোর্ড:* https://metrroma.com/wp-admin`}
+🔗 *লাইভ ড্যাশবোর্ড:* https://secrate.shop/wp-admin`}
             </div>
           </div>
         </div>
@@ -18607,7 +18932,7 @@ function StaffAdmin() {
             <div style={{ fontSize: 11.5, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Staff OTP Sender</div>
             <div style={{ fontSize: 13.5, fontWeight: 600, color: (emailCfg?.enabled && (emailCfg?.resendApiKey || (emailCfg?.provider === 'smtp' && emailCfg?.hasPass))) ? '#4ade80' : '#facc15', marginTop: 3 }}>
               {emailCfg?.enabled && (emailCfg?.provider === 'resend' || emailCfg?.resendApiKey)
-                ? `✓ Resend API (${emailCfg.fromEmail || 'code@metrroma.com'})`
+                ? `✓ Resend API (${emailCfg.fromEmail || 'code@secrate.shop'})`
                 : emailCfg?.provider === 'smtp' && emailCfg?.hasPass
                 ? `✓ Gmail SMTP (${emailCfg.user})`
                 : '⚠ Email Integration Disabled'}
@@ -18642,11 +18967,11 @@ function StaffAdmin() {
                     Staff OTP &amp; Email Delivery via Resend API
                   </h3>
                   <span className="sa-badge" style={{ background: 'rgba(34,197,94,0.18)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.35)' }}>
-                    Active ✓ ({emailCfg?.fromEmail || 'code@metrroma.com'})
+                    Active ✓ ({emailCfg?.fromEmail || 'code@secrate.shop'})
                   </span>
                 </div>
                 <p className="dim" style={{ margin: '4px 0 0', fontSize: 12.5, lineHeight: 1.5 }}>
-                  স্টাফরা লগইন করার সময় তাদের নিজস্ব ইমেইলে <strong>Resend API</strong>-এর মাধ্যমে <code>{emailCfg?.fromEmail || 'code@metrroma.com'}</code> থেকে তাৎক্ষণিক ভেরিফিকেশন কোড (OTP) পৌঁছাবে। Integrations মেনু থেকে এটি সক্রিয় ও কনফিগার করা আছে।
+                  স্টাফরা লগইন করার সময় তাদের নিজস্ব ইমেইলে <strong>Resend API</strong>-এর মাধ্যমে <code>{emailCfg?.fromEmail || 'code@secrate.shop'}</code> থেকে তাৎক্ষণিক ভেরিফিকেশন কোড (OTP) পৌঁছাবে। Integrations মেনু থেকে এটি সক্রিয় ও কনফিগার করা আছে।
                 </p>
               </div>
             </div>

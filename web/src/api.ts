@@ -1,3 +1,6 @@
+import { getTrafficAttribution, type TrafficAttribution } from './attribution';
+export { getTrafficAttribution, type TrafficAttribution };
+
 export type Category = {
   slug: string;
   name: string;
@@ -263,32 +266,15 @@ export type OrderPayload = {
     color?: string;
   }[];
   customer: { name: string; phone: string; address: string; area?: string; note?: string; coupon?: string; source?: string; landing?: string; district?: string; thana?: string; freeDelivery?: boolean; shippingCost?: number };
+  attribution?: TrafficAttribution;
   shipping?: { cost: number; method: string };
 };
 
 
 export function getSource(): string {
   try {
-    const saved = localStorage.getItem('dot_src');
-    if (saved) return saved;
-    const p = new URLSearchParams(location.search);
-    let src = p.get('utm_source') || p.get('ref') || p.get('source') || '';
-    if (!src && p.get('fbclid')) src = 'facebook';
-    if (!src && p.get('ttclid')) src = 'tiktok';
-    if (!src && p.get('gclid')) src = 'google';
-    if (!src && document.referrer) {
-      try {
-        const h = new URL(document.referrer).hostname.replace(/^www\./, '');
-        if (h && !location.hostname.includes(h)) {
-          if (h.includes('facebook') || h.includes('fb.me') || h.includes('instagram')) src = 'facebook';
-          else if (h.includes('tiktok')) src = 'tiktok';
-          else src = h;
-        }
-      } catch {}
-    }
-    src = (src || 'direct').toLowerCase().slice(0, 60);
-    localStorage.setItem('dot_src', src);
-    return src;
+    const attr = getTrafficAttribution();
+    return attr.channel || 'direct';
   } catch { return 'direct'; }
 }
 
@@ -312,13 +298,30 @@ export function getDeviceId(): string {
 
 export async function placeOrder(p: OrderPayload) {
   const did = getDeviceId();
+  const attr = p.attribution || getTrafficAttribution();
+  // Preserve true marketing channel over generic landing strings
+  const custSource = p.customer?.source && !p.customer.source.startsWith('landing_') && !p.customer.source.startsWith('l/')
+    ? p.customer.source
+    : (attr.channel || 'direct');
+
+  const finalPayload = {
+    ...p,
+    deviceId: did,
+    attribution: attr,
+    customer: {
+      ...p.customer,
+      source: custSource,
+      landing: p.customer?.landing || (attr.landingPath && attr.landingPath.startsWith('/l/') ? attr.landingPath.replace('/l/', '') : undefined),
+    }
+  };
+
   const r = await fetch('/api/orders', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-device-id': did,
     },
-    body: JSON.stringify({ ...p, deviceId: did }),
+    body: JSON.stringify(finalPayload),
   });
   const data = await r.json();
   if (!r.ok) throw new Error(data.error || 'could not place order');
@@ -351,7 +354,8 @@ export function isSkincareSite(): boolean {
   if (typeof window === 'undefined') return false;
   const h = (window.location.hostname || '').toLowerCase();
   if (h.includes('secrate')) return true;
-  return false;
+  if (h.includes('metrroma')) return false;
+  return true;
 }
 
 export type MasterColor = {

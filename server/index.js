@@ -813,11 +813,25 @@ app.post('/api/orders', (req, res) => {
   const { items, customer, attribution: rawAttribution } = req.body || {};
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'cart is empty' });
   const c = customer || {};
+  const refererHeader = String(req.headers['referer'] || '').toLowerCase();
+  let serverDetectedChannel = '';
+  if (refererHeader.includes('facebook.com') || refererHeader.includes('fb.me')) serverDetectedChannel = 'facebook';
+  else if (refererHeader.includes('tiktok.com')) serverDetectedChannel = 'tiktok';
+  else if (refererHeader.includes('google.com') || refererHeader.includes('google.')) serverDetectedChannel = 'google';
+  else if (refererHeader.includes('yahoo.com')) serverDetectedChannel = 'yahoo';
+  else if (refererHeader.includes('chatgpt.com') || refererHeader.includes('openai.com')) serverDetectedChannel = 'chatgpt';
+  else if (refererHeader.includes('claude.ai')) serverDetectedChannel = 'claude';
+  else if (refererHeader.includes('perplexity.ai')) serverDetectedChannel = 'perplexity';
+  else if (refererHeader.includes('copilot.microsoft.com') || refererHeader.includes('bing.com')) serverDetectedChannel = 'copilot';
+
   const attribution = rawAttribution && typeof rawAttribution === 'object' ? {
-    channel: String(rawAttribution.channel || '').trim().slice(0, 100), source: String(rawAttribution.source || '').trim().slice(0, 100),
-    medium: String(rawAttribution.medium || '').trim().slice(0, 100), campaign: String(rawAttribution.campaign || '').trim().slice(0, 120),
-    referrer: String(rawAttribution.referrer || '').trim().slice(0, 100),
-  } : null;
+    channel: String(rawAttribution.channel || serverDetectedChannel || '').trim().slice(0, 100),
+    source: String(rawAttribution.source || '').trim().slice(0, 100),
+    medium: String(rawAttribution.medium || '').trim().slice(0, 100),
+    campaign: String(rawAttribution.campaign || '').trim().slice(0, 120),
+    referrer: String(rawAttribution.referrer || req.headers['referer'] || '').trim().slice(0, 150),
+    clickId: String(rawAttribution.clickId || '').trim().slice(0, 120),
+  } : (serverDetectedChannel ? { channel: serverDetectedChannel, source: `${serverDetectedChannel}_referral`, referrer: req.headers['referer'] } : null);
   if (!c.name || c.name.trim().length < 2) return res.status(400).json({ error: 'please enter your name' });
   if (!BD_PHONE.test(String(c.phone || '').trim())) return res.status(400).json({ error: 'enter a valid bangladeshi mobile number' });
   if (!c.address || c.address.trim().length < 6) return res.status(400).json({ error: 'please enter a full delivery address' });
@@ -1102,7 +1116,11 @@ app.post('/api/orders', (req, res) => {
     createdAt: new Date().toISOString(),
     status: 'pending',
     payment: 'cash_on_delivery',
-    source: String(c.source || (landingSlug ? 'l/' + landingSlug : 'direct')).slice(0, 60),
+    source: String(
+      (attribution && attribution.channel && attribution.channel !== 'direct' ? attribution.channel : '') ||
+      (c.source && !c.source.startsWith('landing_') && !c.source.startsWith('l/') ? c.source : '') ||
+      (attribution?.channel || (landingSlug ? 'facebook' : 'direct'))
+    ).slice(0, 60),
     attribution,
     landing: landingSlug,
     deviceId,
