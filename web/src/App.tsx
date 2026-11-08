@@ -12,7 +12,7 @@ const Admin = lazy(() => import('./admin').then((m) => ({ default: m.Admin })));
 const LoveLockLanding = lazy(() => import('./LoveLockLanding').then((m) => ({ default: m.LoveLockLanding })));
 
 function StoreLoading({ admin = false }: { admin?: boolean }) {
-  const brand = admin ? 'SECRATE ADMIN' : 'SECRATE';
+  const brand = admin ? 'METROMA ADMIN' : 'METROMA';
   return (
     <div className="store-loading" role="status" aria-live="polite">
       <div className="store-loading-card">
@@ -78,7 +78,7 @@ function Effects() {
   useEffect(() => {
     let active = true;
     const isSkin = isSkincareSite();
-    const defaultBrand = 'SECRATE';
+    const defaultBrand = 'METROMA';
 
     const setMetaName = (name: string, val: string) => {
       let m = document.head.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
@@ -114,7 +114,7 @@ function Effects() {
     }
 
     getSettings().then((s) => {
-      const brand = s.storeName && s.storeName !== 'dot.' && s.storeName !== 'METRROMA' ? s.storeName : 'SECRATE';
+      const brand = s.storeName && s.storeName !== 'dot.' ? s.storeName : 'METROMA';
       const t: any = isSkin
         ? {
             home: `${brand} — For your personal world.`,
@@ -163,7 +163,7 @@ function Effects() {
       if (route.name === 'shop' && route.param) {
         if (active) document.title = `${isSkin ? 'Shop Skincare' : 'Collection'} — ${defaultBrand}`;
       } else if (route.name !== 'product') {
-        document.title = 'SECRATE — For your personal world.';
+        document.title = 'METROMA — Modern Lifestyle, Sunglasses, Watches & Curated Gifts';
       }
     });
 
@@ -177,8 +177,8 @@ function Effects() {
       setMetaName(
         'keywords',
         isSkin
-          ? 'skincare bangladesh, beauty products bd, self-care products, secrate bangladesh'
-          : 'skincare bangladesh, beauty products bd, self-care products, secrate bangladesh'
+          ? 'skincare bangladesh, beauty products bd, self-care products, metroma bangladesh'
+          : 'skincare bangladesh, beauty products bd, self-care products, metroma bangladesh'
       );
     }
     return () => { active = false; };
@@ -251,7 +251,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
   const { customer, openAuth } = useCustomer();
   const [menu, setMenu] = useState(false);
   const isSkin = isSkincareSite();
-  const [storeName, setStoreName] = useState(() => { const n = getCachedSettings()?.storeName; return n && n !== 'dot.' ? n : (isSkin ? 'SECRATE' : 'METRROMA'); });
+  const [storeName, setStoreName] = useState(() => { const n = getCachedSettings()?.storeName; return n && n !== 'dot.' ? n : 'METROMA'; });
   const [logo, setLogo] = useState(() => getCachedSettings()?.logo || (isSkin ? '' : '/uploads/logo_metrroma_gold_perfect.png'));
   const [cats, setCats] = useState<{ slug: string; name: string; parentSlug?: string }[]>(() => getCachedCategories());
   const [expandedMobileCat, setExpandedMobileCat] = useState<string | null>(null);
@@ -262,7 +262,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
   useEffect(() => {
     getSettings().then((s) => {
       if (s.storeName && s.storeName !== 'dot.' && s.storeName !== 'METRROMA') setStoreName(s.storeName);
-      else if (s.storeName === 'dot.' && isSkin) setStoreName('SECRATE');
+      else if (s.storeName === 'dot.') setStoreName('METROMA');
       const activeLogo = (s.logo && !s.logo.includes('img_mvsqgtsqxzgig') && !s.logo.includes('img_mvddqd311xu5c'))
         ? s.logo
         : (isSkin ? '' : '/uploads/logo_metrroma_gold_perfect.png');
@@ -318,11 +318,11 @@ function Header({ onSearch }: { onSearch: () => void }) {
                 <img
                   className="tabaya-header-logo-img"
                   src={logo}
-                  alt={storeName || 'SECRATE'}
+                  alt={storeName || 'METROMA'}
                   onError={() => setLogo('')}
                 />
               ) : (
-                <span>{storeName && storeName !== 'dot.' && storeName !== 'METRROMA' ? storeName : 'SECRATE'}</span>
+                <span>{storeName && storeName !== 'dot.' ? storeName : 'METROMA'}</span>
               )}
             </div>
           </div>
@@ -655,18 +655,18 @@ function Footer() {
   const [phone, setPhone] = useState('+880 1878-374762');
   const [whatsapp, setWhatsapp] = useState('');
   const isSkin = isSkincareSite();
-  const [name, setName] = useState('SECRATE');
+  const [name, setName] = useState('METROMA');
   const [logo, setLogo] = useState('');
   const [cats, setCats] = useState<{ slug: string; name: string; adult?: boolean }[]>([]);
   useEffect(() => {
     getSettings().then((s) => {
       if (s.phone) setPhone(s.phone);
       if (s.whatsapp) setWhatsapp(s.whatsapp);
-      if (s.storeName && s.storeName !== 'dot.' && s.storeName !== 'METRROMA') setName(s.storeName);
-      else if (s.storeName === 'dot.' && isSkin) setName('SECRATE');
-      const activeLogo = (s.logo && !s.logo.includes('img_mvsqgtsqxzgig') && !s.logo.includes('img_mvddqd311xu5c'))
+      if (s.storeName && s.storeName !== 'dot.') setName(s.storeName);
+      else if (s.storeName === 'dot.') setName('METROMA');
+      const activeLogo = (s.logo && !s.logo.includes('img_mvsqgtsqxzgig') && !s.logo.includes('img_mvddqd311xu5c') && !s.logo.includes('secrate'))
         ? s.logo
-        : '/uploads/logo_secrate_rich.webp';
+        : '/uploads/logo_metrroma_gold_perfect.png';
       if (activeLogo) setLogo(activeLogo);
     }).catch(() => {});
     getCategories().then((cs) => {
@@ -682,11 +682,11 @@ function Footer() {
               {logo ? (
                 <img
                   src={logo}
-                  alt={name || 'SECRATE'}
+                  alt={name || 'METROMA'}
                   style={{ maxHeight: 46, width: 'auto', objectFit: 'contain', display: 'block' }}
                 />
               ) : (
-                <span>{name && name !== 'dot.' && name !== 'METRROMA' ? name : 'SECRATE'}</span>
+                <span>{name && name !== 'dot.' ? name : 'METROMA'}</span>
               )}
             </div>
             <p className="tabaya-footer-desc">
@@ -917,7 +917,7 @@ function SmartWhatsAppChat() {
   const route = useRoute();
   const language = useStoreLanguage();
   const [num, setNum] = useState('');
-  const [brand, setBrand] = useState('SECRATE');
+  const [brand, setBrand] = useState('METROMA');
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [showTooltip, setShowTooltip] = useState(true);
@@ -1046,8 +1046,8 @@ function SmartWhatsAppChat() {
               <div className="secrate-wa-msg-sender">{brand} Care</div>
               <div className="secrate-wa-msg-text">
                 {isBn
-                  ? 'আসসালামু আলাইকুম! 🌸 SECRATE-এ আপনাকে স্বাগতম। আপনার যেকোনো প্রশ্ন, স্কিনকেয়ার পরামর্শ বা অর্ডারের জন্য নিচের যেকোনো অপশনে ট্যাপ করুন অথবা মেসেজ লিখুন:'
-                  : 'Hello! 🌸 Welcome to SECRATE. How can we help you today? Tap an option below or type your message:'}
+                  ? 'আসসালামু আলাইকুম! 🌸 METROMA-এ আপনাকে স্বাগতম। আপনার যেকোনো প্রশ্ন বা অর্ডারের জন্য নিচের যেকোনো অপশনে ট্যাপ করুন অথবা মেসেজ লিখুন:'
+                  : 'Hello! 🌸 Welcome to METROMA. How can we help you today? Tap an option below or type your message:'}
               </div>
               <div className="secrate-wa-msg-time">{isBn ? 'এইমাত্র' : 'Just now'}</div>
             </div>

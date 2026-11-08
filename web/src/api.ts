@@ -351,8 +351,7 @@ export function isSkincareSite(): boolean {
   if (typeof window === 'undefined') return false;
   const h = (window.location.hostname || '').toLowerCase();
   if (h.includes('secrate')) return true;
-  if (h.includes('metrroma')) return false;
-  return true;
+  return false;
 }
 
 export type MasterColor = {

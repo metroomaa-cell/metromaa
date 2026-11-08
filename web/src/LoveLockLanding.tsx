@@ -197,7 +197,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
   useEffect(() => {
     if (!cfg) return;
-    const brand = isSkincareSite() ? 'SECRATE' : 'METRROMA';
+    const brand = isSkincareSite() ? 'METROMA' : 'METRROMA';
     const lTitle = `${cfg.headline || cfg.title} — ${brand}`;
     document.title = lTitle;
     const q = new URLSearchParams(location.search);
