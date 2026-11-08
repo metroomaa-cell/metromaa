@@ -1065,8 +1065,8 @@ const SLIP_PRINT_CSS = `
   .slip-page {
     width: 75mm !important;
     max-width: 75mm !important;
-    height: 94mm !important;
-    max-height: 94mm !important;
+    height: auto !important;
+    max-height: 88mm !important;
     overflow: hidden !important;
     margin: 0 auto !important;
     padding: 0 !important;
@@ -1104,8 +1104,8 @@ body {
 .slip-page {
   width: 75mm;
   max-width: 75mm;
-  height: 94mm;
-  max-height: 94mm;
+  height: auto;
+  max-height: 88mm;
   overflow: hidden;
   background: #ffffff;
   box-sizing: border-box;
@@ -1122,14 +1122,10 @@ body {
 }
 .slip-card {
   width: 75mm;
-  height: 94mm;
-  max-height: 94mm;
-  padding: 2mm 3.2mm;
+  max-width: 75mm;
+  padding: 2mm 3mm;
   box-sizing: border-box;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
   background: #ffffff;
 }
 .header-row {
@@ -1138,15 +1134,15 @@ body {
   align-items: center;
   border-bottom: 1.2px solid #000000;
   padding-bottom: 0.8mm;
-  height: 6mm;
-  flex-shrink: 0;
+  margin-bottom: 1.5mm;
+  height: auto;
 }
 .brand-name {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 900;
   color: #000000;
   line-height: 1;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.4px;
 }
 .brand-logo {
   max-height: 22px;
@@ -1155,7 +1151,7 @@ body {
 }
 .invoice-block {
   text-align: right;
-  line-height: 1.1;
+  line-height: 1.15;
   font-size: 8.5px;
   font-weight: 700;
   color: #000000;
@@ -1172,14 +1168,13 @@ body {
   font-weight: 800;
   text-align: center;
   line-height: 1.1;
-  margin: 0.8mm 0;
-  flex-shrink: 0;
+  margin-bottom: 1.5mm;
 }
 .shipto-box {
   border: 1.2px solid #000000;
   border-radius: 3px;
   padding: 2.2px 4px;
-  margin: 0.8mm 0;
+  margin-bottom: 1.5mm;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -1247,7 +1242,7 @@ body {
   border: 1.2px solid #000000;
   border-radius: 3px;
   padding: 2px 4px;
-  margin: 0.8mm 0;
+  margin-bottom: 1.5mm;
   gap: 4px;
 }
 .items-list-wrap {
@@ -1281,9 +1276,8 @@ body {
 }
 .barcode-footer {
   border-top: 1.2px solid #000000;
-  padding-top: 1mm;
+  padding-top: 1.2mm;
   text-align: center;
-  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -1486,9 +1480,8 @@ function slipBody(o: any) {
   const storeName = liveStoreSettings.storeName || (typeof window !== 'undefined' && window.location.hostname.includes('metrroma') ? 'METROMA' : 'SECRATE');
   const fullLogoUrl = rawLogo ? (rawLogo.startsWith('http') ? rawLogo : (typeof window !== 'undefined' ? window.location.origin : '') + rawLogo) : '';
 
-  const brandBlockHtml = fullLogoUrl
-    ? `<img src="${fullLogoUrl}" alt="${storeName}" class="brand-logo" style="max-height:22px;max-width:100px;object-fit:contain;display:block;" onerror="this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='block';" /><div class="brand-name" style="display:none;font-size:15px;font-weight:900;">${storeName}</div>`
-    : `<div class="brand-name" style="font-size:15px;font-weight:900;">${storeName}</div>`;
+  const storeDisplayName = liveStoreSettings.storeName || ((typeof window !== 'undefined' && window.location.hostname.includes('metrroma')) ? 'METROMA' : 'SECRATE');
+  const brandBlockHtml = `<div class="brand-name" style="font-size:16px;font-weight:900;letter-spacing:-0.4px;color:#000000;line-height:1;">${storeDisplayName}</div>`;
 
   const dateStr = o.createdAt ? new Date(o.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
   const totalPayable = o.total || 0;
