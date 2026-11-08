@@ -1034,7 +1034,7 @@ function code128Svg(text: string, height = 28, maxWidth = 220): string {
 
 const SLIP_PRINT_CSS = `
 @page {
-  size: 100mm 75mm;
+  size: 75mm 100mm;
   margin: 0;
 }
 @media print {
@@ -1042,12 +1042,12 @@ const SLIP_PRINT_CSS = `
     display: none !important;
   }
   @page {
-    size: 100mm 75mm;
+    size: 75mm 100mm;
     margin: 0;
   }
   html, body {
-    width: 100mm !important;
-    max-width: 100mm !important;
+    width: 75mm !important;
+    max-width: 75mm !important;
     height: auto !important;
     min-height: 0 !important;
     margin: 0 !important;
@@ -1059,14 +1059,14 @@ const SLIP_PRINT_CSS = `
   .print-slips-wrapper {
     margin: 0 !important;
     padding: 0 !important;
-    width: 100mm !important;
+    width: 75mm !important;
     background: #ffffff !important;
   }
   .slip-page {
-    width: 100mm !important;
-    max-width: 100mm !important;
-    height: 74mm !important;
-    max-height: 74mm !important;
+    width: 75mm !important;
+    max-width: 75mm !important;
+    height: 94mm !important;
+    max-height: 94mm !important;
     overflow: hidden !important;
     margin: 0 auto !important;
     padding: 0 !important;
@@ -1098,14 +1098,14 @@ body {
   padding: 0;
 }
 .print-slips-wrapper {
-  width: 100mm;
+  width: 75mm;
   margin: 14px auto;
 }
 .slip-page {
-  width: 100mm;
-  max-width: 100mm;
-  height: 74mm;
-  max-height: 74mm;
+  width: 75mm;
+  max-width: 75mm;
+  height: 94mm;
+  max-height: 94mm;
   overflow: hidden;
   background: #ffffff;
   box-sizing: border-box;
@@ -1121,10 +1121,10 @@ body {
   break-before: page;
 }
 .slip-card {
-  width: 100mm;
-  height: 74mm;
-  max-height: 74mm;
-  padding: 1.8mm 2.8mm;
+  width: 75mm;
+  height: 94mm;
+  max-height: 94mm;
+  padding: 2mm 3.2mm;
   box-sizing: border-box;
   overflow: hidden;
   display: flex;
@@ -1150,13 +1150,13 @@ body {
 }
 .brand-logo {
   max-height: 22px;
-  max-width: 110px;
+  max-width: 100px;
   object-fit: contain;
 }
 .invoice-block {
   text-align: right;
   line-height: 1.1;
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 700;
   color: #000000;
 }
@@ -1172,27 +1172,17 @@ body {
   font-weight: 800;
   text-align: center;
   line-height: 1.1;
-  margin: 0.8mm 0 0 0;
+  margin: 0.8mm 0;
   flex-shrink: 0;
 }
-.main-body-split {
-  display: flex;
-  gap: 2mm;
-  flex: 1;
-  padding: 1mm 0;
-  min-height: 0;
-  overflow: hidden;
-}
-.col-shipto {
-  flex: 1.55;
+.shipto-box {
   border: 1.2px solid #000000;
   border-radius: 3px;
-  padding: 2px 4px;
+  padding: 2.2px 4px;
+  margin: 0.8mm 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  min-height: 0;
-  overflow: hidden;
+  gap: 1px;
 }
 .shipto-head {
   display: flex;
@@ -1200,6 +1190,7 @@ body {
   align-items: center;
   border-bottom: 1px dashed #555555;
   padding-bottom: 1px;
+  margin-bottom: 1px;
 }
 .tag-shipto {
   font-size: 8.5px;
@@ -1241,62 +1232,61 @@ body {
   overflow: hidden;
 }
 .customer-note {
-  font-size: 8.5px;
+  font-size: 8px;
   font-weight: 700;
   color: #111111;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-top: 0.5px;
 }
-.col-items {
-  flex: 1;
+.items-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   border: 1.2px solid #000000;
   border-radius: 3px;
   padding: 2px 4px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: center;
-  min-height: 0;
-  overflow: hidden;
+  margin: 0.8mm 0;
+  gap: 4px;
+}
+.items-list-wrap {
+  flex: 1;
+  min-width: 0;
 }
 .items-head {
   font-size: 8px;
   font-weight: 900;
   letter-spacing: 0.5px;
   color: #000000;
-  width: 100%;
-  text-align: center;
-  border-bottom: 1px dashed #555555;
-  padding-bottom: 1px;
+  margin-bottom: 1px;
 }
-.sku-list {
+.item-line {
   font-size: 11px;
   font-weight: 900;
   color: #000000;
-  text-align: center;
   line-height: 1.2;
 }
 .qr-container {
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
 }
 .qr-container svg {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
 }
 .barcode-footer {
   border-top: 1.2px solid #000000;
   padding-top: 1mm;
   text-align: center;
-  height: 19.5mm;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  gap: 1px;
 }
 .tracking-title-row {
   display: flex;
@@ -1320,10 +1310,11 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
+  margin: 0.5mm 0;
 }
 .barcode-svg-wrap svg {
-  height: 17px;
-  max-width: 280px;
+  height: 19px;
+  max-width: 215px;
   width: 100%;
 }
 .barcode-digits-row {
@@ -1333,19 +1324,15 @@ body {
   letter-spacing: 1.2px;
   line-height: 1;
 }
-/* 75x100mm Portrait Mode */
-body.size-75-100 .print-slips-wrapper {
-  width: 75mm;
+/* 100x75mm Landscape Mode */
+body.size-100-75 .print-slips-wrapper {
+  width: 100mm;
 }
-body.size-75-100 .slip-page, body.size-75-100 .slip-card {
-  width: 75mm !important;
-  max-width: 75mm !important;
-  height: 98mm !important;
-  max-height: 98mm !important;
-}
-body.size-75-100 .main-body-split {
-  flex-direction: column;
-  gap: 1.5mm;
+body.size-100-75 .slip-page, body.size-100-75 .slip-card {
+  width: 100mm !important;
+  max-width: 100mm !important;
+  height: 74mm !important;
+  max-height: 74mm !important;
 }
 /* A4 Sheet layout for normal desktop printers */
 body.a4-mode {
@@ -1388,19 +1375,19 @@ body.a4-mode .slip-page:nth-child(4n + 1) {
   body.a4-mode .slip-page {
     border: 1px dashed #64748b !important;
   }
-  body.size-75-100 @page {
-    size: 75mm 100mm !important;
+  body.size-100-75 @page {
+    size: 100mm 75mm !important;
     margin: 0 !important;
   }
-  body.size-75-100 html, body.size-75-100 body {
-    width: 75mm !important;
-    max-width: 75mm !important;
+  body.size-100-75 html, body.size-100-75 body {
+    width: 100mm !important;
+    max-width: 100mm !important;
   }
-  body.size-75-100 .slip-page {
-    width: 75mm !important;
-    max-width: 75mm !important;
-    height: 98mm !important;
-    max-height: 98mm !important;
+  body.size-100-75 .slip-page {
+    width: 100mm !important;
+    max-width: 100mm !important;
+    height: 74mm !important;
+    max-height: 74mm !important;
   }
 }
 `;
@@ -1500,7 +1487,7 @@ function slipBody(o: any) {
   const fullLogoUrl = rawLogo ? (rawLogo.startsWith('http') ? rawLogo : (typeof window !== 'undefined' ? window.location.origin : '') + rawLogo) : '';
 
   const brandBlockHtml = fullLogoUrl
-    ? `<img src="${fullLogoUrl}" alt="${storeName}" class="brand-logo" style="max-height:22px;max-width:110px;object-fit:contain;display:block;" onerror="this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='block';" /><div class="brand-name" style="display:none;font-size:15px;font-weight:900;">${storeName}</div>`
+    ? `<img src="${fullLogoUrl}" alt="${storeName}" class="brand-logo" style="max-height:22px;max-width:100px;object-fit:contain;display:block;" onerror="this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='block';" /><div class="brand-name" style="display:none;font-size:15px;font-weight:900;">${storeName}</div>`
     : `<div class="brand-name" style="font-size:15px;font-weight:900;">${storeName}</div>`;
 
   const dateStr = o.createdAt ? new Date(o.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
@@ -1551,29 +1538,29 @@ function slipBody(o: any) {
         <div class="invoice-block">Invoice <strong>#${o.id}</strong> &middot; ${dateStr}</div>
       </div>
       ${exchangeBanner}
-      <div class="main-body-split">
-        <div class="col-shipto">
-          <div class="shipto-head">
-            <span class="tag-shipto">SHIP TO</span>
-            <span class="badge-cod">COD: ৳${totalPayable}</span>
-          </div>
-          <div class="customer-name">${o.customer?.name || 'N/A'}</div>
-          <div class="customer-phone">${o.customer?.phone || ''}${o.customer?.secondaryPhone ? ' / ' + o.customer.secondaryPhone : ''}</div>
-          <div class="customer-address">${cleanAddress}</div>
-          ${noteSectionHtml}
+      <div class="shipto-box">
+        <div class="shipto-head">
+          <span class="tag-shipto">SHIP TO</span>
+          <span class="badge-cod">COD: ৳${totalPayable}</span>
         </div>
-        <div class="col-items">
+        <div class="customer-name">${o.customer?.name || 'N/A'}</div>
+        <div class="customer-phone">${o.customer?.phone || ''}${o.customer?.secondaryPhone ? ' / ' + o.customer.secondaryPhone : ''}</div>
+        <div class="customer-address">${cleanAddress}</div>
+        ${noteSectionHtml}
+      </div>
+      <div class="items-box">
+        <div class="items-list-wrap">
           <div class="items-head">PACKING (SKU)</div>
-          <div class="sku-list">${itemsHtml}</div>
-          <div class="qr-container">${qrSvg(qrData)}</div>
+          ${itemsHtml}
         </div>
+        <div class="qr-container">${qrSvg(qrData)}</div>
       </div>
       <div class="barcode-footer">
         <div class="tracking-title-row">
           <span class="courier-badge">${displayCourierLabel}:</span>
           <span class="tracking-number-text">${displayTrackingId}</span>
         </div>
-        <div class="barcode-svg-wrap">${code128Svg(barcodeValue, 17, 280)}</div>
+        <div class="barcode-svg-wrap">${code128Svg(barcodeValue, 19, 215)}</div>
         <div class="barcode-digits-row">${displayTrackingId}</div>
       </div>
     </div>
@@ -1604,7 +1591,7 @@ function printSlips(list: any[]) {
   @media print { .top-toolbar { display: none !important; } }
   </style><script>
     var hasPrinted = false;
-    var currentMode = '100-75';
+    var currentMode = '75-100';
     function triggerPrint() {
       if (hasPrinted) return;
       hasPrinted = true;
@@ -1614,20 +1601,20 @@ function printSlips(list: any[]) {
     function cyclePaperMode() {
       var b = document.body;
       var btn = document.getElementById('formatToggleBtn');
-      if (currentMode === '100-75') {
+      if (currentMode === '75-100') {
+        currentMode = '100-75';
+        b.classList.remove('a4-mode');
+        b.classList.add('size-100-75');
+        btn.innerHTML = '🏷️ Paper: <strong>Landscape (100×75mm)</strong>';
+      } else if (currentMode === '100-75') {
         currentMode = 'a4';
-        b.classList.remove('size-75-100');
+        b.classList.remove('size-100-75');
         b.classList.add('a4-mode');
         btn.innerHTML = '📄 Paper: <strong>A4 Sheet (Multi-up)</strong>';
-      } else if (currentMode === 'a4') {
-        currentMode = '75-100';
-        b.classList.remove('a4-mode');
-        b.classList.add('size-75-100');
-        btn.innerHTML = '🏷️ Paper: <strong>Portrait (75×100mm)</strong>';
       } else {
-        currentMode = '100-75';
-        b.classList.remove('a4-mode', 'size-75-100');
-        btn.innerHTML = '🏷️ Paper: <strong>Default (100×75mm)</strong>';
+        currentMode = '75-100';
+        b.classList.remove('a4-mode', 'size-100-75');
+        btn.innerHTML = '🏷️ Paper: <strong>Default (75×100mm)</strong>';
       }
     }
     window.addEventListener('load', function() {
@@ -1644,7 +1631,7 @@ function printSlips(list: any[]) {
         setTimeout(triggerPrint, 500);
       });
     });
-  <\/script></head><body><div class="top-toolbar no-print"><div class="info">📄 <strong>${list.length} Order Slip(s)</strong> &middot; Calibrated for 100&times;75mm (Zero Blank Pages)</div><div class="actions"><button class="top-btn" id="formatToggleBtn" onclick="cyclePaperMode()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;box-shadow:none;">🏷️ Paper: <strong>Default (100&times;75mm)</strong></button><button class="top-btn" onclick="triggerPrint()">🖨️ Print Slips / Save PDF</button><button class="top-btn-close" onclick="window.close()">✕ Close</button></div></div><div class="print-slips-wrapper">${slipsHtml}</div></body></html>`;
+  <\/script></head><body><div class="top-toolbar no-print"><div class="info">📄 <strong>${list.length} Order Slip(s)</strong> &middot; Calibrated for 75&times;100mm (Zero Blank Pages)</div><div class="actions"><button class="top-btn" id="formatToggleBtn" onclick="cyclePaperMode()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;box-shadow:none;">🏷️ Paper: <strong>Default (75&times;100mm)</strong></button><button class="top-btn" onclick="triggerPrint()">🖨️ Print Slips / Save PDF</button><button class="top-btn-close" onclick="window.close()">✕ Close</button></div></div><div class="print-slips-wrapper">${slipsHtml}</div></body></html>`;
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
 }
