@@ -1034,7 +1034,7 @@ function code128Svg(text: string, height = 28, maxWidth = 220): string {
 
 const SLIP_PRINT_CSS = `
 @page {
-  size: 75mm 100mm;
+  size: 100mm 75mm;
   margin: 0;
 }
 @media print {
@@ -1042,17 +1042,16 @@ const SLIP_PRINT_CSS = `
     display: none !important;
   }
   @page {
-    size: 75mm 100mm;
+    size: 100mm 75mm;
     margin: 0;
   }
   html, body {
-    width: 75mm !important;
-    max-width: 75mm !important;
+    width: 100mm !important;
+    max-width: 100mm !important;
     height: auto !important;
     min-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
-    overflow: hidden !important;
     background: #ffffff !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
@@ -1060,13 +1059,14 @@ const SLIP_PRINT_CSS = `
   .print-slips-wrapper {
     margin: 0 !important;
     padding: 0 !important;
-    width: 75mm !important;
+    width: 100mm !important;
+    background: #ffffff !important;
   }
   .slip-page {
-    width: 75mm !important;
-    max-width: 75mm !important;
-    height: 98mm !important;
-    max-height: 98mm !important;
+    width: 100mm !important;
+    max-width: 100mm !important;
+    height: 74mm !important;
+    max-height: 74mm !important;
     overflow: hidden !important;
     margin: 0 auto !important;
     padding: 0 !important;
@@ -1091,7 +1091,6 @@ body, .slip-card, .customer-name, .customer-address, .item-line, .note-text {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  font-feature-settings: "kern" 1, "liga" 1, "clig" 1;
 }
 body {
   background: #0f172a;
@@ -1099,14 +1098,14 @@ body {
   padding: 0;
 }
 .print-slips-wrapper {
-  width: 75mm;
-  margin: 16px auto;
+  width: 100mm;
+  margin: 14px auto;
 }
 .slip-page {
-  width: 75mm;
-  max-width: 75mm;
-  height: 98mm;
-  max-height: 98mm;
+  width: 100mm;
+  max-width: 100mm;
+  height: 74mm;
+  max-height: 74mm;
   overflow: hidden;
   background: #ffffff;
   box-sizing: border-box;
@@ -1122,14 +1121,231 @@ body {
   break-before: page;
 }
 .slip-card {
-  width: 75mm;
-  max-width: 75mm;
-  height: 98mm;
-  max-height: 98mm;
-  background: #ffffff;
-  padding: 2.5mm 3.5mm 2mm 3.5mm;
+  width: 100mm;
+  height: 74mm;
+  max-height: 74mm;
+  padding: 1.8mm 2.8mm;
   box-sizing: border-box;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: #ffffff;
+}
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1.2px solid #000000;
+  padding-bottom: 0.8mm;
+  height: 6mm;
+  flex-shrink: 0;
+}
+.brand-name {
+  font-size: 15px;
+  font-weight: 900;
+  color: #000000;
+  line-height: 1;
+  letter-spacing: -0.3px;
+}
+.brand-logo {
+  max-height: 22px;
+  max-width: 110px;
+  object-fit: contain;
+}
+.invoice-block {
+  text-align: right;
+  line-height: 1.1;
+  font-size: 9px;
+  font-weight: 700;
+  color: #000000;
+}
+.invoice-block strong {
+  font-weight: 900;
+}
+.exchange-banner {
+  background: #000000;
+  color: #ffffff;
+  padding: 1.5px 4px;
+  border-radius: 2px;
+  font-size: 8px;
+  font-weight: 800;
+  text-align: center;
+  line-height: 1.1;
+  margin: 0.8mm 0 0 0;
+  flex-shrink: 0;
+}
+.main-body-split {
+  display: flex;
+  gap: 2mm;
+  flex: 1;
+  padding: 1mm 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.col-shipto {
+  flex: 1.55;
+  border: 1.2px solid #000000;
+  border-radius: 3px;
+  padding: 2px 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 0;
+  overflow: hidden;
+}
+.shipto-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px dashed #555555;
+  padding-bottom: 1px;
+}
+.tag-shipto {
+  font-size: 8.5px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  color: #000000;
+}
+.badge-cod {
+  font-size: 13.5px;
+  font-weight: 900;
+  color: #000000;
+  letter-spacing: 0.2px;
+}
+.customer-name {
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.15;
+  color: #000000;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.customer-phone {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.4px;
+  line-height: 1.15;
+  color: #000000;
+}
+.customer-address {
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: #000000;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.customer-note {
+  font-size: 8.5px;
+  font-weight: 700;
+  color: #111111;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.col-items {
+  flex: 1;
+  border: 1.2px solid #000000;
+  border-radius: 3px;
+  padding: 2px 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 0;
+  overflow: hidden;
+}
+.items-head {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  color: #000000;
+  width: 100%;
+  text-align: center;
+  border-bottom: 1px dashed #555555;
+  padding-bottom: 1px;
+}
+.sku-list {
+  font-size: 11px;
+  font-weight: 900;
+  color: #000000;
+  text-align: center;
+  line-height: 1.2;
+}
+.qr-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 30px;
+  height: 30px;
+}
+.qr-container svg {
+  width: 30px;
+  height: 30px;
+}
+.barcode-footer {
+  border-top: 1.2px solid #000000;
+  padding-top: 1mm;
+  text-align: center;
+  height: 19.5mm;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.tracking-title-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  font-weight: 900;
+  color: #000000;
+  line-height: 1;
+}
+.courier-badge {
+  text-transform: uppercase;
+}
+.tracking-number-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10.5px;
+  font-weight: 900;
+}
+.barcode-svg-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.barcode-svg-wrap svg {
+  height: 17px;
+  max-width: 280px;
+  width: 100%;
+}
+.barcode-digits-row {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  line-height: 1;
+}
+/* 75x100mm Portrait Mode */
+body.size-75-100 .print-slips-wrapper {
+  width: 75mm;
+}
+body.size-75-100 .slip-page, body.size-75-100 .slip-card {
+  width: 75mm !important;
+  max-width: 75mm !important;
+  height: 98mm !important;
+  max-height: 98mm !important;
+}
+body.size-75-100 .main-body-split {
+  flex-direction: column;
+  gap: 1.5mm;
 }
 /* A4 Sheet layout for normal desktop printers */
 body.a4-mode {
@@ -1140,9 +1356,9 @@ body.a4-mode .print-slips-wrapper {
   width: 210mm;
   display: flex;
   flex-wrap: wrap;
-  gap: 8mm;
+  gap: 6mm;
   justify-content: center;
-  margin: 16px auto;
+  margin: 14px auto;
 }
 body.a4-mode .slip-page {
   box-shadow: 0 2px 8px rgba(0,0,0,0.25);
@@ -1172,190 +1388,20 @@ body.a4-mode .slip-page:nth-child(4n + 1) {
   body.a4-mode .slip-page {
     border: 1px dashed #64748b !important;
   }
-}
-.header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin: 0 0 1.5px 0;
-  padding: 0;
-}
-.brand-name {
-  font-size: 16px;
-  font-weight: 900;
-  color: #000000;
-  line-height: 1.1;
-  letter-spacing: -0.3px;
-}
-.brand-logo {
-  max-height: 24px;
-  max-width: 100px;
-  object-fit: contain;
-}
-.invoice-block {
-  text-align: right;
-  line-height: 1.2;
-}
-.inv-title {
-  font-size: 12px;
-  font-weight: 900;
-  color: #000000;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.inv-meta {
-  font-size: 9px;
-  color: #111111;
-  font-weight: 600;
-}
-.shipto-section {
-  border: 1.2px solid #000000;
-  border-radius: 4px;
-  padding: 2.5px 5px;
-  margin: 1.5px 0 2px 0;
-  background: #ffffff;
-}
-.shipto-header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px dashed #444444;
-  padding-bottom: 1.5px;
-  margin-bottom: 2px;
-}
-.section-title {
-  font-size: 9.5px;
-  font-weight: 900;
-  letter-spacing: 0.8px;
-  color: #000000;
-}
-.cod-amount {
-  font-size: 14.5px;
-  font-weight: 900;
-  color: #000000;
-  letter-spacing: 0.2px;
-}
-.customer-name {
-  font-size: 12px;
-  font-weight: 800;
-  color: #000000;
-  line-height: 1.2;
-}
-.customer-phone {
-  font-size: 13.5px;
-  font-weight: 900;
-  color: #000000;
-  letter-spacing: 0.4px;
-  margin: 1px 0;
-}
-.customer-address {
-  font-size: 10px;
-  font-weight: 600;
-  color: #000000;
-  line-height: 1.2;
-  word-break: break-word;
-}
-.divider-line {
-  border-top: 1px dashed #888888;
-  margin: 2px 0;
-}
-.items-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 6px;
-  margin: 1.5px 0;
-}
-.items-list {
-  flex: 1;
-}
-.items-title {
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.5px;
-  color: #000000;
-  margin-bottom: 1px;
-}
-.item-line {
-  font-size: 12px;
-  font-weight: 900;
-  color: #000000;
-  line-height: 1.2;
-}
-.qr-container {
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.qr-container svg {
-  width: 40px;
-  height: 40px;
-}
-.note-row {
-  font-size: 9.5px;
-  line-height: 1.25;
-  color: #111111;
-  margin: 1.5px 0 2px 0;
-  word-break: break-word;
-}
-.note-row .note-title {
-  font-weight: 800;
-  color: #000000;
-}
-.note-row .note-text {
-  font-weight: 600;
-  color: #111111;
-}
-.courier-barcode-block {
-  text-align: center;
-  margin-top: 4px;
-  padding: 2px 0 0 0;
-}
-.tracking-title-row {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 5px;
-  font-size: 10.5px;
-  font-weight: 900;
-  color: #000000;
-  letter-spacing: 0.2px;
-  margin-bottom: 1px;
-}
-.tracking-title-row .courier-badge {
-  text-transform: uppercase;
-  font-size: 9.5px;
-  letter-spacing: 0.5px;
-}
-.tracking-title-row .tracking-number-text {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.5px;
-}
-.barcode-svg-wrap {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin: 1px 0;
-}
-.barcode-svg-wrap svg {
-  max-width: 215px;
-  width: 100%;
-  height: 24px;
-  margin: 0 auto;
-}
-.barcode-digits-row {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 1.5px;
-  color: #000000;
-  margin-top: 0.5px;
-  text-align: center;
+  body.size-75-100 @page {
+    size: 75mm 100mm !important;
+    margin: 0 !important;
+  }
+  body.size-75-100 html, body.size-75-100 body {
+    width: 75mm !important;
+    max-width: 75mm !important;
+  }
+  body.size-75-100 .slip-page {
+    width: 75mm !important;
+    max-width: 75mm !important;
+    height: 98mm !important;
+    max-height: 98mm !important;
+  }
 }
 `;
 
@@ -1448,14 +1494,14 @@ function resolveCourierBrand(rawName: string): string {
 }
 
 function slipBody(o: any) {
-  // Dynamic store logo from live website settings - fully automatic!
+  // Dynamic store logo from live website settings
   const rawLogo = liveStoreSettings.logo || '';
-  const storeName = liveStoreSettings.storeName || 'SECRATE';
+  const storeName = liveStoreSettings.storeName || (typeof window !== 'undefined' && window.location.hostname.includes('metrroma') ? 'METROMA' : 'SECRATE');
   const fullLogoUrl = rawLogo ? (rawLogo.startsWith('http') ? rawLogo : (typeof window !== 'undefined' ? window.location.origin : '') + rawLogo) : '';
 
   const brandBlockHtml = fullLogoUrl
-    ? `<img src="${fullLogoUrl}" alt="${storeName}" class="brand-logo" style="max-height:28px;max-width:120px;object-fit:contain;display:block;" onerror="this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='block';" /><div class="brand-name" style="display:none;font-size:18px;font-weight:900;">${storeName}</div>`
-    : `<div class="brand-name" style="font-size:18px;font-weight:900;">${storeName}</div>`;
+    ? `<img src="${fullLogoUrl}" alt="${storeName}" class="brand-logo" style="max-height:22px;max-width:110px;object-fit:contain;display:block;" onerror="this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='block';" /><div class="brand-name" style="display:none;font-size:15px;font-weight:900;">${storeName}</div>`
+    : `<div class="brand-name" style="font-size:15px;font-weight:900;">${storeName}</div>`;
 
   const dateStr = o.createdAt ? new Date(o.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
   const totalPayable = o.total || 0;
@@ -1464,9 +1510,9 @@ function slipBody(o: any) {
   const itemsHtml = o.items && o.items.length > 0
     ? o.items.map((it: any) => {
         const itemCode = resolveItemSku(it, o);
-        return `<div class="item-line" style="font-size:12.5px;font-weight:900;padding:2px 0;letter-spacing:0.3px;"><strong>SKU: ${itemCode}</strong> &times; ${it.qty || 1}</div>`;
+        return `<div class="item-line" style="font-size:11px;font-weight:900;padding:1px 0;letter-spacing:0.3px;"><strong>SKU: ${itemCode}</strong> &times; ${it.qty || 1}</div>`;
       }).join('')
-    : `<div class="item-line" style="font-size:12.5px;font-weight:900;"><strong>SKU: LL6.7</strong> &times; 1</div>`;
+    : `<div class="item-line" style="font-size:11px;font-weight:900;"><strong>SKU: LL6.7</strong> &times; 1</div>`;
 
   const courierBrand = resolveCourierBrand(o.courier && o.courier.name ? o.courier.name : '');
   const cleanTracking = String(o.courier && o.courier.consignment ? o.courier.consignment : '').replace(/^[#\s]+|[#\s]+$/g, '').trim();
@@ -1486,7 +1532,7 @@ function slipBody(o: any) {
   // Exchange Warning Banner
   const isExchangeOrder = Boolean(o.isExchange || o.exchangeStatus === 'exchange_in_progress' || (o.id && String(o.id).toUpperCase().includes('-EX')));
   const exchangeBanner = isExchangeOrder
-    ? `<div style="background:#000000;color:#ffffff;padding:2px 5px;border-radius:3px;margin:1.5px 0 2px 0;font-size:9.5px;font-weight:800;text-align:center;line-height:1.2;border:1px solid #000000;">⚠️ [EXCHANGE PARCEL] কাস্টমার থেকে আগের পার্সেলটি রিসিভ করে নতুন পার্সেল দিন!</div>`
+    ? `<div class="exchange-banner">⚠️ [EXCHANGE PARCEL] কাস্টমার থেকে আগের পার্সেলটি রিসিভ করে নতুন পার্সেল দিন!</div>`
     : '';
 
   // Clean note (do not repeat exchange text if already in exchange banner)
@@ -1495,10 +1541,43 @@ function slipBody(o: any) {
   const hasNote = rawNote && rawNote !== '-' && rawNote !== 'None' && (!isExchangeOrder || !isDuplicateExchange) && !isDuplicateExchange;
 
   const noteSectionHtml = hasNote
-    ? `<div class="note-row"><span class="note-title">Note: </span><span class="note-text">${rawNote}</span></div><div class="divider-line"></div>`
+    ? `<div class="customer-note">Note: ${rawNote}</div>`
     : '';
 
-  return `<div class="slip-page"><div class="slip-card"><div class="header-row"><div class="brand-block">${brandBlockHtml}</div><div class="invoice-block"><div class="inv-title">Invoice</div><div class="inv-meta">No: <strong>#${o.id}</strong></div><div class="inv-meta">Date: ${dateStr}</div></div></div>${exchangeBanner}<div class="shipto-section"><div class="shipto-header-row"><div class="section-title">SHIP TO</div><div class="cod-amount" style="font-size:14.5px;font-weight:900;">COD: ৳${totalPayable}</div></div><div class="customer-name">${o.customer?.name || 'N/A'}</div><div class="customer-phone" style="font-size:13.5px;font-weight:900;letter-spacing:0.4px;margin-bottom:1px;">${o.customer?.phone || ''}${o.customer?.secondaryPhone ? ' / Alt: ' + o.customer.secondaryPhone : ''}</div><div class="customer-address">${cleanAddress}</div></div><div class="divider-line"></div><div class="items-section"><div class="items-list"><div class="items-title" style="font-size:9px;font-weight:900;letter-spacing:0.5px;">PACKING ITEMS (SKU ONLY)</div>${itemsHtml}</div><div class="qr-container">${qrSvg(qrData)}</div></div><div class="divider-line"></div>${noteSectionHtml}<div class="courier-barcode-block"><div class="tracking-title-row"><span class="courier-badge">${displayCourierLabel}:</span><span class="tracking-number-text">${displayTrackingId}</span></div><div class="barcode-svg-wrap">${code128Svg(barcodeValue, 24, 215)}</div><div class="barcode-digits-row">${displayTrackingId}</div></div></div></div>`;
+  return `<div class="slip-page">
+    <div class="slip-card">
+      <div class="header-row">
+        <div class="brand-block">${brandBlockHtml}</div>
+        <div class="invoice-block">Invoice <strong>#${o.id}</strong> &middot; ${dateStr}</div>
+      </div>
+      ${exchangeBanner}
+      <div class="main-body-split">
+        <div class="col-shipto">
+          <div class="shipto-head">
+            <span class="tag-shipto">SHIP TO</span>
+            <span class="badge-cod">COD: ৳${totalPayable}</span>
+          </div>
+          <div class="customer-name">${o.customer?.name || 'N/A'}</div>
+          <div class="customer-phone">${o.customer?.phone || ''}${o.customer?.secondaryPhone ? ' / ' + o.customer.secondaryPhone : ''}</div>
+          <div class="customer-address">${cleanAddress}</div>
+          ${noteSectionHtml}
+        </div>
+        <div class="col-items">
+          <div class="items-head">PACKING (SKU)</div>
+          <div class="sku-list">${itemsHtml}</div>
+          <div class="qr-container">${qrSvg(qrData)}</div>
+        </div>
+      </div>
+      <div class="barcode-footer">
+        <div class="tracking-title-row">
+          <span class="courier-badge">${displayCourierLabel}:</span>
+          <span class="tracking-number-text">${displayTrackingId}</span>
+        </div>
+        <div class="barcode-svg-wrap">${code128Svg(barcodeValue, 17, 280)}</div>
+        <div class="barcode-digits-row">${displayTrackingId}</div>
+      </div>
+    </div>
+  </div>`;
 }
 function printDoc(title: string, inner: string) {
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
@@ -1514,7 +1593,7 @@ function printSlips(list: any[]) {
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const slipsHtml = list.map(slipBody).map(s => s.trim()).join('');
   const filename = list.length === 1 ? `secrate-slip-${list[0].id}.pdf` : `secrate-slips-${list.length}-orders.pdf`;
-  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><base href="${origin}/"><title>${filename}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800;900&display=swap"><style>${SLIP_PRINT_CSS}
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><base href="${origin}/"><title>${filename}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800;900&display=swap"><style id="dynamicSlipStyle">${SLIP_PRINT_CSS}</style><style>
   .top-toolbar { position: sticky; top: 0; left: 0; right: 0; background: #0f172a; color: #ffffff; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 999999; font-family: 'Inter', 'Hind Siliguri', sans-serif; }
   .top-toolbar .info { font-size: 13px; font-weight: 600; color: #cbd5e1; }
   .top-toolbar .info strong { color: #ffffff; }
@@ -1525,20 +1604,30 @@ function printSlips(list: any[]) {
   @media print { .top-toolbar { display: none !important; } }
   </style><script>
     var hasPrinted = false;
+    var currentMode = '100-75';
     function triggerPrint() {
       if (hasPrinted) return;
       hasPrinted = true;
       window.print();
       setTimeout(function() { hasPrinted = false; }, 2500);
     }
-    function toggleA4Mode() {
+    function cyclePaperMode() {
       var b = document.body;
       var btn = document.getElementById('formatToggleBtn');
-      b.classList.toggle('a4-mode');
-      if (b.classList.contains('a4-mode')) {
+      if (currentMode === '100-75') {
+        currentMode = 'a4';
+        b.classList.remove('size-75-100');
+        b.classList.add('a4-mode');
         btn.innerHTML = '📄 Paper: <strong>A4 Sheet (Multi-up)</strong>';
+      } else if (currentMode === 'a4') {
+        currentMode = '75-100';
+        b.classList.remove('a4-mode');
+        b.classList.add('size-75-100');
+        btn.innerHTML = '🏷️ Paper: <strong>Portrait (75×100mm)</strong>';
       } else {
-        btn.innerHTML = '🏷️ Paper: <strong>POS Thermal (75×100mm)</strong>';
+        currentMode = '100-75';
+        b.classList.remove('a4-mode', 'size-75-100');
+        btn.innerHTML = '🏷️ Paper: <strong>Default (100×75mm)</strong>';
       }
     }
     window.addEventListener('load', function() {
@@ -1555,7 +1644,7 @@ function printSlips(list: any[]) {
         setTimeout(triggerPrint, 500);
       });
     });
-  <\/script></head><body><div class="top-toolbar no-print"><div class="info">📄 <strong>${list.length} Order Slip(s)</strong> &middot; Ready (Zero Blank Pages)</div><div class="actions"><button class="top-btn" id="formatToggleBtn" onclick="toggleA4Mode()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;box-shadow:none;">🏷️ Paper: <strong>POS (75×100mm)</strong></button><button class="top-btn" onclick="triggerPrint()">🖨️ Print Slips / Save PDF</button><button class="top-btn-close" onclick="window.close()">✕ Close</button></div></div><div class="print-slips-wrapper">${slipsHtml}</div></body></html>`;
+  <\/script></head><body><div class="top-toolbar no-print"><div class="info">📄 <strong>${list.length} Order Slip(s)</strong> &middot; Calibrated for 100&times;75mm (Zero Blank Pages)</div><div class="actions"><button class="top-btn" id="formatToggleBtn" onclick="cyclePaperMode()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;box-shadow:none;">🏷️ Paper: <strong>Default (100&times;75mm)</strong></button><button class="top-btn" onclick="triggerPrint()">🖨️ Print Slips / Save PDF</button><button class="top-btn-close" onclick="window.close()">✕ Close</button></div></div><div class="print-slips-wrapper">${slipsHtml}</div></body></html>`;
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
 }
