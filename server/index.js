@@ -350,7 +350,7 @@ function buildDraftOrder(data) {
     payment: 'cash_on_delivery',
     source: String(c.source || (landingPage ? 'l/' + landingPage.slug : 'direct')).slice(0, 60),
     landing: landingPage ? landingPage.slug : '',
-    recoveryUrl: landingPage ? `https://metrroma.com/l/${landingPage.slug}?recover=${draftId}` : `https://metrroma.com/checkout?recover=${draftId}`,
+    recoveryUrl: landingPage ? `https://secrate.shop/l/${landingPage.slug}?recover=${draftId}` : `https://secrate.shop/checkout?recover=${draftId}`,
     deviceId: data.deviceId || '',
     ip: data.ip || '',
     customer: {
@@ -630,7 +630,7 @@ app.put('/api/settings', adminAuth, requireRole('owner', 'manager'), (req, res) 
 
 app.post('/api/app-apk', adminAuth, requireRole('owner', 'manager'), express.raw({ type: ['application/vnd.android.package-archive', 'application/octet-stream'], limit: '50mb' }), (req, res) => {
   if (!Buffer.isBuffer(req.body) || req.body.length < 8 || req.body.length > 50 * 1024 * 1024) return res.status(400).json({ error: 'APK file is empty or too large.' });
-  const filename = String(req.query.filename || 'Metrroma-Admin.apk').replace(/[^a-zA-Z0-9._-]/g, '-').slice(-100);
+  const filename = String(req.query.filename || 'Secrate-Admin.apk').replace(/[^a-zA-Z0-9._-]/g, '-').slice(-100);
   if (!filename.toLowerCase().endsWith('.apk')) return res.status(400).json({ error: 'Please upload an .apk file.' });
   const savedName = `admin-${Date.now()}-${filename}`;
   writeFileSync(join(PRIVATE_APK_DIR, savedName), req.body, { mode: 0o600 });
@@ -694,7 +694,7 @@ function buildFeedAbsoluteUrl(path) {
   if (!path) return '';
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
   const clean = path.startsWith('/') ? path : '/' + path;
-  return `https://metrroma.com${clean}`;
+  return `https://secrate.shop${clean}`;
 }
 
 function escapeXmlFeed(str) {
@@ -711,13 +711,13 @@ function generateFacebookXmlFeed() {
   const catalog = getCatalog();
   const products = (catalog.products || []).filter((p) => !p.seoExclude);
   const settings = getSettings();
-  const storeName = settings.storeName || 'METRROMA';
+  const storeName = settings.storeName || 'SECRATE';
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   xml += `<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0">\n`;
   xml += `  <channel>\n`;
   xml += `    <title><![CDATA[${storeName} Product Catalog]]></title>\n`;
-  xml += `    <link>https://metrroma.com</link>\n`;
+  xml += `    <link>https://secrate.shop</link>\n`;
   xml += `    <description><![CDATA[Official Live Product Catalog for ${storeName}]]></description>\n`;
 
   for (const p of products) {
@@ -725,15 +725,15 @@ function generateFacebookXmlFeed() {
     const title = p.name || 'Product';
     const rawDesc = p.desc || p.shortDesc || p.seoDesc || p.name || '';
     const desc = rawDesc.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
-    const link = `https://metrroma.com/product/${encodeURIComponent(p.slug || p.id)}`;
-    const imageLink = buildFeedAbsoluteUrl(p.image || (p.images && p.images[0]) || '/uploads/banner_metrroma_desktop.webp');
+    const link = `https://secrate.shop/product/${encodeURIComponent(p.slug || p.id)}`;
+    const imageLink = buildFeedAbsoluteUrl(p.image || (p.images && p.images[0]) || '/uploads/banner_secrate_desktop.webp');
     const isOutOfStock = (p.stock != null && p.stock <= 0) || p.soldOut === true;
     const availability = isOutOfStock ? 'out of stock' : 'in stock';
 
     const originalPrice = p.compareAt && p.compareAt > p.price ? p.compareAt : p.price;
     const priceStr = `${Number(originalPrice || 0).toFixed(2)} BDT`;
     const salePriceStr = p.compareAt && p.compareAt > p.price ? `${Number(p.price || 0).toFixed(2)} BDT` : '';
-    const brand = 'METRROMA';
+    const brand = 'SECRATE';
     const category = p.category || 'Health & Beauty';
 
     xml += `    <item>\n`;
@@ -785,9 +785,9 @@ function generateFacebookCsvFeed() {
     const originalPrice = p.compareAt && p.compareAt > p.price ? p.compareAt : p.price;
     const price = `"${Number(originalPrice || 0).toFixed(2)} BDT"`;
     const salePrice = p.compareAt && p.compareAt > p.price ? `"${Number(p.price || 0).toFixed(2)} BDT"` : '""';
-    const link = `"https://metrroma.com/product/${encodeURIComponent(p.slug || p.id)}"`;
-    const imageLink = `"${buildFeedAbsoluteUrl(p.image || (p.images && p.images[0]) || '/uploads/banner_metrroma_desktop.webp')}"`;
-    const brand = '"METRROMA"';
+    const link = `"https://secrate.shop/product/${encodeURIComponent(p.slug || p.id)}"`;
+    const imageLink = `"${buildFeedAbsoluteUrl(p.image || (p.images && p.images[0]) || '/uploads/banner_secrate_desktop.webp')}"`;
+    const brand = '"SECRATE"';
     const cat = '"Health & Beauty"';
 
     rows.push([id, title, desc, availability, condition, price, salePrice, link, imageLink, brand, cat].join(','));
@@ -1602,7 +1602,7 @@ app.post('/api/admin/login', async (req, res) => {
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const tempToken = 't_' + randomBytes(16).toString('hex');
     const st = getSettings();
-    const storeName = (st.storeName && st.storeName !== 'dot.') ? st.storeName : 'METRROMA';
+    const storeName = (st.storeName && st.storeName !== 'dot.') ? st.storeName : 'SECRATE';
 
     console.log(`[Admin Security OTP] Generated login verification code for ${user.username} (${targetEmail}): ${otp}`);
 
@@ -1735,7 +1735,7 @@ app.post('/api/admin/resend-otp', async (req, res) => {
   pendingOtps.set(tempToken, pending);
 
   const st = getSettings();
-  const storeName = (st.storeName && st.storeName !== 'dot.') ? st.storeName : 'METRROMA';
+  const storeName = (st.storeName && st.storeName !== 'dot.') ? st.storeName : 'SECRATE';
 
   const emailRes = await sendEmail(
     pending.email,
@@ -1913,7 +1913,7 @@ app.post('/api/admin/users', adminAuth, requireRole('owner'), async (req, res) =
     const loginUrl = `${req.protocol}://${host}/admin`;
     sendEmail(
       email,
-      `Welcome to METRROMA Admin Team — Your Login Credentials`,
+      `Welcome to SECRATE Admin Team — Your Login Credentials`,
       `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:28px;background:#17120E;color:#ECE4D8;border-radius:18px;border:1px solid rgba(231,180,134,0.3);">
         <div style="font-size:24px;font-weight:700;margin-bottom:6px;color:#ECE4D8;">dot<span style="color:#E7B486;">.</span> <span style="font-size:14px;color:#A99E8E;font-weight:400;">staff onboarding</span></div>
@@ -1962,7 +1962,7 @@ app.post('/api/admin/users/:id/test-otp', adminAuth, requireRole('owner'), async
     return res.status(400).json({ error: 'এই স্টাফের কোনো ইমেইল ঠিকানা সেভ করা নেই।' });
   }
   const st = getSettings();
-  const storeName = (st.storeName && st.storeName !== 'dot.') ? st.storeName : 'METRROMA';
+  const storeName = (st.storeName && st.storeName !== 'dot.') ? st.storeName : 'SECRATE';
   const sampleOtp = String(Math.floor(100000 + Math.random() * 900000));
   const out = await sendEmail(
     u.email,
@@ -2751,7 +2751,7 @@ async function sendEmail(to, subject, html) {
   const e = getIntegrations().email;
   if (!e || !e.enabled) return { ok: false, error: 'email not configured or disabled' };
   const st = getSettings() || {};
-  const defaultBrand = (st.storeName && st.storeName !== 'dot.') ? st.storeName : 'METRROMA';
+  const defaultBrand = (st.storeName && st.storeName !== 'dot.') ? st.storeName : 'SECRATE';
   const fromName = (e.fromName && e.fromName !== 'dot.') ? e.fromName : defaultBrand;
 
   const hasSmtp = !!(e.host && e.user && e.pass);
@@ -2854,7 +2854,7 @@ async function notifyOrder(o, kind) {
       sendSMS(o.customer.phone, fillTpl(tpl, map)).catch(() => {});
     }
     if (ig.email.enabled && o.customer?.email) {
-      const subj = kind === 'placed' ? `METRROMA — order ${o.id} received` : `METRROMA — order ${o.id} is ${o.status}`;
+      const subj = kind === 'placed' ? `SECRATE — order ${o.id} received` : `SECRATE — order ${o.id} is ${o.status}`;
       sendEmail(o.customer.email, subj, `<p>Hi ${map.name},</p><p>Your order <b>${o.id}</b> is <b>${o.status}</b>.</p><p>Total: ${map.total} (cash on delivery)</p>${map.courier ? `<p>Courier: ${map.courier}</p>` : ''}<p>— dot.</p>`).catch(() => {});
     }
     // Automated WhatsApp message
@@ -3393,7 +3393,9 @@ async function courierStatus(acc, consignment) {
       const d = data?.data || {};
       const raw = String(d.transfer_status || d.order?.order_status || d.order_status || d.status || '').trim();
       const riderNote = String(d.note || d.reason || d.status_reason || d.order?.status_reason || d.comment || '').trim();
-      return { ok: r.ok, raw, mapped: mapCourierStatus(raw), riderNote };
+      const attempt = Number(d.attempt || d.delivery_attempts || 0) || 0;
+      const courierUpdatedAt = String(d.updated_at || '').trim();
+      return { ok: r.ok, raw, mapped: mapCourierStatus(raw), riderNote, attempt, courierUpdatedAt };
     } catch (err) {
       return { ok: false, error: String(err.message || err) };
     }
@@ -3465,6 +3467,8 @@ async function syncOrderCourier(order, force) {
       url: cleanTrackUrl,
       liveStatus: rawStatus,
       riderNote: riderNote,
+      attempt: r.attempt != null ? r.attempt : (c.attempt || 0),
+      courierUpdatedAt: r.courierUpdatedAt || c.courierUpdatedAt || '',
       lastSync: new Date().toISOString(),
     },
   };
@@ -3555,7 +3559,7 @@ async function trackPurchase(order) {
   const ids = (order.items || []).map((i) => String(i.id));
   const numItems = (order.items || []).reduce((s, i) => s + (Number(i.qty) || 1), 0);
   const ts = Math.floor(Date.now() / 1000);
-  const sourceUrl = order.landing ? `https://metrroma.com/page/${order.landing}` : 'https://metrroma.com/';
+  const sourceUrl = order.landing ? `https://secrate.shop/page/${order.landing}` : 'https://secrate.shop/';
 
   const userData = {
     ph: [ph],
@@ -4197,12 +4201,12 @@ app.post('/api/admin/tracking/test', adminAuth, requireRole('owner', 'manager'),
 app.post('/api/admin/sms/test', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   const phone = String(req.body?.phone || '').trim();
   if (!BD_PHONE.test(phone)) return res.status(400).json({ error: 'enter a valid bd phone number' });
-  res.json(await sendSMS(phone, 'METRROMA test sms — your SMS integration works ✓'));
+  res.json(await sendSMS(phone, 'SECRATE test sms — your SMS integration works ✓'));
 });
 app.post('/api/admin/email/test', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   const to = String(req.body?.to || '').trim();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ error: 'enter a valid email address' });
-  res.json(await sendEmail(to, 'METRROMA test email ✓', '<p>Your METRROMA email integration works.</p>'));
+  res.json(await sendEmail(to, 'SECRATE test email ✓', '<p>Your SECRATE email integration works.</p>'));
 });
 app.post('/api/admin/courier/book', adminAuth, (req, res) => {
   const { orderId, accountId, courierName } = req.body || {};
@@ -5041,7 +5045,7 @@ async function runServerCampaignWorker() {
       const personalizedMsg = ((serverCampaign.caption || '') + variation)
         .replace(/\\n/g, '\n')
         .replace(/\{name\}/g, target.name || 'সম্মানিত গ্রাহক')
-        .replace(/\{store\}/g, 'METRROMA')
+        .replace(/\{store\}/g, 'SECRATE')
         .replace(/\{phone\}/g, target.phone);
 
       try {
@@ -5363,7 +5367,7 @@ app.get('/api/admin/whatsapp/export-contacts', adminAuth, requireRole('owner', '
     });
 
     const csvContent = '\uFEFF' + rows.map(r => r.join(',')).join('\r\n');
-    const filename = `METRROMA_Contacts_Backup_${type}_${new Date().toISOString().slice(0, 10)}.csv`;
+    const filename = `SECRATE_Contacts_Backup_${type}_${new Date().toISOString().slice(0, 10)}.csv`;
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -5873,7 +5877,7 @@ app.post('/api/customer/send-otp', async (req, res) => {
   if (email) customerOtpCache.set(email.toLowerCase(), otpPayload);
   if (phone) customerOtpCache.set(phone, otpPayload);
 
-  const storeName = getSettings().storeName || 'METRROMA';
+  const storeName = getSettings().storeName || 'SECRATE';
   let emailSent = false;
 
   // Send Code via Email API
@@ -6169,7 +6173,7 @@ if (existsSync(dist)) {
       join(__dir, '..', 'private', 'admin-apks', 'ShakilEcom.apk'),
       join(__dir, 'data', 'private_apk', 'ShakilEcom.apk'),
       '/var/www/dot/private/admin-apks/ShakilEcom.apk',
-      '/root/metrroma-backups/apks/ShakilEcom.apk'
+      '/root/secrate-backups/apks/ShakilEcom.apk'
     ];
     for (const p of candidatePaths) {
       if (existsSync(p)) {
@@ -6181,7 +6185,7 @@ if (existsSync(dist)) {
     return res.status(404).send('ShakilEcom APK file not found');
   });
   app.get(['/admin.html', '/admin'], (_req, res) => res.redirect(301, '/wp-admin'));
-  const SEO_ORIGIN = 'https://metrroma.com';
+  const SEO_ORIGIN = 'https://secrate.shop';
   const xmlEscape = (value) => String(value ?? '').replace(/[<>&'\"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c]);
   const htmlEscape = (value) => String(value ?? '').replace(/[&<>\"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
   const absoluteUrl = (value) => {
@@ -6238,7 +6242,7 @@ if (existsSync(dist)) {
 
     try {
       let html = readFileSync(indexPath, 'utf8');
-      const baseUrl = 'https://metrroma.com';
+      const baseUrl = 'https://secrate.shop';
       const path = req.path || '/';
 
       const cleanPath = path.replace(/^\/+|\/+$/g, '');
@@ -6260,7 +6264,7 @@ if (existsSync(dist)) {
       }
 
       if (targetProduct) {
-        const pTitle = String(targetProduct.seoTitle || `${targetProduct.name} — METRROMA`).slice(0, 70);
+        const pTitle = String(targetProduct.seoTitle || `${targetProduct.name} — SECRATE`).slice(0, 70);
         const pDesc = String(targetProduct.seoDesc || targetProduct.shortDesc || targetProduct.desc || targetProduct.name).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
         const pImg = absoluteUrl(targetProduct.image || (targetProduct.images && targetProduct.images[0]));
         const pUrl = `${baseUrl}/product/${encodeURIComponent(targetProduct.slug || targetProduct.id)}`;
@@ -6268,11 +6272,11 @@ if (existsSync(dist)) {
         const productJsonLd = {
           '@context': 'https://schema.org', '@type': 'Product',
           name: targetProduct.name, description: pDesc, image: [pImg], url: pUrl,
-          sku: targetProduct.sku || undefined, brand: { '@type': 'Brand', name: 'METRROMA' },
+          sku: targetProduct.sku || undefined, brand: { '@type': 'Brand', name: 'SECRATE' },
           offers: {
             '@type': 'Offer', url: pUrl, priceCurrency: 'BDT', price: Number(targetProduct.price || 0),
             availability: targetProduct.soldOut || Number(targetProduct.stock) === 0 ? 'https://schema.org/OutOfStock' : 'https://schema.org/InStock',
-            itemCondition: 'https://schema.org/NewCondition', seller: { '@type': 'Organization', name: 'METRROMA' },
+            itemCondition: 'https://schema.org/NewCondition', seller: { '@type': 'Organization', name: 'SECRATE' },
           },
         };
 
@@ -6298,7 +6302,7 @@ if (existsSync(dist)) {
           .replace(/<link rel="canonical" href="[^"]*"\s*\/?\s*>/i, `<link rel="canonical" href="${htmlEscape(pUrl)}" />`)
           .replace('</head>', `${extraTags}\n</head>`);
       } else if (targetCategory) {
-        const title = `${targetCategory.name} — METRROMA`;
+        const title = `${targetCategory.name} — SECRATE`;
         const description = String(targetCategory.blurb || `Shop ${targetCategory.name} from METRROMA. Authentic products with delivery across Bangladesh.`).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
         const url = `${baseUrl}/categories/${encodeURIComponent(targetCategory.slug)}`;
         const categoryProducts = (getCatalog().products || []).filter((product) => product.category === targetCategory.slug && !product.archived && product.status !== 'draft' && product.published !== false);
@@ -6330,7 +6334,7 @@ if (existsSync(dist)) {
 const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
 app.listen(PORT, HOST, () => {
-  console.log(`METRROMA api on http://${HOST}:${PORT}`);
+  console.log(`SECRATE api on http://${HOST}:${PORT}`);
   // Start automated background courier status sync (initial run after 10s, then every 5 mins)
   setTimeout(() => {
     runBackgroundCourierSync().catch(() => {});
@@ -6343,7 +6347,7 @@ export function formatStaffDailyReport(monitoringData) {
   const staffList = monitoringData.staff || [];
   const dateStr = monitoringData.date;
   
-  let msg = `📊 *[METRROMA] স্টাফ দৈনিক পারফরম্যান্স রিপোর্ট*\n`;
+  let msg = `📊 *[SECRATE] স্টাফ দৈনিক পারফরম্যান্স রিপোর্ট*\n`;
   msg += `📅 তারিখ: ${dateStr}\n`;
   msg += `⏰ সময়: রাত ১১:০০ টা\n`;
   msg += `━━━━━━━━━━━━━━━━━━━━\n\n`;
@@ -6397,7 +6401,7 @@ export function formatStaffDailyReport(monitoringData) {
   msg += `📦 *মোট কনফার্মড পার্সেল:* ${totalConfirmedAll} টি\n`;
   msg += `🚚 *মোট কুরিয়ারে বুকিং:* ${totalBookedAll} টি\n`;
   if (topStaff) msg += `🏆 *আজকের সেরা পারফর্মার:* ${topStaff}\n`;
-  msg += `🔗 *লাইভ ড্যাশবোর্ড:* https://metrroma.com/wp-admin\n`;
+  msg += `🔗 *লাইভ ড্যাশবোর্ড:* https://secrate.shop/wp-admin\n`;
 
   return msg;
 }

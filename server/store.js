@@ -34,10 +34,6 @@ if (!EXTERNAL_DIR) {
 }
 if (!EXTERNAL_DIR) EXTERNAL_DIR = join(DATA_DIR, 'persistent');
 const BACKUPS_DIR = join(EXTERNAL_DIR, 'backups');
-const WA_CHAT_CONTACTS = join(EXTERNAL_DIR, 'wa_chat_contacts.json');
-const AUDIT_LOGS = join(EXTERNAL_DIR, 'audit_logs.json');
-const STAFF_ACTIVITY = join(EXTERNAL_DIR, 'staff_activity.json');
-
 
 function copyMissingTree(sourceDir, targetDir) {
   if (!existsSync(sourceDir) || !statSync(sourceDir).isDirectory()) return 0;
@@ -149,11 +145,26 @@ const PERSISTENT_LANDINGS = join(PERSISTENT_DIR, 'landings.json');
 const BACKUP_LANDINGS = join(DATA_DIR, 'landings.metrroma.backup.json');
 const EXT_LANDINGS = join(EXTERNAL_DIR, 'landings.json');
 
+const AUDIT_LOGS = join(DATA_DIR, 'audit_logs.json');
+const PERSISTENT_AUDIT_LOGS = join(PERSISTENT_DIR, 'audit_logs.json');
+const BACKUP_AUDIT_LOGS = join(DATA_DIR, 'audit_logs.metrroma.backup.json');
+const EXT_AUDIT_LOGS = join(EXTERNAL_DIR, 'audit_logs.json');
+
+const STAFF_ACTIVITY = join(DATA_DIR, 'staff_activity.json');
+const PERSISTENT_STAFF_ACTIVITY = join(PERSISTENT_DIR, 'staff_activity.json');
+const BACKUP_STAFF_ACTIVITY = join(DATA_DIR, 'staff_activity.metrroma.backup.json');
+const EXT_STAFF_ACTIVITY = join(EXTERNAL_DIR, 'staff_activity.json');
+
+const WA_CONTACTS = join(DATA_DIR, 'wa_chat_contacts.json');
+const PERSISTENT_WA_CONTACTS = join(PERSISTENT_DIR, 'wa_chat_contacts.json');
+const BACKUP_WA_CONTACTS = join(DATA_DIR, 'wa_chat_contacts.metrroma.backup.json');
+const EXT_WA_CONTACTS = join(EXTERNAL_DIR, 'wa_chat_contacts.json');
+
 export const getPersistentDataDirectory = () => EXTERNAL_DIR;
 
 export const DEFAULT_SETTINGS = {
-  storeName: 'METRROMA',
-  announce: '✨ FREE SHIPPING ON ORDERS OVER ৳2500 · 100% AUTHENTIC LIFESTYLE & GIFTS · CASH ON DELIVERY NATIONWIDE',
+  storeName: 'SECRATE',
+  announce: 'free discreet shipping over ৳2500 · cash on delivery nationwide',
   deliveryInside: 80,
   deliveryOutside: 130,
   freeShipThreshold: 2500,
@@ -171,12 +182,22 @@ export const DEFAULT_SETTINGS = {
   fraudDetector: {
     enabled: true,
     cooldownHours: 24,
-    maxOrdersPerDay: 5,
+    sameProductLimit: 1,
+    maxOrdersPerDay: 1,
+    maxOrdersPerIp: 2,
     minSecondsBetweenOrders: 30,
     blockByPhone: true,
+    blockByIp: true,
+    protectIncompleteOrders: true,
+    applyOnLandingPages: true,
     sameProductNotice: 'You have already placed an order for this item recently. Please wait before ordering again, or contact our support team.',
+    sameProductNoticeBn: 'আপনি ইতিমধ্যে এই পণ্যটির জন্য একটি অর্ডার করেছেন। নতুন অর্ডারের জন্য অপেক্ষা করুন অথবা আমাদের সাথে যোগাযোগ করুন।',
     maxOrdersNotice: 'You have reached the maximum daily order limit from this device. Please contact customer support for urgent orders.',
+    maxOrdersNoticeBn: 'আপনার ডিভাইস থেকে আজকের সর্বোচ্চ অর্ডার সীমা পূর্ণ হয়েছে। প্রয়োজনীয় সহায়তায় যোগাযোগ করুন।',
+    ipLimitNotice: 'Daily order limit reached from this network/IP address. Please contact customer support.',
+    ipLimitNoticeBn: 'আপনার ইন্টারনেট নেটওয়ার্ক (IP) থেকে আজকের সর্বোচ্চ অর্ডারের সীমা অতিক্রম করেছে। সহায়তার জন্য যোগাযোগ করুন।',
     rapidOrderNotice: 'Please wait a moment before submitting another order.',
+    rapidOrderNoticeBn: 'অনুগ্রহ করে নতুন অর্ডার সাবমিট করার পূর্বে কিছুক্ষণ অপেক্ষা করুন।',
   },
 };
 
@@ -476,7 +497,7 @@ export function addOrder(order) {
 
 export function updateOrderStatus(id, status) {
   const orders = getOrders();
-  const o = orders.find((x) => x.id === id);
+  const o = orders.find((x) => x.id === id || x.id === 'DOT-' + id || 'DOT-' + x.id === id);
   if (!o) return null;
   o.status = status;
   saveOrders(orders);
@@ -485,22 +506,31 @@ export function updateOrderStatus(id, status) {
 
 export function updateOrder(id, patch) {
   const orders = getOrders();
-  const o = orders.find((x) => x.id === id);
+  const o = orders.find((x) => x.id === id || x.id === 'DOT-' + id || 'DOT-' + x.id === id);
   if (!o) return null;
+  if (Array.isArray(patch.history)) {
+    o.history = patch.history;
+  }
   if (typeof patch.status === 'string' && patch.status && patch.status !== o.status) {
     o.status = patch.status;
     o.history = o.history || [];
-    o.history.push({ status: patch.status, at: new Date().toISOString() });
+    if (!Array.isArray(patch.history)) {
+      o.history.push({ status: patch.status, at: new Date().toISOString() });
+    }
   }
   if (patch.courier && typeof patch.courier === 'object') {
     const c = patch.courier;
     o.courier = {
-      name: String(c.name || '').trim(),
-      consignment: String(c.consignment || '').trim(),
-      phone: String(c.phone || '').trim(),
-      url: String(c.url || '').trim(),
+      ...(o.courier || {}),
+      name: String(c.name ?? o.courier?.name ?? '').trim(),
+      consignment: String(c.consignment ?? o.courier?.consignment ?? '').trim(),
+      phone: String(c.phone ?? o.courier?.phone ?? '').trim(),
+      url: String(c.url ?? o.courier?.url ?? '').trim(),
       accountId: c.accountId ? String(c.accountId) : (o.courier?.accountId || ''),
       liveStatus: c.liveStatus != null ? String(c.liveStatus) : (o.courier?.liveStatus || ''),
+      riderNote: c.riderNote != null ? String(c.riderNote) : (o.courier?.riderNote || ''),
+      attempt: c.attempt != null ? (Number(c.attempt) || 0) : (o.courier?.attempt || 0),
+      courierUpdatedAt: c.courierUpdatedAt != null ? String(c.courierUpdatedAt) : (o.courier?.courierUpdatedAt || ''),
       lastSync: c.lastSync != null ? String(c.lastSync) : (o.courier?.lastSync || ''),
     };
   }
@@ -588,8 +618,8 @@ export function saveUsers(u) {
 }
 
 export const DEFAULT_INTEGRATIONS = {
-  email: { enabled: true, provider: 'resend', resendApiKey: process.env.RESEND_API_KEY || '', adminEmail: 'metroomaa@gmail.com', host: '', port: 587, secure: false, user: '', pass: '', fromName: 'METRROMA', fromEmail: 'admin@metrroma.com' },
-  sms: { enabled: false, url: '', method: 'GET', senderId: '', apiKey: '', templatePlaced: 'METRROMA: order {id} received. total {total}. we will call to confirm. track: {track}', templateStatus: 'METRROMA: order {id} is now {status}. {courier}' },
+  email: { enabled: true, provider: 'resend', resendApiKey: process.env.RESEND_API_KEY || '', adminEmail: 'metroomaa@gmail.com', host: '', port: 587, secure: false, user: '', pass: '', fromName: 'SECRATE', fromEmail: 'onboarding@resend.dev' },
+  sms: { enabled: false, url: '', method: 'GET', senderId: '', apiKey: '', templatePlaced: 'SECRATE: order {id} received. total {total}. we will call to confirm. track: {track}', templateStatus: 'SECRATE: order {id} is now {status}. {courier}' },
   couriers: [],
   tracking: { fbEnabled: false, fbPixelId: '1122829254194671', fbToken: '', fbTestCode: '', ttkEnabled: false, ttkPixelId: '', ttkToken: '' },
   fraud: { enabled: false, url: '', method: 'GET', headers: '', totalPath: '', successPath: '', cancelPath: '' },
@@ -972,6 +1002,9 @@ export function initStorageProtection() {
   }
 }
 
+// ==========================================
+// STAFF ACTIVITY, PRESENCE & AUDIT LOGS
+// ==========================================
 
 export function getBangladeshDate(d = new Date()) {
   const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
@@ -1020,7 +1053,6 @@ export function saveStaffActivity(data) {
 }
 
 // ---- WhatsApp Chat Contacts (Everyone who ever messaged on WhatsApp) ----
-
 export function getWaChatContacts() {
   const list = readSafe(EXT_WA_CONTACTS, PERSISTENT_WA_CONTACTS, WA_CONTACTS, [], BACKUP_WA_CONTACTS);
   return Array.isArray(list) ? list : [];
@@ -1082,7 +1114,6 @@ export function upsertWaChatContact({ phone, name = '', lastMessage = '', isInco
 }
 
 // Sync all historical WhatsApp chat contacts from Baileys auth session storage (LID mappings & device lists)
-
 export function syncWhatsAppSessionContacts(authDirOverride = null) {
   try {
     let authDir = authDirOverride;

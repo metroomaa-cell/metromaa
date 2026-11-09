@@ -4035,9 +4035,27 @@ function OrdersAdmin() {
       }
     } catch {}
   };
+  const isCourierHoldOrder = (o: any): boolean => {
+    if (!o) return false;
+    const st = String(o.status || '').toLowerCase();
+    if (['delivered', 'return', 'cancelled'].includes(st)) return false;
+    if (st === 'courier_hold') return true;
+    const hasConsignment = !!(o.courier && o.courier.consignment);
+    if (!hasConsignment) return false;
+    if (st === 'hold') return true;
+    const ls = String(o.courier?.liveStatus || '').toLowerCase();
+    return /hold|resched|delay|attempt|unreach|not_available/.test(ls);
+  };
+
   const getOrderEventTime = (o: any, statusFilter: string): number => {
     if (!o) return 0;
     if (statusFilter && statusFilter !== 'all') {
+      if (statusFilter === 'courier_hold') {
+        if (o.courier?.courierUpdatedAt) return new Date(o.courier.courierUpdatedAt).getTime();
+        const chHist = Array.isArray(o.history) ? o.history.slice().reverse().find((h: any) => h.status === 'hold' || h.status === 'courier_hold') : null;
+        if (chHist && chHist.at) return new Date(chHist.at).getTime();
+        if (o.courier?.lastSync) return new Date(o.courier.lastSync).getTime();
+      }
       if (statusFilter === 'exchange') {
         const exHist = Array.isArray(o.history) ? o.history.slice().reverse().find((h: any) => h.status === 'exchange' || String(h.status || '').includes('exchange')) : null;
         if (exHist && exHist.at) return new Date(exHist.at).getTime();
@@ -4084,12 +4102,16 @@ function OrdersAdmin() {
   const shown = useMemo(() => {
     const query = q.trim().toLowerCase();
     const list = (Array.isArray(orders) ? orders : []).filter((o) => {
-      if (filter === 'exchange') {
+      if (filter === 'courier_hold') {
+        if (!isCourierHoldOrder(o)) return false;
+      } else if (filter === 'hold') {
+        if (o.status !== 'hold' || isCourierHoldOrder(o)) return false;
+      } else if (filter === 'exchange') {
         if (!o.isExchange && o.exchangeStatus !== 'exchange_in_progress') return false;
       } else if (filter !== 'all' && o.status !== filter) return false;
       const eventTime = getOrderEventTime(o, filter);
       if (!matchesOrderRange(eventTime, range)) return false;
-      if (query && !(o.id + ' ' + (o.customer?.name || '') + ' ' + (o.customer?.phone || '') + ' ' + (o.source || '')).toLowerCase().includes(query)) return false;
+      if (query && !(o.id + ' ' + (o.customer?.name || '') + ' ' + (o.customer?.phone || '') + ' ' + (o.source || '') + ' ' + (o.courier?.consignment || '') + ' ' + (o.courier?.riderNote || '')).toLowerCase().includes(query)) return false;
       return true;
     });
     return list.sort((a, b) => {
@@ -4260,12 +4282,48 @@ function OrdersAdmin() {
       <div className="sa-toolbar">
         <div className="sa-filters">
           {['all', ...STATUSES].map((s) => {
-            const cnt = s === 'all' ? (Array.isArray(orders) ? orders.length : 0) : (Array.isArray(orders) ? orders : []).filter((o) => o.status === s).length;
+            const allList = Array.isArray(orders) ? orders : [];
+            const cnt =
+              s === 'all'
+                ? allList.length
+                : s === 'hold'
+                ? allList.filter((o) => o.status === 'hold' && !isCourierHoldOrder(o)).length
+                : allList.filter((o) => o.status === s).length;
+            const chCount = s === 'shipped' ? allList.filter((o) => isCourierHoldOrder(o)).length : 0;
             return (
-              <button key={s} className={filter === s ? 'on' : ''} onClick={() => setFilter(s)}>
-                <span>{s === 'all' ? 'All' : s}</span>
-                <span className="sa-filter-count">{cnt}</span>
-              </button>
+              <React.Fragment key={s}>
+                <button className={filter === s ? 'on' : ''} onClick={() => setFilter(s)}>
+                  <span>{s === 'all' ? 'All' : s}</span>
+                  <span className="sa-filter-count">{cnt}</span>
+                </button>
+                {s === 'shipped' && (
+                  <button
+                    type="button"
+                    className={filter === 'courier_hold' ? 'on' : ''}
+                    onClick={() => setFilter('courier_hold')}
+                    style={
+                      filter === 'courier_hold'
+                        ? { background: 'rgba(245, 158, 11, 0.25)', borderColor: '#f59e0b', color: '#fef3c7', fontWeight: 700 }
+                        : chCount > 0
+                        ? { borderColor: 'rgba(245, 158, 11, 0.55)', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.08)' }
+                        : { borderColor: 'rgba(245, 158, 11, 0.3)', color: '#d97706' }
+                    }
+                    title="Parcels held/rescheduled/attempted at Courier"
+                  >
+                    <span>⚠️ Courier Hold</span>
+                    <span
+                      className="sa-filter-count"
+                      style={{
+                        background: chCount > 0 ? '#f59e0b' : 'rgba(245, 158, 11, 0.25)',
+                        color: chCount > 0 ? '#000' : '#fde68a',
+                        fontWeight: 800,
+                      }}
+                    >
+                      {chCount}
+                    </span>
+                  </button>
+                )}
+              </React.Fragment>
             );
           })}
           {(() => {
@@ -4639,13 +4697,81 @@ function OrdersAdmin() {
                         <span>{syncingId === o.id ? '…' : 'Sync'}</span>
                       </button>
                     </div>
-                    {o.courier.liveStatus && (
-                      <div className="courier-live-tag" title={o.courier.liveStatus}>
-                        <span className="c-dot" />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>
-                          {o.courier.liveStatus}
+                    {(o.courier.liveStatus || isCourierHoldOrder(o)) && (
+                      <div
+                        className="courier-live-tag"
+                        title={o.courier.liveStatus || 'Courier Hold'}
+                        style={
+                          isCourierHoldOrder(o)
+                            ? {
+                                background: 'rgba(245, 158, 11, 0.18)',
+                                border: '1px solid rgba(245, 158, 11, 0.5)',
+                                color: '#fbbf24',
+                                fontWeight: 700,
+                              }
+                            : undefined
+                        }
+                      >
+                        <span
+                          className="c-dot"
+                          style={isCourierHoldOrder(o) ? { background: '#f59e0b', boxShadow: '0 0 6px #f59e0b' } : undefined}
+                        />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 155 }}>
+                          {isCourierHoldOrder(o) ? '⚠️ ' : ''}
+                          {o.courier.liveStatus || 'On hold'}
+                          {o.courier.attempt ? ` (${o.courier.attempt}x)` : ''}
                         </span>
                       </div>
+                    )}
+                    {o.courier.riderNote && (
+                      <div
+                        style={{
+                          fontSize: 10.5,
+                          color: isCourierHoldOrder(o) ? '#fde68a' : '#cbd5e1',
+                          background: isCourierHoldOrder(o) ? 'rgba(245, 158, 11, 0.12)' : 'rgba(255, 255, 255, 0.05)',
+                          border: isCourierHoldOrder(o) ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
+                          borderRadius: 5,
+                          padding: '3px 6px',
+                          marginTop: 3,
+                          lineHeight: 1.3,
+                          maxWidth: 215,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                        }}
+                        title={`Rider Reason: ${o.courier.riderNote}`}
+                      >
+                        💬 {o.courier.riderNote}
+                      </div>
+                    )}
+                    {isCourierHoldOrder(o) && cleanPhone && (
+                      <a
+                        href={`https://wa.me/88${cleanPhone}?text=${encodeURIComponent(
+                          `আসসালামু আলাইকুম ${o.customer?.name || 'স্যার/ম্যাম'}, Secrate থেকে আপনার অর্ডারটি (#${o.id.replace('DOT-', '')}, ৳${o.total}) ডেলিভারি করার জন্য কুরিয়ার (${o.courier.name} - Consignment #${o.courier.consignment}) যোগাযোগ করেছিল কিন্তু পার্সেলটি বর্তমানে হোল্ডে আছে${o.courier.riderNote ? ` (কারণ: ${o.courier.riderNote})` : ''}। অনুগ্রহ করে আপনার ফোনটি খোলা রাখুন যাতে ডেলিভারি রাইডার পার্সেলটি পৌঁছে দিতে পারেন। ধন্যবাদ!`
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          marginTop: 4,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: '#10b981',
+                          background: 'rgba(16, 185, 129, 0.14)',
+                          border: '1px solid rgba(16, 185, 129, 0.35)',
+                          padding: '2px 7px',
+                          borderRadius: 4,
+                          textDecoration: 'none',
+                          width: 'fit-content',
+                        }}
+                        title="Send 1-click Courier Hold alert on WhatsApp"
+                      >
+                        <span>📲 Alert Customer</span>
+                      </a>
                     )}
                   </div>
                 ) : ['approved', 'confirmed'].includes(String(o.status || '').toLowerCase()) ? (
