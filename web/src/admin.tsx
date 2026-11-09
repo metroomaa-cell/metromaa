@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import qrcode from 'qrcode-generator';
 import './admin.css';
 import { taka, getCategories, fetchMasterColors, createMasterColor, deleteMasterColor, autoDetectCategoryAndSub, isWellnessOrExcludedCategory, type MasterColor } from './api';
