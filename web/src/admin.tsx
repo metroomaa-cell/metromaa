@@ -4035,18 +4035,69 @@ function OrdersAdmin() {
       }
     } catch {}
   };
+  const getOrderEventTime = (o: any, statusFilter: string): number => {
+    if (!o) return 0;
+    if (statusFilter && statusFilter !== 'all') {
+      if (statusFilter === 'exchange') {
+        const exHist = Array.isArray(o.history) ? o.history.slice().reverse().find((h: any) => h.status === 'exchange' || String(h.status || '').includes('exchange')) : null;
+        if (exHist && exHist.at) return new Date(exHist.at).getTime();
+        if (o.exchangeRequestedAt) return new Date(o.exchangeRequestedAt).getTime();
+      }
+      const hist = Array.isArray(o.history) ? o.history.slice().reverse().find((h: any) => h.status === statusFilter) : null;
+      if (hist && hist.at) return new Date(hist.at).getTime();
+
+      if (statusFilter === 'delivered') {
+        if (o.deliveredAt) return new Date(o.deliveredAt).getTime();
+        if (o.courier?.lastSync && o.courier?.liveStatus && String(o.courier.liveStatus).toLowerCase().includes('deliver')) {
+          return new Date(o.courier.lastSync).getTime();
+        }
+      }
+      if (statusFilter === 'shipped') {
+        if (o.shippedAt) return new Date(o.shippedAt).getTime();
+        if (o.courier?.lastSync) return new Date(o.courier.lastSync).getTime();
+      }
+      if (statusFilter === 'return') {
+        if (o.returnedAt) return new Date(o.returnedAt).getTime();
+      }
+      if (statusFilter === 'cancelled') {
+        if (o.cancelledAt) return new Date(o.cancelledAt).getTime();
+      }
+      if (o.updatedAt) return new Date(o.updatedAt).getTime();
+    }
+    return o.createdAt ? new Date(o.createdAt).getTime() : 0;
+  };
+
+  const matchesOrderRange = (time: number, rangeVal: string): boolean => {
+    if (rangeVal === 'all') return true;
+    if (!time) return false;
+    const now = new Date();
+    if (rangeVal === '1') {
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      return time >= startOfToday;
+    }
+    const days = parseInt(rangeVal, 10);
+    if (isNaN(days)) return true;
+    const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)).getTime();
+    return time >= cutoff;
+  };
+
   const shown = useMemo(() => {
     const query = q.trim().toLowerCase();
-    const now = Date.now();
     const list = (Array.isArray(orders) ? orders : []).filter((o) => {
       if (filter === 'exchange') {
         if (!o.isExchange && o.exchangeStatus !== 'exchange_in_progress') return false;
       } else if (filter !== 'all' && o.status !== filter) return false;
-      if (range !== 'all' && now - new Date(o.createdAt).getTime() > parseInt(range, 10) * 86400000) return false;
+      const eventTime = getOrderEventTime(o, filter);
+      if (!matchesOrderRange(eventTime, range)) return false;
       if (query && !(o.id + ' ' + (o.customer?.name || '') + ' ' + (o.customer?.phone || '') + ' ' + (o.source || '')).toLowerCase().includes(query)) return false;
       return true;
     });
-    return list.sort((a, b) => sort === 'high' ? b.total - a.total : sort === 'old' ? (a.createdAt < b.createdAt ? -1 : 1) : (a.createdAt > b.createdAt ? -1 : 1));
+    return list.sort((a, b) => {
+      if (sort === 'high') return b.total - a.total;
+      const tA = getOrderEventTime(a, filter);
+      const tB = getOrderEventTime(b, filter);
+      return sort === 'old' ? (tA - tB) : (tB - tA);
+    });
   }, [orders, filter, range, sort, q]);
   const PAGE = 25;
   const [page, setPage] = useState(1);
@@ -4401,6 +4452,24 @@ function OrdersAdmin() {
                 <div style={{ fontSize: 10.5, color: '#64748b' }}>
                   {new Date(o.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                 </div>
+                {filter === 'delivered' && (() => {
+                  const delTime = getOrderEventTime(o, 'delivered');
+                  if (!delTime) return null;
+                  return (
+                    <div style={{ fontSize: 10, color: '#10b981', fontWeight: 600, marginTop: 1, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                      <span>✓ Delivered {timeAgo(new Date(delTime).toISOString())}</span>
+                    </div>
+                  );
+                })()}
+                {filter === 'shipped' && (() => {
+                  const shipTime = getOrderEventTime(o, 'shipped');
+                  if (!shipTime) return null;
+                  return (
+                    <div style={{ fontSize: 10, color: '#38bdf8', fontWeight: 600, marginTop: 1, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                      <span>🚚 Shipped {timeAgo(new Date(shipTime).toISOString())}</span>
+                    </div>
+                  );
+                })()}
                 <div style={{ marginTop: 3, display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
                   <OriginBadge order={o} style={{ fontSize: 10, padding: '2px 7px' }} />
                   {o.landing && (
