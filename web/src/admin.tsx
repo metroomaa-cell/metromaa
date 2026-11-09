@@ -3914,6 +3914,11 @@ function OrdersAdmin() {
   const [range, setRange] = useState('all');
   const [sort, setSort] = useState('new');
   const [q, setQ] = useState('');
+  const switchTab = (tab: string) => {
+    setFilter(tab);
+    setRange('all');
+    setPage(1);
+  };
   const [sel, setSel] = useState<any>(null);
   const [exchangeOrderTarget, setExchangeOrderTarget] = useState<any>(null);
   const [allProductsList, setAllProductsList] = useState<any[]>([]);
@@ -3925,9 +3930,10 @@ function OrdersAdmin() {
   const load = (silent = false) => {
     if (!silent) setLoading(true);
     return aFetch('/orders')
-      .then((r) => (r.ok ? r.json() : []))
+      .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        const arr = Array.isArray(d) ? d : [];
+        if (!Array.isArray(d)) return;
+        const arr = d;
         if (prevCount.current !== null && arr.length > prevCount.current) {
           try {
             const a = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -3947,7 +3953,6 @@ function OrdersAdmin() {
         setLoading(false);
       })
       .catch(() => {
-        if (!silent) setOrders([]);
         setLoading(false);
       });
   };
@@ -4306,7 +4311,7 @@ function OrdersAdmin() {
             const chCount = s === 'shipped' ? allList.filter((o) => isCourierHoldOrder(o)).length : 0;
             return (
               <React.Fragment key={s}>
-                <button className={filter === s ? 'on' : ''} onClick={() => setFilter(s)}>
+                <button className={filter === s ? 'on' : ''} onClick={() => switchTab(s)}>
                   <span>{s === 'all' ? 'All' : s}</span>
                   <span className="sa-filter-count">{cnt}</span>
                 </button>
@@ -4314,7 +4319,7 @@ function OrdersAdmin() {
                   <button
                     type="button"
                     className={filter === 'courier_hold' ? 'on' : ''}
-                    onClick={() => setFilter('courier_hold')}
+                    onClick={() => switchTab('courier_hold')}
                     style={
                       filter === 'courier_hold'
                         ? { background: 'rgba(245, 158, 11, 0.25)', borderColor: '#f59e0b', color: '#fef3c7', fontWeight: 700 }
@@ -4346,7 +4351,7 @@ function OrdersAdmin() {
               <button
                 type="button"
                 className={filter === 'exchange' ? 'on' : ''}
-                onClick={() => setFilter('exchange')}
+                onClick={() => switchTab('exchange')}
                 style={filter === 'exchange' ? { background: 'rgba(168, 85, 247, 0.25)', borderColor: '#a855f7', color: '#e9d5ff' } : { borderColor: 'rgba(168, 85, 247, 0.4)', color: '#c084fc' }}
               >
                 <span>🔄 Exchange</span>
@@ -4915,7 +4920,48 @@ function OrdersAdmin() {
           );
         })}
         {loading && <div className="ogskel-wrap">{[0, 1, 2, 3, 4, 5].map((i) => <div className="ska ogskel-row" key={i} />)}</div>}
-        {!loading && shown.length === 0 && <div className="sa-empty">No orders here.</div>}
+        {!loading && shown.length === 0 && (
+          <div className="sa-empty" style={{ padding: '36px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+            <div style={{ color: '#94a3b8', fontSize: 13.5 }}>
+              {range !== 'all' ? `No orders found for the selected date range (${range === '1' ? 'Today' : `${range} days`}).` : q ? `No orders match "${q}".` : 'No orders here.'}
+            </div>
+            {range !== 'all' && (
+              <button
+                type="button"
+                onClick={() => setRange('all')}
+                style={{
+                  background: 'rgba(139, 92, 246, 0.2)',
+                  border: '1px solid rgba(139, 92, 246, 0.45)',
+                  color: '#c4b5fd',
+                  padding: '6px 14px',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: 12,
+                }}
+              >
+                📅 Show All Time (Clear Date Filter)
+              </button>
+            )}
+            {q && (
+              <button
+                type="button"
+                onClick={() => setQ('')}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  color: '#94a3b8',
+                  padding: '5px 12px',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontSize: 12,
+                }}
+              >
+                Clear Search Query
+              </button>
+            )}
+          </div>
+        )}
         {pageCount > 1 && (
           <div className="ogpager">
             <button disabled={curPage <= 1} onClick={() => setPage(curPage - 1)}>← prev</button>
