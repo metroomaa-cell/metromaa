@@ -1117,9 +1117,9 @@ app.post('/api/orders', (req, res) => {
     status: 'pending',
     payment: 'cash_on_delivery',
     source: String(
-      (attribution && attribution.channel && attribution.channel !== 'direct' ? attribution.channel : '') ||
+      (attribution && attribution.channel ? attribution.channel : '') ||
       (c.source && !c.source.startsWith('landing_') && !c.source.startsWith('l/') ? c.source : '') ||
-      (attribution?.channel || (landingSlug ? 'facebook' : 'direct'))
+      'direct'
     ).slice(0, 60),
     attribution,
     landing: landingSlug,

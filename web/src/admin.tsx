@@ -125,6 +125,20 @@ export function resolveOrderSource(orderOrSource: any): {
   const med = (attr?.medium || '').toLowerCase();
   const ref = (attr?.referrer || '').toLowerCase();
 
+  // 0. Explicit Direct / Organic
+  if ((ch === 'direct' || s === 'direct') && !attr?.clickId && !ref.includes('facebook') && !ref.includes('google') && !ref.includes('tiktok')) {
+    return {
+      channel: 'direct',
+      label: 'Direct',
+      subLabel: landing ? `l/${landing}` : undefined,
+      isPaid: false,
+      color: '#94a3b8',
+      bg: 'rgba(148, 163, 184, 0.12)',
+      border: 'rgba(148, 163, 184, 0.25)',
+      iconType: 'direct',
+    };
+  }
+
   // 1. WhatsApp
   if (ch === 'whatsapp' || s.includes('whatsapp') || s === 'wa') {
     return {
