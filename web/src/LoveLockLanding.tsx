@@ -895,7 +895,16 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
   // If page is set to Custom HTML mode, render custom HTML with embedded checkout form
   if (cfg.mode === 'html' && cfg.customHtml) {
-    const rawHtml = String(cfg.customHtml || '');
+    const phone = cfg.phone || '09638752122';
+    const rawWa = String(cfg.whatsapp || '8801351107157').replace(/[^0-9]/g, '');
+    const waUrl = `https://wa.me/${rawWa}`;
+    const rawHtml = String(cfg.customHtml || '')
+      .replaceAll('[PHONE]', phone)
+      .replaceAll('{{phone}}', phone)
+      .replaceAll('[WHATSAPP_URL]', waUrl)
+      .replaceAll('[WHATSAPP]', waUrl)
+      .replaceAll('{{whatsapp}}', waUrl)
+      .replaceAll('[WHATSAPP_NUMBER]', cfg.whatsapp || '8801351107157');
     const hasOrderTag = rawHtml.includes('[ORDER_FORM]');
     return (
       <div className="lovelock-landing custom-html-landing" style={themeVars}>

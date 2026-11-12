@@ -16157,7 +16157,7 @@ function LandingsAdmin() {
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
-  const [copiedTag, setCopiedTag] = useState(false);
+  const [copiedTag, setCopiedTag] = useState<string | boolean>(false);
 
   // Media Library Picker Modal State
   const [mediaPickerTarget, setMediaPickerTarget] = useState<{
@@ -17940,6 +17940,74 @@ function LandingsAdmin() {
               </div>
             </div>
 
+            {/* Quick Contact Settings for HTML Mode */}
+            <div style={{
+              marginBottom: 16,
+              padding: '14px 16px',
+              borderRadius: 8,
+              background: '#13111f',
+              border: '1px solid rgba(255,255,255,0.08)',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+              gap: 14
+            }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#e2e8f0' }}>
+                    📞 হেল্পলাইন ফোন নম্বর (Phone)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText('[PHONE]');
+                      setCopiedTag('phone');
+                      setTimeout(() => setCopiedTag(false), 2000);
+                    }}
+                    style={{ background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.35)', color: '#38bdf8', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    {copiedTag === 'phone' ? '✓ Copied!' : '📋 Copy [PHONE]'}
+                  </button>
+                </div>
+                <input
+                  value={f.phone || ''}
+                  onChange={(e) => setF((s: any) => ({ ...s, phone: e.target.value }))}
+                  placeholder="09638752122"
+                  style={{ width: '100%', padding: '9px 12px', background: '#0b0914', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, fontSize: 13 }}
+                />
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                  এইচটিএমএলে <code>&lt;a href="tel:[PHONE]"&gt;[PHONE]&lt;/a&gt;</code> লিখলে স্বয়ংক্রিয়ভাবে এই নম্বরটি বসে যাবে।
+                </div>
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#e2e8f0' }}>
+                    💬 হোয়াটসঅ্যাপ নম্বর (WhatsApp with Country Code)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText('[WHATSAPP]');
+                      setCopiedTag('wa');
+                      setTimeout(() => setCopiedTag(false), 2000);
+                    }}
+                    style={{ background: 'rgba(37, 211, 102, 0.15)', border: '1px solid rgba(37, 211, 102, 0.35)', color: '#25d366', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    {copiedTag === 'wa' ? '✓ Copied!' : '📋 Copy [WHATSAPP]'}
+                  </button>
+                </div>
+                <input
+                  value={f.whatsapp || ''}
+                  onChange={(e) => setF((s: any) => ({ ...s, whatsapp: e.target.value }))}
+                  placeholder="8801351107157"
+                  style={{ width: '100%', padding: '9px 12px', background: '#0b0914', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, fontSize: 13 }}
+                />
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                  এইচটিএমএলে <code>&lt;a href="[WHATSAPP]"&gt;হোয়াটসঅ্যাপে যোগাযোগ&lt;/a&gt;</code> লিখলে সরাসরি এই চ্যাটে যাবে।
+                </div>
+              </div>
+            </div>
+
             {/* Quick Tag Pill with Click-to-Copy */}
             <div style={{
               marginBottom: 16,
@@ -17969,12 +18037,12 @@ function LandingsAdmin() {
                 type="button"
                 onClick={() => {
                   navigator.clipboard.writeText('[ORDER_FORM]');
-                  setCopiedTag(true);
+                  setCopiedTag('order');
                   setTimeout(() => setCopiedTag(false), 2000);
                 }}
                 style={{
-                  background: copiedTag ? '#10b981' : '#0e0c18',
-                  color: copiedTag ? '#fff' : '#6ee7b7',
+                  background: copiedTag === 'order' ? '#10b981' : '#0e0c18',
+                  color: copiedTag === 'order' ? '#fff' : '#6ee7b7',
                   border: '1px solid rgba(16, 185, 129, 0.5)',
                   padding: '7px 16px',
                   borderRadius: 6,
@@ -17990,7 +18058,7 @@ function LandingsAdmin() {
               >
                 <span>[ORDER_FORM]</span>
                 <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.85 }}>
-                  {copiedTag ? '✓ Copied!' : '📋 Copy Tag'}
+                  {copiedTag === 'order' ? '✓ Copied!' : '📋 Copy Tag'}
                 </span>
               </button>
             </div>
