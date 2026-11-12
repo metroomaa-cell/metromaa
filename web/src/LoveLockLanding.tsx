@@ -197,7 +197,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
   useEffect(() => {
     if (!cfg) return;
-    const brand = 'SECRATE';
+    const brand = 'TimeBoost';
     const lTitle = `${cfg.headline || cfg.title} — ${brand}`;
     document.title = lTitle;
     const q = new URLSearchParams(location.search);
@@ -495,6 +495,33 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
     );
   }
 
+  // Handle Paused / Temporarily Inactive Landing Page
+  if (cfg.status === 'paused') {
+    if (cfg.pausedAction === 'redirect_home') {
+      go('home');
+      return null;
+    }
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0e0c18', fontFamily: "'Hind Siliguri', sans-serif", padding: 20 }}>
+        <div style={{ maxWidth: 480, width: '100%', background: '#161326', borderRadius: 20, padding: '44px 32px', textAlign: 'center', boxShadow: '0 25px 60px rgba(0,0,0,0.6)', border: '1px solid rgba(139, 92, 246, 0.35)' }}>
+          <div style={{ fontSize: 52, marginBottom: 16 }}>⏳</div>
+          <h1 style={{ fontSize: 23, fontWeight: 800, color: '#f8fafc', margin: '0 0 12px' }}>
+            {cfg.pausedTitle || 'সাময়িকভাবে অর্ডার নেওয়া বন্ধ আছে'}
+          </h1>
+          <p style={{ fontSize: 14.5, color: '#94a3b8', margin: '0 0 28px', lineHeight: 1.65 }}>
+            {cfg.pausedMessage || 'পণ্যটির স্টক সাময়িকভাবে শেষ হওয়ায় এই মুহূর্তে অর্ডার গ্রহণ স্থগিত রাখা হয়েছে। খুব শীঘ্রই স্টক পুনরায় চালু হবে।'}
+          </p>
+          <button
+            onClick={() => go('home')}
+            style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)', color: '#fff', border: 'none', padding: '13px 32px', borderRadius: 999, fontSize: 15, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 18px rgba(139, 92, 246, 0.4)' }}
+          >
+            আমাদের মূল স্টোর ভিজিট করুন 🛍️
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const benefitsList = Array.isArray(cfg.benefits) ? cfg.benefits.filter(Boolean) : [];
   const usageStepsList = Array.isArray(cfg.usageSteps) ? cfg.usageSteps.filter(Boolean) : [];
   const colorOptions: string[] = Array.isArray(cfg.colors)
@@ -532,6 +559,362 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
       ? '🚚 আজকের অর্ডারে সারা বাংলাদেশে ডেলিভারি সম্পূর্ণ ফ্রি!'
       : `🚚 সারা বাংলাদেশে দ্রুত ক্যাশ অন হোম ডেলিভারি! (ঢাকায় ৳${delInside}, ঢাকার বাইরে ৳${delOutside})`);
 
+  const renderCheckoutForm = () => (
+    <section className="ll-sec ll-sec-light ll-sec-order" id="order">
+      <div className="ll-inner">
+        <h2 className="ll-order-form-title">অর্ডার করতে নিচের ফর্মটি পূরন করুন</h2>
+
+        <div className="ll-checkout-container">
+          <form onSubmit={handleOrder} className="ll-form">
+            {/* Product Selection */}
+            <div className="ll-card ll-product-options-wrap">
+              <h3 className="ll-checkout-heading">Your Products</h3>
+
+              <div className="ll-qty-options">
+                {packagesList.map((prod: any) => {
+                  const isSelected = selectedProduct === prod.id;
+                  const q = qty[prod.id] || 1;
+                  return (
+                    <div
+                      key={prod.id}
+                      className={`ll-product-card ${isSelected ? 'selected' : ''} ${prod.popular ? 'highlight' : ''}`}
+                      onClick={() => handleSelectPackage(prod)}
+                    >
+                      {prod.popular && <span className="ll-highlight-badge">সর্বাধিক জনপ্রিয়</span>}
+
+                      <div className="ll-product-card-body">
+                        <div className="ll-radio-wrap">
+                          <input
+                            type="radio"
+                            name="ll-product"
+                            checked={isSelected}
+                            onChange={() => handleSelectPackage(prod)}
+                            id={`prod-${prod.id}`}
+                          />
+                          <label htmlFor={`prod-${prod.id}`}></label>
+                        </div>
+
+                        {prod.image && (
+                          <div className="ll-card-thumb">
+                            <img src={prod.image} alt={prod.title} />
+                          </div>
+                        )}
+
+                        <div className="ll-card-content">
+                          <div className="ll-card-title">
+                              {prod.title}
+                              {prod.sku && (
+                                <span style={{ display: 'inline-block', marginLeft: 8, fontSize: 11, background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.25)', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
+                                  SKU: {prod.sku}
+                                </span>
+                              )}
+                            </div>
+
+                          <div className="ll-card-footer">
+                            <div className="ll-stepper">
+                              <button
+                                type="button"
+                                onClick={(e) => handleQtyChange(prod.id, -1, e)}
+                                className="ll-stepper-btn"
+                              >
+                                −
+                              </button>
+                              <span className="ll-stepper-val">{q}</span>
+                              <button
+                                type="button"
+                                onClick={(e) => handleQtyChange(prod.id, 1, e)}
+                                className="ll-stepper-btn"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            <div className="ll-card-price">
+                              {prod.originalPrice && Number(prod.originalPrice) > Number(prod.price) && (
+                                <span style={{ textDecoration: 'line-through', color: '#9ca3af', fontSize: 13, marginRight: 8, fontWeight: 500 }}>
+                                  {taka(Number(prod.originalPrice) * q)}
+                                </span>
+                              )}
+                              <span className="ll-price-num">{taka(prod.price * q)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Optional Color / Variant Selector */}
+              {colorOptions.length > 0 && (
+                <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid rgba(229,231,235,0.7)' }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1F2937', marginBottom: 10 }}>
+                    পছন্দের কালার / ভ্যারিয়েন্ট নির্বাচন করুন:
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    {colorOptions.map((cName) => {
+                      const active = selectedColor === cName;
+                      return (
+                        <button
+                          key={cName}
+                          type="button"
+                          onClick={() => setSelectedColor(cName)}
+                          style={{
+                            padding: '8px 18px',
+                            borderRadius: 999,
+                            fontSize: 14,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            border: active ? `2px solid ${primaryHex}` : '1.5px solid #d1d5db',
+                            background: active ? primaryHex : '#ffffff',
+                            color: active ? '#ffffff' : '#374151',
+                            boxShadow: active ? `0 4px 12px rgba(${primaryRgb}, 0.25)` : 'none',
+                            transition: 'all 0.2s ease',
+                          }}
+                        >
+                          {active ? `✓ ${cName}` : cName}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Billing Details */}
+            <div className="ll-card ll-billing-details-wrap">
+              <h3 className="ll-checkout-heading">Billing details</h3>
+
+              <div className="ll-field-group">
+                <label className="ll-label">
+                  আপনার নাম <span className="ll-req">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  className="ll-input"
+                  placeholder="আপনার সম্পূর্ণ নাম লিখুন"
+                  value={name}
+                  onFocus={triggerInitiateCheckout}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+
+              <div className="ll-field-group">
+                <label className="ll-label">
+                  আপনার সম্পূর্ণ ঠিকানা <span className="ll-req">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  className="ll-input"
+                  placeholder="জেলা, থানা, এলাকা ও বাসার ঠিকানা লিখুন"
+                  value={address}
+                  onFocus={triggerInitiateCheckout}
+                  onChange={(e) => setAddress(e.target.value)}
+                />
+              </div>
+
+              <div className="ll-field-group">
+                <label className="ll-label" htmlFor="ll-phone-input">
+                  আপনার ফোন নাম্বার <span className="ll-req">*</span>
+                </label>
+                <div className="ll-phone-input-wrap">
+                  <div className="ll-phone-flag" aria-hidden="true">
+                    <span className="ll-flag-icon">🇧🇩</span>
+                    <span className="ll-country-code">+88</span>
+                  </div>
+                  <input
+                    id="ll-phone-input"
+                    type="tel"
+                    required
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    maxLength={11}
+                    className={`ll-input ll-phone-input ${phoneValidation.state === 'valid' ? 'll-input-valid' : phoneValidation.state === 'invalid' ? 'll-input-invalid' : ''}`}
+                    placeholder="01XXXXXXXXX"
+                    value={phone}
+                    onFocus={triggerInitiateCheckout}
+                    onChange={(e) => handlePhoneChange(e.target.value)}
+                  />
+                </div>
+                {phoneValidation.state !== 'empty' && (
+                  <div className={`ll-phone-helper ${phoneValidation.state === 'valid' ? 'valid' : phoneValidation.state === 'invalid' ? 'error' : 'info'}`}>
+                    <span>{phoneValidation.message}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Shipping */}
+            <div className="ll-card ll-shipping-wrap">
+              <h3 className="ll-checkout-heading">Shipping (ডেলিভারি এলাকা)</h3>
+              {isFreeDelivery ? (
+                <div className="ll-shipping-option">
+                  <input type="radio" checked readOnly id="free-ship" />
+                  <label htmlFor="free-ship" style={{ fontWeight: 700, color: '#047857' }}>
+                    সম্পূর্ণ ফ্রি ডেলিভারি (Free Shipping — ৳0)
+                  </label>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <label
+                    htmlFor="ship-inside"
+                    onClick={() => setShippingZone('inside')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px 16px',
+                      borderRadius: 12,
+                      border: shippingZone === 'inside' ? `2px solid ${primaryHex}` : '1.5px solid #e5e7eb',
+                      background: shippingZone === 'inside' ? `rgba(${primaryRgb}, 0.06)` : '#ffffff',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 700, color: '#111827', fontSize: 15 }}>
+                      <input
+                        type="radio"
+                        id="ship-inside"
+                        name="ll-shipping-zone"
+                        checked={shippingZone === 'inside'}
+                        onChange={() => setShippingZone('inside')}
+                        style={{ accentColor: primaryHex, width: 18, height: 18 }}
+                      />
+                      <span>ঢাকার ভেতরে (Inside Dhaka)</span>
+                    </span>
+                    <strong style={{ fontSize: 16, color: primaryHex }}>{taka(delInside)}</strong>
+                  </label>
+
+                  <label
+                    htmlFor="ship-outside"
+                    onClick={() => setShippingZone('outside')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px 16px',
+                      borderRadius: 12,
+                      border: shippingZone === 'outside' ? `2px solid ${primaryHex}` : '1.5px solid #e5e7eb',
+                      background: shippingZone === 'outside' ? `rgba(${primaryRgb}, 0.06)` : '#ffffff',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 700, color: '#111827', fontSize: 15 }}>
+                      <input
+                        type="radio"
+                        id="ship-outside"
+                        name="ll-shipping-zone"
+                        checked={shippingZone === 'outside'}
+                        onChange={() => setShippingZone('outside')}
+                        style={{ accentColor: primaryHex, width: 18, height: 18 }}
+                      />
+                      <span>ঢাকার বাইরে (Outside Dhaka)</span>
+                    </span>
+                    <strong style={{ fontSize: 16, color: primaryHex }}>{taka(delOutside)}</strong>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Order Review Table */}
+            <div className="ll-card ll-order-review-wrap">
+              <h3 className="ll-checkout-heading">Your order</h3>
+
+              <table className="ll-order-table">
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th style={{ textAlign: 'right' }}>Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      {currentItem.title}
+                      {selectedColor ? ` (${selectedColor})` : ''} <strong>&times; {currentQty}</strong>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>{taka(subtotal)}</td>
+                  </tr>
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th>Subtotal</th>
+                    <td style={{ textAlign: 'right' }}>{taka(subtotal)}</td>
+                  </tr>
+                  <tr>
+                    <th>Shipment</th>
+                    <td style={{ textAlign: 'right' }}>
+                      {isFreeDelivery
+                        ? 'Free shipping (৳0)'
+                        : `${shippingZone === 'inside' ? 'ঢাকার ভেতরে' : 'ঢাকার বাইরে'}: ${taka(shippingCost)}`}
+                    </td>
+                  </tr>
+                  <tr className="ll-total-row">
+                    <th>Total</th>
+                    <td style={{ textAlign: 'right' }}>
+                      <strong>{taka(total)}</strong>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+
+              {/* Payment Method */}
+              <div className="ll-payment-method">
+                <div className="ll-payment-title">
+                  <input type="radio" checked readOnly id="pay-cod" />
+                  <label htmlFor="pay-cod">ক্যাশ অন ডেলিভারি</label>
+                </div>
+                <div className="ll-payment-desc">পন্য হাতে পেয়ে মূল্য পরিশোধ করুন।</div>
+              </div>
+
+              {/* Privacy disclaimer */}
+              <p className="ll-privacy-notice">
+                Your personal data will be used to process your order, support your experience throughout this website, and for other purposes described in our privacy policy.
+              </p>
+
+              {error && <div className="ll-form-error">{error}</div>}
+
+              {/* Place Order CTA Button */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="ll-submit-order-btn"
+                id="place_order"
+              >
+                {loading ? 'অর্ডার প্রসেস হচ্ছে...' : `Place Order  ${total}.00 ৳`}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+  );
+
+  // If page is set to Custom HTML mode, render custom HTML with embedded checkout form
+  if (cfg.mode === 'html' && cfg.customHtml) {
+    const rawHtml = String(cfg.customHtml || '');
+    const hasOrderTag = rawHtml.includes('[ORDER_FORM]');
+    return (
+      <div className="lovelock-landing custom-html-landing" style={themeVars}>
+        {hasOrderTag ? (
+          <>
+            <div dangerouslySetInnerHTML={{ __html: rawHtml.split('[ORDER_FORM]')[0] }} />
+            {renderCheckoutForm()}
+            <div dangerouslySetInnerHTML={{ __html: rawHtml.split('[ORDER_FORM]')[1] }} />
+          </>
+        ) : (
+          <>
+            <div dangerouslySetInnerHTML={{ __html: rawHtml }} />
+            {renderCheckoutForm()}
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="lovelock-landing" style={themeVars}>
       {/* iOS Ambient Glow Orbs for Glass Refraction */}
@@ -542,37 +925,39 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
       </div>
 
       {/* SECTION 1: HERO */}
-      <section className="ll-sec ll-sec-hero">
-        <div className="ll-inner">
-          {cfg.badgeTop && (
-            <div className="ll-pill-badge ll-pill-badge-red">
-              <CheckCircleIcon color={primaryHex} size={16} />
-              <span>{cfg.badgeTop}</span>
-            </div>
-          )}
+      {cfg.showHero !== false && (
+        <section className="ll-sec ll-sec-hero">
+          <div className="ll-inner">
+            {cfg.badgeTop && (
+              <div className="ll-pill-badge ll-pill-badge-red">
+                <CheckCircleIcon color={primaryHex} size={16} />
+                <span>{cfg.badgeTop}</span>
+              </div>
+            )}
 
-          <h1 className="ll-title-main">{cfg.headline || cfg.title}</h1>
+            <h1 className="ll-title-main">{cfg.headline || cfg.title}</h1>
 
-          {cfg.subtitle && <p className="ll-subtitle">{cfg.subtitle}</p>}
+            {cfg.subtitle && <p className="ll-subtitle">{cfg.subtitle}</p>}
 
-          {cfg.badgeGuarantee && (
-            <div className="ll-pill-badge ll-pill-badge-green">
-              <CheckCircleIcon color="#065F46" size={16} />
-              <span>{cfg.badgeGuarantee}</span>
-            </div>
-          )}
-        </div>
-      </section>
+            {cfg.badgeGuarantee && (
+              <div className="ll-pill-badge ll-pill-badge-green">
+                <CheckCircleIcon color="#065F46" size={16} />
+                <span>{cfg.badgeGuarantee}</span>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* SECTION 2: VIDEO & CTA */}
-      <section className="ll-sec ll-sec-crimson">
-        <div className="ll-inner">
-          <button onClick={scrollToOrder} className="ll-pulse-btn" id="pulse-button">
-            <CartIcon size={24} />
-            <span>অর্ডার করতে ক্লিক করুন</span>
-          </button>
+      {cfg.showVideo !== false && cfg.videoUrl && parsedVideo.embedUrl && (
+        <section className="ll-sec ll-sec-crimson">
+          <div className="ll-inner">
+            <button onClick={scrollToOrder} className="ll-pulse-btn" id="pulse-button">
+              <CartIcon size={24} />
+              <span>অর্ডার করতে ক্লিক করুন</span>
+            </button>
 
-          {cfg.videoUrl && parsedVideo.embedUrl && (
             <div className={`ll-video-wrap ${parsedVideo.type === 'youtube-shorts' ? 'll-video-shorts' : ''}`}>
               {parsedVideo.type === 'youtube' || parsedVideo.type === 'youtube-shorts' || parsedVideo.type === 'facebook' ? (
                 <iframe
@@ -596,16 +981,16 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
                 />
               )}
             </div>
-          )}
 
-          {cfg.videoBadge && (
-            <div className="ll-pill-badge ll-pill-badge-subcrimson">
-              <CheckCircleIcon color="#FAFAFA" size={16} />
-              <span>{cfg.videoBadge}</span>
-            </div>
-          )}
-        </div>
-      </section>
+            {cfg.videoBadge && (
+              <div className="ll-pill-badge ll-pill-badge-subcrimson">
+                <CheckCircleIcon color="#FAFAFA" size={16} />
+                <span>{cfg.videoBadge}</span>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* SECTION 3: PRODUCT INTRO */}
       <section className="ll-sec ll-sec-product">
@@ -835,337 +1220,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
       </section>
 
       {/* SECTION 8: CHECKOUT & PRODUCT SELECTION */}
-      <section className="ll-sec ll-sec-light ll-sec-order" id="order">
-        <div className="ll-inner">
-          <h2 className="ll-order-form-title">অর্ডার করতে নিচের ফর্মটি পূরন করুন</h2>
-
-          <div className="ll-checkout-container">
-            <form onSubmit={handleOrder} className="ll-form">
-              {/* Product Selection */}
-              <div className="ll-card ll-product-options-wrap">
-                <h3 className="ll-checkout-heading">Your Products</h3>
-
-                <div className="ll-qty-options">
-                  {packagesList.map((prod: any) => {
-                    const isSelected = selectedProduct === prod.id;
-                    const q = qty[prod.id] || 1;
-                    return (
-                      <div
-                        key={prod.id}
-                        className={`ll-product-card ${isSelected ? 'selected' : ''} ${prod.popular ? 'highlight' : ''}`}
-                        onClick={() => handleSelectPackage(prod)}
-                      >
-                        {prod.popular && <span className="ll-highlight-badge">সর্বাধিক জনপ্রিয়</span>}
-
-                        <div className="ll-product-card-body">
-                          <div className="ll-radio-wrap">
-                            <input
-                              type="radio"
-                              name="ll-product"
-                              checked={isSelected}
-                              onChange={() => handleSelectPackage(prod)}
-                              id={`prod-${prod.id}`}
-                            />
-                            <label htmlFor={`prod-${prod.id}`}></label>
-                          </div>
-
-                          {prod.image && (
-                            <div className="ll-card-thumb">
-                              <img src={prod.image} alt={prod.title} />
-                            </div>
-                          )}
-
-                          <div className="ll-card-content">
-                            <div className="ll-card-title">
-                                {prod.title}
-                                {prod.sku && (
-                                  <span style={{ display: 'inline-block', marginLeft: 8, fontSize: 11, background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.25)', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
-                                    SKU: {prod.sku}
-                                  </span>
-                                )}
-                              </div>
-
-                            <div className="ll-card-footer">
-                              <div className="ll-stepper">
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleQtyChange(prod.id, -1, e)}
-                                  className="ll-stepper-btn"
-                                >
-                                  −
-                                </button>
-                                <span className="ll-stepper-val">{q}</span>
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleQtyChange(prod.id, 1, e)}
-                                  className="ll-stepper-btn"
-                                >
-                                  +
-                                </button>
-                              </div>
-
-                              <div className="ll-card-price">
-                                {prod.originalPrice && Number(prod.originalPrice) > Number(prod.price) && (
-                                  <span style={{ textDecoration: 'line-through', color: '#9ca3af', fontSize: 13, marginRight: 8, fontWeight: 500 }}>
-                                    {taka(Number(prod.originalPrice) * q)}
-                                  </span>
-                                )}
-                                <span className="ll-price-num">{taka(prod.price * q)}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Optional Color / Variant Selector */}
-                {colorOptions.length > 0 && (
-                  <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid rgba(229,231,235,0.7)' }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1F2937', marginBottom: 10 }}>
-                      পছন্দের কালার / ভ্যারিয়েন্ট নির্বাচন করুন:
-                    </div>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      {colorOptions.map((cName) => {
-                        const active = selectedColor === cName;
-                        return (
-                          <button
-                            key={cName}
-                            type="button"
-                            onClick={() => setSelectedColor(cName)}
-                            style={{
-                              padding: '8px 18px',
-                              borderRadius: 999,
-                              fontSize: 14,
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              border: active ? `2px solid ${primaryHex}` : '1.5px solid #d1d5db',
-                              background: active ? primaryHex : '#ffffff',
-                              color: active ? '#ffffff' : '#374151',
-                              boxShadow: active ? `0 4px 12px rgba(${primaryRgb}, 0.25)` : 'none',
-                              transition: 'all 0.2s ease',
-                            }}
-                          >
-                            {active ? `✓ ${cName}` : cName}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Billing Details */}
-              <div className="ll-card ll-billing-details-wrap">
-                <h3 className="ll-checkout-heading">Billing details</h3>
-
-                <div className="ll-field-group">
-                  <label className="ll-label">
-                    আপনার নাম <span className="ll-req">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    className="ll-input"
-                    placeholder="আপনার সম্পূর্ণ নাম লিখুন"
-                    value={name}
-                    onFocus={triggerInitiateCheckout}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                </div>
-
-                <div className="ll-field-group">
-                  <label className="ll-label">
-                    আপনার সম্পূর্ণ ঠিকানা <span className="ll-req">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    className="ll-input"
-                    placeholder="জেলা, থানা, এলাকা ও বাসার ঠিকানা লিখুন"
-                    value={address}
-                    onFocus={triggerInitiateCheckout}
-                    onChange={(e) => setAddress(e.target.value)}
-                  />
-                </div>
-
-                <div className="ll-field-group">
-                  <label className="ll-label" htmlFor="ll-phone-input">
-                    আপনার ফোন নাম্বার <span className="ll-req">*</span>
-                  </label>
-                  <div className="ll-phone-input-wrap">
-                    <div className="ll-phone-flag" aria-hidden="true">
-                      <span className="ll-flag-icon">🇧🇩</span>
-                      <span className="ll-country-code">+88</span>
-                    </div>
-                    <input
-                      id="ll-phone-input"
-                      type="tel"
-                      required
-                      inputMode="numeric"
-                      autoComplete="tel"
-                      maxLength={11}
-                      className={`ll-input ll-phone-input ${phoneValidation.state === 'valid' ? 'll-input-valid' : phoneValidation.state === 'invalid' ? 'll-input-invalid' : ''}`}
-                      placeholder="01XXXXXXXXX"
-                      value={phone}
-                      onFocus={triggerInitiateCheckout}
-                      onChange={(e) => handlePhoneChange(e.target.value)}
-                    />
-                  </div>
-                  {phoneValidation.state !== 'empty' && (
-                    <div className={`ll-phone-helper ${phoneValidation.state === 'valid' ? 'valid' : phoneValidation.state === 'invalid' ? 'error' : 'info'}`}>
-                      <span>{phoneValidation.message}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Shipping */}
-              <div className="ll-card ll-shipping-wrap">
-                <h3 className="ll-checkout-heading">Shipping (ডেলিভারি এলাকা)</h3>
-                {isFreeDelivery ? (
-                  <div className="ll-shipping-option">
-                    <input type="radio" checked readOnly id="free-ship" />
-                    <label htmlFor="free-ship" style={{ fontWeight: 700, color: '#047857' }}>
-                      সম্পূর্ণ ফ্রি ডেলিভারি (Free Shipping — ৳0)
-                    </label>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <label
-                      htmlFor="ship-inside"
-                      onClick={() => setShippingZone('inside')}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '12px 16px',
-                        borderRadius: 12,
-                        border: shippingZone === 'inside' ? `2px solid ${primaryHex}` : '1.5px solid #e5e7eb',
-                        background: shippingZone === 'inside' ? `rgba(${primaryRgb}, 0.06)` : '#ffffff',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 700, color: '#111827', fontSize: 15 }}>
-                        <input
-                          type="radio"
-                          id="ship-inside"
-                          name="ll-shipping-zone"
-                          checked={shippingZone === 'inside'}
-                          onChange={() => setShippingZone('inside')}
-                          style={{ accentColor: primaryHex, width: 18, height: 18 }}
-                        />
-                        <span>ঢাকার ভেতরে (Inside Dhaka)</span>
-                      </span>
-                      <strong style={{ fontSize: 16, color: primaryHex }}>{taka(delInside)}</strong>
-                    </label>
-
-                    <label
-                      htmlFor="ship-outside"
-                      onClick={() => setShippingZone('outside')}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '12px 16px',
-                        borderRadius: 12,
-                        border: shippingZone === 'outside' ? `2px solid ${primaryHex}` : '1.5px solid #e5e7eb',
-                        background: shippingZone === 'outside' ? `rgba(${primaryRgb}, 0.06)` : '#ffffff',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 700, color: '#111827', fontSize: 15 }}>
-                        <input
-                          type="radio"
-                          id="ship-outside"
-                          name="ll-shipping-zone"
-                          checked={shippingZone === 'outside'}
-                          onChange={() => setShippingZone('outside')}
-                          style={{ accentColor: primaryHex, width: 18, height: 18 }}
-                        />
-                        <span>ঢাকার বাইরে (Outside Dhaka)</span>
-                      </span>
-                      <strong style={{ fontSize: 16, color: primaryHex }}>{taka(delOutside)}</strong>
-                    </label>
-                  </div>
-                )}
-              </div>
-
-              {/* Order Review Table */}
-              <div className="ll-card ll-order-review-wrap">
-                <h3 className="ll-checkout-heading">Your order</h3>
-
-                <table className="ll-order-table">
-                  <thead>
-                    <tr>
-                      <th>Product</th>
-                      <th style={{ textAlign: 'right' }}>Subtotal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>
-                        {currentItem.title}
-                        {selectedColor ? ` (${selectedColor})` : ''} <strong>&times; {currentQty}</strong>
-                      </td>
-                      <td style={{ textAlign: 'right' }}>{taka(subtotal)}</td>
-                    </tr>
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <th>Subtotal</th>
-                      <td style={{ textAlign: 'right' }}>{taka(subtotal)}</td>
-                    </tr>
-                    <tr>
-                      <th>Shipment</th>
-                      <td style={{ textAlign: 'right' }}>
-                        {isFreeDelivery
-                          ? 'Free shipping (৳0)'
-                          : `${shippingZone === 'inside' ? 'ঢাকার ভেতরে' : 'ঢাকার বাইরে'}: ${taka(shippingCost)}`}
-                      </td>
-                    </tr>
-                    <tr className="ll-total-row">
-                      <th>Total</th>
-                      <td style={{ textAlign: 'right' }}>
-                        <strong>{taka(total)}</strong>
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-
-                {/* Payment Method */}
-                <div className="ll-payment-method">
-                  <div className="ll-payment-title">
-                    <input type="radio" checked readOnly id="pay-cod" />
-                    <label htmlFor="pay-cod">ক্যাশ অন ডেলিভারি</label>
-                  </div>
-                  <div className="ll-payment-desc">পন্য হাতে পেয়ে মূল্য পরিশোধ করুন।</div>
-                </div>
-
-                {/* Privacy disclaimer */}
-                <p className="ll-privacy-notice">
-                  Your personal data will be used to process your order, support your experience throughout this website, and for other purposes described in our privacy policy.
-                </p>
-
-                {error && <div className="ll-form-error">{error}</div>}
-
-                {/* Place Order CTA Button */}
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="ll-submit-order-btn"
-                  id="place_order"
-                >
-                  {loading ? 'অর্ডার প্রসেস হচ্ছে...' : `Place Order  ${total}.00 ৳`}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </section>
+      {renderCheckoutForm()}
 
       {/* SECTION 9: FOOTER */}
       <footer className="ll-sec ll-footer-sec">

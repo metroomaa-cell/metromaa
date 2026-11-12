@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, Fragment } from 'react';
 import qrcode from 'qrcode-generator';
 import './admin.css';
 import { taka, getCategories, fetchMasterColors, createMasterColor, deleteMasterColor, autoDetectCategoryAndSub, isWellnessOrExcludedCategory, type MasterColor } from './api';
@@ -384,7 +384,7 @@ function exportCSV(
   orders: any[],
   prodMap?: Record<string, any>,
   landingMap?: Record<string, any>,
-  filePrefix = 'secrate-orders'
+  filePrefix = 'timeboost-orders'
 ) {
   return exportOrdersExcel(orders, prodMap, landingMap, filePrefix);
 }
@@ -1433,7 +1433,7 @@ function invoiceBody(o: any) {
   const rows = o.items.map((it: any, i: number) => `<tr><td class="c">${i + 1}</td><td><div style="display:flex;align-items:center;gap:8px">${it.image ? `<img src="${it.image}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;border:1px solid #eee;flex:none"/>` : ''}<span>${it.name}</span></div></td><td class="c">${it.qty}</td><td class="r">৳${it.price ?? Math.round(it.subtotal / it.qty)}</td><td class="r">৳${it.subtotal}</td></tr>`).join('');
   const cour = o.courier && o.courier.name ? `<div class="col"><div class="lbl">Courier</div><p class="nm">${o.courier.name}</p>${o.courier.consignment ? `<p>Tracking: ${o.courier.consignment}</p>` : ''}</div>` : '';
   const disc = o.discount ? `<div class="totrow"><span>Discount${o.coupon ? ' (' + o.coupon + ')' : ''}</span><span>&minus;৳${o.discount}</span></div>` : '';
-  return `<div class="pg"><div class="doc-top"><div><div class="brand">SECRATE</div><div class="brand-sub">For your personal world.</div></div><div class="doc-meta"><div class="doc-title">INVOICE</div><div class="doc-id">${o.id}</div><div class="doc-date">${new Date(o.createdAt).toLocaleString()}</div></div></div><div class="cols"><div class="col"><div class="lbl">Deliver to</div><p class="nm">${o.customer.name}</p><p>${o.customer.phone}</p><p>${o.customer.address}${o.customer.area ? ' (' + o.customer.area + ' dhaka)' : ''}</p></div><div class="col"><div class="lbl">Payment</div><span class="pay">Cash on delivery</span></div>${cour}</div><table><thead><tr><th class="c">#</th><th>Item</th><th class="c">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody></table><div class="totbox"><div class="totrow"><span>Subtotal</span><span>৳${o.itemsTotal ?? o.total}</span></div><div class="totrow"><span>Delivery</span><span>${o.delivery ? '৳' + o.delivery : 'Free'}</span></div>${disc}<div class="totrow grand"><span>Total (COD)</span><span>৳${o.total}</span></div></div><div class="foot">Thank you for shopping with SECRATE. &middot; Every order ships in plain, discreet packaging.<br>This is a computer-generated invoice and needs no signature.</div></div>`;
+  return `<div class="pg"><div class="doc-top"><div><div class="brand">TimeBoost</div><div class="brand-sub">For your personal world.</div></div><div class="doc-meta"><div class="doc-title">INVOICE</div><div class="doc-id">${o.id}</div><div class="doc-date">${new Date(o.createdAt).toLocaleString()}</div></div></div><div class="cols"><div class="col"><div class="lbl">Deliver to</div><p class="nm">${o.customer.name}</p><p>${o.customer.phone}</p><p>${o.customer.address}${o.customer.area ? ' (' + o.customer.area + ' dhaka)' : ''}</p></div><div class="col"><div class="lbl">Payment</div><span class="pay">Cash on delivery</span></div>${cour}</div><table><thead><tr><th class="c">#</th><th>Item</th><th class="c">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody></table><div class="totbox"><div class="totrow"><span>Subtotal</span><span>৳${o.itemsTotal ?? o.total}</span></div><div class="totrow"><span>Delivery</span><span>${o.delivery ? '৳' + o.delivery : 'Free'}</span></div>${disc}<div class="totrow grand"><span>Total (COD)</span><span>৳${o.total}</span></div></div><div class="foot">Thank you for shopping with TimeBoost. &middot; Every order ships in plain, discreet packaging.<br>This is a computer-generated invoice and needs no signature.</div></div>`;
 }
 function resolveItemSku(it: any, order?: any): string {
   const rawSku = String(it?.sku || '').trim();
@@ -1491,10 +1491,10 @@ function resolveCourierBrand(rawName: string): string {
 function slipBody(o: any) {
   // Dynamic store logo from live website settings
   const rawLogo = liveStoreSettings.logo || '';
-  const storeName = liveStoreSettings.storeName || (typeof window !== 'undefined' && window.location.hostname.includes('metrroma') ? 'METROMA' : 'SECRATE');
+  const storeName = liveStoreSettings.storeName || (typeof window !== 'undefined' && window.location.hostname.includes('metrroma') ? 'METROMA' : 'TimeBoost');
   const fullLogoUrl = rawLogo ? (rawLogo.startsWith('http') ? rawLogo : (typeof window !== 'undefined' ? window.location.origin : '') + rawLogo) : '';
 
-  const storeDisplayName = liveStoreSettings.storeName || ((typeof window !== 'undefined' && window.location.hostname.includes('metrroma')) ? 'METROMA' : 'SECRATE');
+  const storeDisplayName = liveStoreSettings.storeName || ((typeof window !== 'undefined' && window.location.hostname.includes('metrroma')) ? 'METROMA' : 'TimeBoost');
   const brandBlockHtml = `<div class="brand-name" style="font-size:16px;font-weight:900;letter-spacing:-0.4px;color:#000000;line-height:1;">${storeDisplayName}</div>`;
 
   const dateStr = o.createdAt ? new Date(o.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
@@ -1586,7 +1586,7 @@ function printSlips(list: any[]) {
   updateLiveSettingsCache();
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const slipsHtml = list.map(slipBody).map(s => s.trim()).join('');
-  const filename = list.length === 1 ? `secrate-slip-${list[0].id}.pdf` : `secrate-slips-${list.length}-orders.pdf`;
+  const filename = list.length === 1 ? `timeboost-slip-${list[0].id}.pdf` : `timeboost-slips-${list.length}-orders.pdf`;
   const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><base href="${origin}/"><title>${filename}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800;900&display=swap"><style id="dynamicSlipStyle">${SLIP_PRINT_CSS}</style><style>
   .top-toolbar { position: sticky; top: 0; left: 0; right: 0; background: #0f172a; color: #ffffff; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 999999; font-family: 'Inter', 'Hind Siliguri', sans-serif; }
   .top-toolbar .info { font-size: 13px; font-weight: 600; color: #cbd5e1; }
@@ -1665,10 +1665,446 @@ const I = {
   media: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="4" width="14" height="12" rx="2" /><circle cx="7.5" cy="8.5" r="1.4" /><path d="M4 14l4-3.5 3 2.5 3-3 2 2.5" /></svg>,
 };
 
+export interface AdminWhatsAppTarget {
+  order?: any;
+  phone: string;
+  name?: string;
+  defaultMsg?: string;
+  title?: string;
+  forceModal?: boolean;
+}
+
+export function triggerAdminWhatsApp(target: AdminWhatsAppTarget) {
+  window.dispatchEvent(new CustomEvent('open-admin-whatsapp', { detail: target }));
+}
+
+function isCourierHoldOrderGlobal(o: any): boolean {
+  if (!o) return false;
+  const st = String(o.status || '').toLowerCase();
+  if (['delivered', 'return', 'cancelled'].includes(st)) return false;
+  if (st === 'courier_hold') return true;
+  const hasConsignment = !!(o.courier && o.courier.consignment);
+  if (!hasConsignment) return false;
+  if (st === 'hold') return true;
+  const ls = String(o.courier?.liveStatus || '').toLowerCase();
+  return /hold|resched|delay|attempt|unreach|not_available/.test(ls);
+}
+
+function getSmartWhatsAppMessage(o: any): string {
+  if (!o) return 'আসসালামু আলাইকুম! timingboost.xyz থেকে আপনার সাথে যোগাযোগ করা হচ্ছে।';
+  const name = o.customer?.name ? String(o.customer.name).trim() : 'সম্মানিত গ্রাহক';
+  const orderId = String(o.id || '').replace(/^DOT-/i, '');
+  const total = o.total || 0;
+  let itemTitle = 'আমাদের পণ্য';
+  if (Array.isArray(o.items) && o.items.length > 0) {
+    const it = o.items[0];
+    itemTitle = (it.title || it.name || '').trim() || 'আমাদের পণ্য';
+  }
+
+  if (o.status === 'incomplete') {
+    return `আসসালামু আলাইকুম ${name}! timingboost.xyz থেকে লক্ষ্য করলাম "${itemTitle}" এর অর্ডারটি আপনি সম্পন্ন করেননি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট প্রদেয় মূল্য: ৳${total}। তথ্য নিশ্চিত করতে হ্যাঁ লিখে জানান।`;
+  }
+  if (isCourierHoldOrderGlobal(o)) {
+    const courName = o.courier?.name || 'কুরিয়ার';
+    const cons = o.courier?.consignment ? ` (Consignment #${o.courier.consignment})` : '';
+    const note = o.courier?.riderNote ? ` (কারণ: ${o.courier.riderNote})` : '';
+    return `আসসালামু আলাইকুম ${name}, TimeBoost থেকে আপনার অর্ডারটি (#${orderId}, ৳${total}) ডেলিভারি করার জন্য কুরিয়ার ${courName}${cons} যোগাযোগ করেছিল কিন্তু পার্সেলটি বর্তমানে হোল্ডে আছে${note}। অনুগ্রহ করে ফোনটি খোলা রাখুন যাতে রাইডার পার্সেলটি পৌঁছে দিতে পারেন। ধন্যবাদ!`;
+  }
+  if (o.status === 'approved' || o.status === 'confirmed') {
+    return `আসসালামু আলাইকুম ${name}! timingboost.xyz এ আপনার অর্ডারটি (#${orderId}) সফলভাবে কনফার্ম করা হয়েছে। মোট প্রদেয় মূল্য: ৳${total} (ক্যাশ অন ডেলিভারি)। খুব শীঘ্রই পার্সেলটি কুরিয়ারে হস্তান্তর করা হবে। ধন্যবাদ!`;
+  }
+  if (o.status === 'shipped') {
+    const courName = o.courier?.name ? ` (${o.courier.name}${o.courier.consignment ? ` - ট্র্যাকিং: #${o.courier.consignment}` : ''})` : '';
+    return `আসসালামু আলাইকুম ${name}! timingboost.xyz থেকে আপনার অর্ডারটি (#${orderId}) কুরিয়ারে${courName} পাঠানো হয়েছে। আগামী ২-৩ দিনের মধ্যে পার্সেলটি পেয়ে যাবেন। অনুগ্রহ করে ডেলিভারির সময় ৳${total} প্রস্তুত রাখুন। ধন্যবাদ!`;
+  }
+  if (o.status === 'delivered') {
+    return `আসসালামু আলাইকুম ${name}! timingboost.xyz থেকে আপনার অর্ডারটি (#${orderId}) সফলভাবে ডেলিভারি হয়েছে। আমাদের পণ্যটি আপনার কেমন লেগেছে তা জানিয়ে সহায়তা করবেন। ধন্যবাদ!`;
+  }
+  if (o.status === 'hold') {
+    return `আসসালামু আলাইকুম ${name}! timingboost.xyz থেকে আপনার অর্ডার (#${orderId}) সংক্রান্ত তথ্য যাচাইয়ের জন্য যোগাযোগ করা হচ্ছে। অনুগ্রহ করে একটু রিপ্লাই দিয়ে সাহায্য করবেন। ধন্যবাদ!`;
+  }
+  return `আসসালামু আলাইকুম ${name}! timingboost.xyz থেকে আপনার অর্ডার (#${orderId}) সংক্রান্ত বিষয়ে যোগাযোগ করা হচ্ছে। যেকোনো সহায়তার জন্য আমাদের জানান। ধন্যবাদ!`;
+}
+
+function QuickWhatsAppModal() {
+  const [target, setTarget] = useState<AdminWhatsAppTarget | null>(null);
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<{ type: 'sending' | 'success' | 'error'; text: string } | null>(null);
+  const [directSendEnabled, setDirectSendEnabled] = useState(() => localStorage.getItem('secrate_wa_direct_send') === 'true');
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const executeSend = useCallback(async (tgt: AdminWhatsAppTarget, text: string) => {
+    const clean = String(tgt.phone || '').replace(/\D/g, '');
+    if (!clean) return;
+    const digits = clean.startsWith('88') ? clean : '88' + clean.slice(-11);
+
+    setSending(true);
+    setStatusMsg({ type: 'sending', text: 'স্টোরের অফিসিয়াল WhatsApp থেকে পাঠানো হচ্ছে... ⏳' });
+
+    try {
+      const res = await aFetch('/admin/whatsapp/send', {
+        method: 'POST',
+        body: JSON.stringify({
+          phone: digits,
+          message: text,
+          orderId: tgt.order?.id || null,
+          eventType: 'manual_admin',
+        }),
+      }).then((r) => r.json());
+
+      if (res?.sent !== false && !res?.error) {
+        setStatusMsg({ type: 'success', text: `✅ Store WhatsApp থেকে ${tgt.phone} এ মেসেজ চলে গেছে!` });
+        window.dispatchEvent(new CustomEvent('admin-orders-updated'));
+        setTimeout(() => {
+          setStatusMsg(null);
+          setSending(false);
+          setTarget(null);
+        }, 1200);
+      } else {
+        const isNotConnected = res?.connected === false || String(res?.reason || res?.error || '').toLowerCase().includes('not connected');
+        if (isNotConnected) {
+          setStatusMsg({ type: 'error', text: '⚠️ স্টোরের WhatsApp ডিসকানেক্টেড! WhatsApp Web ট্যাব ওপেন হচ্ছে...' });
+          setTimeout(() => {
+            window.open(`https://wa.me/${digits}?text=${encodeURIComponent(text)}`, '_blank');
+            setStatusMsg(null);
+            setSending(false);
+            setTarget(null);
+          }, 1500);
+        } else {
+          setStatusMsg({ type: 'error', text: `❌ সেন্ড ব্যর্থ: ${res?.reason || res?.error || 'মেসেজ পাঠানো যায়নি'}` });
+          setSending(false);
+        }
+      }
+    } catch (err: any) {
+      setStatusMsg({ type: 'error', text: `❌ নেটওয়ার্ক ত্রুটি: ${err.message}। WhatsApp Web ওপেন হচ্ছে...` });
+      setTimeout(() => {
+        window.open(`https://wa.me/${digits}?text=${encodeURIComponent(text)}`, '_blank');
+        setStatusMsg(null);
+        setSending(false);
+        setTarget(null);
+      }, 1500);
+    }
+  }, []);
+
+  useEffect(() => {
+    const onOpen = (e: any) => {
+      const d: AdminWhatsAppTarget = e.detail;
+      if (!d || !d.phone) return;
+      const initialText = d.defaultMsg || getSmartWhatsAppMessage(d.order);
+      const isDirect = localStorage.getItem('secrate_wa_direct_send') === 'true';
+
+      if (isDirect && !d.forceModal) {
+        setTarget(d);
+        setMessage(initialText);
+        executeSend(d, initialText);
+      } else {
+        setTarget(d);
+        setMessage(initialText);
+        setStatusMsg(null);
+        setSending(false);
+        setTimeout(() => {
+          if (textareaRef.current) {
+            textareaRef.current.focus();
+            textareaRef.current.setSelectionRange(textareaRef.current.value.length, textareaRef.current.value.length);
+          }
+        }, 80);
+      }
+    };
+
+    window.addEventListener('open-admin-whatsapp', onOpen);
+    return () => window.removeEventListener('open-admin-whatsapp', onOpen);
+  }, [executeSend]);
+
+  if (!target) return null;
+
+  const clean = String(target.phone || '').replace(/\D/g, '');
+  const digits = clean.startsWith('88') ? clean : '88' + clean.slice(-11);
+  const custName = target.name || target.order?.customer?.name || 'Customer';
+  const orderId = target.order ? String(target.order.id || '').replace(/^DOT-/i, '') : null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 99999,
+        background: 'rgba(0, 0, 0, 0.72)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !sending) setTarget(null);
+      }}
+    >
+      <div
+        style={{
+          background: '#15161e',
+          border: '1px solid #2d3142',
+          borderRadius: 14,
+          maxWidth: 540,
+          width: '100%',
+          boxShadow: '0 24px 48px -12px rgba(0, 0, 0, 0.75)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            padding: '16px 20px',
+            borderBottom: '1px solid #232736',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'rgba(37, 211, 102, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                background: '#25D366',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <WhatsAppIcon size={20} variant="white" />
+            </div>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>Send via Store WhatsApp</span>
+                <span style={{ fontSize: 10.5, background: 'rgba(37, 211, 102, 0.2)', color: '#4ade80', padding: '2px 7px', borderRadius: 99 }}>
+                  No Browser Tab
+                </span>
+              </div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
+                To: <b style={{ color: '#e2e8f0' }}>{custName}</b> ({target.phone})
+                {orderId && <span style={{ marginLeft: 8, color: '#38bdf8' }}>Order #{orderId}</span>}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            disabled={sending}
+            onClick={() => setTarget(null)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#94a3b8',
+              fontSize: 20,
+              cursor: sending ? 'not-allowed' : 'pointer',
+              padding: 4,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Status Toast inside Modal */}
+        {statusMsg && (
+          <div
+            style={{
+              padding: '10px 16px',
+              fontSize: 13,
+              fontWeight: 600,
+              background: statusMsg.type === 'success' ? 'rgba(34, 197, 94, 0.2)' : statusMsg.type === 'error' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(59, 130, 246, 0.2)',
+              color: statusMsg.type === 'success' ? '#4ade80' : statusMsg.type === 'error' ? '#f87171' : '#60a5fa',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            {statusMsg.text}
+          </div>
+        )}
+
+        {/* Body */}
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: '#cbd5e1' }}>
+            Message Content (মেসেজ আপনি চাইলে এডিট করতে পারেন):
+          </label>
+          <textarea
+            ref={textareaRef}
+            rows={5}
+            value={message}
+            disabled={sending}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                executeSend(target, message);
+              }
+            }}
+            placeholder="Type WhatsApp message..."
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              background: '#0d0e14',
+              border: '1px solid #33384c',
+              borderRadius: 8,
+              padding: '12px 14px',
+              color: '#f8fafc',
+              fontSize: 13.5,
+              lineHeight: 1.6,
+              resize: 'vertical',
+              fontFamily: 'inherit',
+            }}
+          />
+
+          {/* Quick Template Buttons */}
+          {target.order && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, color: '#64748b', alignSelf: 'center', marginRight: 2 }}>টেমপ্লেট:</span>
+              <button
+                type="button"
+                className="sa-btn ghost sa-mini"
+                disabled={sending}
+                onClick={() => setMessage(getSmartWhatsAppMessage({ ...target.order, status: 'confirmed' }))}
+                style={{ fontSize: 11, padding: '3px 8px' }}
+              >
+                📝 কনফার্মেশন
+              </button>
+              <button
+                type="button"
+                className="sa-btn ghost sa-mini"
+                disabled={sending}
+                onClick={() => setMessage(getSmartWhatsAppMessage({ ...target.order, status: 'shipped' }))}
+                style={{ fontSize: 11, padding: '3px 8px' }}
+              >
+                🚚 কুরিয়ার ট্র্যাকিং
+              </button>
+              <button
+                type="button"
+                className="sa-btn ghost sa-mini"
+                disabled={sending}
+                onClick={() => setMessage(getSmartWhatsAppMessage({ ...target.order, status: 'courier_hold', courier: { ...(target.order.courier || {}), riderNote: 'Customer phone unreachable / rescheduled' } }))}
+                style={{ fontSize: 11, padding: '3px 8px', color: '#fbbf24' }}
+              >
+                ⚠️ কুরিয়ার হোল্ড
+              </button>
+              <button
+                type="button"
+                className="sa-btn ghost sa-mini"
+                disabled={sending}
+                onClick={() => setMessage(`আসসালামু আলাইকুম ${custName}! timingboost.xyz থেকে আপনার অর্ডারটি কনফার্ম করার জন্য আপনার ডেলিভারি ঠিকানা ও ফোন নাম্বারটি একটু কনফার্ম করবেন কি? ধন্যবাদ!`)}
+                style={{ fontSize: 11, padding: '3px 8px' }}
+              >
+                📍 ঠিকানা যাচাই
+              </button>
+            </div>
+          )}
+
+          {/* Direct Send Mode Checkbox */}
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 12,
+              color: '#94a3b8',
+              cursor: 'pointer',
+              marginTop: 4,
+              userSelect: 'none',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={directSendEnabled}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setDirectSendEnabled(checked);
+                localStorage.setItem('secrate_wa_direct_send', checked ? 'true' : 'false');
+              }}
+              style={{ accentColor: '#25D366' }}
+            />
+            <span>⚡ <b>1-Click Direct Send Mode</b> (ভবিষ্যতে বাটন চাপলে প্রিভিউ না দেখিয়ে সরাসরি স্টোরের হোয়াটসঅ্যাপ থেকে মেসেজ চলে যাবে)</span>
+          </label>
+        </div>
+
+        {/* Footer Actions */}
+        <div
+          style={{
+            padding: '14px 20px',
+            borderTop: '1px solid #232736',
+            background: '#101118',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
+        >
+          <a
+            href={`https://wa.me/${digits}?text=${encodeURIComponent(message)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setTarget(null)}
+            style={{
+              color: '#64748b',
+              fontSize: 12,
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+            title="Open in regular browser WhatsApp Web tab"
+          >
+            ↗ Open in WhatsApp Web
+          </a>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              className="sa-btn ghost"
+              disabled={sending}
+              onClick={() => setTarget(null)}
+              style={{ fontSize: 13, padding: '7px 14px' }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={sending || !message.trim()}
+              onClick={() => executeSend(target, message)}
+              style={{
+                background: '#25D366',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: 8,
+                padding: '8px 18px',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: sending || !message.trim() ? 'not-allowed' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                opacity: sending || !message.trim() ? 0.6 : 1,
+                boxShadow: '0 4px 12px rgba(37, 211, 102, 0.3)',
+              }}
+            >
+              <WhatsAppIcon size={16} variant="white" />
+              <span>{sending ? 'Sending...' : '⚡ Send from Store WhatsApp'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Admin() {
   const [authed, setAuthed] = useState(() => !!getTok());
   const [nav, setNav] = useState('dashboard');
-  const [store, setStore] = useState('SECRATE');
+  const [store, setStore] = useState('TimeBoost');
   const [me, setMe] = useState<any>(null);
   const [orderTotal, setOrderTotal] = useState<number | null>(null);
   const [lastSeen, setLastSeen] = useState<number | null>(null);
@@ -1682,7 +2118,7 @@ export function Admin() {
   }, []);
   useEffect(() => {
     if (!authed) return;
-    fetch('/api/settings').then((r) => r.json()).then((s) => setStore(s.storeName || 'SECRATE')).catch(() => {});
+    fetch('/api/settings').then((r) => r.json()).then((s) => setStore(s.storeName || 'TimeBoost')).catch(() => {});
     aFetch('/admin/me').then((r) => (r.ok ? r.json() : null)).then((m) => { if (m) setMe(m); else { localStorage.removeItem(KEY); setAuthed(false); } }).catch(() => {});
   }, [authed]);
   useEffect(() => {
@@ -1692,14 +2128,14 @@ export function Admin() {
       if (!o) return; const n = o.length;
       setOrderTotal(n);
       if (prevTotal.current === null) setLastSeen((ls) => (ls === null ? n : ls));
-      else if (n > prevTotal.current) { beep(); if (document.title.indexOf('🔴') < 0) document.title = '🔴 new order — SECRATE Admin'; }
+      else if (n > prevTotal.current) { beep(); if (document.title.indexOf('🔴') < 0) document.title = '🔴 new order — TimeBoost Admin'; }
       prevTotal.current = n;
     }).catch(() => {});
     check();
     const t = setInterval(check, 25000);
     return () => clearInterval(t);
   }, [authed]);
-  useEffect(() => { if (!authed) return; if (nav === 'orders' && orderTotal != null) { setLastSeen(orderTotal); document.title = 'SECRATE Admin'; } }, [nav, orderTotal, authed]);
+  useEffect(() => { if (!authed) return; if (nav === 'orders' && orderTotal != null) { setLastSeen(orderTotal); document.title = 'TimeBoost Admin'; } }, [nav, orderTotal, authed]);
 
   // Real-time Staff Presence & Active Time Heartbeat
   useEffect(() => {
@@ -1932,6 +2368,7 @@ export function Admin() {
           <span>Menu</span>
         </button>
       </nav>
+      <QuickWhatsAppModal />
     </div>
   );
 }
@@ -4285,7 +4722,7 @@ function OrdersAdmin() {
             onClick={() =>
               pickedOrders.length > 0
                 ? exportCSV(pickedOrders, prodMap, landingMap, `secrate-selected-${pickedOrders.length}-orders`)
-                : exportCSV(shown, prodMap, landingMap, filter !== 'all' ? `secrate-${filter}-orders` : 'secrate-orders')
+                : exportCSV(shown, prodMap, landingMap, filter !== 'all' ? `secrate-${filter}-orders` : 'timeboost-orders')
             }
             style={
               pickedOrders.length > 0
@@ -4310,7 +4747,7 @@ function OrdersAdmin() {
                 : allList.filter((o) => o.status === s).length;
             const chCount = s === 'shipped' ? allList.filter((o) => isCourierHoldOrder(o)).length : 0;
             return (
-              <React.Fragment key={s}>
+              <Fragment key={s}>
                 <button className={filter === s ? 'on' : ''} onClick={() => switchTab(s)}>
                   <span>{s === 'all' ? 'All' : s}</span>
                   <span className="sa-filter-count">{cnt}</span>
@@ -4342,7 +4779,7 @@ function OrdersAdmin() {
                     </span>
                   </button>
                 )}
-              </React.Fragment>
+              </Fragment>
             );
           })}
           {(() => {
@@ -4611,16 +5048,21 @@ function OrdersAdmin() {
                         <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
                       </svg>
                     </a>
-                    <a
-                      href={`https://wa.me/88${cleanPhone}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ display: 'inline-flex', alignItems: 'center' }}
-                      title="Chat on WhatsApp"
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        triggerAdminWhatsApp({
+                          order: o,
+                          phone: cleanPhone,
+                          name: o.customer?.name,
+                        });
+                      }}
+                      style={{ display: 'inline-flex', alignItems: 'center', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
+                      title="Send WhatsApp via Store WhatsApp (No Tab)"
                     >
                       <WhatsAppIcon size={14} variant="official" />
-                    </a>
+                    </button>
                   </div>
                 )}
 
@@ -4766,12 +5208,17 @@ function OrdersAdmin() {
                       </div>
                     )}
                     {isCourierHoldOrder(o) && cleanPhone && (
-                      <a
-                        href={`https://wa.me/88${cleanPhone}?text=${encodeURIComponent(
-                          `আসসালামু আলাইকুম ${o.customer?.name || 'স্যার/ম্যাম'}, Secrate থেকে আপনার অর্ডারটি (#${o.id.replace('DOT-', '')}, ৳${o.total}) ডেলিভারি করার জন্য কুরিয়ার (${o.courier.name} - Consignment #${o.courier.consignment}) যোগাযোগ করেছিল কিন্তু পার্সেলটি বর্তমানে হোল্ডে আছে${o.courier.riderNote ? ` (কারণ: ${o.courier.riderNote})` : ''}। অনুগ্রহ করে আপনার ফোনটি খোলা রাখুন যাতে ডেলিভারি রাইডার পার্সেলটি পৌঁছে দিতে পারেন। ধন্যবাদ!`
-                        )}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          triggerAdminWhatsApp({
+                            order: o,
+                            phone: cleanPhone,
+                            name: o.customer?.name,
+                            defaultMsg: `আসসালামু আলাইকুম ${o.customer?.name || 'স্যার/ম্যাম'}, TimeBoost থেকে আপনার অর্ডারটি (#${o.id.replace('DOT-', '')}, ৳${o.total}) ডেলিভারি করার জন্য কুরিয়ার (${o.courier?.name || 'কুরিয়ার'}${o.courier?.consignment ? ` - Consignment #${o.courier.consignment}` : ''}) যোগাযোগ করেছিল কিন্তু পার্সেলটি বর্তমানে হোল্ডে আছে${o.courier?.riderNote ? ` (কারণ: ${o.courier.riderNote})` : ''}। অনুগ্রহ করে আপনার ফোনটি খোলা রাখুন যাতে ডেলিভারি রাইডার পার্সেলটি পৌঁছে দিতে পারেন। ধন্যবাদ!`,
+                          });
+                        }}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -4784,13 +5231,13 @@ function OrdersAdmin() {
                           border: '1px solid rgba(16, 185, 129, 0.35)',
                           padding: '2px 7px',
                           borderRadius: 4,
-                          textDecoration: 'none',
+                          cursor: 'pointer',
                           width: 'fit-content',
                         }}
-                        title="Send 1-click Courier Hold alert on WhatsApp"
+                        title="Send Courier Hold alert via Store WhatsApp (No Tab)"
                       >
                         <span>📲 Alert Customer</span>
-                      </a>
+                      </button>
                     )}
                   </div>
                 ) : ['approved', 'confirmed'].includes(String(o.status || '').toLowerCase()) ? (
@@ -4905,15 +5352,22 @@ function OrdersAdmin() {
                   <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M5 7V2.5h8V7M5 13H3.5V7.5h11V13H13M5 11h8v4.5H5z" /></svg>
                 </button>
                 {phone && (
-                  <a
+                  <button
+                    type="button"
                     className="eye-btn eye-btn-wa"
-                    title={o.status === 'incomplete' ? "Send WhatsApp Recovery Message" : "WhatsApp customer"}
-                    href={`https://wa.me/88${cleanPhone}${o.status === 'incomplete' ? `?text=${encodeURIComponent(`আসসালামু আলাইকুম ${o.customer?.name || 'Sir/Mam'}! secrate.shop থেকে লক্ষ্য করলাম "${cleanItem.title || 'আমাদের পণ্য'}" এর অর্ডারটি আপনি সম্পন্ন করেননি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳${o.total}।`)}` : ''}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    title={o.status === 'incomplete' ? "Send WhatsApp Recovery Message from Store WhatsApp" : "Send WhatsApp from Store WhatsApp (No Tab)"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      triggerAdminWhatsApp({
+                        order: o,
+                        phone: cleanPhone,
+                        name: o.customer?.name,
+                      });
+                    }}
+                    style={{ cursor: 'pointer' }}
                   >
                     <WhatsAppIcon size={16} variant="official" />
-                  </a>
+                  </button>
                 )}
               </div>
             </div>
@@ -5487,6 +5941,14 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
   const [busy, setBusy] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+  const [historyExpanded, setHistoryExpanded] = useState(false);
+
+  const sortedHistory = useMemo(() => {
+    if (!Array.isArray(o.history) || o.history.length === 0) return [];
+    const list = [...o.history];
+    list.reverse();
+    return list;
+  }, [o.history]);
 
   // Editable customer fields
   const [custName, setCustName] = useState(o.customer?.name || '');
@@ -5740,9 +6202,21 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
             <a className="sa-btn ghost sa-mini" href={'tel:' + custPhone} title="Call customer">
               📞 Call
             </a>
-            <a className="sa-btn ghost sa-mini" href={'https://wa.me/88' + custPhone.replace(/\D/g, '')} target="_blank" rel="noreferrer" title="Chat on WhatsApp" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <button
+              type="button"
+              className="sa-btn ghost sa-mini"
+              onClick={() => {
+                triggerAdminWhatsApp({
+                  order: o,
+                  phone: custPhone,
+                  name: custName,
+                });
+              }}
+              title="Send WhatsApp via Store WhatsApp (No Tab)"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}
+            >
               <WhatsAppIcon size={14} variant="official" /> WhatsApp
-            </a>
+            </button>
             <button
               type="button"
               className="sa-btn ghost sa-mini"
@@ -5758,6 +6232,24 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
             <button className="sa-btn ghost sa-mini" onClick={() => printInvoice(o)} title="Print invoice">
               🖨️ Print
             </button>
+            {sortedHistory.length > 0 && (
+              <button
+                type="button"
+                className="sa-btn ghost sa-mini"
+                onClick={() => setHistoryExpanded((v) => !v)}
+                title="Toggle Order History & Audit Trail"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  background: historyExpanded ? 'rgba(139, 92, 246, 0.25)' : undefined,
+                  color: historyExpanded ? '#c084fc' : undefined,
+                  borderColor: historyExpanded ? 'rgba(139, 92, 246, 0.4)' : undefined
+                }}
+              >
+                📜 History ({sortedHistory.length})
+              </button>
+            )}
             <button className="sa-om-close" onClick={onClose} title="Close">×</button>
           </div>
         </div>
@@ -5880,12 +6372,16 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
               {/* Recovery Action Buttons */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, paddingTop: 4 }}>
                 {custPhone && (
-                  <a
-                    href={`https://wa.me/88${custPhone.replace(/\D/g, '')}?text=${encodeURIComponent(
-                      `আসসালামু আলাইকুম ${custName ? `${custName} Sir/Mam` : 'Sir/Mam'}! secrate.shop থেকে লক্ষ্য করলাম আপনি "${items[0]?.name || 'আমাদের পণ্য'}" অর্ডার করার চেষ্টা করেছিলেন কিন্তু অর্ডারটি সম্পন্ন হয়নি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳${grandTotal}।`
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerAdminWhatsApp({
+                        order: o,
+                        phone: custPhone,
+                        name: custName,
+                        defaultMsg: `আসসালামু আলাইকুম ${custName ? `${custName} Sir/Mam` : 'Sir/Mam'}! timingboost.xyz থেকে লক্ষ্য করলাম আপনি "${items[0]?.name || 'আমাদের পণ্য'}" অর্ডার করার চেষ্টা করেছিলেন কিন্তু অর্ডারটি সম্পন্ন হয়নি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳${grandTotal}। তথ্য নিশ্চিত করতে হ্যাঁ লিখে জানান।`,
+                      });
+                    }}
                     style={{
                       background: 'rgba(37, 211, 102, 0.15)',
                       border: '1px solid rgba(37, 211, 102, 0.4)',
@@ -5898,12 +6394,13 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: 8,
-                      textDecoration: 'none'
+                      cursor: 'pointer',
+                      width: '100%',
                     }}
                   >
                     <WhatsAppIcon size={16} variant="official" />
-                    <span>Send WhatsApp Recovery Message</span>
-                  </a>
+                    <span>Send WhatsApp Recovery Message (via Store WhatsApp)</span>
+                  </button>
                 )}
                 {custPhone && (
                   <a
@@ -6435,54 +6932,105 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
           </div>
         </div>
 
-        {/* Staff Activity & Order History Timeline */}
-        <div style={{ marginTop: 22, marginBottom: 12, padding: 18, background: '#120f20', borderRadius: 12, border: '1px solid rgba(139, 92, 246, 0.25)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+        {/* Staff Activity & Order History Timeline (Compact & Collapsible) */}
+        <div style={{ marginTop: 18, marginBottom: 12, padding: '14px 16px', background: '#120f20', borderRadius: 12, border: '1px solid rgba(139, 92, 246, 0.25)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(139,92,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
+              <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(139,92,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>
                 👤
               </div>
               <div>
-                <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#f8fafc', letterSpacing: '0.2px' }}>
-                  Staff Activity &amp; Order Audit Trail
-                </h4>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>এই অর্ডারে কোন স্টাফ কখন কী কাজ করেছে তার বিবরণ</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: '#f8fafc', letterSpacing: '0.2px' }}>
+                    Staff Activity &amp; Order Audit Trail
+                  </h4>
+                  {sortedHistory.length > 0 && (
+                    <span style={{ fontSize: 11, background: 'rgba(139, 92, 246, 0.2)', color: '#c084fc', padding: '1px 7px', borderRadius: 10, fontWeight: 600 }}>
+                      {sortedHistory.length} logs
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: '#94a3b8' }}>এই অর্ডারে কোন স্টাফ বা সিস্টেমে কখন কী আপডেট হয়েছে</div>
               </div>
             </div>
-            {o.lastUpdatedBy && (
-              <span style={{ fontSize: 12, color: '#c084fc', background: 'rgba(139, 92, 246, 0.15)', padding: '4px 10px', borderRadius: 8, border: '1px solid rgba(139, 92, 246, 0.35)', fontWeight: 600 }}>
-                সর্বশেষ আপডেট করেছেন: <strong>{o.lastUpdatedBy.name || o.lastUpdatedBy.username}</strong> ({o.lastUpdatedBy.role})
-              </span>
-            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {o.lastUpdatedBy && (
+                <span style={{ fontSize: 11, color: '#c084fc', background: 'rgba(139, 92, 246, 0.15)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(139, 92, 246, 0.35)', fontWeight: 600 }}>
+                  সর্বশেষ: <strong>{o.lastUpdatedBy.name || o.lastUpdatedBy.username}</strong>
+                </span>
+              )}
+              {sortedHistory.length > 2 && (
+                <button
+                  type="button"
+                  onClick={() => setHistoryExpanded(!historyExpanded)}
+                  style={{
+                    background: historyExpanded ? 'rgba(255,255,255,0.08)' : 'rgba(139,92,246,0.25)',
+                    color: historyExpanded ? '#cbd5e1' : '#c4b5fd',
+                    border: '1px solid rgba(139,92,246,0.4)',
+                    borderRadius: 6,
+                    padding: '4px 10px',
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4
+                  }}
+                >
+                  {historyExpanded ? '▲ কম দেখান (Collapse)' : `▼ সব দেখুন (${sortedHistory.length} টি লগ)`}
+                </button>
+              )}
+            </div>
           </div>
 
-          {Array.isArray(o.history) && o.history.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {o.history.map((h: any, idx: number) => {
+          {sortedHistory.length > 0 ? (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              marginTop: 10,
+              maxHeight: historyExpanded ? '260px' : 'none',
+              overflowY: historyExpanded ? 'auto' : 'visible',
+              paddingRight: historyExpanded ? '4px' : '0'
+            }}>
+              {(historyExpanded ? sortedHistory : sortedHistory.slice(0, 2)).map((h: any, idx: number) => {
                 const dateStr = h.at ? new Date(h.at).toLocaleString('bn-BD', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }) : '';
                 const staffName = h.staff?.name || h.staff?.username || (h.by ? h.by : '');
                 return (
-                  <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, fontSize: 12, padding: '9px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, borderLeft: '3px solid #8b5cf6' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-                      <span style={{ minWidth: 90, color: '#94a3b8', fontSize: 11 }}>{dateStr}</span>
-                      <span style={{ color: '#e2e8f0' }}>
-                        <strong style={{ color: '#fff', textTransform: 'capitalize' }}>{h.status || 'Action'}:</strong> {h.note || 'Status updated'}
-                      </span>
+                  <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, fontSize: 11.5, padding: '7px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 7, borderLeft: '3px solid #8b5cf6' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flex: 1, minWidth: 0 }}>
+                      <span style={{ minWidth: 80, color: '#94a3b8', fontSize: 10.5, flexShrink: 0, marginTop: 1 }}>{dateStr}</span>
+                      <div style={{ color: '#e2e8f0', wordBreak: 'break-word', minWidth: 0, flex: 1, maxHeight: '60px', overflowY: 'auto' }}>
+                        <strong style={{ color: '#fff', textTransform: 'capitalize' }}>{h.status || 'Action'}:</strong>{' '}
+                        <span style={{ whiteSpace: 'pre-wrap' }}>{h.note || 'Status updated'}</span>
+                      </div>
                     </div>
                     {staffName ? (
-                      <div style={{ color: '#c084fc', fontSize: 11.5, fontWeight: 700, background: 'rgba(139,92,246,0.15)', padding: '2px 8px', borderRadius: 6 }}>
+                      <div style={{ color: '#c084fc', fontSize: 11, fontWeight: 700, background: 'rgba(139,92,246,0.15)', padding: '2px 7px', borderRadius: 5, flexShrink: 0 }}>
                         👤 {staffName} {h.staff?.role && <span style={{ opacity: 0.7, fontWeight: 400 }}>({h.staff.role})</span>}
                       </div>
                     ) : (
-                      <span style={{ color: '#64748b', fontSize: 11 }}>System</span>
+                      <span style={{ color: '#64748b', fontSize: 10.5, flexShrink: 0 }}>System</span>
                     )}
                   </div>
                 );
               })}
+              {!historyExpanded && sortedHistory.length > 2 && (
+                <div style={{ textAlign: 'center', paddingTop: 4 }}>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryExpanded(true)}
+                    style={{ background: 'none', border: 'none', color: '#a78bfa', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    + আরও {sortedHistory.length - 2} টি পূর্ববর্তী অ্যাকশন লগ রয়েছে (ক্লিক করে দেখুন)
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
-            <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', padding: 8 }}>
-              এই অর্ডারে এখনও কোনো স্টাফ অ্যাক্টিভিটি রেকর্ড নেই। অর্ডারটি এসেছে: {originLabel(o.source)}
+            <div style={{ fontSize: 11.5, color: '#64748b', fontStyle: 'italic', padding: '8px 0 0' }}>
+              এই অর্ডারে এখনও কোনো অতিরিক্ত লগ নেই। অর্ডারটি এসেছে: {originLabel(o.source)}
             </div>
           )}
         </div>
@@ -9789,7 +10337,7 @@ function SettingsAdmin() {
   const setPrimaryHeroImage = (url: string, isMobile = false) => {
     setF((cur: any) => {
       const curSliders = Array.isArray(cur?.sliders) && cur.sliders.length > 0 ? [...cur.sliders] : [{
-        id: 'secrate-hero-1',
+        id: 'timeboost-hero-1',
         active: true,
         image: '',
         mobileImage: '',
@@ -10053,7 +10601,7 @@ function SettingsAdmin() {
                 <div style={{ textAlign: 'center', color: '#64748b' }}>
                   <div style={{ fontSize: 24, marginBottom: 4 }}>🖼️</div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>No logo image uploaded yet</div>
-                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Storefront displays styled text: <strong>{f.storeName || 'SECRATE'}</strong></div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Storefront displays styled text: <strong>{f.storeName || 'TimeBoost'}</strong></div>
                 </div>
               )}
             </div>
@@ -10185,7 +10733,7 @@ function SettingsAdmin() {
                   <span style={{ fontSize: 14 }}>🌐</span>
                 )}
                 <span style={{ fontSize: 12, color: '#e2e8f0', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {f.storeName || 'SECRATE'} — Online Store
+                  {f.storeName || 'TimeBoost'} — Online Store
                 </span>
                 <span style={{ color: '#71717a', fontSize: 11, marginLeft: 'auto' }}>×</span>
               </div>
@@ -10539,7 +11087,7 @@ function SettingsAdmin() {
       {tab === 'store' && (
         <div className="sa-card" style={{ padding: 24 }}>
           <div className="sa-sgrid">
-            <label>Store name<input value={f.storeName || ''} onChange={set('storeName')} placeholder="SECRATE" /></label>
+            <label>Store name<input value={f.storeName || ''} onChange={set('storeName')} placeholder="TimeBoost" /></label>
             <label>Announcement text<input value={f.announce || ''} onChange={set('announce')} /></label>
             <label>WhatsApp number (with country code)<input value={f.whatsapp || ''} onChange={set('whatsapp')} placeholder="8801XXXXXXXXX" /></label>
             <label>Store phone<input value={f.phone || ''} onChange={set('phone')} placeholder="8801XXXXXXXXX" /></label>
@@ -11246,7 +11794,7 @@ function CourierWebhookBox({
   const prov = (c.provider || 'courier').toLowerCase();
   const secret = c.webhookSecret || '';
   const headerValue = c.headerValue || '40489fe0-9386-4fc9-8e92-2b2fcb9d451c';
-  const accountUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/webhooks/${prov}/${c.id}` : `https://secrate.shop/api/webhooks/${prov}/${c.id}`;
+  const accountUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/webhooks/${prov}/${c.id}` : `https://timingboost.xyz/api/webhooks/${prov}/${c.id}`;
 
   const copy = (txt: string, cb: (v: boolean) => void) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -11626,17 +12174,17 @@ function IntegrationsAdmin() {
           {(ig.email.provider || 'resend') === 'resend' ? (
             <>
               <label style={{ gridColumn: '1 / -1' }}>Resend API Key<input type="password" value={ig.email.resendApiKey || ''} onChange={(e) => setEmail('resendApiKey', e.target.value)} placeholder="re_..." /></label>
-              <label>From Name<input value={ig.email.fromName || ''} onChange={(e) => setEmail('fromName', e.target.value)} placeholder="SECRATE" /></label>
-              <label>From Email<input value={ig.email.fromEmail || ''} onChange={(e) => setEmail('fromEmail', e.target.value)} placeholder="admin@secrate.shop" /></label>
+              <label>From Name<input value={ig.email.fromName || ''} onChange={(e) => setEmail('fromName', e.target.value)} placeholder="TimeBoost" /></label>
+              <label>From Email<input value={ig.email.fromEmail || ''} onChange={(e) => setEmail('fromEmail', e.target.value)} placeholder="admin@timingboost.xyz" /></label>
             </>
           ) : (
             <>
               <label>SMTP host<input value={ig.email.host || ''} onChange={(e) => setEmail('host', e.target.value)} placeholder="smtp.hostinger.com" /></label>
               <label>Port<input value={ig.email.port ?? ''} onChange={(e) => setEmail('port', e.target.value)} placeholder="587" /></label>
-              <label>Username<input value={ig.email.user || ''} onChange={(e) => setEmail('user', e.target.value)} placeholder="support@secrate.shop" /></label>
+              <label>Username<input value={ig.email.user || ''} onChange={(e) => setEmail('user', e.target.value)} placeholder="support@timingboost.xyz" /></label>
               <label>Password<input type="password" value={ig.email.pass || ''} onChange={(e) => setEmail('pass', e.target.value)} placeholder={ig.email.hasPass ? 'saved — leave to keep' : ''} /></label>
-              <label>From name<input value={ig.email.fromName || ''} onChange={(e) => setEmail('fromName', e.target.value)} placeholder="SECRATE" /></label>
-              <label>From email<input value={ig.email.fromEmail || ''} onChange={(e) => setEmail('fromEmail', e.target.value)} placeholder="support@secrate.shop" /></label>
+              <label>From name<input value={ig.email.fromName || ''} onChange={(e) => setEmail('fromName', e.target.value)} placeholder="TimeBoost" /></label>
+              <label>From email<input value={ig.email.fromEmail || ''} onChange={(e) => setEmail('fromEmail', e.target.value)} placeholder="support@timingboost.xyz" /></label>
               <label className="sa-chk"><input type="checkbox" checked={!!ig.email.secure} onChange={(e) => setEmail('secure', e.target.checked)} /> Use SSL (port 465)</label>
             </>
           )}
@@ -12606,7 +13154,7 @@ function WhatsAppAdmin() {
   // Offer Creative States
   const [offerImage, setOfferImage] = useState('/uploads/img_mv7u70cc5edq0.jpg');
   const [offerCaption, setOfferCaption] = useState(
-    'সম্মানিত {name}!\n\nআমাদের স্টোর SECRATE-এ আপনার জন্য স্পেশাল অফার! 🔥\nসব প্রিমিয়াম প্রোডাক্টে আজ পাচ্ছেন ২০% ডিসকাউন্ট এবং ফ্রি হোম ডেলিভারি।\n\nঅর্ডার করতে এখনি ভিজিট করুন: https://secrate.shop\n\nঅথবা এই মেসেজের রিপ্লাইয়ে আপনার নাম, ফোন ও ঠিকানা লিখে পাঠালেই সরাসরি ক্যাশ অন ডেলিভারিতে অর্ডার কনফার্ম হয়ে যাবে! 🚀'
+    'সম্মানিত {name}!\n\nআমাদের স্টোর TimeBoost-এ আপনার জন্য স্পেশাল অফার! 🔥\nসব প্রিমিয়াম প্রোডাক্টে আজ পাচ্ছেন ২০% ডিসকাউন্ট এবং ফ্রি হোম ডেলিভারি।\n\nঅর্ডার করতে এখনি ভিজিট করুন: https://timingboost.xyz\n\nঅথবা এই মেসেজের রিপ্লাইয়ে আপনার নাম, ফোন ও ঠিকানা লিখে পাঠালেই সরাসরি ক্যাশ অন ডেলিভারিতে অর্ডার কনফার্ম হয়ে যাবে! 🚀'
   );
   const [antiBanDelay, setAntiBanDelay] = useState(5);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -12835,7 +13383,7 @@ function WhatsAppAdmin() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `SECRATE_Contacts_Backup_${targetType}_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `TimeBoost_Contacts_Backup_${targetType}_${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -12873,19 +13421,19 @@ function WhatsAppAdmin() {
   const applyPresetTemplate = (type: 'discount' | 'free_shipping' | 'vip' | 'cart_recovery') => {
     if (type === 'discount') {
       setOfferCaption(
-        'সম্মানিত {name}!\n\nআমাদের স্টোর SECRATE-এ আপনার জন্য মেগা ধামাকা অফার! 🔥\nসব প্রিমিয়াম প্রোডাক্টে আজ পাচ্ছেন ২০% ফ্ল্যাট ডিসকাউন্ট!\n\nকুপন কোড: SECRATE20\nশপ লিংক: https://secrate.shop\n\nঅথবা এই মেসেজের রিপ্লাইয়ে পছন্দের পণ্যের নাম বা ছবি পাঠালেই আমরা ক্যাশ অন ডেলিভারিতে পাঠিয়ে দেব! 🛍️'
+        'সম্মানিত {name}!\n\nআমাদের স্টোর TimeBoost-এ আপনার জন্য মেগা ধামাকা অফার! 🔥\nসব প্রিমিয়াম প্রোডাক্টে আজ পাচ্ছেন ২০% ফ্ল্যাট ডিসকাউন্ট!\n\nকুপন কোড: TimeBoost20\nশপ লিংক: https://timingboost.xyz\n\nঅথবা এই মেসেজের রিপ্লাইয়ে পছন্দের পণ্যের নাম বা ছবি পাঠালেই আমরা ক্যাশ অন ডেলিভারিতে পাঠিয়ে দেব! 🛍️'
       );
     } else if (type === 'free_shipping') {
       setOfferCaption(
-        'প্রিয় {name},\n\nআজকের জন্য সারা বাংলাদেশে সম্পূর্ণ ফ্রি হোম ডেলিভারি! 🚚💨\nকোনো অগ্রিম পেমেন্ট ছাড়া পণ্য হাতে পেয়ে মূল্য পরিশোধ করুন।\n\nভিজিট করুন: https://secrate.shop\nঅর্ডার করতে এখানে সরাসরি রিপ্লাই করুন। ধন্যবাদ! ✨'
+        'প্রিয় {name},\n\nআজকের জন্য সারা বাংলাদেশে সম্পূর্ণ ফ্রি হোম ডেলিভারি! 🚚💨\nকোনো অগ্রিম পেমেন্ট ছাড়া পণ্য হাতে পেয়ে মূল্য পরিশোধ করুন।\n\nভিজিট করুন: https://timingboost.xyz\nঅর্ডার করতে এখানে সরাসরি রিপ্লাই করুন। ধন্যবাদ! ✨'
       );
     } else if (type === 'vip') {
       setOfferCaption(
-        'সম্মানিত {name} Sir/Mam!\n\nআমাদের প্রিমিয়াম ও সিক্রেট কালেকশনে নতুন আইটেম যুক্ত হয়েছে! 👑\n১০০% প্রাইভেসি ও গোপন প্যাকেজিংয়ে নিরাপদ ডেলিভারি পেতে এখনি চেক করুন: https://secrate.shop\n\nআপনার যেকোনো প্রয়োজনে আমরা হোয়াটসঅ্যাপে সাথেই আছি।'
+        'সম্মানিত {name} Sir/Mam!\n\nআমাদের প্রিমিয়াম ও সিক্রেট কালেকশনে নতুন আইটেম যুক্ত হয়েছে! 👑\n১০০% প্রাইভেসি ও গোপন প্যাকেজিংয়ে নিরাপদ ডেলিভারি পেতে এখনি চেক করুন: https://timingboost.xyz\n\nআপনার যেকোনো প্রয়োজনে আমরা হোয়াটসঅ্যাপে সাথেই আছি।'
       );
     } else if (type === 'cart_recovery') {
       setOfferCaption(
-        'সম্মানিত {name},\n\nআপনি SECRATE স্টোরে পছন্দের আইটেমটি অর্ডার করতে গিয়েছিলেন কিন্তু সম্পন্ন করেননি। 🛒\n\nআপনার অর্ডারটি সহজে কনফার্ম করতে আমরা দিচ্ছি স্পেশাল ফ্রি ডেলিভারি!\nঅর্ডার কনফার্ম করতে শুধু আপনার ঠিকানা লিখে এখানে রিপ্লাই করুন, অথবা ভিজিট করুন: https://secrate.shop'
+        'সম্মানিত {name},\n\nআপনি TimeBoost স্টোরে পছন্দের আইটেমটি অর্ডার করতে গিয়েছিলেন কিন্তু সম্পন্ন করেননি। 🛒\n\nআপনার অর্ডারটি সহজে কনফার্ম করতে আমরা দিচ্ছি স্পেশাল ফ্রি ডেলিভারি!\nঅর্ডার কনফার্ম করতে শুধু আপনার ঠিকানা লিখে এখানে রিপ্লাই করুন, অথবা ভিজিট করুন: https://timingboost.xyz'
       );
     }
     setToast('✅ অফার টেমপ্লেট লোড হয়েছে!');
@@ -12906,7 +13454,7 @@ function WhatsAppAdmin() {
       const testMsg = offerCaption
         .replace(/\\n/g, '\n')
         .replace(/\{name\}/g, 'সম্মানিত টেস্ট গ্রাহক')
-        .replace(/\{store\}/g, 'SECRATE')
+        .replace(/\{store\}/g, 'TimeBoost')
         .replace(/\{phone\}/g, myPhone);
 
       const res = await aFetch('/admin/whatsapp/send', {
@@ -13054,10 +13602,10 @@ function WhatsAppAdmin() {
   const triggers = status.triggers || {};
   const waPreview = (key: string) => {
     const sample: Record<string, string> = {
-      name: 'সাকিব', store: 'SECRATE', items: 'Love Lock Condom (Pack of 2)', total: '৳899',
+      name: 'সাকিব', store: 'TimeBoost', items: 'Love Lock Condom (Pack of 2)', total: '৳899',
       order_id: 'DOT-2048', courier: 'Pathao', consignment: 'DM021126AP25',
       tracking_url: 'https://merchant.pathao.com/tracking?consignment_id=DM021126AP25&phone=018XXXXXXXX',
-      store_tracking_url: 'https://secrate.shop/track?id=DOT-2048',
+      store_tracking_url: 'https://timingboost.xyz/track?id=DOT-2048',
     };
     return String(triggers[key]?.template || '').replace(/\\{([^}]+)\\}/g, (token: string, name: string) => sample[name] ?? token);
   };
@@ -13783,7 +14331,7 @@ function WhatsAppAdmin() {
                       <button type="button" style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'pointer' }} onClick={() => setOfferCaption(prev => prev + ' {store}')}>
                         {'{store}'}
                       </button>
-                      <button type="button" style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'pointer' }} onClick={() => setOfferCaption(prev => prev + ' https://secrate.shop')}>
+                      <button type="button" style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'pointer' }} onClick={() => setOfferCaption(prev => prev + ' https://timingboost.xyz')}>
                         🌐 লিঙ্ক
                       </button>
                     </div>
@@ -13878,7 +14426,7 @@ function WhatsAppAdmin() {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: '#e9edef', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span>SECRATE Store</span>
+                      <span>TimeBoost Store</span>
                       <span style={{ color: '#25D366', fontSize: 11 }}>✓</span>
                     </div>
                     <div style={{ fontSize: 10.5, color: '#25D366' }}>● Online</div>
@@ -13919,7 +14467,7 @@ function WhatsAppAdmin() {
                     {/* Caption */}
                     <div style={{ padding: '8px 10px 4px' }}>
                       <p style={{ margin: 0, fontSize: 12, color: '#e9edef', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                        {offerCaption.replace(/\\n/g, '\n').replace(/\{name\}/g, 'সাকিব').replace(/\{store\}/g, 'SECRATE').replace(/\{phone\}/g, '018XXXXXXXX')}
+                        {offerCaption.replace(/\\n/g, '\n').replace(/\{name\}/g, 'সাকিব').replace(/\{store\}/g, 'TimeBoost').replace(/\{phone\}/g, '018XXXXXXXX')}
                       </p>
                       
                       {/* Timestamp & Ticks */}
@@ -15604,11 +16152,12 @@ function LandingsAdmin() {
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editItem, setEditItem] = useState<any | null>(null);
-  const [tab, setTab] = useState<'general' | 'hero' | 'video' | 'packages' | 'benefits' | 'usage' | 'reviews' | 'guarantee'>('general');
+  const [tab, setTab] = useState<'general' | 'hero' | 'video' | 'packages' | 'benefits' | 'usage' | 'reviews' | 'guarantee' | 'code'>('general');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const [copiedTag, setCopiedTag] = useState(false);
 
   // Media Library Picker Modal State
   const [mediaPickerTarget, setMediaPickerTarget] = useState<{
@@ -15718,6 +16267,17 @@ function LandingsAdmin() {
       slug: 'offer-' + Math.random().toString(36).slice(2, 7),
       aliases: [],
       status: 'live',
+      mode: 'builder',
+      customHtml: '',
+      pausedAction: 'notice',
+      pausedTitle: 'পণ্যটির স্টক সাময়িকভাবে শেষ',
+      pausedMessage: 'পণ্যটির স্টক সাময়িকভাবে শেষ হওয়ায় এই মুহূর্তে অর্ডার গ্রহণ স্থগিত রাখা হয়েছে। খুব শীঘ্রই স্টক পুনরায় চালু হবে।',
+      showHero: true,
+      showVideo: true,
+      showBenefits: true,
+      showUsage: true,
+      showReviews: true,
+      showGuarantee: true,
       freeDelivery: false,
       deliveryInside: 80,
       deliveryOutside: 130,
@@ -15822,6 +16382,21 @@ function LandingsAdmin() {
       load();
     } catch (e: any) {
       alert(e.message || 'Delete error');
+    }
+  };
+
+  const toggleLandingStatus = async (item: any) => {
+    const nextStatus = item.status === 'paused' ? 'live' : 'paused';
+    try {
+      const updated = { ...item, status: nextStatus };
+      const res = await aFetch('/landings/' + encodeURIComponent(item.id), {
+        method: 'PUT',
+        body: JSON.stringify(updated)
+      });
+      if (!res.ok) throw new Error('Status update failed');
+      setList((prev) => prev.map((x) => (x.id === item.id ? updated : x)));
+    } catch (e: any) {
+      alert(e.message || 'Status update failed');
     }
   };
 
@@ -16034,18 +16609,101 @@ function LandingsAdmin() {
           </div>
         )}
 
+        {/* Mode Switcher Banner: Visual Blocks vs Custom HTML */}
+        <div style={{
+          marginBottom: 16,
+          padding: '14px 18px',
+          background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(30, 27, 52, 0.95) 100%)',
+          borderRadius: 12,
+          border: '1px solid rgba(139, 92, 246, 0.35)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 12
+        }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>⚙️ ল্যান্ডিং পেজ ডিজাইন মোড (Design Mode):</span>
+              <span style={{
+                fontSize: 11,
+                padding: '2px 8px',
+                borderRadius: 999,
+                background: f.mode === 'html' ? '#8b5cf6' : '#10b981',
+                color: '#fff',
+                fontWeight: 700
+              }}>
+                {f.mode === 'html' ? '⚡ Custom HTML / Code Freedom' : '🎨 Visual Blocks Builder'}
+              </span>
+            </div>
+            <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 3 }}>
+              {f.mode === 'html'
+                ? 'আপনার যেকোনো ইউনিক HTML/CSS/Tailwind কোড পেস্ট করুন — [ORDER_FORM] ট্যাগে অটোমেটিক ফুল ট্র্যাকিং ফর্ম যুক্ত হবে।'
+                : 'সেকশন ভিত্তিক সহজ ভিজ্যুয়াল বিল্ডার — ইমেজ, টেক্সট এবং প্যাকেজ দিয়ে সহজে পেজ সাজান।'}
+            </div>
+          </div>
+
+          <div style={{ display: 'inline-flex', background: '#0e0c18', padding: 4, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)' }}>
+            <button
+              type="button"
+              onClick={() => setF((s: any) => ({ ...s, mode: 'builder' }))}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 6,
+                border: 'none',
+                background: f.mode !== 'html' ? '#8b5cf6' : 'transparent',
+                color: f.mode !== 'html' ? '#fff' : '#94a3b8',
+                fontSize: 12.5,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              🎨 Visual Blocks
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setF((s: any) => ({ ...s, mode: 'html' }));
+                setTab('code');
+              }}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 6,
+                border: 'none',
+                background: f.mode === 'html' ? '#8b5cf6' : 'transparent',
+                color: f.mode === 'html' ? '#fff' : '#94a3b8',
+                fontSize: 12.5,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              ⚡ Custom HTML Code
+            </button>
+          </div>
+        </div>
+
         {/* Sub-Tabs Bar */}
         <div style={{ display: 'flex', gap: 4, margin: '16px 0 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', overflowX: 'auto', paddingBottom: 2 }}>
-          {[
-            { id: 'general', label: 'General' },
-            { id: 'hero', label: 'Hero & Header' },
-            { id: 'video', label: 'Video & Offer' },
-            { id: 'packages', label: 'Packages & Delivery' },
-            { id: 'benefits', label: 'Benefits' },
-            { id: 'usage', label: 'Usage Guide' },
-            { id: 'reviews', label: 'Reviews' },
-            { id: 'guarantee', label: 'Policy & Contact' }
-          ].map((t) => (
+          {(f.mode === 'html'
+            ? [
+                { id: 'general', label: '⚙️ General & Status' },
+                { id: 'code', label: '⚡ Custom HTML Code' },
+                { id: 'packages', label: '📦 Packages & Delivery' }
+              ]
+            : [
+                { id: 'general', label: '⚙️ General & Status' },
+                { id: 'hero', label: 'Hero & Header' },
+                { id: 'video', label: 'Video & Offer' },
+                { id: 'packages', label: 'Packages & Delivery' },
+                { id: 'benefits', label: 'Benefits' },
+                { id: 'usage', label: 'Usage Guide' },
+                { id: 'reviews', label: 'Reviews' },
+                { id: 'guarantee', label: 'Policy & Contact' },
+                { id: 'code', label: '⚡ Custom HTML Code' }
+              ]
+          ).map((t) => (
             <button
               key={t.id}
               type="button"
@@ -16130,11 +16788,94 @@ function LandingsAdmin() {
                   onChange={(e) => setF((s: any) => ({ ...s, status: e.target.value }))}
                   style={{ width: '100%', padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6 }}
                 >
-              <option value="live">Live — visible</option>
-              <option value="draft">Draft — hidden</option>
+                  <option value="live">🟢 Live — পেজ চালু ও লাইভ</option>
+                  <option value="paused">⏸️ Paused — সাময়িক অফ (স্টক শেষ)</option>
+                  <option value="draft">📝 Draft — খসড়া (লুকানো)</option>
                 </select>
               </div>
             </div>
+
+            {/* Paused Settings Panel */}
+            {f.status === 'paused' && (
+              <div style={{ marginTop: 16, padding: 16, background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                  <span>⏸️ সাময়িক অফ / Paused অ্যাকশন কনফিগারেশন:</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
+                      অফ অবস্থায় ভিজিটর কী দেখবে?
+                    </label>
+                    <select
+                      value={f.pausedAction || 'notice'}
+                      onChange={(e) => setF((s: any) => ({ ...s, pausedAction: e.target.value }))}
+                      style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: 6, fontSize: 13 }}
+                    >
+                      <option value="notice">📢 স্টক শেষ নোটিশ স্ক্রিন + মূল শপে যাওয়ার বাটন (Recommended)</option>
+                      <option value="redirect_home">↪️ সরাসরি মূল স্টোরের হোমপেজে অটোমেটিক রিডাইরেক্ট</option>
+                    </select>
+                  </div>
+                  {f.pausedAction !== 'redirect_home' && (
+                    <>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
+                          নোটিশ শিরোনাম (Notice Title)
+                        </label>
+                        <input
+                          value={f.pausedTitle ?? 'পণ্যটির স্টক সাময়িকভাবে শেষ'}
+                          onChange={(e) => setF((s: any) => ({ ...s, pausedTitle: e.target.value }))}
+                          placeholder="পণ্যটির স্টক সাময়িকভাবে শেষ"
+                          style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
+                        />
+                      </div>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
+                          নোটিশ বিবরণ (Notice Message)
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={f.pausedMessage ?? 'পণ্যটির স্টক সাময়িকভাবে শেষ হওয়ায় এই মুহূর্তে অর্ডার গ্রহণ স্থগিত রাখা হয়েছে। খুব শীঘ্রই স্টক পুনরায় চালু হবে।'}
+                          onChange={(e) => setF((s: any) => ({ ...s, pausedMessage: e.target.value }))}
+                          placeholder="বিস্তারিত মেসেজ..."
+                          style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Section Visibility Toggles (Visual Builder Mode) */}
+            {f.mode !== 'html' && (
+              <div style={{ marginTop: 20, padding: 16, background: '#13111f', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)' }}>
+                <h4 style={{ margin: '0 0 12px', fontSize: 14, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>👁️ সেকশন প্রদর্শন নিয়ন্ত্রণ (Show / Hide Sections):</span>
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+                  {[
+                    { key: 'showHero', label: 'Hero ব্যানার ও শিরোনাম' },
+                    { key: 'showVideo', label: 'ভিডিও ও স্পেশাল অফার' },
+                    { key: 'showBenefits', label: 'উপকারিতা ও ফিচারস' },
+                    { key: 'showUsage', label: 'ব্যবহারের নিয়মাবলী' },
+                    { key: 'showReviews', label: 'কাস্টমার রিভিউ ইমেজ' },
+                    { key: 'showGuarantee', label: 'গ্যারান্টি রিবন ও পলিসি' },
+                  ].map((sec) => {
+                    const isVisible = f[sec.key] !== false;
+                    return (
+                      <label key={sec.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: isVisible ? 'rgba(139, 92, 246, 0.12)' : 'rgba(255,255,255,0.03)', border: isVisible ? '1px solid rgba(139, 92, 246, 0.3)' : '1px solid rgba(255,255,255,0.06)', borderRadius: 6, cursor: 'pointer', fontSize: 12.5, color: isVisible ? '#e2e8f0' : '#64748b' }}>
+                        <input
+                          type="checkbox"
+                          checked={isVisible}
+                          onChange={(e) => setF((s: any) => ({ ...s, [sec.key]: e.target.checked }))}
+                        />
+                        <span>{sec.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.08)', margin: '24px 0' }} />
 
@@ -17158,6 +17899,175 @@ function LandingsAdmin() {
           </div>
         )}
 
+        {/* TAB: CUSTOM HTML CODE FREEDOM */}
+        {tab === 'code' && (
+          <div className="sa-card" style={{ padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 17, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>⚡</span>
+                  <span>Custom HTML / Code Freedom Editor</span>
+                  <span style={{ fontSize: 11, background: '#8b5cf6', color: '#fff', padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>
+                    100% Zero-Lag Speed
+                  </span>
+                </h3>
+                <div style={{ fontSize: 12.5, color: '#cbd5e1', marginTop: 4, maxWidth: 760 }}>
+                  যেকোনো ইউনিক ডিজাইন, এইচটিএমএল বা সিএসএস কোড এখানে পেস্ট করুন। পেজের যেখানে অর্ডার ফরমটি বসাতে চান, ঠিক সেখানে <code>[ORDER_FORM]</code> ট্যাগটি বসিয়ে দিন।
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <a
+                  href={`/page/${f.slug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    padding: '7px 14px',
+                    borderRadius: 6,
+                    background: 'rgba(56, 189, 248, 0.15)',
+                    border: '1px solid rgba(56, 189, 248, 0.35)',
+                    color: '#38bdf8',
+                    textDecoration: 'none',
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                >
+                  <span>👁️ লাইভ প্রিভিউ দেখুন ↗</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Quick Tag Pill with Click-to-Copy */}
+            <div style={{
+              marginBottom: 16,
+              padding: '12px 16px',
+              borderRadius: 8,
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(5, 150, 105, 0.05) 100%)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 10
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 20 }}>🏷️</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#34d399' }}>
+                    অর্ডার ফর্ম বসানোর শর্টকোড ট্যাগ:
+                  </div>
+                  <div style={{ fontSize: 11.5, color: '#94a3b8' }}>
+                    কোডের ভেতর যেখানে এই ট্যাগ রাখবেন, সেখানে অটোমেটিক লাইভ ক্যাশ-অন-ডেলিভারি ফর্ম চলে আসবে।
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText('[ORDER_FORM]');
+                  setCopiedTag(true);
+                  setTimeout(() => setCopiedTag(false), 2000);
+                }}
+                style={{
+                  background: copiedTag ? '#10b981' : '#0e0c18',
+                  color: copiedTag ? '#fff' : '#6ee7b7',
+                  border: '1px solid rgba(16, 185, 129, 0.5)',
+                  padding: '7px 16px',
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontFamily: 'monospace',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>[ORDER_FORM]</span>
+                <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.85 }}>
+                  {copiedTag ? '✓ Copied!' : '📋 Copy Tag'}
+                </span>
+              </button>
+            </div>
+
+            {/* Automated Features Checklist */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginBottom: 16 }}>
+              <div style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid rgba(255,255,255,0.06)', fontSize: 12, color: '#cbd5e1' }}>
+                🚀 <strong>হাই-স্পিড লোডিং:</strong> কোন ভারী ওয়ার্ডপ্রেস বা এক্সটার্নাল স্ক্রিপ্ট নেই, ইনস্ট্যান্ট লোড হবে।
+              </div>
+              <div style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid rgba(255,255,255,0.06)', fontSize: 12, color: '#cbd5e1' }}>
+                🎯 <strong>ফুল পিক্সেল অটো-ট্র্যাকিং:</strong> Meta Pixel ও Server CAPI ইভেন্ট অটো ফায়ার হবে।
+              </div>
+              <div style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid rgba(255,255,255,0.06)', fontSize: 12, color: '#cbd5e1' }}>
+                🚚 <strong>লাইভ ডেলিভারি চার্জ:</strong> ঢাকা ও ঢাকার বাইরের চার্জ প্যাকেজ সেটিংস থেকে হিসাব হবে।
+              </div>
+            </div>
+
+            {/* Code Textarea */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0' }}>
+                  HTML / CSS / Tailwind Code Content:
+                </label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="sa-btn-subtle"
+                    style={{ fontSize: 11 }}
+                    onClick={() => {
+                      if (!f.customHtml?.includes('[ORDER_FORM]')) {
+                        setF((s: any) => ({ ...s, customHtml: (s.customHtml || '') + '\n\n<div class="checkout-wrapper">\n  [ORDER_FORM]\n</div>\n' }));
+                      }
+                    }}
+                  >
+                    + Insert [ORDER_FORM]
+                  </button>
+                  {f.customHtml && (
+                    <button
+                      type="button"
+                      className="sa-btn-subtle"
+                      style={{ fontSize: 11, color: '#f87171' }}
+                      onClick={() => {
+                        if (window.confirm('Clear all custom code?')) {
+                          setF((s: any) => ({ ...s, customHtml: '' }));
+                        }
+                      }}
+                    >
+                      Clear Code
+                    </button>
+                  )}
+                </div>
+              </div>
+              <textarea
+                value={f.customHtml || ''}
+                onChange={(e) => setF((s: any) => ({ ...s, customHtml: e.target.value }))}
+                placeholder="<!-- Paste your custom HTML / Tailwind / CSS code here -->&#10;<div class=&quot;hero&quot;>&#10;  <h1>My Custom Design</h1>&#10;</div>&#10;&#10;<!-- Embedded Order Form -->&#10;[ORDER_FORM]"
+                rows={18}
+                style={{
+                  width: '100%',
+                  padding: 16,
+                  fontFamily: 'Consolas, Monaco, &quot;Courier New&quot;, monospace',
+                  fontSize: 13,
+                  lineHeight: '1.5',
+                  background: '#090710',
+                  color: '#e2e8f0',
+                  border: '1px solid rgba(139, 92, 246, 0.35)',
+                  borderRadius: 8,
+                  boxSizing: 'border-box',
+                  tabSize: 2,
+                  whiteSpace: 'pre',
+                  overflowX: 'auto'
+                }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Bottom Save Bar */}
         <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end', gap: 12, alignItems: 'center' }}>
           <button className="sa-btn ghost" onClick={() => { setEditItem(null); load(); }}>
@@ -17442,9 +18352,53 @@ function LandingsAdmin() {
                     </div>
                   </td>
                   <td>
-                    <span className={`sa-badge ${item.status === 'live' ? 'b-ok' : 'b-draft'}`}>
-                      {item.status === 'live' ? 'Live' : 'Draft'}
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+                      <button
+                        type="button"
+                        onClick={() => toggleLandingStatus(item)}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: 999,
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          fontSize: 11.5,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          background: item.status === 'paused'
+                            ? 'rgba(245, 158, 11, 0.2)'
+                            : item.status === 'draft'
+                            ? 'rgba(148, 163, 184, 0.2)'
+                            : 'rgba(34, 197, 94, 0.2)',
+                          color: item.status === 'paused'
+                            ? '#fbbf24'
+                            : item.status === 'draft'
+                            ? '#cbd5e1'
+                            : '#4ade80',
+                          borderWidth: 1,
+                          borderStyle: 'solid',
+                          borderColor: item.status === 'paused'
+                            ? 'rgba(245, 158, 11, 0.4)'
+                            : item.status === 'draft'
+                            ? 'rgba(148, 163, 184, 0.3)'
+                            : 'rgba(34, 197, 94, 0.4)'
+                        }}
+                        title="Click to toggle Live/Paused status"
+                      >
+                        {item.status === 'paused' ? '⏸️ Paused (অফ)' : item.status === 'draft' ? '📝 Draft' : '🟢 Live (চালু)'}
+                      </button>
+                      <span style={{
+                        fontSize: 10.5,
+                        color: item.mode === 'html' ? '#c084fc' : '#94a3b8',
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3
+                      }}>
+                        {item.mode === 'html' ? '⚡ Custom HTML' : '🎨 Visual Blocks'}
+                      </span>
+                    </div>
                   </td>
                   <td className="r">
                     <button
@@ -18519,7 +19473,7 @@ function CustomersAdmin() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `secrate_customers_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `timeboost_customers_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -18749,7 +19703,7 @@ function StaffAdmin() {
         port: 465,
         secure: true,
         user: smtpGmail.trim(),
-        fromName: 'SECRATE',
+        fromName: 'TimeBoost',
         fromEmail: smtpGmail.trim(),
       };
       if (smtpAppPass.trim()) {
@@ -19264,7 +20218,7 @@ function StaffAdmin() {
           <div className="sa-card" style={{ padding: 22 }}>
             <h4 style={{ margin: '0 0 12px', fontSize: 14, color: '#fff', fontWeight: 700 }}>👁️ WhatsApp Message Preview</h4>
             <div style={{ background: '#0e0c18', padding: 16, borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', fontFamily: 'monospace', fontSize: 13, color: '#e2e8f0', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
-              {reportPreviewMsg || `📊 *[SECRATE] স্টাফ দৈনিক পারফরম্যান্স রিপোর্ট*
+              {reportPreviewMsg || `📊 *[TimeBoost] স্টাফ দৈনিক পারফরম্যান্স রিপোর্ট*
 📅 তারিখ: ${new Date().toLocaleDateString('bn-BD', { timeZone: 'Asia/Dhaka', day: 'numeric', month: 'long', year: 'numeric' })}
 ⏰ সময়: রাত ১১:০০ টা
 ━━━━━━━━━━━━━━━━━━━━
@@ -19278,7 +20232,7 @@ function StaffAdmin() {
 
 ━━━━━━━━━━━━━━━━━━━━
 🏆 *আজকের সেরা পারফর্মার:* Rocky
-🔗 *লাইভ ড্যাশবোর্ড:* https://secrate.shop/wp-admin`}
+🔗 *লাইভ ড্যাশবোর্ড:* https://timingboost.xyz/wp-admin`}
             </div>
           </div>
         </div>
@@ -19326,7 +20280,7 @@ function StaffAdmin() {
             <div style={{ fontSize: 11.5, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>Staff OTP Sender</div>
             <div style={{ fontSize: 13.5, fontWeight: 600, color: (emailCfg?.enabled && (emailCfg?.resendApiKey || (emailCfg?.provider === 'smtp' && emailCfg?.hasPass))) ? '#4ade80' : '#facc15', marginTop: 3 }}>
               {emailCfg?.enabled && (emailCfg?.provider === 'resend' || emailCfg?.resendApiKey)
-                ? `✓ Resend API (${emailCfg.fromEmail || 'code@secrate.shop'})`
+                ? `✓ Resend API (${emailCfg.fromEmail || 'code@timingboost.xyz'})`
                 : emailCfg?.provider === 'smtp' && emailCfg?.hasPass
                 ? `✓ Gmail SMTP (${emailCfg.user})`
                 : '⚠ Email Integration Disabled'}
@@ -19361,11 +20315,11 @@ function StaffAdmin() {
                     Staff OTP &amp; Email Delivery via Resend API
                   </h3>
                   <span className="sa-badge" style={{ background: 'rgba(34,197,94,0.18)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.35)' }}>
-                    Active ✓ ({emailCfg?.fromEmail || 'code@secrate.shop'})
+                    Active ✓ ({emailCfg?.fromEmail || 'code@timingboost.xyz'})
                   </span>
                 </div>
                 <p className="dim" style={{ margin: '4px 0 0', fontSize: 12.5, lineHeight: 1.5 }}>
-                  স্টাফরা লগইন করার সময় তাদের নিজস্ব ইমেইলে <strong>Resend API</strong>-এর মাধ্যমে <code>{emailCfg?.fromEmail || 'code@secrate.shop'}</code> থেকে তাৎক্ষণিক ভেরিফিকেশন কোড (OTP) পৌঁছাবে। Integrations মেনু থেকে এটি সক্রিয় ও কনফিগার করা আছে।
+                  স্টাফরা লগইন করার সময় তাদের নিজস্ব ইমেইলে <strong>Resend API</strong>-এর মাধ্যমে <code>{emailCfg?.fromEmail || 'code@timingboost.xyz'}</code> থেকে তাৎক্ষণিক ভেরিফিকেশন কোড (OTP) পৌঁছাবে। Integrations মেনু থেকে এটি সক্রিয় ও কনফিগার করা আছে।
                 </p>
               </div>
             </div>
