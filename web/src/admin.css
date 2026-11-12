@@ -136,7 +136,7 @@
 .ogpager button { background: #181624; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer; font-family: inherit; color: #ffffff; transition: background .15s, border-color .15s; }
 .ogpager button:hover:not(:disabled) { background: #231f33; border-color: #8b5cf6; }
 .ogpager button:disabled { opacity: .4; cursor: default; }
-.ogrid-head, .ogrid-row { display: grid; grid-template-columns: 36px 155px 190px minmax(220px, 1.6fr) 115px 145px 200px 115px 150px; column-gap: 14px; align-items: center; min-width: 1280px; }
+.ogrid-head, .ogrid-row { display: grid; grid-template-columns: 36px 150px 185px minmax(210px, 1.4fr) 110px 135px 135px 195px 110px 145px; column-gap: 14px; align-items: center; min-width: 1380px; }
 .ogrid-head { padding: 13px 20px; background: #0e0c18; border-bottom: 1px solid rgba(255, 255, 255, 0.09); font-size: 11px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; user-select: none; }
 .ogrid-row { padding: 13px 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); cursor: pointer; font-size: 13.5px; color: #e2e8f0; transition: background .15s ease; }
 .ogrid-row:last-child { border-bottom: none; }
@@ -617,7 +617,8 @@
       "order total"
       "cust cust"
       "items items"
-      "status courier"
+      "status call"
+      "courier courier"
       "score acts" !important;
     min-width: 0 !important;
     width: 100% !important;
@@ -653,6 +654,12 @@
   .og-cell-status {
     grid-area: status;
     justify-content: flex-start !important;
+  }
+  .og-cell-call {
+    grid-area: call;
+    display: flex;
+    justify-content: flex-end !important;
+    align-items: center;
   }
   .og-cell-courier {
     grid-area: courier;

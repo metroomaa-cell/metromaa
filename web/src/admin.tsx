@@ -3426,6 +3426,7 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
               <th>Date</th>
               <th>Customer</th>
               <th>Origin</th>
+              <th style={{ textAlign: 'center' }}>IP Call</th>
               <th>Courier</th>
               <th>Status</th>
               <th className="r">Total</th>
@@ -3441,6 +3442,17 @@ function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
                   <div className="dim small">{o.customer.phone}</div>
                 </td>
                 <td><span className="sa-tag-source">🌐 {originLabel(o.source)}</span></td>
+                <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
+                  <button
+                    type="button"
+                    className="sa-btn ghost sa-mini"
+                    style={{ color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.45)', background: 'rgba(16, 185, 129, 0.12)', padding: '3px 8px', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                    onClick={() => triggerAdminIPCall({ order: o, phone: o.customer?.phone, name: o.customer?.name, orderId: o.id, product: o.items?.[0]?.name })}
+                    title="Call customer via IP Softphone"
+                  >
+                    📞 Call
+                  </button>
+                </td>
                 <td>
                   {o.courier?.name ? (
                     <span>{o.courier.name}{o.courier.consignment ? ` #${o.courier.consignment}` : ''}</span>
@@ -4942,6 +4954,7 @@ function OrdersAdmin() {
           <span>Item & Option</span>
           <span className="r">Total</span>
           <span style={{ textAlign: 'center' }}>Status</span>
+          <span style={{ textAlign: 'center' }}>IP Call & Rec</span>
           <span>Courier</span>
           <span style={{ textAlign: 'center' }}>Trust Score</span>
           <span style={{ textAlign: 'right' }}>Actions</span>
@@ -5157,6 +5170,161 @@ function OrdersAdmin() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* 6.5. IP Call & Voice Recording Column */}
+              <div
+                className="og-cell-call"
+                onClick={(e) => e.stopPropagation()}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+              >
+                {(() => {
+                  const callEvents = (o.history || []).filter((h: any) => h.status === 'call' || h.callId);
+                  const lastCall = callEvents[0];
+                  if (!callEvents.length) {
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => triggerAdminIPCall({
+                          order: o,
+                          phone: cleanPhone,
+                          name: o.customer?.name,
+                          orderId: o.id,
+                          product: o.items?.[0]?.name
+                        })}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          padding: '5px 10px',
+                          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(5, 150, 105, 0.25) 100%)',
+                          border: '1px solid rgba(16, 185, 129, 0.45)',
+                          borderRadius: 7,
+                          color: '#34d399',
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 8px rgba(16, 185, 129, 0.15)',
+                          transition: 'all 0.15s ease'
+                        }}
+                        title="কাস্টমারকে সরাসরি আইপি কল করুন ও অডিও রেকর্ড করুন"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
+                          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                        </svg>
+                        <span>IP Call</span>
+                      </button>
+                    );
+                  }
+
+                  const outcome = lastCall.outcome || 'completed';
+                  const isConfirmed = outcome === 'confirmed';
+                  const isNoAnswer = outcome === 'no_answer';
+                  const isCallLater = outcome === 'call_later';
+                  const isCancelled = outcome === 'cancelled';
+
+                  const badgeBg = isConfirmed
+                    ? 'rgba(16, 185, 129, 0.2)'
+                    : isNoAnswer
+                    ? 'rgba(239, 68, 68, 0.2)'
+                    : isCallLater
+                    ? 'rgba(245, 158, 11, 0.2)'
+                    : isCancelled
+                    ? 'rgba(239, 68, 68, 0.15)'
+                    : 'rgba(56, 189, 248, 0.15)';
+
+                  const badgeColor = isConfirmed
+                    ? '#34d399'
+                    : isNoAnswer
+                    ? '#f87171'
+                    : isCallLater
+                    ? '#fbbf24'
+                    : isCancelled
+                    ? '#fca5a5'
+                    : '#38bdf8';
+
+                  const badgeBorder = isConfirmed
+                    ? 'rgba(16, 185, 129, 0.4)'
+                    : isNoAnswer
+                    ? 'rgba(239, 68, 68, 0.4)'
+                    : isCallLater
+                    ? 'rgba(245, 158, 11, 0.4)'
+                    : 'rgba(56, 189, 248, 0.35)';
+
+                  const label = isConfirmed
+                    ? '✓ Confirmed'
+                    : isNoAnswer
+                    ? '📵 No Ans'
+                    : isCallLater
+                    ? '⏰ Call Later'
+                    : isCancelled
+                    ? '✖ Cancelled'
+                    : '📞 Called';
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, width: '100%' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <button
+                          type="button"
+                          onClick={() => triggerAdminIPCall({
+                            order: o,
+                            phone: cleanPhone,
+                            name: o.customer?.name,
+                            orderId: o.id,
+                            product: o.items?.[0]?.name
+                          })}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3,
+                            padding: '3px 8px',
+                            background: 'rgba(56, 189, 248, 0.15)',
+                            border: '1px solid rgba(56, 189, 248, 0.4)',
+                            borderRadius: 6,
+                            color: '#38bdf8',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                          title="পুনরায় কল করুন (Re-dial)"
+                        >
+                          📞 Call
+                        </button>
+                        {lastCall.recordingUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setSel(o)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 2,
+                              padding: '3px 6px',
+                              background: 'rgba(168, 85, 247, 0.18)',
+                              border: '1px solid rgba(168, 85, 247, 0.45)',
+                              borderRadius: 6,
+                              color: '#c084fc',
+                              fontSize: 10.5,
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                            title="🎙️ ভয়েস রেকর্ড রয়েছে! ক্লিক করে অর্ডারের ভিতরে শুনুন"
+                          >
+                            <span>🎙️</span>
+                            <span>Rec</span>
+                          </button>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10 }}>
+                        <span style={{ padding: '1px 5px', borderRadius: 4, fontWeight: 700, fontSize: 9.5, background: badgeBg, color: badgeColor, border: `1px solid ${badgeBorder}` }}>
+                          {label}
+                        </span>
+                        {callEvents.length > 1 && (
+                          <span style={{ color: '#94a3b8', fontSize: 9.5 }}>({callEvents.length}x)</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* 7. Courier */}
