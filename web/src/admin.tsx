@@ -2183,9 +2183,9 @@ export function Admin() {
   }, [authed, nav]);
   if (!authed) return <Login onDone={() => setAuthed(true)} />;
   const role = me?.role || 'owner';
-  const allowed = role === 'staff' ? ['dashboard', 'orders', 'scanner', 'customers']
-    : role === 'manager' ? ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'push_popups', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings']
-      : ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'push_popups', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings'];
+  const allowed = role === 'staff' ? ['dashboard', 'orders', 'scanner', 'customers', 'calls']
+    : role === 'manager' ? ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'calls', 'push_popups', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings']
+      : ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'calls', 'push_popups', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings'];
   if (role === 'manager' && !allowed.includes('reviews')) allowed.push('reviews');
   const cur = allowed.includes(nav) ? nav : 'dashboard';
   const newOrders = cur === 'orders' || lastSeen == null || orderTotal == null ? 0 : Math.max(0, orderTotal - lastSeen);
