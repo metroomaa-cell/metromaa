@@ -2267,7 +2267,7 @@ export function Admin() {
           {item('scanner', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1.5"/><line x1="7" y1="12" x2="17" y2="12"/></svg>, 'QR Scanner')}
           {item('finance', <FinanceIcon />, 'Finance & Ledger')}
           {item('whatsapp', <WhatsAppIcon size={18} variant="official" className="ci" />, 'WhatsApp Automation')}
-          {item('calls', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>, 'Voice Audit & Calls')}
+          {item('calls', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>, 'IP Calling & Audit')}
           {item('push_popups', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>, 'Push & Pop-ups')}
           {item('backup', <BackupIcon />, 'Backup & Restore')}
           {item('customers', I.customers, 'Customers')}
@@ -19334,12 +19334,12 @@ function CallsAdmin() {
           </button>
           <button
             type="button"
-            className="sa-btn ghost"
+            className="sa-btn primary"
             onClick={() => setSettingsOpen(true)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderColor: 'rgba(139, 92, 246, 0.4)', color: '#c4b5fd' }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#8b5cf6', borderColor: '#8b5cf6', fontWeight: 700 }}
           >
             <span>⚙️</span>
-            <span>Telephony &amp; SIP Settings</span>
+            <span>Connect IPTSP / SIP API</span>
           </button>
         </div>
       </div>
@@ -19651,6 +19651,10 @@ function CallsAdmin() {
                 {settingsMsg}
               </div>
             )}
+
+            <div style={{ background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, lineHeight: 1.5, color: '#bae6fd' }}>
+              💡 <b>IPTSP বা SIP API কানেকশন গাইড:</b> আপনার IPTSP অপারেটর (যেমন: Amber IT, Brilliant Cloud, BDCOM) থেকে পাওয়া <b>Caller ID</b>, <b>SIP Server IP</b>, <b>Extension/Username</b> ও <b>Password</b> এখানে ইনপুট করে সেভ করুন। প্রোভাইডারের WebRTC সাপোর্ট থাকলে <b>WSS Gateway URL</b> দিন।
+            </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, marginBottom: 16 }}>
               <div>
