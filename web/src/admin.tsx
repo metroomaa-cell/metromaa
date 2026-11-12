@@ -18340,9 +18340,31 @@ function LandingsAdmin() {
                   )}
                 </div>
               </div>
+              {f.mode !== 'html' && (
+                <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8, background: 'rgba(245, 158, 11, 0.14)', border: '1px solid rgba(245, 158, 11, 0.4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                  <div style={{ fontSize: 12, color: '#fde68a' }}>
+                    ⚠️ <b>সতর্কতা:</b> পেজটি বর্তমানে <b>Visual Blocks</b> মোডে রয়েছে, তাই লাইভ পেজে এই HTML কোড দেখাবে না।
+                  </div>
+                  <button
+                    type="button"
+                    className="sa-btn sa-mini"
+                    style={{ background: '#f59e0b', color: '#000', fontWeight: 700, border: 'none' }}
+                    onClick={() => setF((s: any) => ({ ...s, mode: 'html' }))}
+                  >
+                    ⚡ Custom HTML Mode অন করুন
+                  </button>
+                </div>
+              )}
               <textarea
                 value={f.customHtml || ''}
-                onChange={(e) => setF((s: any) => ({ ...s, customHtml: e.target.value }))}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setF((s: any) => ({
+                    ...s,
+                    customHtml: val,
+                    ...(val.includes('<') && val.includes('>') && s.mode !== 'html' ? { mode: 'html' } : {})
+                  }));
+                }}
                 placeholder="<!-- Paste your custom HTML / Tailwind / CSS code here -->&#10;<div class=&quot;hero&quot;>&#10;  <h1>My Custom Design</h1>&#10;</div>&#10;&#10;<!-- Embedded Order Form -->&#10;[ORDER_FORM]"
                 rows={18}
                 style={{
