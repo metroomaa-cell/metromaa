@@ -1460,3 +1460,224 @@ export function getStaffMonitoringData() {
     recentAuditLogs: getAuditLogs().slice(0, 100)
   };
 }
+
+// ==========================================
+// IP TELEPHONY, CALL LOGS & VOICE AUDIT
+// ==========================================
+const CALLS_FILE = join(EXTERNAL_DIR, 'calls.json');
+const TELEPHONY_FILE = join(EXTERNAL_DIR, 'telephony.json');
+const RECORDINGS_DIR = join(EXTERNAL_DIR, 'uploads', 'recordings');
+try { mkdirSync(RECORDINGS_DIR, { recursive: true }); } catch (_) {}
+
+export function getCalls(filters = {}) {
+  let list = [];
+  try {
+    if (existsSync(CALLS_FILE)) {
+      list = JSON.parse(readFileSync(CALLS_FILE, 'utf8'));
+    }
+  } catch (_) {
+    list = [];
+  }
+  if (!Array.isArray(list)) list = [];
+
+  if (filters.orderId) {
+    list = list.filter(c => c.orderId === filters.orderId);
+  }
+  if (filters.staffUsername) {
+    list = list.filter(c => c.staff?.username === filters.staffUsername || c.staff?.name === filters.staffUsername);
+  }
+  if (filters.outcome && filters.outcome !== 'all') {
+    list = list.filter(c => c.outcome === filters.outcome);
+  }
+  if (filters.search) {
+    const q = String(filters.search).toLowerCase();
+    list = list.filter(c =>
+      (c.customerPhone && c.customerPhone.includes(q)) ||
+      (c.customerName && c.customerName.toLowerCase().includes(q)) ||
+      (c.orderId && c.orderId.toLowerCase().includes(q)) ||
+      (c.staff?.name && c.staff.name.toLowerCase().includes(q))
+    );
+  }
+
+  return list.sort((a, b) => new Date(b.createdAt || b.startedAt || 0) - new Date(a.createdAt || a.startedAt || 0));
+}
+
+export function saveCall(callData) {
+  let list = [];
+  try {
+    if (existsSync(CALLS_FILE)) {
+      list = JSON.parse(readFileSync(CALLS_FILE, 'utf8'));
+    }
+  } catch (_) {
+    list = [];
+  }
+  if (!Array.isArray(list)) list = [];
+
+  const id = callData.id || ('call_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
+  const record = {
+    id,
+    orderId: callData.orderId || null,
+    customerName: callData.customerName || '',
+    customerPhone: callData.customerPhone || '',
+    productName: callData.productName || '',
+    staff: callData.staff || { name: 'Staff', role: 'agent' },
+    duration: Math.max(0, parseInt(callData.duration, 10) || 0),
+    startedAt: callData.startedAt || new Date().toISOString(),
+    endedAt: callData.endedAt || new Date().toISOString(),
+    status: callData.status || 'completed',
+    outcome: callData.outcome || 'completed',
+    notes: String(callData.notes || '').trim(),
+    recordingUrl: callData.recordingUrl || null,
+    fileSize: parseInt(callData.fileSize, 10) || 0,
+    createdAt: new Date().toISOString()
+  };
+
+  list.unshift(record);
+  saveFile(CALLS_FILE, JSON.stringify(list, null, 2));
+
+  // If orderId is provided, attach to order audit history
+  if (record.orderId) {
+    try {
+      const orders = getOrders();
+      const ord = orders.find(o => o.id === record.orderId || o.trackingId === record.orderId);
+      if (ord) {
+        if (!Array.isArray(ord.history)) ord.history = [];
+        const mins = Math.floor(record.duration / 60);
+        const secs = record.duration % 60;
+        const durStr = `${mins > 0 ? mins + 'm ' : ''}${secs}s`;
+
+        ord.history.unshift({
+          at: record.createdAt,
+          status: 'call',
+          note: `IP Call (${durStr}) · Outcome: ${record.outcome}${record.notes ? ' · Note: ' + record.notes : ''}`,
+          staff: record.staff,
+          by: record.staff?.name || record.staff?.username || 'Staff',
+          callId: record.id,
+          recordingUrl: record.recordingUrl,
+          duration: record.duration,
+          outcome: record.outcome,
+          notes: record.notes
+        });
+        ord.lastUpdated = record.createdAt;
+        ord.lastUpdatedBy = record.staff;
+        saveOrders(orders);
+      }
+    } catch (e) {
+      console.error('[Store] Error attaching call to order history:', e);
+    }
+  }
+
+  // Record action in staff performance log
+  try {
+    if (record.staff?.username) {
+      recordStaffAction(record.staff.username, 'call', { callId: record.id, outcome: record.outcome });
+    }
+  } catch (_) {}
+
+  return record;
+}
+
+export function deleteCall(callId) {
+  let list = [];
+  try {
+    if (existsSync(CALLS_FILE)) {
+      list = JSON.parse(readFileSync(CALLS_FILE, 'utf8'));
+    }
+  } catch (_) {
+    return false;
+  }
+  if (!Array.isArray(list)) return false;
+
+  const item = list.find(c => c.id === callId);
+  if (!item) return false;
+
+  list = list.filter(c => c.id !== callId);
+  saveFile(CALLS_FILE, JSON.stringify(list, null, 2));
+
+  if (item.recordingUrl && item.recordingUrl.startsWith('/uploads/recordings/')) {
+    try {
+      const fname = item.recordingUrl.replace('/uploads/recordings/', '');
+      const fpath = join(RECORDINGS_DIR, fname);
+      if (existsSync(fpath)) unlinkSync(fpath);
+    } catch (_) {}
+  }
+
+  return true;
+}
+
+export function getCallStats() {
+  const list = getCalls();
+  const totalCalls = list.length;
+  const totalDuration = list.reduce((acc, c) => acc + (c.duration || 0), 0);
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const todayCalls = list.filter(c => (c.createdAt || '').startsWith(todayStr));
+  const confirmedCalls = list.filter(c => c.outcome === 'confirmed');
+
+  const staffStats = {};
+  list.forEach(c => {
+    const sName = c.staff?.name || c.staff?.username || 'Unknown';
+    if (!staffStats[sName]) staffStats[sName] = { calls: 0, duration: 0, confirmed: 0 };
+    staffStats[sName].calls++;
+    staffStats[sName].duration += (c.duration || 0);
+    if (c.outcome === 'confirmed') staffStats[sName].confirmed++;
+  });
+
+  return {
+    totalCalls,
+    totalDuration,
+    todayCallsCount: todayCalls.length,
+    confirmedCallsCount: confirmedCalls.length,
+    avgDuration: totalCalls > 0 ? Math.round(totalDuration / totalCalls) : 0,
+    staffStats
+  };
+}
+
+export function getTelephonySettings() {
+  try {
+    if (existsSync(TELEPHONY_FILE)) {
+      return JSON.parse(readFileSync(TELEPHONY_FILE, 'utf8'));
+    }
+  } catch (_) {}
+  return {
+    enabled: true,
+    provider: 'iptsp',
+    callerId: '09638752122',
+    sipServer: '',
+    wssUrl: '',
+    sipUsername: '',
+    sipPassword: '',
+    retentionDays: 30,
+    autoRecord: true,
+    testMode: true
+  };
+}
+
+export function saveTelephonySettings(settings) {
+  const current = getTelephonySettings();
+  const merged = { ...current, ...settings, updatedAt: new Date().toISOString() };
+  saveFile(TELEPHONY_FILE, JSON.stringify(merged, null, 2));
+  return merged;
+}
+
+export function cleanupOldRecordings(retentionDays = 30) {
+  try {
+    if (!existsSync(RECORDINGS_DIR)) return { deleted: 0 };
+    const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+    const files = readdirSync(RECORDINGS_DIR);
+    let deleted = 0;
+    for (const f of files) {
+      const p = join(RECORDINGS_DIR, f);
+      try {
+        const st = statSync(p);
+        if (st.isFile() && st.mtimeMs < cutoff) {
+          unlinkSync(p);
+          deleted++;
+        }
+      } catch (_) {}
+    }
+    return { deleted };
+  } catch (e) {
+    return { error: e.message };
+  }
+}

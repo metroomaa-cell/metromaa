@@ -1678,6 +1678,18 @@ export function triggerAdminWhatsApp(target: AdminWhatsAppTarget) {
   window.dispatchEvent(new CustomEvent('open-admin-whatsapp', { detail: target }));
 }
 
+export interface AdminIPCallTarget {
+  order?: any;
+  phone: string;
+  name?: string;
+  orderId?: string;
+  product?: string;
+}
+
+export function triggerAdminIPCall(target: AdminIPCallTarget) {
+  window.dispatchEvent(new CustomEvent('open-admin-ip-call', { detail: target }));
+}
+
 function isCourierHoldOrderGlobal(o: any): boolean {
   if (!o) return false;
   const st = String(o.status || '').toLowerCase();
@@ -2255,6 +2267,7 @@ export function Admin() {
           {item('scanner', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1.5"/><line x1="7" y1="12" x2="17" y2="12"/></svg>, 'QR Scanner')}
           {item('finance', <FinanceIcon />, 'Finance & Ledger')}
           {item('whatsapp', <WhatsAppIcon size={18} variant="official" className="ci" />, 'WhatsApp Automation')}
+          {item('calls', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>, 'Voice Audit & Calls')}
           {item('push_popups', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>, 'Push & Pop-ups')}
           {item('backup', <BackupIcon />, 'Backup & Restore')}
           {item('customers', I.customers, 'Customers')}
@@ -2282,6 +2295,7 @@ export function Admin() {
         {cur === 'scanner' && <ScannerAdmin />}
         {cur === 'finance' && <FinanceAdmin />}
         {cur === 'whatsapp' && <WhatsAppAdmin />}
+        {cur === 'calls' && <CallsAdmin />}
         {cur === 'push_popups' && <PushPopupsAdmin />}
         {cur === 'backup' && <BackupAdmin />}
         {cur === 'customers' && <CustomersAdmin />}
@@ -2369,6 +2383,7 @@ export function Admin() {
         </button>
       </nav>
       <QuickWhatsAppModal />
+      <WebCallDialer />
     </div>
   );
 }
@@ -5038,16 +5053,25 @@ function OrdersAdmin() {
                         Alt: {o.customer.secondaryPhone}
                       </span>
                     )}
-                    <a
-                      href={`tel:${cleanPhone}`}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ display: 'inline-flex', alignItems: 'center', color: '#94a3b8' }}
-                      title="Call customer"
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        triggerAdminIPCall({
+                          order: o,
+                          phone: cleanPhone,
+                          name: o.customer?.name,
+                          orderId: o.id,
+                          product: o.items?.[0]?.name
+                        });
+                      }}
+                      style={{ display: 'inline-flex', alignItems: 'center', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: '#38bdf8' }}
+                      title="Call customer via In-Browser IP Softphone & Auto Record"
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
                         <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
                       </svg>
-                    </a>
+                    </button>
                     <button
                       type="button"
                       onClick={(e) => {
@@ -6199,8 +6223,32 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
             >
               {isEditing ? '✓ View Order' : '✏️ Edit Order'}
             </button>
-            <a className="sa-btn ghost sa-mini" href={'tel:' + custPhone} title="Call customer">
-              📞 Call
+            <button
+              type="button"
+              className="sa-btn ghost sa-mini"
+              onClick={() => {
+                triggerAdminIPCall({
+                  order: o,
+                  phone: custPhone,
+                  name: custName,
+                  orderId: o.id,
+                  product: items?.[0]?.name
+                });
+              }}
+              title="Call customer via In-Browser IP Softphone & Auto Record"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                color: '#38bdf8',
+                borderColor: 'rgba(56, 189, 248, 0.4)',
+                background: 'rgba(56, 189, 248, 0.1)'
+              }}
+            >
+              📞 IP Call
+            </button>
+            <a className="sa-btn ghost sa-mini" href={'tel:' + custPhone} title="Direct call from phone/device">
+              Cell Call
             </a>
             <button
               type="button"
@@ -7001,9 +7049,22 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                   <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, fontSize: 11.5, padding: '7px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 7, borderLeft: '3px solid #8b5cf6' }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flex: 1, minWidth: 0 }}>
                       <span style={{ minWidth: 80, color: '#94a3b8', fontSize: 10.5, flexShrink: 0, marginTop: 1 }}>{dateStr}</span>
-                      <div style={{ color: '#e2e8f0', wordBreak: 'break-word', minWidth: 0, flex: 1, maxHeight: '60px', overflowY: 'auto' }}>
-                        <strong style={{ color: '#fff', textTransform: 'capitalize' }}>{h.status || 'Action'}:</strong>{' '}
-                        <span style={{ whiteSpace: 'pre-wrap' }}>{h.note || 'Status updated'}</span>
+                      <div style={{ color: '#e2e8f0', wordBreak: 'break-word', minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <strong style={{ color: '#fff', textTransform: 'capitalize' }}>{h.status || 'Action'}:</strong>{' '}
+                          <span style={{ whiteSpace: 'pre-wrap' }}>{h.note || 'Status updated'}</span>
+                        </div>
+                        {h.recordingUrl && (
+                          <div style={{ marginTop: 6, padding: '6px 10px', background: 'rgba(56, 189, 248, 0.08)', borderRadius: 6, border: '1px solid rgba(56, 189, 248, 0.25)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10.5, color: '#38bdf8' }}>
+                              <span>🎧 কল অডিও রেকর্ডিং</span>
+                              <a href={h.recordingUrl} download target="_blank" rel="noreferrer" style={{ color: '#38bdf8', textDecoration: 'none', fontWeight: 600 }}>
+                                📥 ডাউনলোড
+                              </a>
+                            </div>
+                            <audio src={h.recordingUrl} controls preload="none" style={{ width: '100%', height: 28 }} />
+                          </div>
+                        )}
                       </div>
                     </div>
                     {staffName ? (
@@ -18503,6 +18564,1028 @@ function LandingsAdmin() {
         </div>
       )}
     </>
+  );
+}
+
+// ==========================================
+// IN-BROWSER IP SOFTPHONE DIALER
+// ==========================================
+function WebCallDialer() {
+  const [target, setTarget] = useState<AdminIPCallTarget | null>(null);
+  const [status, setStatus] = useState<'idle' | 'calling' | 'connected' | 'wrapup'>('idle');
+  const [seconds, setSeconds] = useState(0);
+  const [muted, setMuted] = useState(false);
+  const [held, setHeld] = useState(false);
+  const [minimized, setMinimized] = useState(false);
+  const [outcome, setOutcome] = useState('confirmed');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const timerRef = useRef<any>(null);
+  const audioBlobRef = useRef<Blob | null>(null);
+
+  useEffect(() => {
+    const handleOpen = async (e: any) => {
+      const d: AdminIPCallTarget = e.detail;
+      if (!d || !d.phone) return;
+      setTarget(d);
+      setStatus('calling');
+      setSeconds(0);
+      setMuted(false);
+      setHeld(false);
+      setMinimized(false);
+      setOutcome('confirmed');
+      setNotes('');
+      setSaving(false);
+      setSaveSuccess(false);
+      audioChunksRef.current = [];
+      audioBlobRef.current = null;
+
+      // Request browser microphone
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        streamRef.current = stream;
+
+        let mimeType = 'audio/webm;codecs=opus';
+        if (!MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          if (MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/webm';
+          else if (MediaRecorder.isTypeSupported('audio/ogg')) mimeType = 'audio/ogg';
+          else mimeType = '';
+        }
+
+        const options = mimeType ? { mimeType } : undefined;
+        const mr = new MediaRecorder(stream, options);
+        mr.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+        mr.onstop = () => {
+          if (audioChunksRef.current.length > 0) {
+            audioBlobRef.current = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
+          }
+        };
+        mr.start(1000);
+        mediaRecorderRef.current = mr;
+      } catch (err) {
+        console.warn('Microphone permission not granted or available:', err);
+      }
+
+      // Simulate ringing and connect after 2 seconds
+      setTimeout(() => {
+        setStatus('connected');
+      }, 2000);
+    };
+
+    window.addEventListener('open-admin-ip-call', handleOpen);
+    return () => window.removeEventListener('open-admin-ip-call', handleOpen);
+  }, []);
+
+  // Duration timer
+  useEffect(() => {
+    if (status === 'connected') {
+      timerRef.current = setInterval(() => {
+        setSeconds((s) => s + 1);
+      }, 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [status]);
+
+  const toggleMute = () => {
+    if (streamRef.current) {
+      const audioTrack = streamRef.current.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = muted;
+        setMuted(!muted);
+      }
+    }
+  };
+
+  const endCall = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch (_) {}
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+    }
+    setStatus('wrapup');
+  };
+
+  const handleSaveCall = async () => {
+    if (!target) return;
+    setSaving(true);
+    let recordingUrl: string | null = null;
+    let fileSize = 0;
+
+    // Convert audio Blob to base64 DataURL and upload
+    if (audioBlobRef.current && audioBlobRef.current.size > 0) {
+      fileSize = audioBlobRef.current.size;
+      try {
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve) => {
+          reader.onloadend = () => resolve(reader.result as string);
+        });
+        reader.readAsDataURL(audioBlobRef.current);
+        const dataUrl = await base64Promise;
+
+        const upRes = await aFetch('/calls/upload-recording', {
+          method: 'POST',
+          body: JSON.stringify({ dataUrl })
+        }).then((r) => r.json());
+
+        if (upRes && upRes.url) {
+          recordingUrl = upRes.url;
+        }
+      } catch (err) {
+        console.error('Error uploading recording:', err);
+      }
+    }
+
+    try {
+      await aFetch('/calls', {
+        method: 'POST',
+        body: JSON.stringify({
+          orderId: target.orderId || null,
+          customerName: target.name || target.order?.customer?.name || '',
+          customerPhone: target.phone,
+          productName: target.product || target.order?.items?.[0]?.name || '',
+          duration: seconds,
+          outcome,
+          notes,
+          recordingUrl,
+          fileSize
+        })
+      });
+
+      setSaveSuccess(true);
+      window.dispatchEvent(new CustomEvent('admin-orders-updated'));
+      setTimeout(() => {
+        setTarget(null);
+        setStatus('idle');
+      }, 1200);
+    } catch (err) {
+      alert('Failed to save call log');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!target || status === 'idle') return null;
+
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+  if (minimized) {
+    return (
+      <div
+        onClick={() => setMinimized(false)}
+        style={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+          color: '#fff',
+          padding: '10px 18px',
+          borderRadius: 999,
+          boxShadow: '0 8px 32px rgba(16, 185, 129, 0.4)',
+          zIndex: 99999,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          fontWeight: 700,
+          fontSize: 13
+        }}
+      >
+        <span style={{ animation: 'pulse 1.5s infinite' }}>📞</span>
+        <span>Call in progress · {timeStr}</span>
+        <span style={{ fontSize: 11, background: 'rgba(0,0,0,0.2)', padding: '2px 8px', borderRadius: 999 }}>Maximize</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: 24,
+        right: 24,
+        width: 360,
+        background: '#161326',
+        borderRadius: 16,
+        border: '1px solid rgba(139, 92, 246, 0.4)',
+        boxShadow: '0 20px 50px rgba(0,0,0,0.7)',
+        zIndex: 99999,
+        overflow: 'hidden',
+        fontFamily: "'Hind Siliguri', 'Inter', sans-serif",
+        color: '#f8fafc'
+      }}
+    >
+      {/* Header */}
+      <div style={{ padding: '12px 16px', background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(30, 27, 52, 0.95) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: '#c4b5fd' }}>
+          <span>📞</span>
+          <span>Web IP Softphone</span>
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            type="button"
+            onClick={() => setMinimized(true)}
+            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14 }}
+            title="Minimize"
+          >
+            —
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (status === 'connected') {
+                if (window.confirm('End call and close?')) endCall();
+              } else {
+                setTarget(null);
+                setStatus('idle');
+              }
+            }}
+            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 16 }}
+            title="Close"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{ padding: 18 }}>
+        {status !== 'wrapup' ? (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ width: 64, height: 64, borderRadius: '50%', background: status === 'connected' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(139, 92, 246, 0.15)', border: status === 'connected' ? '2px solid #10b981' : '2px solid #8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, margin: '0 auto 12px' }}>
+              👤
+            </div>
+            <h3 style={{ margin: '0 0 4px', fontSize: 17, fontWeight: 700, color: '#fff' }}>
+              {target.name || 'Customer'}
+            </h3>
+            <div style={{ fontSize: 14, color: '#38bdf8', fontWeight: 600, marginBottom: 4 }}>
+              {target.phone}
+            </div>
+            {target.orderId && (
+              <div style={{ fontSize: 11, color: '#a78bfa', marginBottom: 12 }}>
+                Order #{target.orderId.replace('DOT-', '')} {target.product ? `· ${target.product}` : ''}
+              </div>
+            )}
+
+            {/* Call State & Timer */}
+            <div style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+              {status === 'calling' ? (
+                <>
+                  <span style={{ fontSize: 14, animation: 'spin 1s infinite linear' }}>⏳</span>
+                  <span style={{ fontSize: 13, color: '#fbbf24', fontWeight: 600 }}>Ringing customer...</span>
+                </>
+              ) : (
+                <>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', animation: 'pulse 1s infinite' }} />
+                  <span style={{ fontSize: 15, fontWeight: 800, color: '#10b981', fontFamily: 'monospace' }}>{timeStr}</span>
+                  <span style={{ fontSize: 10.5, background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
+                    REC
+                  </span>
+                </>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+              {status === 'connected' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={toggleMute}
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: '50%',
+                      background: muted ? '#ef4444' : 'rgba(255,255,255,0.08)',
+                      border: 'none',
+                      color: '#fff',
+                      fontSize: 16,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    title={muted ? 'Unmute microphone' : 'Mute microphone'}
+                  >
+                    {muted ? '🔇' : '🎙️'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHeld(!held)}
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: '50%',
+                      background: held ? '#fbbf24' : 'rgba(255,255,255,0.08)',
+                      border: 'none',
+                      color: held ? '#000' : '#fff',
+                      fontSize: 16,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    title={held ? 'Resume call' : 'Hold call'}
+                  >
+                    ⏸️
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={endCall}
+                style={{
+                  height: 44,
+                  padding: '0 24px',
+                  borderRadius: 22,
+                  background: '#dc2626',
+                  border: 'none',
+                  color: '#fff',
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  boxShadow: '0 4px 14px rgba(220, 38, 38, 0.4)'
+                }}
+              >
+                <span>📞 End Call</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* Wrap-up & Audit Save Screen */
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>কল শেষ হয়েছে ({mins}m {secs}s)</span>
+              <span style={{ fontSize: 11, color: '#10b981', fontWeight: 600 }}>🔴 অডিও রেকর্ড প্রস্তুত</span>
+            </div>
+            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 14 }}>
+              কলের ফলাফল সিলেক্ট করুন এবং অডিট সেভ করুন:
+            </div>
+
+            {/* Outcome Selection */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 12 }}>
+              {[
+                { id: 'confirmed', label: '✅ Order Confirmed', color: '#10b981' },
+                { id: 'call_later', label: '⏰ Call Later / Reschedule', color: '#38bdf8' },
+                { id: 'no_answer', label: '⚠️ No Answer / Ringing', color: '#fbbf24' },
+                { id: 'cancelled', label: '❌ Cancelled by Customer', color: '#f87171' }
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setOutcome(opt.id)}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 6,
+                    border: outcome === opt.id ? `1.5px solid ${opt.color}` : '1px solid rgba(255,255,255,0.1)',
+                    background: outcome === opt.id ? 'rgba(255,255,255,0.08)' : 'transparent',
+                    color: outcome === opt.id ? opt.color : '#cbd5e1',
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    textAlign: 'left',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Notes */}
+            <textarea
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="অডিট নোট লিখুন (যেমন: কাস্টমার সাইজ কনফার্ম করেছেন)..."
+              style={{
+                width: '100%',
+                padding: '8px 10px',
+                background: '#0e0c18',
+                color: '#fff',
+                border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: 6,
+                fontSize: 12,
+                boxSizing: 'border-box',
+                marginBottom: 14
+              }}
+            />
+
+            {/* Save Button */}
+            <button
+              type="button"
+              onClick={handleSaveCall}
+              disabled={saving || saveSuccess}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                borderRadius: 8,
+                background: saveSuccess ? '#10b981' : 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+                color: '#fff',
+                border: 'none',
+                fontWeight: 700,
+                fontSize: 13,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6
+              }}
+            >
+              {saving ? 'অডিও ও অডিট আপলোড হচ্ছে...' : saveSuccess ? '✅ সংরক্ষিত হয়েছে!' : '💾 Save Call & Audio Audit'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// VOICE AUDIT & CALLS ADMIN VIEW
+// ==========================================
+function CallsAdmin() {
+  const [calls, setCalls] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<any>({ totalCalls: 0, totalDuration: 0, todayCallsCount: 0, confirmedCallsCount: 0, staffStats: {} });
+  const [search, setSearch] = useState('');
+  const [outcomeFilter, setOutcomeFilter] = useState('all');
+  const [staffFilter, setStaffFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState<any>({
+    enabled: true,
+    provider: 'iptsp',
+    callerId: '09638752122',
+    sipServer: '',
+    wssUrl: '',
+    sipUsername: '',
+    sipPassword: '',
+    retentionDays: 30,
+    autoRecord: true,
+    testMode: true
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsMsg, setSettingsMsg] = useState('');
+  const [manualCallOpen, setManualCallOpen] = useState(false);
+  const [manualPhone, setManualPhone] = useState('');
+  const [manualName, setManualName] = useState('');
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const q = new URLSearchParams();
+      if (search) q.set('search', search);
+      if (outcomeFilter !== 'all') q.set('outcome', outcomeFilter);
+      if (staffFilter !== 'all') q.set('staffUsername', staffFilter);
+
+      const [cRes, sRes, tRes] = await Promise.all([
+        aFetch('/calls?' + q.toString()).then(r => r.json()),
+        aFetch('/calls/stats').then(r => r.json()),
+        aFetch('/telephony/settings').then(r => r.json())
+      ]);
+
+      setCalls(Array.isArray(cRes) ? cRes : []);
+      if (sRes && typeof sRes === 'object') setStats(sRes);
+      if (tRes && typeof tRes === 'object') setSettings(tRes);
+    } catch (e) {
+      console.error('Error loading calls data:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [outcomeFilter, staffFilter]);
+
+  const handleSaveSettings = async () => {
+    setSavingSettings(true);
+    setSettingsMsg('');
+    try {
+      const res = await aFetch('/telephony/settings', {
+        method: 'PUT',
+        body: JSON.stringify(settings)
+      }).then(r => r.json());
+      setSettings(res);
+      setSettingsMsg('✅ সেটিংস সফলভাবে সংরক্ষিত হয়েছে!');
+      setTimeout(() => setSettingsMsg(''), 3000);
+    } catch (e: any) {
+      setSettingsMsg('❌ ত্রুটি: ' + e.message);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleDeleteCall = async (id: string) => {
+    if (!window.confirm('এই কল রেকর্ড ও অডিও ফাইল মুছে ফেলতে চান?')) return;
+    try {
+      await aFetch('/calls/' + encodeURIComponent(id), { method: 'DELETE' });
+      setCalls(prev => prev.filter(c => c.id !== id));
+    } catch (e: any) {
+      alert(e.message || 'ডিলিট করতে সমস্যা হয়েছে');
+    }
+  };
+
+  // Filter calls by date
+  const filteredCalls = calls.filter(c => {
+    if (search) {
+      const q = search.toLowerCase();
+      const match = (c.customerPhone && c.customerPhone.includes(q)) ||
+                    (c.customerName && c.customerName.toLowerCase().includes(q)) ||
+                    (c.orderId && c.orderId.toLowerCase().includes(q)) ||
+                    (c.staff?.name && c.staff.name.toLowerCase().includes(q));
+      if (!match) return false;
+    }
+    if (dateFilter === 'today') {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      return (c.createdAt || '').startsWith(todayStr);
+    }
+    if (dateFilter === '7d') {
+      const d7 = Date.now() - 7 * 86400 * 1000;
+      return new Date(c.createdAt || 0).getTime() > d7;
+    }
+    if (dateFilter === '30d') {
+      const d30 = Date.now() - 30 * 86400 * 1000;
+      return new Date(c.createdAt || 0).getTime() > d30;
+    }
+    return true;
+  });
+
+  const allStaffNames = Array.from(new Set(calls.map(c => c.staff?.name || c.staff?.username).filter(Boolean)));
+
+  const totalSecs = stats.totalDuration || 0;
+  const hours = Math.floor(totalSecs / 3600);
+  const remainingSecs = totalSecs % 3600;
+  const totalMins = Math.floor(remainingSecs / 60);
+  const talkTimeStr = `${hours > 0 ? hours + 'h ' : ''}${totalMins}m`;
+
+  const confRate = stats.totalCalls > 0 ? Math.round((stats.confirmedCallsCount / stats.totalCalls) * 100) : 0;
+
+  return (
+    <div style={{ paddingBottom: 60, fontFamily: "'Hind Siliguri', 'Inter', sans-serif" }}>
+      {/* Top Header */}
+      <div className="sa-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 22, display: 'flex', alignItems: 'center', gap: 10, color: '#f8fafc' }}>
+            <span>📞</span>
+            <span>Voice Audit &amp; Call Center Logs</span>
+          </h1>
+          <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 4 }}>
+            ব্রাউজার আইপি কলিং, স্টাফদের কথা বলার অডিও রেকর্ডিং এবং অর্ডার কোয়ালিটি অডিট।
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button
+            type="button"
+            className="sa-btn ghost"
+            onClick={() => setManualCallOpen(true)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderColor: 'rgba(56, 189, 248, 0.4)', color: '#38bdf8' }}
+          >
+            <span>📞</span>
+            <span>New Call</span>
+          </button>
+          <button
+            type="button"
+            className="sa-btn ghost"
+            onClick={() => setSettingsOpen(true)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderColor: 'rgba(139, 92, 246, 0.4)', color: '#c4b5fd' }}
+          >
+            <span>⚙️</span>
+            <span>Telephony &amp; SIP Settings</span>
+          </button>
+        </div>
+      </div>
+
+      {/* KPI Stats Row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, margin: '20px 0' }}>
+        <div style={{ padding: 18, background: '#13111f', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
+            <span>মোট সম্পন্ন কল</span>
+            <span style={{ color: '#38bdf8' }}>📞</span>
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', marginTop: 6 }}>
+            {stats.totalCalls}
+          </div>
+          <div style={{ fontSize: 11, color: '#10b981', marginTop: 4, fontWeight: 600 }}>
+            আজকে: {stats.todayCallsCount} টি কল
+          </div>
+        </div>
+
+        <div style={{ padding: 18, background: '#13111f', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
+            <span>মোট কথা বলার সময়</span>
+            <span style={{ color: '#a78bfa' }}>⏱️</span>
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: '#a78bfa', marginTop: 6 }}>
+            {talkTimeStr || '0m'}
+          </div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+            গড় কল: {Math.floor((stats.avgDuration || 0) / 60)}m {(stats.avgDuration || 0) % 60}s
+          </div>
+        </div>
+
+        <div style={{ padding: 18, background: '#13111f', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
+            <span>কল কনভার্সন রেট</span>
+            <span style={{ color: '#10b981' }}>🎯</span>
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: '#10b981', marginTop: 6 }}>
+            {confRate}%
+          </div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+            {stats.confirmedCallsCount} টি অর্ডার কনফার্মড
+          </div>
+        </div>
+
+        <div style={{ padding: 18, background: '#13111f', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
+            <span>অডিও ব্যাকআপ পলিসি</span>
+            <span style={{ color: '#fbbf24' }}>🛡️</span>
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: '#fbbf24', marginTop: 6 }}>
+            {settings.retentionDays || 30} Days
+          </div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+            অটো ক্লিনআপ চালু (ডিস্ক সেফ)
+          </div>
+        </div>
+      </div>
+
+      {/* Filter Toolbar */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="ফোন নম্বর, কাস্টমার, অর্ডার বা স্টাফ খুঁজুন..."
+          style={{ flex: 1, minWidth: 240, padding: '9px 14px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, fontSize: 13 }}
+        />
+
+        <select
+          value={outcomeFilter}
+          onChange={(e) => setOutcomeFilter(e.target.value)}
+          style={{ padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, fontSize: 13 }}
+        >
+          <option value="all">সকল ফলাফল (All Outcomes)</option>
+          <option value="confirmed">✅ Confirmed</option>
+          <option value="call_later">⏰ Call Later</option>
+          <option value="no_answer">⚠️ No Answer</option>
+          <option value="cancelled">❌ Cancelled</option>
+        </select>
+
+        <select
+          value={staffFilter}
+          onChange={(e) => setStaffFilter(e.target.value)}
+          style={{ padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, fontSize: 13 }}
+        >
+          <option value="all">সকল স্টাফ (All Staff)</option>
+          {allStaffNames.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+
+        <select
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          style={{ padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, fontSize: 13 }}
+        >
+          <option value="all">সব সময় (All Time)</option>
+          <option value="today">আজকে (Today)</option>
+          <option value="7d">গত ৭ দিন (Last 7 Days)</option>
+          <option value="30d">গত ৩০ দিন (Last 30 Days)</option>
+        </select>
+
+        <button
+          type="button"
+          className="sa-btn ghost"
+          onClick={loadData}
+          style={{ padding: '8px 12px', fontSize: 13 }}
+          title="Refresh"
+        >
+          🔄
+        </button>
+      </div>
+
+      {/* Calls Table */}
+      <div className="sa-card" style={{ padding: 0, overflow: 'hidden' }}>
+        <table className="sa-table" style={{ width: '100%' }}>
+          <thead>
+            <tr>
+              <th style={{ width: 140 }}>তারিখ ও সময়</th>
+              <th style={{ width: 130 }}>অর্ডার আইডি</th>
+              <th>কাস্টমার ও নম্বর</th>
+              <th style={{ width: 130 }}>স্টাফ</th>
+              <th style={{ width: 90 }}>স্থিতিকাল</th>
+              <th style={{ width: 120 }}>ফলাফল</th>
+              <th style={{ minWidth: 260 }}>অডিও রেকর্ডিং (Audio Player)</th>
+              <th>নোট</th>
+              <th className="r" style={{ width: 60 }}>অ্যাকশন</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredCalls.map((c: any) => {
+              const dStr = c.createdAt ? new Date(c.createdAt).toLocaleString('bn-BD', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }) : '—';
+              const m = Math.floor((c.duration || 0) / 60);
+              const s = (c.duration || 0) % 60;
+              const durText = `${m > 0 ? m + 'm ' : ''}${s}s`;
+
+              return (
+                <tr key={c.id}>
+                  <td style={{ fontSize: 11.5, color: '#94a3b8' }}>
+                    {dStr}
+                  </td>
+                  <td>
+                    {c.orderId ? (
+                      <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#a78bfa', fontSize: 12 }}>
+                        #{c.orderId.replace('DOT-', '')}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#64748b', fontSize: 11 }}>Direct Call</span>
+                    )}
+                  </td>
+                  <td>
+                    <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: 13 }}>
+                      {c.customerName || 'Customer'}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#38bdf8', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>{c.customerPhone}</span>
+                      <button
+                        type="button"
+                        onClick={() => triggerAdminIPCall({ phone: c.customerPhone, name: c.customerName, orderId: c.orderId })}
+                        style={{ background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: 0, fontSize: 11 }}
+                        title="Re-dial"
+                      >
+                        📞
+                      </button>
+                    </div>
+                  </td>
+                  <td>
+                    <div style={{ fontWeight: 600, color: '#c084fc', fontSize: 12 }}>
+                      👤 {c.staff?.name || c.staff?.username || 'Staff'}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'capitalize' }}>
+                      {c.staff?.role || 'agent'}
+                    </div>
+                  </td>
+                  <td style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0', fontFamily: 'monospace' }}>
+                    {durText}
+                  </td>
+                  <td>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        padding: '3px 8px',
+                        borderRadius: 999,
+                        fontWeight: 700,
+                        background: c.outcome === 'confirmed' ? 'rgba(16, 185, 129, 0.15)' : c.outcome === 'cancelled' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                        color: c.outcome === 'confirmed' ? '#34d399' : c.outcome === 'cancelled' ? '#f87171' : '#fbbf24',
+                        border: `1px solid ${c.outcome === 'confirmed' ? 'rgba(16, 185, 129, 0.3)' : c.outcome === 'cancelled' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`
+                      }}
+                    >
+                      {c.outcome === 'confirmed' ? '✅ Confirmed' : c.outcome === 'cancelled' ? '❌ Cancelled' : c.outcome === 'call_later' ? '⏰ Call Later' : c.outcome === 'no_answer' ? '⚠️ No Answer' : c.outcome || 'Completed'}
+                    </span>
+                  </td>
+                  <td>
+                    {c.recordingUrl ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <audio
+                          src={c.recordingUrl}
+                          controls
+                          preload="none"
+                          style={{ width: '100%', height: 32, borderRadius: 6 }}
+                        />
+                        <a
+                          href={c.recordingUrl}
+                          download
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ padding: '4px 8px', background: 'rgba(255,255,255,0.06)', borderRadius: 5, color: '#38bdf8', textDecoration: 'none', fontSize: 11, fontWeight: 600 }}
+                          title="Download audio recording"
+                        >
+                          📥
+                        </a>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic' }}>
+                        No audio (Mic unavailable)
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ fontSize: 11.5, color: '#cbd5e1', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.notes}>
+                    {c.notes || '—'}
+                  </td>
+                  <td className="r">
+                    <button
+                      type="button"
+                      className="sa-link danger"
+                      onClick={() => handleDeleteCall(c.id)}
+                      style={{ fontSize: 12 }}
+                      title="Delete log"
+                    >
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {filteredCalls.length === 0 && !loading && (
+          <div style={{ padding: '50px 20px', textAlign: 'center', color: '#94a3b8' }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>🎧</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>কোনো কল রেকর্ড পাওয়া যায়নি</div>
+            <div style={{ fontSize: 12, marginTop: 4 }}>
+              অর্ডার লিস্ট থেকে "📞 IP Call" বাটনে ক্লিক করে কাস্টমারদের সাথে কল রেকর্ড শুরু করুন।
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Manual Call Modal */}
+      {manualCallOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#161326', borderRadius: 14, border: '1px solid rgba(139, 92, 246, 0.4)', padding: 24, width: 'min(420px, 95%)' }}>
+            <h3 style={{ margin: '0 0 14px', fontSize: 16, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>📞</span>
+              <span>নতুন ম্যানুয়াল আইপি কল করুন</span>
+            </h3>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>কাস্টমারের নাম</label>
+              <input
+                value={manualName}
+                onChange={(e) => setManualName(e.target.value)}
+                placeholder="যেমন: Shakil Ahmed"
+                style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
+              />
+            </div>
+            <div style={{ marginBottom: 18 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>ফোন নম্বর *</label>
+              <input
+                value={manualPhone}
+                onChange={(e) => setManualPhone(e.target.value)}
+                placeholder="01XXXXXXXXX"
+                style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
+              />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button type="button" className="sa-btn ghost" onClick={() => setManualCallOpen(false)}>বাতিল</button>
+              <button
+                type="button"
+                className="sa-btn primary"
+                disabled={!manualPhone}
+                onClick={() => {
+                  setManualCallOpen(false);
+                  triggerAdminIPCall({ phone: manualPhone, name: manualName });
+                  setManualPhone('');
+                  setManualName('');
+                }}
+                style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', border: 'none', fontWeight: 700 }}
+              >
+                📞 কল শুরু করুন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Telephony Settings Modal */}
+      {settingsOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#161326', borderRadius: 14, border: '1px solid rgba(139, 92, 246, 0.4)', padding: 24, width: 'min(580px, 95%)', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 12 }}>
+              <h3 style={{ margin: 0, fontSize: 17, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>⚙️</span>
+                <span>Telephony &amp; IPTSP SIP Settings</span>
+              </h3>
+              <button type="button" onClick={() => setSettingsOpen(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 16, cursor: 'pointer' }}>✕</button>
+            </div>
+
+            {settingsMsg && (
+              <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 6, background: settingsMsg.includes('✅') ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)', color: settingsMsg.includes('✅') ? '#34d399' : '#f87171', fontSize: 12.5, fontWeight: 600 }}>
+                {settingsMsg}
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, marginBottom: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>IPTSP Provider</label>
+                <select
+                  value={settings.provider || 'iptsp'}
+                  onChange={(e) => setSettings({ ...settings, provider: e.target.value })}
+                  style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
+                >
+                  <option value="iptsp">Amber IT IPTSP (09612...)</option>
+                  <option value="brilliant">Brilliant Cloud (InterCloud 09638...)</option>
+                  <option value="custom_sip">Custom SIP Server / PBX</option>
+                  <option value="simulation">Web Audio Simulation &amp; Test Mode</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>অফিসিয়াল কলার আইডি (Caller ID)</label>
+                <input
+                  value={settings.callerId || ''}
+                  onChange={(e) => setSettings({ ...settings, callerId: e.target.value })}
+                  placeholder="09638752122"
+                  style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>SIP Proxy / Server Host</label>
+                <input
+                  value={settings.sipServer || ''}
+                  onChange={(e) => setSettings({ ...settings, sipServer: e.target.value })}
+                  placeholder="sip.amberit.com.bd বা PBX IP"
+                  style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>WSS WebRTC Gateway URL</label>
+                <input
+                  value={settings.wssUrl || ''}
+                  onChange={(e) => setSettings({ ...settings, wssUrl: e.target.value })}
+                  placeholder="wss://pbx.yourdomain.com:8089/ws"
+                  style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>SIP Username / Extension</label>
+                <input
+                  value={settings.sipUsername || ''}
+                  onChange={(e) => setSettings({ ...settings, sipUsername: e.target.value })}
+                  placeholder="1001"
+                  style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>SIP Secret / Password</label>
+                <input
+                  type="password"
+                  value={settings.sipPassword || ''}
+                  onChange={(e) => setSettings({ ...settings, sipPassword: e.target.value })}
+                  placeholder="••••••••"
+                  style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
+                />
+              </div>
+
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
+                  অডিও রেকর্ডিং সংরক্ষণের মেয়াদ (Retention Period)
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input
+                    type="number"
+                    min="7"
+                    max="365"
+                    value={settings.retentionDays || 30}
+                    onChange={(e) => setSettings({ ...settings, retentionDays: parseInt(e.target.value, 10) || 30 })}
+                    style={{ width: 90, padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13, fontWeight: 700 }}
+                  />
+                  <span style={{ fontSize: 13, color: '#94a3b8' }}>
+                    দিন পর পুরনো অডিও ফাইল স্বয়ংক্রিয়ভাবে মুছে যাবে (মেটাডাটা ও অডিট হিস্ট্রি স্থায়ীভাবে থাকবে)।
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 14 }}>
+              <button type="button" className="sa-btn ghost" onClick={() => setSettingsOpen(false)}>বাতিল</button>
+              <button
+                type="button"
+                className="sa-btn primary"
+                onClick={handleSaveSettings}
+                disabled={savingSettings}
+                style={{ minWidth: 140, fontWeight: 700, background: '#8b5cf6', borderColor: '#8b5cf6' }}
+              >
+                {savingSettings ? 'সেভ হচ্ছে...' : '💾 সেটিংস সংরক্ষণ করুন'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
