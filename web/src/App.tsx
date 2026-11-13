@@ -930,6 +930,7 @@ function SmartWhatsAppChat() {
   const [callState, setCallState] = useState<'form' | 'connecting' | 'ringing' | 'connected' | 'error'>('form');
   const [callerName, setCallerName] = useState('');
   const [callerPhone, setCallerPhone] = useState('');
+  const [callDept, setCallDept] = useState<'Order' | 'Tracking' | 'Advice'>('Order');
   const [callSecs, setCallSecs] = useState(0);
   const [callMuted, setCallMuted] = useState(false);
   const [callErr, setCallErr] = useState('');
@@ -971,7 +972,7 @@ function SmartWhatsAppChat() {
       const socket = new JsSIP.WebSocketInterface('wss://timingboost.xyz/ws');
       const safeName = callerName.trim().replace(/["\r\n()]/g, '') || 'Visitor';
       const safePhone = callerPhone.trim().replace(/["\r\n()]/g, '');
-      const displayLabel = safePhone ? `${safeName} (${safePhone})` : safeName;
+      const displayLabel = safePhone ? `${safeName} [${callDept}] (${safePhone})` : `${safeName} [${callDept}]`;
 
       const ua = new JsSIP.UA({
         sockets: [socket],
@@ -1185,6 +1186,31 @@ function SmartWhatsAppChat() {
                         {callErr}
                       </div>
                     )}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 4 }}>
+                      {[
+                        { id: 'Order', label: isBn ? '🛍️ অর্ডার' : '🛍️ Order' },
+                        { id: 'Tracking', label: isBn ? '📦 ট্র্যাকিং' : '📦 Track' },
+                        { id: 'Advice', label: isBn ? '✨ পরামর্শ' : '✨ Advice' }
+                      ].map((d) => (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => setCallDept(d.id as any)}
+                          style={{
+                            padding: '6px 4px',
+                            borderRadius: 8,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            border: callDept === d.id ? '1.5px solid #10b981' : '1px solid rgba(255,255,255,0.12)',
+                            background: callDept === d.id ? 'rgba(16, 185, 129, 0.18)' : 'rgba(255,255,255,0.04)',
+                            color: callDept === d.id ? '#34d399' : '#cbd5e1'
+                          }}
+                        >
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
                     <input
                       type="text"
                       placeholder={isBn ? 'আপনার নাম (ঐচ্ছিক)' : 'Your Name (optional)'}
