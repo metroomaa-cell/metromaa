@@ -983,7 +983,10 @@ function SmartWhatsAppChat() {
       });
       uaRef.current = ua;
 
+      let hasDialed = false;
       ua.on('registered', () => {
+        if (hasDialed) return;
+        hasDialed = true;
         setCallState('ringing');
         fetch('/api/calls/visitor-ring', {
           method: 'POST',
@@ -997,6 +1000,10 @@ function SmartWhatsAppChat() {
             confirmed: () => setCallState('connected'),
             ended: () => stopLiveCall(),
             failed: () => {
+              if (uaRef.current) {
+                try { uaRef.current.stop(); } catch (_) {}
+                uaRef.current = null;
+              }
               fetch('/api/calls/visitor-missed', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
