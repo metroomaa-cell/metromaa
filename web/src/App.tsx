@@ -27,9 +27,8 @@ function resolveBrandName(storeName?: string | null) {
 }
 
 function resolveBrandLogo(logo?: string | null) {
-  const def = getSiteBrandDefaults();
   if (logo && !logo.includes('img_mvsqgtsqxzgig') && !logo.includes('img_mvddqd311xu5c')) return logo;
-  return def.logo;
+  return '';
 }
 
 function StoreLoading({ admin = false }: { admin?: boolean }) {
@@ -340,9 +339,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
                   alt={storeName}
                   onError={() => setLogo('')}
                 />
-              ) : (
-                <span>{storeName}</span>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -700,9 +697,7 @@ function Footer() {
                   alt={name}
                   style={{ maxHeight: 46, width: 'auto', objectFit: 'contain', display: 'block' }}
                 />
-              ) : (
-                <span>{name}</span>
-              )}
+              ) : null}
             </div>
             <p className="tabaya-footer-desc">
               {tr(isSkin
