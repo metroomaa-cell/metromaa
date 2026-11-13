@@ -1370,75 +1370,103 @@ function SmartWhatsAppChat() {
         </div>
       )}
 
-      {/* Floating Trigger Buttons */}
-      <div className="secrate-wa-trigger-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
-        {!open && (
+      {/* Compact Mobile-Friendly Floating Action Dock */}
+      <div className="secrate-wa-trigger-container">
+        {open ? (
           <button
-            id="secrate-free-call-btn"
+            id="secrate-wa-toggle-btn"
             type="button"
+            className="secrate-wa-fab open"
             onClick={() => {
-              setOpen(true);
-              setCallMode(true);
-              setCallState('form');
-              setCallErr('');
+              setOpen(false);
               setShowTooltip(false);
             }}
+            aria-label="Close Concierge"
+            title="Close"
+          >
+            <span className="secrate-wa-fab-close">✕</span>
+          </button>
+        ) : (
+          <div
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 8,
-              padding: '9px 15px',
+              height: 44,
+              padding: '4px',
               borderRadius: 999,
-              border: '1px solid rgba(52, 211, 153, 0.5)',
-              background: 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
-              color: '#ffffff',
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: 'pointer',
-              boxShadow: '0 8px 24px rgba(5, 150, 105, 0.38)',
-              whiteSpace: 'nowrap'
+              background: 'rgba(13, 18, 30, 0.92)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(52, 211, 153, 0.38)',
+              boxShadow: '0 10px 28px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(255, 255, 255, 0.05) inset',
+              gap: 2
             }}
-            title={isBn ? 'কোনো টাকা ছাড়াই ব্রাউজার থেকে সরাসরি কথা বলুন' : 'Call support directly from your browser for free'}
           >
-            <span style={{ fontSize: 15 }}>📞</span>
-            <span>{isBn ? 'ফ্রি কল করুন' : 'Free Live Call'}</span>
-            <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 999, background: 'rgba(255,255,255,0.2)', fontWeight: 800 }}>
-              {isBn ? 'ফ্রি' : 'FREE'}
-            </span>
-          </button>
-        )}
-        {showTooltip && !open && (
-          <div className="secrate-wa-tooltip" onClick={() => { setOpen(true); setShowTooltip(false); }}>
-            <span>{isBn ? 'সাহায্য প্রয়োজন? চ্যাট করুন 💬' : 'Need help? Chat with us 💬'}</span>
             <button
+              id="secrate-free-call-btn"
               type="button"
-              className="secrate-wa-tooltip-close"
-              onClick={(e) => { e.stopPropagation(); setShowTooltip(false); }}
+              onClick={() => {
+                setOpen(true);
+                setCallMode(true);
+                setCallState('form');
+                setCallErr('');
+                setShowTooltip(false);
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                height: 36,
+                padding: '0 12px',
+                borderRadius: 999,
+                border: 'none',
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: '#ffffff',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                letterSpacing: '0.01em',
+                boxShadow: '0 2px 10px rgba(16, 185, 129, 0.35)'
+              }}
+              title={isBn ? 'কোনো টাকা ছাড়াই ব্রাউজার থেকে সরাসরি কথা বলুন' : 'Free Live Voice Call'}
             >
-              ×
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+              </svg>
+              <span>{isBn ? 'ফ্রি কল' : 'Free Call'}</span>
+            </button>
+            <button
+              id="secrate-wa-toggle-btn"
+              type="button"
+              onClick={() => {
+                setCallMode(false);
+                setOpen(true);
+                setShowTooltip(false);
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                height: 36,
+                padding: '0 11px 0 9px',
+                borderRadius: 999,
+                border: 'none',
+                background: 'transparent',
+                color: '#f8fafc',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+              aria-label="Toggle WhatsApp Smart Chat"
+              title="WhatsApp Concierge"
+            >
+              <WhatsAppIcon size={20} variant="official" />
+              <span>{isBn ? 'চ্যাট' : 'Chat'}</span>
             </button>
           </div>
         )}
-        <button
-          id="secrate-wa-toggle-btn"
-          type="button"
-          className={`secrate-wa-fab ${open ? 'open' : ''}`}
-          onClick={() => {
-            setOpen((v) => !v);
-            setShowTooltip(false);
-          }}
-          aria-label="Toggle WhatsApp Smart Chat"
-          title="WhatsApp Concierge"
-        >
-          {open ? (
-            <span className="secrate-wa-fab-close">✕</span>
-          ) : (
-            <>
-              <WhatsAppIcon size={34} variant="official" />
-              <span className="secrate-wa-fab-badge" />
-            </>
-          )}
-        </button>
       </div>
     </div>
   );
