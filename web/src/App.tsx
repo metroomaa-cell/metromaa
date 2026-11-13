@@ -12,8 +12,29 @@ import { getTrafficAttribution } from './attribution';
 const Admin = lazy(() => import('./admin').then((m) => ({ default: m.Admin })));
 const LoveLockLanding = lazy(() => import('./LoveLockLanding').then((m) => ({ default: m.LoveLockLanding })));
 
+function getSiteBrandDefaults() {
+  const h = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
+  if (h.includes('secrate')) return { name: 'SECRATE', logo: '/uploads/logo_secrate_rich.webp', isMetrroma: false };
+  if (h.includes('metrroma') || h.includes('metromaa')) return { name: 'METRROMA', logo: '/uploads/logo_secrate_rich.webp', isMetrroma: true };
+  return { name: 'TimeBoost', logo: '/uploads/logo_timeboost.svg', isMetrroma: false };
+}
+
+function resolveBrandName(storeName?: string | null) {
+  const def = getSiteBrandDefaults();
+  if (!storeName || storeName === 'dot.') return def.name;
+  if (storeName === 'METRROMA' && !def.isMetrroma) return def.name;
+  return storeName;
+}
+
+function resolveBrandLogo(logo?: string | null) {
+  const def = getSiteBrandDefaults();
+  if (logo && !logo.includes('img_mvsqgtsqxzgig') && !logo.includes('img_mvddqd311xu5c')) return logo;
+  return def.logo;
+}
+
 function StoreLoading({ admin = false }: { admin?: boolean }) {
-  const brand = admin ? 'TimeBoost ADMIN' : 'TimeBoost';
+  const baseBrand = getSiteBrandDefaults().name;
+  const brand = admin ? `${baseBrand} ADMIN` : baseBrand;
   return (
     <div className="store-loading" role="status" aria-live="polite">
       <div className="store-loading-card">
@@ -80,7 +101,7 @@ function Effects() {
   useEffect(() => {
     let active = true;
     const isSkin = isSkincareSite();
-    const defaultBrand = 'TimeBoost';
+    const defaultBrand = getSiteBrandDefaults().name;
 
     const setMetaName = (name: string, val: string) => {
       let m = document.head.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
@@ -116,7 +137,7 @@ function Effects() {
     }
 
     getSettings().then((s) => {
-      const brand = s.storeName && s.storeName !== 'dot.' && s.storeName !== 'METRROMA' ? s.storeName : 'TimeBoost';
+      const brand = resolveBrandName(s.storeName);
       const t: any = isSkin
         ? {
             home: `${brand} — For your personal world.`,
@@ -165,7 +186,7 @@ function Effects() {
       if (route.name === 'shop' && route.param) {
         if (active) document.title = `${isSkin ? 'Shop Skincare' : 'Collection'} — ${defaultBrand}`;
       } else if (route.name !== 'product') {
-        document.title = 'TimeBoost — For your personal world.';
+        document.title = `${defaultBrand} — For your personal world.`;
       }
     });
 
@@ -253,8 +274,8 @@ function Header({ onSearch }: { onSearch: () => void }) {
   const { customer, openAuth } = useCustomer();
   const [menu, setMenu] = useState(false);
   const isSkin = isSkincareSite();
-  const [storeName, setStoreName] = useState(() => { const n = getCachedSettings()?.storeName; return n && n !== 'dot.' ? n : 'TimeBoost'; });
-  const [logo, setLogo] = useState(() => getCachedSettings()?.logo || '/uploads/logo_timeboost.svg');
+  const [storeName, setStoreName] = useState(() => resolveBrandName(getCachedSettings()?.storeName));
+  const [logo, setLogo] = useState(() => resolveBrandLogo(getCachedSettings()?.logo));
   const [cats, setCats] = useState<{ slug: string; name: string; parentSlug?: string }[]>(() => getCachedCategories());
   const [expandedMobileCat, setExpandedMobileCat] = useState<string | null>(null);
   const [hoveredMainCat, setHoveredMainCat] = useState<string | null>(null);
@@ -263,12 +284,8 @@ function Header({ onSearch }: { onSearch: () => void }) {
 
   useEffect(() => {
     getSettings().then((s) => {
-      if (s.storeName && s.storeName !== 'dot.' && s.storeName !== 'METRROMA') setStoreName(s.storeName);
-      else if (s.storeName === 'dot.' && isSkin) setStoreName('TimeBoost');
-      const activeLogo = (s.logo && !s.logo.includes('img_mvsqgtsqxzgig') && !s.logo.includes('img_mvddqd311xu5c'))
-        ? s.logo
-        : '/uploads/logo_timeboost.svg';
-      setLogo(activeLogo);
+      setStoreName(resolveBrandName(s.storeName));
+      setLogo(resolveBrandLogo(s.logo));
     }).catch(() => {});
     getCategories().then((cs) => {
       if (Array.isArray(cs)) setCats(cs);
@@ -320,11 +337,11 @@ function Header({ onSearch }: { onSearch: () => void }) {
                 <img
                   className="tabaya-header-logo-img"
                   src={logo}
-                  alt={storeName || 'TimeBoost'}
+                  alt={storeName}
                   onError={() => setLogo('')}
                 />
               ) : (
-                <span>{storeName && storeName !== 'dot.' && storeName !== 'METRROMA' ? storeName : 'TimeBoost'}</span>
+                <span>{storeName}</span>
               )}
             </div>
           </div>
@@ -657,19 +674,15 @@ function Footer() {
   const [phone, setPhone] = useState('+880 1878-374762');
   const [whatsapp, setWhatsapp] = useState('');
   const isSkin = isSkincareSite();
-  const [name, setName] = useState('TimeBoost');
-  const [logo, setLogo] = useState('');
+  const [name, setName] = useState(() => resolveBrandName(getCachedSettings()?.storeName));
+  const [logo, setLogo] = useState(() => resolveBrandLogo(getCachedSettings()?.logo));
   const [cats, setCats] = useState<{ slug: string; name: string; adult?: boolean }[]>([]);
   useEffect(() => {
     getSettings().then((s) => {
       if (s.phone) setPhone(s.phone);
       if (s.whatsapp) setWhatsapp(s.whatsapp);
-      if (s.storeName && s.storeName !== 'dot.' && s.storeName !== 'METRROMA') setName(s.storeName);
-      else if (s.storeName === 'dot.' && isSkin) setName('TimeBoost');
-      const activeLogo = (s.logo && !s.logo.includes('img_mvsqgtsqxzgig') && !s.logo.includes('img_mvddqd311xu5c'))
-        ? s.logo
-        : '/uploads/logo_timeboost.svg';
-      if (activeLogo) setLogo(activeLogo);
+      setName(resolveBrandName(s.storeName));
+      setLogo(resolveBrandLogo(s.logo));
     }).catch(() => {});
     getCategories().then((cs) => {
       if (Array.isArray(cs)) setCats(cs);
@@ -684,11 +697,11 @@ function Footer() {
               {logo ? (
                 <img
                   src={logo}
-                  alt={name || 'TimeBoost'}
+                  alt={name}
                   style={{ maxHeight: 46, width: 'auto', objectFit: 'contain', display: 'block' }}
                 />
               ) : (
-                <span>{name && name !== 'dot.' && name !== 'METRROMA' ? name : 'TimeBoost'}</span>
+                <span>{name}</span>
               )}
             </div>
             <p className="tabaya-footer-desc">
@@ -1053,7 +1066,7 @@ function SmartWhatsAppChat() {
     getSettings().then((s) => {
       const wa = s.whatsapp || s.phone || '';
       setNum(wa);
-      if (s.storeName && s.storeName !== 'dot.' && s.storeName !== 'METRROMA') setBrand(s.storeName);
+      setBrand(resolveBrandName(s.storeName));
     }).catch(() => {});
   }, []);
 
