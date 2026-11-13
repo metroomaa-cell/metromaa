@@ -933,6 +933,7 @@ function SmartWhatsAppChat() {
   const [callDept, setCallDept] = useState<'Order' | 'Tracking' | 'Advice'>('Order');
   const [callSecs, setCallSecs] = useState(0);
   const [callMuted, setCallMuted] = useState(false);
+  const [showKeypad, setShowKeypad] = useState(false);
   const [callErr, setCallErr] = useState('');
   const uaRef = useRef<any>(null);
   const sessionRef = useRef<any>(null);
@@ -1158,19 +1159,20 @@ function SmartWhatsAppChat() {
 
           {/* Body */}
           <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
-          <div className="secrate-wa-body">
+          <div className="secrate-wa-body" style={callMode ? { padding: 0, background: 'linear-gradient(165deg, #0b1322 0%, #101b2e 100%)' } : undefined}>
             {callMode ? (
-              <div style={{ padding: '12px 6px', textAlign: 'center' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ padding: '16px 16px 18px', textAlign: 'center', color: '#f8fafc' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                   <button
                     type="button"
-                    onClick={() => { stopLiveCall(); setCallMode(false); }}
-                    style={{ background: 'rgba(255,255,255,0.08)', border: 'none', color: '#cbd5e1', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}
+                    onClick={() => { stopLiveCall(); setCallMode(false); setShowKeypad(false); }}
+                    style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: '#e2e8f0', borderRadius: 999, padding: '5px 12px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}
                   >
                     ← {isBn ? 'ফিরে যান' : 'Back'}
                   </button>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: '#34d399', background: 'rgba(16,185,129,0.15)', padding: '3px 10px', borderRadius: 999 }}>
-                    📞 {isBn ? 'ফ্রি লাইভ কল' : 'Free Live Call'}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: '#34d399', background: 'rgba(16,185,129,0.14)', border: '1px solid rgba(16,185,129,0.32)', padding: '4px 10px', borderRadius: 999 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
+                    {isBn ? 'HD ফ্রি কল · ০৳' : 'HD FREE CALL'}
                   </span>
                 </div>
 
@@ -1178,15 +1180,15 @@ function SmartWhatsAppChat() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left' }}>
                     <div style={{ fontSize: 12.5, color: '#cbd5e1', lineHeight: 1.5 }}>
                       {isBn
-                        ? 'কোনো সিম বা টাকা ছাড়াই ব্রাউজার থেকে সরাসরি আমাদের প্রতিনিধির সাথে কথা বলুন:'
+                        ? 'কোনো ব্যালেন্স ছাড়াই সরাসরি ব্রাউজার থেকে আমাদের প্রতিনিধির সাথে কথা বলুন:'
                         : 'Speak directly with our support agent right from your browser for free:'}
                     </div>
                     {callErr && (
-                      <div style={{ padding: '8px 10px', borderRadius: 6, background: 'rgba(239,68,68,0.15)', color: '#fca5a5', fontSize: 12 }}>
+                      <div style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(239,68,68,0.16)', border: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5', fontSize: 12 }}>
                         {callErr}
                       </div>
                     )}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 4 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
                       {[
                         { id: 'Order', label: isBn ? '🛍️ অর্ডার' : '🛍️ Order' },
                         { id: 'Tracking', label: isBn ? '📦 ট্র্যাকিং' : '📦 Track' },
@@ -1197,14 +1199,14 @@ function SmartWhatsAppChat() {
                           type="button"
                           onClick={() => setCallDept(d.id as any)}
                           style={{
-                            padding: '6px 4px',
-                            borderRadius: 8,
-                            fontSize: 11,
+                            padding: '8px 4px',
+                            borderRadius: 10,
+                            fontSize: 11.5,
                             fontWeight: 700,
                             cursor: 'pointer',
                             border: callDept === d.id ? '1.5px solid #10b981' : '1px solid rgba(255,255,255,0.12)',
-                            background: callDept === d.id ? 'rgba(16, 185, 129, 0.18)' : 'rgba(255,255,255,0.04)',
-                            color: callDept === d.id ? '#34d399' : '#cbd5e1'
+                            background: callDept === d.id ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)',
+                            color: callDept === d.id ? '#34d399' : '#e2e8f0'
                           }}
                         >
                           {d.label}
@@ -1216,73 +1218,143 @@ function SmartWhatsAppChat() {
                       placeholder={isBn ? 'আপনার নাম (ঐচ্ছিক)' : 'Your Name (optional)'}
                       value={callerName}
                       onChange={(e) => setCallerName(e.target.value)}
-                      className="secrate-wa-input"
-                      style={{ width: '100%', boxSizing: 'border-box' }}
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '10px 13px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        background: 'rgba(255,255,255,0.06)',
+                        color: '#ffffff',
+                        fontSize: 13,
+                        outline: 'none'
+                      }}
                     />
                     <input
                       type="tel"
                       placeholder={isBn ? 'মোবাইল নম্বর (ঐচ্ছিক)' : 'Phone Number (optional)'}
                       value={callerPhone}
                       onChange={(e) => setCallerPhone(e.target.value)}
-                      className="secrate-wa-input"
-                      style={{ width: '100%', boxSizing: 'border-box' }}
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '10px 13px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        background: 'rgba(255,255,255,0.06)',
+                        color: '#ffffff',
+                        fontSize: 13,
+                        outline: 'none'
+                      }}
                     />
                     <button
                       type="button"
                       onClick={startLiveCall}
                       style={{
                         width: '100%',
-                        padding: '11px 14px',
-                        borderRadius: 10,
+                        padding: '12px 16px',
+                        borderRadius: 12,
                         border: 'none',
                         background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                         color: '#fff',
                         fontWeight: 700,
                         fontSize: 13.5,
                         cursor: 'pointer',
-                        marginTop: 4
+                        marginTop: 4,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        boxShadow: '0 8px 22px rgba(16, 185, 129, 0.35)'
                       }}
                     >
-                      📞 {isBn ? 'এখনই ফ্রি কল করুন' : 'Start Free Call Now'}
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                      </svg>
+                      <span>{isBn ? 'এখনই ফ্রি কল করুন' : 'Start Free Call Now'}</span>
                     </button>
                   </div>
                 ) : (
-                  <div style={{ padding: '16px 8px' }}>
-                    <div style={{ width: 58, height: 58, borderRadius: '50%', background: 'rgba(16,185,129,0.18)', border: '2px solid #10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, margin: '0 auto 10px' }}>
-                      🎧
+                  <div style={{ padding: '10px 4px 6px' }}>
+                    <div style={{ width: 68, height: 68, borderRadius: '50%', background: 'radial-gradient(circle, rgba(16,185,129,0.28) 0%, rgba(16,185,129,0.08) 100%)', border: '2px solid #10b981', boxShadow: '0 0 24px rgba(16,185,129,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', color: '#34d399' }}>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+                        <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+                      </svg>
                     </div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 4 }}>
+                    <div style={{ fontSize: 15.5, fontWeight: 700, color: '#ffffff', marginBottom: 4 }}>
                       {brand} Support
                     </div>
-                    <div style={{ fontSize: 13, color: callState === 'connected' ? '#34d399' : '#fbbf24', fontWeight: 600, marginBottom: 16 }}>
+                    <div style={{ fontSize: 11.5, color: '#94a3b8', marginBottom: 6 }}>
+                      {callDept} Desk
+                    </div>
+                    <div style={{ fontSize: 14, color: callState === 'connected' ? '#34d399' : '#fbbf24', fontWeight: 700, fontFamily: 'monospace', marginBottom: 16 }}>
                       {callState === 'connecting'
                         ? (isBn ? 'সংযোগ করা হচ্ছে...' : 'Connecting...')
                         : callState === 'ringing'
                         ? (isBn ? 'প্রতিনিধিকে রিং হচ্ছে...' : 'Ringing agent...')
                         : `${String(Math.floor(callSecs / 60)).padStart(2, '0')}:${String(callSecs % 60).padStart(2, '0')}`}
                     </div>
+
+                    {callState === 'connected' && showKeypad && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, maxWidth: 210, margin: '0 auto 14px' }}>
+                        {['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'].map((d) => (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => {
+                              try { sessionRef.current?.sendDTMF(d); } catch (_) {}
+                            }}
+                            style={{
+                              height: 38,
+                              borderRadius: 10,
+                              border: '1px solid rgba(255,255,255,0.12)',
+                              background: 'rgba(255,255,255,0.06)',
+                              color: '#f8fafc',
+                              fontSize: 15,
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {d}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     <div style={{ display: 'flex', justifyContent: 'center', gap: 10 }}>
                       {callState === 'connected' && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (sessionRef.current) {
-                              if (callMuted) sessionRef.current.unmute({ audio: true });
-                              else sessionRef.current.mute({ audio: true });
-                            }
-                            setCallMuted(!callMuted);
-                          }}
-                          style={{ padding: '8px 14px', borderRadius: 20, border: 'none', background: callMuted ? '#ef4444' : 'rgba(255,255,255,0.12)', color: '#fff', cursor: 'pointer', fontSize: 13 }}
-                        >
-                          {callMuted ? '🔇 Muted' : '🎙️ Mute'}
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (sessionRef.current) {
+                                if (callMuted) sessionRef.current.unmute({ audio: true });
+                                else sessionRef.current.mute({ audio: true });
+                              }
+                              setCallMuted(!callMuted);
+                            }}
+                            style={{ width: 42, height: 42, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.15)', background: callMuted ? '#ef4444' : 'rgba(255,255,255,0.09)', color: '#fff', cursor: 'pointer', fontSize: 16 }}
+                            title={callMuted ? 'Unmute' : 'Mute'}
+                          >
+                            {callMuted ? '🔇' : '🎙️'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowKeypad((v) => !v)}
+                            style={{ width: 42, height: 42, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.15)', background: showKeypad ? '#6366f1' : 'rgba(255,255,255,0.09)', color: '#fff', cursor: 'pointer', fontSize: 15 }}
+                            title="Keypad"
+                          >
+                            ⌨️
+                          </button>
+                        </>
                       )}
                       <button
                         type="button"
-                        onClick={stopLiveCall}
-                        style={{ padding: '8px 18px', borderRadius: 20, border: 'none', background: '#dc2626', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}
+                        onClick={() => { stopLiveCall(); setShowKeypad(false); }}
+                        style={{ height: 42, padding: '0 20px', borderRadius: 21, border: 'none', background: '#dc2626', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13, boxShadow: '0 4px 14px rgba(220,38,38,0.4)' }}
                       >
-                        📞 {isBn ? 'কল কাটুন' : 'End Call'}
+                        {isBn ? 'কল কাটুন' : 'End Call'}
                       </button>
                     </div>
                   </div>
@@ -1309,14 +1381,14 @@ function SmartWhatsAppChat() {
                   <button
                     type="button"
                     className="secrate-wa-quick-btn"
-                    style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(5, 150, 105, 0.22) 100%)', borderColor: 'rgba(16, 185, 129, 0.45)' }}
+                    style={{ background: 'rgba(16, 185, 129, 0.12)', borderColor: 'rgba(16, 185, 129, 0.45)' }}
                     onClick={() => { setCallMode(true); setCallState('form'); setCallErr(''); }}
                   >
                     <span className="secrate-wa-quick-icon">📞</span>
-                    <span className="secrate-wa-quick-text" style={{ color: '#34d399', fontWeight: 700 }}>
+                    <span className="secrate-wa-quick-text" style={{ color: '#065f46', fontWeight: 700 }}>
                       {isBn ? 'ফ্রি লাইভ ভয়েস কল (সরাসরি কথা বলুন)' : 'Free Live Voice Call (Talk Now)'}
                     </span>
-                    <span className="secrate-wa-quick-arrow" style={{ color: '#34d399' }}>›</span>
+                    <span className="secrate-wa-quick-arrow" style={{ color: '#059669' }}>›</span>
                   </button>
                   {quickOptions.map((opt) => (
                     <button
@@ -1338,8 +1410,9 @@ function SmartWhatsAppChat() {
             )}
           </div>
 
-          {/* Footer Input Area */}
-          <div className="secrate-wa-footer">
+          {/* Footer Input Area (hidden during Call Pad mode) */}
+          {!callMode && (
+            <div className="secrate-wa-footer">
             <div className="secrate-wa-input-row">
               <input
                 type="text"
@@ -1366,7 +1439,8 @@ function SmartWhatsAppChat() {
             <div className="secrate-wa-trust">
               <span>🔒 {isBn ? 'শতভাগ গোপনীয় ও সুরক্ষিত চ্যাট' : '100% Confidential & Secure Chat'}</span>
             </div>
-          </div>
+            </div>
+          )}
         </div>
       )}
 
