@@ -13,7 +13,7 @@ const Admin = lazy(() => import('./admin').then((m) => ({ default: m.Admin })));
 const LoveLockLanding = lazy(() => import('./LoveLockLanding').then((m) => ({ default: m.LoveLockLanding })));
 
 function StoreLoading({ admin = false }: { admin?: boolean }) {
-  const brand = admin ? 'SECRATE ADMIN' : 'SECRATE';
+  const brand = admin ? 'TimeBoost ADMIN' : 'TimeBoost';
   return (
     <div className="store-loading" role="status" aria-live="polite">
       <div className="store-loading-card">
@@ -80,7 +80,7 @@ function Effects() {
   useEffect(() => {
     let active = true;
     const isSkin = isSkincareSite();
-    const defaultBrand = 'SECRATE';
+    const defaultBrand = 'TimeBoost';
 
     const setMetaName = (name: string, val: string) => {
       let m = document.head.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
@@ -116,7 +116,7 @@ function Effects() {
     }
 
     getSettings().then((s) => {
-      const brand = s.storeName && s.storeName !== 'dot.' && s.storeName !== 'METRROMA' ? s.storeName : 'SECRATE';
+      const brand = s.storeName && s.storeName !== 'dot.' && s.storeName !== 'METRROMA' ? s.storeName : 'TimeBoost';
       const t: any = isSkin
         ? {
             home: `${brand} — For your personal world.`,
@@ -165,7 +165,7 @@ function Effects() {
       if (route.name === 'shop' && route.param) {
         if (active) document.title = `${isSkin ? 'Shop Skincare' : 'Collection'} — ${defaultBrand}`;
       } else if (route.name !== 'product') {
-        document.title = 'SECRATE — For your personal world.';
+        document.title = 'TimeBoost — For your personal world.';
       }
     });
 
@@ -253,8 +253,8 @@ function Header({ onSearch }: { onSearch: () => void }) {
   const { customer, openAuth } = useCustomer();
   const [menu, setMenu] = useState(false);
   const isSkin = isSkincareSite();
-  const [storeName, setStoreName] = useState(() => { const n = getCachedSettings()?.storeName; return n && n !== 'dot.' ? n : 'SECRATE'; });
-  const [logo, setLogo] = useState(() => getCachedSettings()?.logo || '/uploads/logo_secrate_rich.webp');
+  const [storeName, setStoreName] = useState(() => { const n = getCachedSettings()?.storeName; return n && n !== 'dot.' ? n : 'TimeBoost'; });
+  const [logo, setLogo] = useState(() => getCachedSettings()?.logo || '/uploads/logo_timeboost.svg');
   const [cats, setCats] = useState<{ slug: string; name: string; parentSlug?: string }[]>(() => getCachedCategories());
   const [expandedMobileCat, setExpandedMobileCat] = useState<string | null>(null);
   const [hoveredMainCat, setHoveredMainCat] = useState<string | null>(null);
@@ -264,10 +264,10 @@ function Header({ onSearch }: { onSearch: () => void }) {
   useEffect(() => {
     getSettings().then((s) => {
       if (s.storeName && s.storeName !== 'dot.' && s.storeName !== 'METRROMA') setStoreName(s.storeName);
-      else if (s.storeName === 'dot.' && isSkin) setStoreName('SECRATE');
+      else if (s.storeName === 'dot.' && isSkin) setStoreName('TimeBoost');
       const activeLogo = (s.logo && !s.logo.includes('img_mvsqgtsqxzgig') && !s.logo.includes('img_mvddqd311xu5c'))
         ? s.logo
-        : '/uploads/logo_secrate_rich.webp';
+        : '/uploads/logo_timeboost.svg';
       setLogo(activeLogo);
     }).catch(() => {});
     getCategories().then((cs) => {
@@ -320,11 +320,11 @@ function Header({ onSearch }: { onSearch: () => void }) {
                 <img
                   className="tabaya-header-logo-img"
                   src={logo}
-                  alt={storeName || 'SECRATE'}
+                  alt={storeName || 'TimeBoost'}
                   onError={() => setLogo('')}
                 />
               ) : (
-                <span>{storeName && storeName !== 'dot.' && storeName !== 'METRROMA' ? storeName : 'SECRATE'}</span>
+                <span>{storeName && storeName !== 'dot.' && storeName !== 'METRROMA' ? storeName : 'TimeBoost'}</span>
               )}
             </div>
           </div>
@@ -657,7 +657,7 @@ function Footer() {
   const [phone, setPhone] = useState('+880 1878-374762');
   const [whatsapp, setWhatsapp] = useState('');
   const isSkin = isSkincareSite();
-  const [name, setName] = useState('SECRATE');
+  const [name, setName] = useState('TimeBoost');
   const [logo, setLogo] = useState('');
   const [cats, setCats] = useState<{ slug: string; name: string; adult?: boolean }[]>([]);
   useEffect(() => {
@@ -665,10 +665,10 @@ function Footer() {
       if (s.phone) setPhone(s.phone);
       if (s.whatsapp) setWhatsapp(s.whatsapp);
       if (s.storeName && s.storeName !== 'dot.' && s.storeName !== 'METRROMA') setName(s.storeName);
-      else if (s.storeName === 'dot.' && isSkin) setName('SECRATE');
+      else if (s.storeName === 'dot.' && isSkin) setName('TimeBoost');
       const activeLogo = (s.logo && !s.logo.includes('img_mvsqgtsqxzgig') && !s.logo.includes('img_mvddqd311xu5c'))
         ? s.logo
-        : '/uploads/logo_secrate_rich.webp';
+        : '/uploads/logo_timeboost.svg';
       if (activeLogo) setLogo(activeLogo);
     }).catch(() => {});
     getCategories().then((cs) => {
@@ -684,11 +684,11 @@ function Footer() {
               {logo ? (
                 <img
                   src={logo}
-                  alt={name || 'SECRATE'}
+                  alt={name || 'TimeBoost'}
                   style={{ maxHeight: 46, width: 'auto', objectFit: 'contain', display: 'block' }}
                 />
               ) : (
-                <span>{name && name !== 'dot.' && name !== 'METRROMA' ? name : 'SECRATE'}</span>
+                <span>{name && name !== 'dot.' && name !== 'METRROMA' ? name : 'TimeBoost'}</span>
               )}
             </div>
             <p className="tabaya-footer-desc">
@@ -919,11 +919,107 @@ function SmartWhatsAppChat() {
   const route = useRoute();
   const language = useStoreLanguage();
   const [num, setNum] = useState('');
-  const [brand, setBrand] = useState('SECRATE');
+  const [brand, setBrand] = useState('TimeBoost');
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [showTooltip, setShowTooltip] = useState(true);
   const cardRef = useRef<HTMLDivElement>(null);
+
+  // Free Web-to-Web Live Voice Call State
+  const [callMode, setCallMode] = useState(false);
+  const [callState, setCallState] = useState<'form' | 'connecting' | 'ringing' | 'connected' | 'error'>('form');
+  const [callerName, setCallerName] = useState('');
+  const [callerPhone, setCallerPhone] = useState('');
+  const [callSecs, setCallSecs] = useState(0);
+  const [callMuted, setCallMuted] = useState(false);
+  const [callErr, setCallErr] = useState('');
+  const uaRef = useRef<any>(null);
+  const sessionRef = useRef<any>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const callTimerRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (callState === 'connected') {
+      callTimerRef.current = setInterval(() => setCallSecs((s) => s + 1), 1000);
+    } else {
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+    }
+    return () => { if (callTimerRef.current) clearInterval(callTimerRef.current); };
+  }, [callState]);
+
+  const stopLiveCall = () => {
+    if (sessionRef.current) {
+      try { sessionRef.current.terminate(); } catch (_) {}
+      sessionRef.current = null;
+    }
+    if (uaRef.current) {
+      try { uaRef.current.stop(); } catch (_) {}
+      uaRef.current = null;
+    }
+    setCallState('form');
+    setCallSecs(0);
+    setCallMuted(false);
+  };
+
+  const startLiveCall = async () => {
+    setCallErr('');
+    setCallState('connecting');
+    setCallSecs(0);
+    try {
+      const JsSIPMod = await import('jssip');
+      const JsSIP = JsSIPMod.default || JsSIPMod;
+      const socket = new JsSIP.WebSocketInterface('wss://timingboost.xyz/ws');
+      const displayLabel = callerPhone.trim()
+        ? `${callerName.trim() || 'Visitor'} (${callerPhone.trim()})`
+        : (callerName.trim() || 'Website Visitor');
+
+      const ua = new JsSIP.UA({
+        sockets: [socket],
+        uri: 'sip:guest@timingboost.xyz',
+        password: 'TbGuest#2026!',
+        display_name: displayLabel,
+        register: true,
+        session_timers: false
+      });
+      uaRef.current = ua;
+
+      ua.on('registered', () => {
+        setCallState('ringing');
+        const session = ua.call('sip:600@timingboost.xyz', {
+          mediaConstraints: { audio: true, video: false },
+          eventHandlers: {
+            accepted: () => setCallState('connected'),
+            confirmed: () => setCallState('connected'),
+            ended: () => stopLiveCall(),
+            failed: () => {
+              setCallErr(isBn ? 'এই মুহূর্তে কোনো প্রতিনিধি অনলাইনে নেই বা মাইক্রোফোন অনুমতি দেওয়া হয়নি।' : 'No agent available or microphone permission denied.');
+              setCallState('error');
+            }
+          }
+        });
+        sessionRef.current = session;
+        if (session?.connection) {
+          session.connection.addEventListener('track', (ev: any) => {
+            const rStream = ev.streams?.[0] || new MediaStream([ev.track]);
+            if (remoteAudioRef.current) {
+              remoteAudioRef.current.srcObject = rStream;
+              remoteAudioRef.current.play().catch(() => {});
+            }
+          });
+        }
+      });
+
+      ua.on('registrationFailed', () => {
+        setCallErr(isBn ? 'কল সার্ভারে সংযোগ করা যায়নি।' : 'Could not connect to call server.');
+        setCallState('error');
+      });
+
+      ua.start();
+    } catch (e: any) {
+      setCallErr(e?.message || 'Microphone or WebRTC error');
+      setCallState('error');
+    }
+  };
 
   useEffect(() => {
     getSettings().then((s) => {
@@ -1042,39 +1138,160 @@ function SmartWhatsAppChat() {
           </div>
 
           {/* Body */}
+          <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
           <div className="secrate-wa-body">
-            {/* Bot Greeting Bubble */}
-            <div className="secrate-wa-msg-bubble">
-              <div className="secrate-wa-msg-sender">{brand} Care</div>
-              <div className="secrate-wa-msg-text">
-                {isBn
-                  ? 'আসসালামু আলাইকুম! 🌸 SECRATE-এ আপনাকে স্বাগতম। আপনার যেকোনো প্রশ্ন, স্কিনকেয়ার পরামর্শ বা অর্ডারের জন্য নিচের যেকোনো অপশনে ট্যাপ করুন অথবা মেসেজ লিখুন:'
-                  : 'Hello! 🌸 Welcome to SECRATE. How can we help you today? Tap an option below or type your message:'}
-              </div>
-              <div className="secrate-wa-msg-time">{isBn ? 'এইমাত্র' : 'Just now'}</div>
-            </div>
+            {callMode ? (
+              <div style={{ padding: '12px 6px', textAlign: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => { stopLiveCall(); setCallMode(false); }}
+                    style={{ background: 'rgba(255,255,255,0.08)', border: 'none', color: '#cbd5e1', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}
+                  >
+                    ← {isBn ? 'ফিরে যান' : 'Back'}
+                  </button>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: '#34d399', background: 'rgba(16,185,129,0.15)', padding: '3px 10px', borderRadius: 999 }}>
+                    📞 {isBn ? 'ফ্রি লাইভ কল' : 'Free Live Call'}
+                  </span>
+                </div>
 
-            {/* Quick Action Pills */}
-            <div className="secrate-wa-quick-title">
-              {isBn ? '⚡ দ্রুত সহায়তার অপশন:' : '⚡ Quick assistance options:'}
-            </div>
-            <div className="secrate-wa-quick-list">
-              {quickOptions.map((opt) => (
-                <button
-                  type="button"
-                  key={opt.id}
-                  className="secrate-wa-quick-btn"
-                  onClick={() => {
-                    setText(opt.msg);
-                    handleSend(opt.msg);
-                  }}
-                >
-                  <span className="secrate-wa-quick-icon">{opt.icon}</span>
-                  <span className="secrate-wa-quick-text">{opt.label}</span>
-                  <span className="secrate-wa-quick-arrow">›</span>
-                </button>
-              ))}
-            </div>
+                {callState === 'form' || callState === 'error' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left' }}>
+                    <div style={{ fontSize: 12.5, color: '#cbd5e1', lineHeight: 1.5 }}>
+                      {isBn
+                        ? 'কোনো সিম বা টাকা ছাড়াই ব্রাউজার থেকে সরাসরি আমাদের প্রতিনিধির সাথে কথা বলুন:'
+                        : 'Speak directly with our support agent right from your browser for free:'}
+                    </div>
+                    {callErr && (
+                      <div style={{ padding: '8px 10px', borderRadius: 6, background: 'rgba(239,68,68,0.15)', color: '#fca5a5', fontSize: 12 }}>
+                        {callErr}
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      placeholder={isBn ? 'আপনার নাম (ঐচ্ছিক)' : 'Your Name (optional)'}
+                      value={callerName}
+                      onChange={(e) => setCallerName(e.target.value)}
+                      className="secrate-wa-input"
+                      style={{ width: '100%', boxSizing: 'border-box' }}
+                    />
+                    <input
+                      type="tel"
+                      placeholder={isBn ? 'মোবাইল নম্বর (ঐচ্ছিক)' : 'Phone Number (optional)'}
+                      value={callerPhone}
+                      onChange={(e) => setCallerPhone(e.target.value)}
+                      className="secrate-wa-input"
+                      style={{ width: '100%', boxSizing: 'border-box' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={startLiveCall}
+                      style={{
+                        width: '100%',
+                        padding: '11px 14px',
+                        borderRadius: 10,
+                        border: 'none',
+                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                        color: '#fff',
+                        fontWeight: 700,
+                        fontSize: 13.5,
+                        cursor: 'pointer',
+                        marginTop: 4
+                      }}
+                    >
+                      📞 {isBn ? 'এখনই ফ্রি কল করুন' : 'Start Free Call Now'}
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ padding: '16px 8px' }}>
+                    <div style={{ width: 58, height: 58, borderRadius: '50%', background: 'rgba(16,185,129,0.18)', border: '2px solid #10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, margin: '0 auto 10px' }}>
+                      🎧
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 4 }}>
+                      {brand} Support
+                    </div>
+                    <div style={{ fontSize: 13, color: callState === 'connected' ? '#34d399' : '#fbbf24', fontWeight: 600, marginBottom: 16 }}>
+                      {callState === 'connecting'
+                        ? (isBn ? 'সংযোগ করা হচ্ছে...' : 'Connecting...')
+                        : callState === 'ringing'
+                        ? (isBn ? 'প্রতিনিধিকে রিং হচ্ছে...' : 'Ringing agent...')
+                        : `${String(Math.floor(callSecs / 60)).padStart(2, '0')}:${String(callSecs % 60).padStart(2, '0')}`}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: 10 }}>
+                      {callState === 'connected' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (sessionRef.current) {
+                              if (callMuted) sessionRef.current.unmute({ audio: true });
+                              else sessionRef.current.mute({ audio: true });
+                            }
+                            setCallMuted(!callMuted);
+                          }}
+                          style={{ padding: '8px 14px', borderRadius: 20, border: 'none', background: callMuted ? '#ef4444' : 'rgba(255,255,255,0.12)', color: '#fff', cursor: 'pointer', fontSize: 13 }}
+                        >
+                          {callMuted ? '🔇 Muted' : '🎙️ Mute'}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={stopLiveCall}
+                        style={{ padding: '8px 18px', borderRadius: 20, border: 'none', background: '#dc2626', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}
+                      >
+                        📞 {isBn ? 'কল কাটুন' : 'End Call'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Bot Greeting Bubble */}
+                <div className="secrate-wa-msg-bubble">
+                  <div className="secrate-wa-msg-sender">{brand} Care</div>
+                  <div className="secrate-wa-msg-text">
+                    {isBn
+                      ? 'আসসালামু আলাইকুম! 🌸 TimeBoost-এ আপনাকে স্বাগতম। আপনার যেকোনো প্রশ্ন, স্কিনকেয়ার পরামর্শ বা অর্ডারের জন্য নিচের যেকোনো অপশনে ট্যাপ করুন অথবা মেসেজ লিখুন:'
+                      : 'Hello! 🌸 Welcome to TimeBoost. How can we help you today? Tap an option below or type your message:'}
+                  </div>
+                  <div className="secrate-wa-msg-time">{isBn ? 'এইমাত্র' : 'Just now'}</div>
+                </div>
+
+                {/* Quick Action Pills */}
+                <div className="secrate-wa-quick-title">
+                  {isBn ? '⚡ দ্রুত সহায়তার অপশন:' : '⚡ Quick assistance options:'}
+                </div>
+                <div className="secrate-wa-quick-list">
+                  <button
+                    type="button"
+                    className="secrate-wa-quick-btn"
+                    style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(5, 150, 105, 0.22) 100%)', borderColor: 'rgba(16, 185, 129, 0.45)' }}
+                    onClick={() => { setCallMode(true); setCallState('form'); setCallErr(''); }}
+                  >
+                    <span className="secrate-wa-quick-icon">📞</span>
+                    <span className="secrate-wa-quick-text" style={{ color: '#34d399', fontWeight: 700 }}>
+                      {isBn ? 'ফ্রি লাইভ ভয়েস কল (সরাসরি কথা বলুন)' : 'Free Live Voice Call (Talk Now)'}
+                    </span>
+                    <span className="secrate-wa-quick-arrow" style={{ color: '#34d399' }}>›</span>
+                  </button>
+                  {quickOptions.map((opt) => (
+                    <button
+                      type="button"
+                      key={opt.id}
+                      className="secrate-wa-quick-btn"
+                      onClick={() => {
+                        setText(opt.msg);
+                        handleSend(opt.msg);
+                      }}
+                    >
+                      <span className="secrate-wa-quick-icon">{opt.icon}</span>
+                      <span className="secrate-wa-quick-text">{opt.label}</span>
+                      <span className="secrate-wa-quick-arrow">›</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Footer Input Area */}
