@@ -70,6 +70,12 @@ function Effects() {
           document.head.appendChild(link);
         }
         link.href = s.favicon;
+      } else {
+        document.querySelectorAll("link[rel*='icon'], link[rel='apple-touch-icon']").forEach((el) => el.remove());
+        const blank = document.createElement('link');
+        blank.rel = 'icon';
+        blank.href = 'data:,';
+        document.head.appendChild(blank);
       }
     }).catch(() => {});
   }, [isAdmin, isLocalPreview]);
