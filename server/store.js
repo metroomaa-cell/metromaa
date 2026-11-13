@@ -1516,6 +1516,7 @@ export function saveCall(callData) {
   const id = callData.id || ('call_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
   const record = {
     id,
+    direction: callData.direction === 'inbound' ? 'inbound' : 'outbound',
     orderId: callData.orderId || null,
     customerName: callData.customerName || '',
     customerPhone: callData.customerPhone || '',
@@ -1549,7 +1550,8 @@ export function saveCall(callData) {
         ord.history.unshift({
           at: record.createdAt,
           status: 'call',
-          note: `IP Call (${durStr}) · Outcome: ${record.outcome}${record.notes ? ' · Note: ' + record.notes : ''}`,
+          direction: record.direction,
+          note: `${record.direction === 'inbound' ? '📥 Incoming' : '📤 Outbound'} IP Call (${durStr}) · Outcome: ${record.outcome}${record.notes ? ' · Note: ' + record.notes : ''}`,
           staff: record.staff,
           by: record.staff?.name || record.staff?.username || 'Staff',
           callId: record.id,

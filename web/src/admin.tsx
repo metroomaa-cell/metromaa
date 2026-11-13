@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback, Fragment } from 'react';
 import qrcode from 'qrcode-generator';
+import JsSIP from 'jssip';
 import './admin.css';
 import { taka, getCategories, fetchMasterColors, createMasterColor, deleteMasterColor, autoDetectCategoryAndSub, isWellnessOrExcludedCategory, type MasterColor } from './api';
 import { WhatsAppIcon } from './icons';
@@ -18762,7 +18763,9 @@ function LandingsAdmin() {
 // ==========================================
 function WebCallDialer() {
   const [target, setTarget] = useState<AdminIPCallTarget | null>(null);
-  const [status, setStatus] = useState<'idle' | 'calling' | 'connected' | 'wrapup'>('idle');
+  const [direction, setDirection] = useState<'outbound' | 'inbound'>('outbound');
+  const [status, setStatus] = useState<'idle' | 'ringing' | 'calling' | 'connected' | 'wrapup'>('idle');
+  const [sipStatus, setSipStatus] = useState<'simulation' | 'connecting' | 'registered' | 'error'>('simulation');
   const [seconds, setSeconds] = useState(0);
   const [muted, setMuted] = useState(false);
   const [held, setHeld] = useState(false);
@@ -18772,17 +18775,236 @@ function WebCallDialer() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  const uaRef = useRef<any>(null);
+  const sipSettingsRef = useRef<any>(null);
+  const rtcSessionRef = useRef<any>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const ringIntervalRef = useRef<any>(null);
   const timerRef = useRef<any>(null);
   const audioBlobRef = useRef<Blob | null>(null);
 
+  const broadcastSipStatus = (st: 'simulation' | 'connecting' | 'registered' | 'error', ext?: string) => {
+    setSipStatus(st);
+    (window as any).__sipStatus = { status: st, ext: ext || '' };
+    window.dispatchEvent(new CustomEvent('sip-status-changed', { detail: { status: st, ext: ext || '' } }));
+  };
+
+  // Web Audio dual-tone incoming ringtone
+  const stopRingtone = () => {
+    if (ringIntervalRef.current) {
+      clearInterval(ringIntervalRef.current);
+      ringIntervalRef.current = null;
+    }
+  };
+
+  const startRingtone = () => {
+    stopRingtone();
+    const playBurst = () => {
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc1.frequency.value = 440;
+        osc2.frequency.value = 480;
+        gain.gain.setValueAtTime(0.08, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.9);
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(ctx.destination);
+        osc1.start();
+        osc2.start();
+        osc1.stop(ctx.currentTime + 0.9);
+        osc2.stop(ctx.currentTime + 0.9);
+        setTimeout(() => { try { ctx.close(); } catch (_) {} }, 1100);
+      } catch (_) {}
+    };
+    playBurst();
+    ringIntervalRef.current = setInterval(playBurst, 2200);
+  };
+
+  // Lookup customer & latest order by incoming phone number
+  const lookupCallerOrder = async (rawPhone: string): Promise<AdminIPCallTarget> => {
+    const clean = String(rawPhone || '').replace(/\D/g, '').replace(/^88/, '');
+    const fallback: AdminIPCallTarget = { phone: rawPhone || 'Unknown', name: 'Incoming Caller' };
+    if (!clean || clean.length < 6) return fallback;
+    try {
+      const orders = await aFetch('/orders').then((r) => r.json());
+      if (Array.isArray(orders)) {
+        const matched = orders.find((o: any) => {
+          const op = String(o.customer?.phone || '').replace(/\D/g, '').replace(/^88/, '');
+          return op && (op.endsWith(clean.slice(-8)) || clean.endsWith(op.slice(-8)));
+        });
+        if (matched) {
+          return {
+            order: matched,
+            phone: matched.customer?.phone || rawPhone,
+            name: matched.customer?.name || 'Customer',
+            orderId: matched.id,
+            product: matched.items?.[0]?.name || matched.items?.[0]?.title || ''
+          };
+        }
+      }
+    } catch (_) {}
+    return fallback;
+  };
+
+  // Start dual-stream (Local Mic + Remote Audio) MediaRecorder
+  const startCallRecording = async (remoteStream?: MediaStream | null) => {
+    audioChunksRef.current = [];
+    audioBlobRef.current = null;
+    try {
+      const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = localStream;
+
+      let streamToRecord: MediaStream = localStream;
+      if (remoteStream && remoteStream.getAudioTracks().length > 0) {
+        try {
+          const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+          const ctx = new AudioCtx();
+          audioCtxRef.current = ctx;
+          const dest = ctx.createMediaStreamDestination();
+          ctx.createMediaStreamSource(localStream).connect(dest);
+          ctx.createMediaStreamSource(remoteStream).connect(dest);
+          streamToRecord = dest.stream;
+        } catch (_) {
+          streamToRecord = localStream;
+        }
+      }
+
+      let mimeType = 'audio/webm;codecs=opus';
+      if (!MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        if (MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/webm';
+        else if (MediaRecorder.isTypeSupported('audio/ogg')) mimeType = 'audio/ogg';
+        else mimeType = '';
+      }
+
+      const mr = new MediaRecorder(streamToRecord, mimeType ? { mimeType } : undefined);
+      mr.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+      mr.onstop = () => {
+        if (audioChunksRef.current.length > 0) {
+          audioBlobRef.current = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
+        }
+      };
+      mr.start(1000);
+      mediaRecorderRef.current = mr;
+    } catch (err) {
+      console.warn('Microphone permission not granted or available:', err);
+    }
+  };
+
+  const attachPeerConnectionAudio = (session: any) => {
+    const pc = session?.connection;
+    if (!pc) return;
+    pc.addEventListener('track', (ev: any) => {
+      const rStream = ev.streams?.[0] || new MediaStream([ev.track]);
+      remoteStreamRef.current = rStream;
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = rStream;
+        remoteAudioRef.current.play().catch(() => {});
+      }
+      startCallRecording(rStream);
+    });
+  };
+
+  // Initialize JsSIP WebRTC User Agent from telephony settings
+  const initSipAgent = async () => {
+    if (uaRef.current) {
+      try { uaRef.current.stop(); } catch (_) {}
+      uaRef.current = null;
+    }
+    try {
+      const cfg = await aFetch('/telephony/settings').then((r) => r.json());
+      sipSettingsRef.current = cfg;
+      if (!cfg || cfg.enabled === false || !cfg.wssUrl || !cfg.sipServer || !cfg.sipUsername || !cfg.sipPassword || cfg.provider === 'simulation') {
+        broadcastSipStatus('simulation');
+        return;
+      }
+
+      broadcastSipStatus('connecting', cfg.sipUsername);
+      const socket = new JsSIP.WebSocketInterface(cfg.wssUrl);
+      const ua = new JsSIP.UA({
+        sockets: [socket],
+        uri: `sip:${cfg.sipUsername}@${cfg.sipServer}`,
+        password: cfg.sipPassword,
+        display_name: cfg.callerId || cfg.sipUsername,
+        register: true,
+        session_timers: false
+      });
+
+      ua.on('registered', () => broadcastSipStatus('registered', cfg.sipUsername));
+      ua.on('registrationFailed', () => broadcastSipStatus('error', cfg.sipUsername));
+      ua.on('disconnected', () => broadcastSipStatus('error', cfg.sipUsername));
+
+      ua.on('newRTCSession', async (data: any) => {
+        const session = data.session;
+        if (data.originator === 'remote') {
+          rtcSessionRef.current = session;
+          const callerRaw = session.remote_identity?.uri?.user || session.remote_identity?.display_name || 'Unknown';
+          const callerInfo = await lookupCallerOrder(callerRaw);
+          setTarget(callerInfo);
+          setDirection('inbound');
+          setStatus('ringing');
+          setSeconds(0);
+          setMuted(false);
+          setHeld(false);
+          setMinimized(false);
+          setOutcome('confirmed');
+          setNotes('');
+          setSaving(false);
+          setSaveSuccess(false);
+          startRingtone();
+
+          session.on('ended', () => {
+            stopRingtone();
+            endCallCleanupOnly();
+          });
+          session.on('failed', () => {
+            stopRingtone();
+            rtcSessionRef.current = null;
+            setTarget(null);
+            setStatus('idle');
+          });
+        }
+      });
+
+      ua.start();
+      uaRef.current = ua;
+    } catch (_) {
+      broadcastSipStatus('simulation');
+    }
+  };
+
+  useEffect(() => {
+    initSipAgent();
+    const onSettingsUpdated = () => initSipAgent();
+    window.addEventListener('telephony-settings-updated', onSettingsUpdated);
+    return () => {
+      window.removeEventListener('telephony-settings-updated', onSettingsUpdated);
+      stopRingtone();
+      if (uaRef.current) {
+        try { uaRef.current.stop(); } catch (_) {}
+      }
+    };
+  }, []);
+
+  // Handle Outgoing Call & Simulated Incoming Call events
   useEffect(() => {
     const handleOpen = async (e: any) => {
       const d: AdminIPCallTarget = e.detail;
       if (!d || !d.phone) return;
+      stopRingtone();
       setTarget(d);
+      setDirection('outbound');
       setStatus('calling');
       setSeconds(0);
       setMuted(false);
@@ -18792,55 +19014,63 @@ function WebCallDialer() {
       setNotes('');
       setSaving(false);
       setSaveSuccess(false);
-      audioChunksRef.current = [];
-      audioBlobRef.current = null;
 
-      // Request browser microphone
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        streamRef.current = stream;
-
-        let mimeType = 'audio/webm;codecs=opus';
-        if (!MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-          if (MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/webm';
-          else if (MediaRecorder.isTypeSupported('audio/ogg')) mimeType = 'audio/ogg';
-          else mimeType = '';
-        }
-
-        const options = mimeType ? { mimeType } : undefined;
-        const mr = new MediaRecorder(stream, options);
-        mr.ondataavailable = (event) => {
-          if (event.data && event.data.size > 0) {
-            audioChunksRef.current.push(event.data);
-          }
+      const cfg = sipSettingsRef.current;
+      if (uaRef.current && sipStatus === 'registered' && cfg?.sipServer) {
+        const cleanDial = String(d.phone).replace(/[^0-9+]/g, '');
+        const eventHandlers = {
+          accepted: () => setStatus('connected'),
+          confirmed: () => setStatus('connected'),
+          ended: () => endCallCleanupOnly(),
+          failed: () => endCallCleanupOnly()
         };
-        mr.onstop = () => {
-          if (audioChunksRef.current.length > 0) {
-            audioBlobRef.current = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
-          }
-        };
-        mr.start(1000);
-        mediaRecorderRef.current = mr;
-      } catch (err) {
-        console.warn('Microphone permission not granted or available:', err);
+        const session = uaRef.current.call(`sip:${cleanDial}@${cfg.sipServer}`, {
+          eventHandlers,
+          mediaConstraints: { audio: true, video: false }
+        });
+        rtcSessionRef.current = session;
+        attachPeerConnectionAudio(session);
+      } else {
+        await startCallRecording(null);
+        setTimeout(() => {
+          setStatus((prev) => (prev === 'calling' ? 'connected' : prev));
+        }, 1800);
       }
+    };
 
-      // Simulate ringing and connect after 2 seconds
-      setTimeout(() => {
-        setStatus('connected');
-      }, 2000);
+    const handleSimIncoming = async (e: any) => {
+      const rawPhone = e.detail?.phone || '01711223344';
+      const callerInfo = await lookupCallerOrder(rawPhone);
+      if (e.detail?.name && callerInfo.name === 'Incoming Caller') {
+        callerInfo.name = e.detail.name;
+      }
+      rtcSessionRef.current = null;
+      setTarget(callerInfo);
+      setDirection('inbound');
+      setStatus('ringing');
+      setSeconds(0);
+      setMuted(false);
+      setHeld(false);
+      setMinimized(false);
+      setOutcome('confirmed');
+      setNotes('');
+      setSaving(false);
+      setSaveSuccess(false);
+      startRingtone();
     };
 
     window.addEventListener('open-admin-ip-call', handleOpen);
-    return () => window.removeEventListener('open-admin-ip-call', handleOpen);
-  }, []);
+    window.addEventListener('simulate-incoming-ip-call', handleSimIncoming);
+    return () => {
+      window.removeEventListener('open-admin-ip-call', handleOpen);
+      window.removeEventListener('simulate-incoming-ip-call', handleSimIncoming);
+    };
+  }, [sipStatus]);
 
   // Duration timer
   useEffect(() => {
     if (status === 'connected') {
-      timerRef.current = setInterval(() => {
-        setSeconds((s) => s + 1);
-      }, 1000);
+      timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
@@ -18849,25 +19079,78 @@ function WebCallDialer() {
     };
   }, [status]);
 
-  const toggleMute = () => {
-    if (streamRef.current) {
-      const audioTrack = streamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = muted;
-        setMuted(!muted);
+  const acceptIncomingCall = async () => {
+    stopRingtone();
+    setStatus('connected');
+    if (rtcSessionRef.current) {
+      try {
+        rtcSessionRef.current.answer({ mediaConstraints: { audio: true, video: false } });
+        attachPeerConnectionAudio(rtcSessionRef.current);
+      } catch (err) {
+        console.error('Failed to answer SIP session:', err);
       }
+    } else {
+      await startCallRecording(null);
     }
   };
 
-  const endCall = () => {
+  const rejectIncomingCall = () => {
+    stopRingtone();
+    if (rtcSessionRef.current) {
+      try { rtcSessionRef.current.terminate(); } catch (_) {}
+      rtcSessionRef.current = null;
+    }
+    setTarget(null);
+    setStatus('idle');
+  };
+
+  const toggleMute = () => {
+    if (rtcSessionRef.current) {
+      try {
+        if (muted) rtcSessionRef.current.unmute({ audio: true });
+        else rtcSessionRef.current.mute({ audio: true });
+      } catch (_) {}
+    }
+    if (streamRef.current) {
+      const audioTrack = streamRef.current.getAudioTracks()[0];
+      if (audioTrack) audioTrack.enabled = muted;
+    }
+    setMuted(!muted);
+  };
+
+  const toggleHold = () => {
+    if (rtcSessionRef.current) {
+      try {
+        if (held) rtcSessionRef.current.unhold();
+        else rtcSessionRef.current.hold();
+      } catch (_) {}
+    }
+    setHeld(!held);
+  };
+
+  const endCallCleanupOnly = () => {
+    stopRingtone();
     if (timerRef.current) clearInterval(timerRef.current);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try { mediaRecorderRef.current.stop(); } catch (_) {}
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
     }
-    setStatus('wrapup');
+    if (audioCtxRef.current) {
+      try { audioCtxRef.current.close(); } catch (_) {}
+      audioCtxRef.current = null;
+    }
+    rtcSessionRef.current = null;
+    setStatus((prev) => (prev === 'idle' ? 'idle' : 'wrapup'));
+  };
+
+  const endCall = () => {
+    if (rtcSessionRef.current) {
+      try { rtcSessionRef.current.terminate(); } catch (_) {}
+    }
+    endCallCleanupOnly();
   };
 
   const handleSaveCall = async () => {
@@ -18876,7 +19159,6 @@ function WebCallDialer() {
     let recordingUrl: string | null = null;
     let fileSize = 0;
 
-    // Convert audio Blob to base64 DataURL and upload
     if (audioBlobRef.current && audioBlobRef.current.size > 0) {
       fileSize = audioBlobRef.current.size;
       try {
@@ -18892,9 +19174,7 @@ function WebCallDialer() {
           body: JSON.stringify({ dataUrl })
         }).then((r) => r.json());
 
-        if (upRes && upRes.url) {
-          recordingUrl = upRes.url;
-        }
+        if (upRes && upRes.url) recordingUrl = upRes.url;
       } catch (err) {
         console.error('Error uploading recording:', err);
       }
@@ -18904,6 +19184,7 @@ function WebCallDialer() {
       await aFetch('/calls', {
         method: 'POST',
         body: JSON.stringify({
+          direction,
           orderId: target.orderId || null,
           customerName: target.name || target.order?.customer?.name || '',
           customerPhone: target.phone,
@@ -18929,283 +19210,283 @@ function WebCallDialer() {
     }
   };
 
-  if (!target || status === 'idle') return null;
+  if (!target || status === 'idle') {
+    return <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />;
+  }
 
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 
-  if (minimized) {
+  if (minimized && status !== 'ringing') {
     return (
-      <div
-        onClick={() => setMinimized(false)}
-        style={{
-          position: 'fixed',
-          bottom: 24,
-          right: 24,
-          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-          color: '#fff',
-          padding: '10px 18px',
-          borderRadius: 999,
-          boxShadow: '0 8px 32px rgba(16, 185, 129, 0.4)',
-          zIndex: 99999,
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          fontWeight: 700,
-          fontSize: 13
-        }}
-      >
-        <span style={{ animation: 'pulse 1.5s infinite' }}>📞</span>
-        <span>Call in progress · {timeStr}</span>
-        <span style={{ fontSize: 11, background: 'rgba(0,0,0,0.2)', padding: '2px 8px', borderRadius: 999 }}>Maximize</span>
-      </div>
+      <>
+        <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
+        <div
+          onClick={() => setMinimized(false)}
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+            color: '#fff',
+            padding: '10px 18px',
+            borderRadius: 999,
+            boxShadow: '0 8px 32px rgba(16, 185, 129, 0.4)',
+            zIndex: 99999,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            fontWeight: 700,
+            fontSize: 13
+          }}
+        >
+          <span style={{ animation: 'pulse 1.5s infinite' }}>📞</span>
+          <span>{direction === 'inbound' ? 'Incoming' : 'Call'} · {timeStr}</span>
+          <span style={{ fontSize: 11, background: 'rgba(0,0,0,0.2)', padding: '2px 8px', borderRadius: 999 }}>Maximize</span>
+        </div>
+      </>
     );
   }
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: 24,
-        right: 24,
-        width: 360,
-        background: '#161326',
-        borderRadius: 16,
-        border: '1px solid rgba(139, 92, 246, 0.4)',
-        boxShadow: '0 20px 50px rgba(0,0,0,0.7)',
-        zIndex: 99999,
-        overflow: 'hidden',
-        fontFamily: "'Hind Siliguri', 'Inter', sans-serif",
-        color: '#f8fafc'
-      }}
-    >
-      {/* Header */}
-      <div style={{ padding: '12px 16px', background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(30, 27, 52, 0.95) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: '#c4b5fd' }}>
-          <span>📞</span>
-          <span>Web IP Softphone</span>
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            type="button"
-            onClick={() => setMinimized(true)}
-            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14 }}
-            title="Minimize"
-          >
-            —
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (status === 'connected') {
-                if (window.confirm('End call and close?')) endCall();
-              } else {
-                setTarget(null);
-                setStatus('idle');
-              }
-            }}
-            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 16 }}
-            title="Close"
-          >
-            ✕
-          </button>
-        </div>
-      </div>
-
-      {/* Body */}
-      <div style={{ padding: 18 }}>
-        {status !== 'wrapup' ? (
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ width: 64, height: 64, borderRadius: '50%', background: status === 'connected' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(139, 92, 246, 0.15)', border: status === 'connected' ? '2px solid #10b981' : '2px solid #8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, margin: '0 auto 12px' }}>
-              👤
-            </div>
-            <h3 style={{ margin: '0 0 4px', fontSize: 17, fontWeight: 700, color: '#fff' }}>
-              {target.name || 'Customer'}
-            </h3>
-            <div style={{ fontSize: 14, color: '#38bdf8', fontWeight: 600, marginBottom: 4 }}>
-              {target.phone}
-            </div>
-            {target.orderId && (
-              <div style={{ fontSize: 11, color: '#a78bfa', marginBottom: 12 }}>
-                Order #{target.orderId.replace('DOT-', '')} {target.product ? `· ${target.product}` : ''}
-              </div>
-            )}
-
-            {/* Call State & Timer */}
-            <div style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
-              {status === 'calling' ? (
-                <>
-                  <span style={{ fontSize: 14, animation: 'spin 1s infinite linear' }}>⏳</span>
-                  <span style={{ fontSize: 13, color: '#fbbf24', fontWeight: 600 }}>Ringing customer...</span>
-                </>
-              ) : (
-                <>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', animation: 'pulse 1s infinite' }} />
-                  <span style={{ fontSize: 15, fontWeight: 800, color: '#10b981', fontFamily: 'monospace' }}>{timeStr}</span>
-                  <span style={{ fontSize: 10.5, background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
-                    REC
-                  </span>
-                </>
-              )}
-            </div>
-
-            {/* Action Buttons */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
-              {status === 'connected' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={toggleMute}
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: '50%',
-                      background: muted ? '#ef4444' : 'rgba(255,255,255,0.08)',
-                      border: 'none',
-                      color: '#fff',
-                      fontSize: 16,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                    title={muted ? 'Unmute microphone' : 'Mute microphone'}
-                  >
-                    {muted ? '🔇' : '🎙️'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setHeld(!held)}
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: '50%',
-                      background: held ? '#fbbf24' : 'rgba(255,255,255,0.08)',
-                      border: 'none',
-                      color: held ? '#000' : '#fff',
-                      fontSize: 16,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                    title={held ? 'Resume call' : 'Hold call'}
-                  >
-                    ⏸️
-                  </button>
-                </>
-              )}
-              <button
-                type="button"
-                onClick={endCall}
-                style={{
-                  height: 44,
-                  padding: '0 24px',
-                  borderRadius: 22,
-                  background: '#dc2626',
-                  border: 'none',
-                  color: '#fff',
-                  fontSize: 14,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  boxShadow: '0 4px 14px rgba(220, 38, 38, 0.4)'
-                }}
-              >
-                <span>📞 End Call</span>
-              </button>
-            </div>
+    <>
+      <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
+      <div
+        style={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          width: 365,
+          background: '#161326',
+          borderRadius: 16,
+          border: status === 'ringing' ? '2px solid #10b981' : '1px solid rgba(139, 92, 246, 0.4)',
+          boxShadow: status === 'ringing' ? '0 0 40px rgba(16, 185, 129, 0.45)' : '0 20px 50px rgba(0,0,0,0.7)',
+          zIndex: 99999,
+          overflow: 'hidden',
+          fontFamily: "'Hind Siliguri', 'Inter', sans-serif",
+          color: '#f8fafc'
+        }}
+      >
+        {/* Header */}
+        <div style={{ padding: '12px 16px', background: status === 'ringing' ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(16, 185, 129, 0.08) 100%)' : 'linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(30, 27, 52, 0.95) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: status === 'ringing' ? '#34d399' : '#c4b5fd' }}>
+            <span>{direction === 'inbound' ? '📥' : '📞'}</span>
+            <span>{status === 'ringing' ? 'ইনকামিং কল আসছে!' : 'Web IP Softphone'}</span>
+            <span style={{ fontSize: 9.5, padding: '2px 6px', borderRadius: 999, background: sipStatus === 'registered' ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.18)', color: sipStatus === 'registered' ? '#34d399' : '#fbbf24' }}>
+              {sipStatus === 'registered' ? 'SIP Live' : 'Test Mode'}
+            </span>
           </div>
-        ) : (
-          /* Wrap-up & Audit Save Screen */
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>কল শেষ হয়েছে ({mins}m {secs}s)</span>
-              <span style={{ fontSize: 11, color: '#10b981', fontWeight: 600 }}>🔴 অডিও রেকর্ড প্রস্তুত</span>
-            </div>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 14 }}>
-              কলের ফলাফল সিলেক্ট করুন এবং অডিট সেভ করুন:
-            </div>
-
-            {/* Outcome Selection */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 12 }}>
-              {[
-                { id: 'confirmed', label: '✅ Order Confirmed', color: '#10b981' },
-                { id: 'call_later', label: '⏰ Call Later / Reschedule', color: '#38bdf8' },
-                { id: 'no_answer', label: '⚠️ No Answer / Ringing', color: '#fbbf24' },
-                { id: 'cancelled', label: '❌ Cancelled by Customer', color: '#f87171' }
-              ].map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => setOutcome(opt.id)}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: 6,
-                    border: outcome === opt.id ? `1.5px solid ${opt.color}` : '1px solid rgba(255,255,255,0.1)',
-                    background: outcome === opt.id ? 'rgba(255,255,255,0.08)' : 'transparent',
-                    color: outcome === opt.id ? opt.color : '#cbd5e1',
-                    fontSize: 11.5,
-                    fontWeight: 600,
-                    textAlign: 'left',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Notes */}
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="অডিট নোট লিখুন (যেমন: কাস্টমার সাইজ কনফার্ম করেছেন)..."
-              style={{
-                width: '100%',
-                padding: '8px 10px',
-                background: '#0e0c18',
-                color: '#fff',
-                border: '1px solid rgba(255,255,255,0.15)',
-                borderRadius: 6,
-                fontSize: 12,
-                boxSizing: 'border-box',
-                marginBottom: 14
-              }}
-            />
-
-            {/* Save Button */}
+          <div style={{ display: 'flex', gap: 6 }}>
+            {status !== 'ringing' && (
+              <button type="button" onClick={() => setMinimized(true)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14 }} title="Minimize">—</button>
+            )}
             <button
               type="button"
-              onClick={handleSaveCall}
-              disabled={saving || saveSuccess}
-              style={{
-                width: '100%',
-                padding: '10px 14px',
-                borderRadius: 8,
-                background: saveSuccess ? '#10b981' : 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
-                color: '#fff',
-                border: 'none',
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6
+              onClick={() => {
+                if (status === 'connected') {
+                  if (window.confirm('End call and close?')) endCall();
+                } else if (status === 'ringing') {
+                  rejectIncomingCall();
+                } else {
+                  setTarget(null);
+                  setStatus('idle');
+                }
               }}
+              style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 16 }}
+              title="Close"
             >
-              {saving ? 'অডিও ও অডিট আপলোড হচ্ছে...' : saveSuccess ? '✅ সংরক্ষিত হয়েছে!' : '💾 Save Call & Audio Audit'}
+              ✕
             </button>
           </div>
-        )}
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: 18 }}>
+          {status !== 'wrapup' ? (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ width: 64, height: 64, borderRadius: '50%', background: status === 'connected' || status === 'ringing' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(139, 92, 246, 0.15)', border: status === 'connected' || status === 'ringing' ? '2px solid #10b981' : '2px solid #8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, margin: '0 auto 12px', animation: status === 'ringing' ? 'pulse 1s infinite' : 'none' }}>
+                {direction === 'inbound' ? '📲' : '👤'}
+              </div>
+              <h3 style={{ margin: '0 0 4px', fontSize: 17, fontWeight: 700, color: '#fff' }}>
+                {target.name || 'Customer'}
+              </h3>
+              <div style={{ fontSize: 14, color: '#38bdf8', fontWeight: 600, marginBottom: 4 }}>
+                {target.phone}
+              </div>
+              {target.orderId ? (
+                <div style={{ fontSize: 11.5, color: '#c4b5fd', background: 'rgba(139, 92, 246, 0.14)', border: '1px solid rgba(139, 92, 246, 0.3)', padding: '3px 10px', borderRadius: 999, display: 'inline-block', marginBottom: 12 }}>
+                  📦 Order #{target.orderId.replace('DOT-', '')} {target.product ? `· ${target.product}` : ''}
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 12 }}>
+                  {direction === 'inbound' ? 'নতুন কলার (কোনো পূর্ববর্তী অর্ডার পাওয়া যায়নি)' : 'Direct Call'}
+                </div>
+              )}
+
+              {/* Call State & Timer */}
+              {status !== 'ringing' && (
+                <div style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+                  {status === 'calling' ? (
+                    <>
+                      <span style={{ fontSize: 14, animation: 'spin 1s infinite linear' }}>⏳</span>
+                      <span style={{ fontSize: 13, color: '#fbbf24', fontWeight: 600 }}>Ringing customer...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', animation: 'pulse 1s infinite' }} />
+                      <span style={{ fontSize: 15, fontWeight: 800, color: '#10b981', fontFamily: 'monospace' }}>{timeStr}</span>
+                      <span style={{ fontSize: 10.5, background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
+                        REC
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              {status === 'ringing' ? (
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 8 }}>
+                  <button
+                    type="button"
+                    onClick={acceptIncomingCall}
+                    style={{
+                      flex: 1,
+                      height: 44,
+                      borderRadius: 22,
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      border: 'none',
+                      color: '#fff',
+                      fontSize: 13.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      boxShadow: '0 4px 16px rgba(16, 185, 129, 0.45)'
+                    }}
+                  >
+                    <span>✅</span>
+                    <span>রিসিভ করুন</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={rejectIncomingCall}
+                    style={{
+                      flex: 1,
+                      height: 44,
+                      borderRadius: 22,
+                      background: '#dc2626',
+                      border: 'none',
+                      color: '#fff',
+                      fontSize: 13.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      boxShadow: '0 4px 14px rgba(220, 38, 38, 0.4)'
+                    }}
+                  >
+                    <span>❌</span>
+                    <span>কেটে দিন</span>
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+                  {status === 'connected' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={toggleMute}
+                        style={{ width: 44, height: 44, borderRadius: '50%', background: muted ? '#ef4444' : 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        title={muted ? 'Unmute microphone' : 'Mute microphone'}
+                      >
+                        {muted ? '🔇' : '🎙️'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={toggleHold}
+                        style={{ width: 44, height: 44, borderRadius: '50%', background: held ? '#fbbf24' : 'rgba(255,255,255,0.08)', border: 'none', color: held ? '#000' : '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        title={held ? 'Resume call' : 'Hold call'}
+                      >
+                        ⏸️
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={endCall}
+                    style={{ height: 44, padding: '0 24px', borderRadius: 22, background: '#dc2626', border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 14px rgba(220, 38, 38, 0.4)' }}
+                  >
+                    <span>📞 End Call</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Wrap-up & Audit Save Screen */
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>কল শেষ হয়েছে ({mins}m {secs}s)</span>
+                <span style={{ fontSize: 11, color: '#10b981', fontWeight: 600 }}>🔴 অডিও রেকর্ড প্রস্তুত</span>
+              </div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 14 }}>
+                কলের ফলাফল সিলেক্ট করুন এবং অডিট সেভ করুন:
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 12 }}>
+                {[
+                  { id: 'confirmed', label: '✅ Order Confirmed', color: '#10b981' },
+                  { id: 'call_later', label: '⏰ Call Later / Reschedule', color: '#38bdf8' },
+                  { id: 'no_answer', label: '⚠️ No Answer / Ringing', color: '#fbbf24' },
+                  { id: 'cancelled', label: '❌ Cancelled by Customer', color: '#f87171' }
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setOutcome(opt.id)}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: 6,
+                      border: outcome === opt.id ? `1.5px solid ${opt.color}` : '1px solid rgba(255,255,255,0.1)',
+                      background: outcome === opt.id ? 'rgba(255,255,255,0.08)' : 'transparent',
+                      color: outcome === opt.id ? opt.color : '#cbd5e1',
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      textAlign: 'left',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                rows={2}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="অডিট নোট লিখুন (যেমন: কাস্টমার সাইজ কনফার্ম করেছেন)..."
+                style={{ width: '100%', padding: '8px 10px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 12, boxSizing: 'border-box', marginBottom: 14 }}
+              />
+
+              <button
+                type="button"
+                onClick={handleSaveCall}
+                disabled={saving || saveSuccess}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: 8, background: saveSuccess ? '#10b981' : 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)', color: '#fff', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+              >
+                {saving ? 'অডিও ও অডিট আপলোড হচ্ছে...' : saveSuccess ? '✅ সংরক্ষিত হয়েছে!' : '💾 Save Call & Audio Audit'}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -19238,6 +19519,15 @@ function CallsAdmin() {
   const [manualCallOpen, setManualCallOpen] = useState(false);
   const [manualPhone, setManualPhone] = useState('');
   const [manualName, setManualName] = useState('');
+  const [sipConn, setSipConn] = useState<{ status: string; ext?: string }>(() => (window as any).__sipStatus || { status: 'simulation', ext: '' });
+
+  useEffect(() => {
+    const onSip = (e: any) => {
+      if (e.detail) setSipConn(e.detail);
+    };
+    window.addEventListener('sip-status-changed', onSip);
+    return () => window.removeEventListener('sip-status-changed', onSip);
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -19276,7 +19566,8 @@ function CallsAdmin() {
         body: JSON.stringify(settings)
       }).then(r => r.json());
       setSettings(res);
-      setSettingsMsg('✅ সেটিংস সফলভাবে সংরক্ষিত হয়েছে!');
+      window.dispatchEvent(new Event('telephony-settings-updated'));
+      setSettingsMsg('✅ সেটিংস সফলভাবে সংরক্ষিত হয়েছে ও SIP রিলোড হয়েছে!');
       setTimeout(() => setSettingsMsg(''), 3000);
     } catch (e: any) {
       setSettingsMsg('❌ ত্রুটি: ' + e.message);
@@ -19344,7 +19635,42 @@ function CallsAdmin() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span
+            style={{
+              padding: '6px 12px',
+              borderRadius: 999,
+              fontSize: 11.5,
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: sipConn.status === 'registered' ? 'rgba(16, 185, 129, 0.14)' : sipConn.status === 'error' ? 'rgba(239, 68, 68, 0.14)' : 'rgba(245, 158, 11, 0.14)',
+              color: sipConn.status === 'registered' ? '#34d399' : sipConn.status === 'error' ? '#f87171' : '#fbbf24',
+              border: `1px solid ${sipConn.status === 'registered' ? 'rgba(16, 185, 129, 0.35)' : sipConn.status === 'error' ? 'rgba(239, 68, 68, 0.35)' : 'rgba(245, 158, 11, 0.35)'}`
+            }}
+          >
+            <span>{sipConn.status === 'registered' ? '🟢' : sipConn.status === 'error' ? '🔴' : '🟡'}</span>
+            <span>
+              {sipConn.status === 'registered'
+                ? `SIP Online (${sipConn.ext || 'Ready'})`
+                : sipConn.status === 'connecting'
+                ? 'Connecting SIP...'
+                : sipConn.status === 'error'
+                ? 'SIP Auth Error'
+                : 'Test / Simulation Mode'}
+            </span>
+          </span>
+          <button
+            type="button"
+            className="sa-btn ghost"
+            onClick={() => window.dispatchEvent(new CustomEvent('simulate-incoming-ip-call', { detail: { phone: '01711223344', name: 'Demo Incoming Customer' } }))}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderColor: 'rgba(16, 185, 129, 0.45)', color: '#34d399' }}
+            title="ইনকামিং কল রিং ও অটো-রেকর্ড টেস্ট করুন"
+          >
+            <span>📲</span>
+            <span>Test Incoming</span>
+          </button>
           <button
             type="button"
             className="sa-btn ghost"
@@ -19511,8 +19837,11 @@ function CallsAdmin() {
                     )}
                   </td>
                   <td>
-                    <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: 13 }}>
-                      {c.customerName || 'Customer'}
+                    <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>{c.customerName || 'Customer'}</span>
+                      <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, background: c.direction === 'inbound' ? 'rgba(16, 185, 129, 0.16)' : 'rgba(56, 189, 248, 0.14)', color: c.direction === 'inbound' ? '#34d399' : '#38bdf8', fontWeight: 700 }}>
+                        {c.direction === 'inbound' ? '📥 In' : '📤 Out'}
+                      </span>
                     </div>
                     <div style={{ fontSize: 12, color: '#38bdf8', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span>{c.customerPhone}</span>
