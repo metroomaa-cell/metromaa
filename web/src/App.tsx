@@ -1462,6 +1462,7 @@ function Shell() {
       <Suspense fallback={<StoreLoading />}>
         <Effects />
         <LoveLockLanding slug={route.param} />
+        <SmartWhatsAppChat />
         <Toast />
       </Suspense>
     );
