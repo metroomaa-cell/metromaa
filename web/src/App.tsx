@@ -919,7 +919,16 @@ function SmartWhatsAppChat() {
   const route = useRoute();
   const language = useStoreLanguage();
   const [num, setNum] = useState('');
-  const [brand, setBrand] = useState('TimeBoost');
+  const [brand, setBrand] = useState(() => {
+    const cached = getCachedSettings()?.storeName;
+    if (cached && cached !== 'dot.' && cached !== 'METRROMA') return cached;
+    if (typeof window !== 'undefined') {
+      const h = window.location.hostname.toLowerCase();
+      if (h.includes('secrate')) return 'Secrate';
+      if (h.includes('metrroma')) return 'Metrroma';
+    }
+    return 'TimeBoost';
+  });
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [showTooltip, setShowTooltip] = useState(true);
@@ -1367,8 +1376,8 @@ function SmartWhatsAppChat() {
                   <div className="secrate-wa-msg-sender">{brand} Care</div>
                   <div className="secrate-wa-msg-text">
                     {isBn
-                      ? 'আসসালামু আলাইকুম! 🌸 TimeBoost-এ আপনাকে স্বাগতম। আপনার যেকোনো প্রশ্ন, স্কিনকেয়ার পরামর্শ বা অর্ডারের জন্য নিচের যেকোনো অপশনে ট্যাপ করুন অথবা মেসেজ লিখুন:'
-                      : 'Hello! 🌸 Welcome to TimeBoost. How can we help you today? Tap an option below or type your message:'}
+                      ? `আসসালামু আলাইকুম! 🌸 ${brand}-এ আপনাকে স্বাগতম। আপনার যেকোনো প্রশ্ন, স্কিনকেয়ার পরামর্শ বা অর্ডারের জন্য নিচের যেকোনো অপশনে ট্যাপ করুন অথবা মেসেজ লিখুন:`
+                      : `Hello! 🌸 Welcome to ${brand}. How can we help you today? Tap an option below or type your message:`}
                   </div>
                   <div className="secrate-wa-msg-time">{isBn ? 'এইমাত্র' : 'Just now'}</div>
                 </div>
