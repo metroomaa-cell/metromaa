@@ -969,9 +969,9 @@ function SmartWhatsAppChat() {
       const JsSIPMod = await import('jssip');
       const JsSIP = JsSIPMod.default || JsSIPMod;
       const socket = new JsSIP.WebSocketInterface('wss://timingboost.xyz/ws');
-      const displayLabel = callerPhone.trim()
-        ? `${callerName.trim() || 'Visitor'} (${callerPhone.trim()})`
-        : (callerName.trim() || 'Website Visitor');
+      const safeName = callerName.trim().replace(/["\r\n()]/g, '') || 'Visitor';
+      const safePhone = callerPhone.trim().replace(/["\r\n()]/g, '');
+      const displayLabel = safePhone ? `${safeName} (${safePhone})` : safeName;
 
       const ua = new JsSIP.UA({
         sockets: [socket],
@@ -985,6 +985,11 @@ function SmartWhatsAppChat() {
 
       ua.on('registered', () => {
         setCallState('ringing');
+        fetch('/api/calls/visitor-ring', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: callerName.trim() || 'Website Visitor', phone: callerPhone.trim() })
+        }).catch(() => {});
         const session = ua.call('sip:600@timingboost.xyz', {
           mediaConstraints: { audio: true, video: false },
           eventHandlers: {
@@ -992,6 +997,11 @@ function SmartWhatsAppChat() {
             confirmed: () => setCallState('connected'),
             ended: () => stopLiveCall(),
             failed: () => {
+              fetch('/api/calls/visitor-missed', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: callerName.trim() || 'Website Visitor', phone: callerPhone.trim() || 'Guest' })
+              }).catch(() => {});
               setCallErr(isBn ? 'এই মুহূর্তে কোনো প্রতিনিধি অনলাইনে নেই বা মাইক্রোফোন অনুমতি দেওয়া হয়নি।' : 'No agent available or microphone permission denied.');
               setCallState('error');
             }
@@ -1034,7 +1044,8 @@ function SmartWhatsAppChat() {
     const handleClickOutside = (e: MouseEvent) => {
       if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
         const toggleBtn = document.getElementById('secrate-wa-toggle-btn');
-        if (toggleBtn && toggleBtn.contains(e.target as Node)) return;
+        const callBtn = document.getElementById('secrate-free-call-btn');
+        if ((toggleBtn && toggleBtn.contains(e.target as Node)) || (callBtn && callBtn.contains(e.target as Node))) return;
         setOpen(false);
       }
     };
@@ -1326,8 +1337,43 @@ function SmartWhatsAppChat() {
         </div>
       )}
 
-      {/* Floating Trigger Button with Tooltip */}
-      <div className="secrate-wa-trigger-container">
+      {/* Floating Trigger Buttons */}
+      <div className="secrate-wa-trigger-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
+        {!open && (
+          <button
+            id="secrate-free-call-btn"
+            type="button"
+            onClick={() => {
+              setOpen(true);
+              setCallMode(true);
+              setCallState('form');
+              setCallErr('');
+              setShowTooltip(false);
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '9px 15px',
+              borderRadius: 999,
+              border: '1px solid rgba(52, 211, 153, 0.5)',
+              background: 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
+              color: '#ffffff',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 8px 24px rgba(5, 150, 105, 0.38)',
+              whiteSpace: 'nowrap'
+            }}
+            title={isBn ? 'কোনো টাকা ছাড়াই ব্রাউজার থেকে সরাসরি কথা বলুন' : 'Call support directly from your browser for free'}
+          >
+            <span style={{ fontSize: 15 }}>📞</span>
+            <span>{isBn ? 'ফ্রি কল করুন' : 'Free Live Call'}</span>
+            <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 999, background: 'rgba(255,255,255,0.2)', fontWeight: 800 }}>
+              {isBn ? 'ফ্রি' : 'FREE'}
+            </span>
+          </button>
+        )}
         {showTooltip && !open && (
           <div className="secrate-wa-tooltip" onClick={() => { setOpen(true); setShowTooltip(false); }}>
             <span>{isBn ? 'সাহায্য প্রয়োজন? চ্যাট করুন 💬' : 'Need help? Chat with us 💬'}</span>
