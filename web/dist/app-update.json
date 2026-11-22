@@ -1,8 +1,7 @@
 {
-  "versionCode": 10,
-  "versionName": "2.4.4",
+  "versionCode": 12,
+  "versionName": "2.4.6",
   "apkUrl": "https://raw.githubusercontent.com/metroomaa-cell/metromaa/main/web/dist/ShakilEcom.apk",
-  "sha256": "9457aeb21690488154273e4f82dee3262ee26eea3620f24d5bd634cc6402aeff",
-  "releaseNotes": "Expired store sessions now prompt a fresh sign-in. Store accounts remain managed separately in Settings. Android will ask you to confirm the install."
+  "sha256": "74a899ffc9dd46b55f3860b5c6628f0b2edcd0a040b15581138f121790262761",
+  "releaseNotes": "Automatic update checks download and verify new versions in the background; Android asks you to confirm installation. Includes full Admin tab, in-app audio/video permissions, image/video/document/CSV/Excel uploads, and existing store features."
 }
-
