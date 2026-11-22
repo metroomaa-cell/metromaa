@@ -3427,6 +3427,10 @@
 .sa-filters button.on{background:linear-gradient(135deg,#7c3aed,#6d28d9);box-shadow:0 5px 16px rgba(124,58,237,.2)}
 .sa .sa-btn{min-height:36px;transition:transform .16s ease,box-shadow .16s ease,background .16s ease}
 .sa .sa-btn:not(.ghost):hover{transform:translateY(-1px);box-shadow:0 7px 18px rgba(124,58,237,.22)}
+.sa .sa-order-call-icon{width:26px;height:26px;min-width:26px;min-height:26px;flex:0 0 26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:1px solid rgba(52,211,153,.48);border-radius:8px;background:rgba(16,185,129,.14);color:#34d399;cursor:pointer;transition:background .16s ease,border-color .16s ease,transform .16s ease}
+.sa .sa-order-call-icon svg{width:15px;height:15px;display:block}
+.sa .sa-order-call-icon:hover{background:rgba(16,185,129,.26);border-color:#34d399;transform:translateY(-1px)}
+.sa .sa-order-call-icon:focus-visible{outline:2px solid #34d399;outline-offset:2px}
 .sa input,.sa select,.sa textarea,.sa-modal input,.sa-modal select,.sa-modal textarea,.sa-drawer input,.sa-drawer select{background-color:#151320;border-color:rgba(255,255,255,.105)}
 .sa input:focus,.sa select:focus,.sa textarea:focus,.sa-modal input:focus,.sa-modal select:focus,.sa-modal textarea:focus,.sa-drawer input:focus,.sa-drawer select:focus{border-color:#8b5cf6;box-shadow:0 0 0 3px rgba(139,92,246,.16);background-color:#191628}
 .sa-login{background:radial-gradient(ellipse at 50% 30%,rgba(124,58,237,.13),transparent 45%),#0b0a12}
