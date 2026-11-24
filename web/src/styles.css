@@ -6805,22 +6805,61 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
 /* ============================================================== */
 /* FIX GAP: REDUCE DEAD SPACE BELOW HERO BANNER SLIDER */
 /* ============================================================== */
+.royal-hero-section {
+  width: 100%;
+  margin-bottom: 0 !important;
+}
+.royal-hero-wrap {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto 0 !important;
+  padding: 0 16px;
+  box-sizing: border-box;
+}
+@media (max-width: 640px) {
+  .royal-hero-wrap {
+    padding: 0 12px;
+    margin-bottom: 0 !important;
+  }
+}
+
+.royal-hero-dots {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  margin-bottom: 8px;
+}
+
 .tabaya-home .ara-section,
 .royal-hero-section + .ara-section {
-  padding-top: 14px !important;
+  padding-top: 8px !important;
 }
 
 .ara-header {
-  margin-bottom: 24px !important;
+  margin-bottom: 14px !important;
+}
+
+.ara-eyebrow {
+  margin-bottom: 2px !important;
+}
+
+.ara-title {
+  margin-bottom: 4px !important;
 }
 
 @media (max-width: 640px) {
   .tabaya-home .ara-section,
   .royal-hero-section + .ara-section {
-    padding-top: 10px !important;
-    padding-bottom: 24px !important;
+    padding-top: 6px !important;
+    padding-bottom: 20px !important;
   }
   .ara-header {
-    margin-bottom: 14px !important;
+    margin-bottom: 10px !important;
+  }
+  .ara-title {
+    font-size: clamp(20px, 5.2vw, 25px) !important;
+    margin-bottom: 4px !important;
   }
 }
