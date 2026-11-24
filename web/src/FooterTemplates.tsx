@@ -80,6 +80,22 @@ export const OFFICIAL_COLORS: Record<string, string> = {
   custom: '#0f172a',
 };
 
+export function ShakilDeveloperCredit({ style, linkColor }: { style?: React.CSSProperties; linkColor?: string }) {
+  return (
+    <span style={{ fontSize: 12, opacity: 0.9, ...style }}>
+      Designed &amp; Developed BY{' '}
+      <a
+        href="https://shakil.metrroma.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: linkColor || 'inherit', fontWeight: 700, textDecoration: 'underline' }}
+      >
+        Shakil
+      </a>
+    </span>
+  );
+}
+
 export function getSiteBrandDefaults() {
   const h = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
   if (h.includes('secrate')) return { name: 'SECRATE', logo: '/uploads/logo_secrate_rich.webp', isMetrroma: false };
@@ -647,7 +663,7 @@ export function WatchLuxuryFooter({
         {/* Bottom copyright line */}
         <div className="ft-rm-bottom">
           <span>{f.copyright || (language === 'bn' ? `© ২০২৬ ${name}. সর্বস্বত্ব সংরক্ষিত।` : `© 2026 ${name}. All Rights Reserved.`)}</span>
-          <span style={{ fontSize: 12, opacity: 0.75 }}>Curated for Exceptional Everyday Living</span>
+          <ShakilDeveloperCredit />
         </div>
       </div>
     </footer>
@@ -757,7 +773,7 @@ export function AvoraFooter({
         {/* Middle copyright & Powered by */}
         <div className="ft-avora-mid-row">
           <span>{f.copyright || `© Copyright 2026. ${name} All Rights Reserved.`}</span>
-          <span>{f.poweredBy || `Powered By ${name.toLowerCase()}.com`}</span>
+          <ShakilDeveloperCredit />
         </div>
 
         {/* Giant Oversized Brand Typography */}
@@ -910,8 +926,9 @@ export function BoutiqueFooter({
         </div>
 
         {/* Small copyright */}
-        <div className="ft-btq-copyright">
-          {f.copyright || `© 2026 ${name}. ALL RIGHTS RESERVED.`}
+        <div className="ft-btq-copyright" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+          <span>{f.copyright || `© 2026 ${name}. ALL RIGHTS RESERVED.`}</span>
+          <ShakilDeveloperCredit />
         </div>
       </div>
     </footer>
@@ -1021,8 +1038,9 @@ export function EnkyFooter({
           <div className="ft-enky-giant-brand">
             {name.toLowerCase()}<span className="ft-enky-reg">®</span>
           </div>
-          <div className="ft-enky-copyright">
-            {f.copyright || `© 2026 ${name}. All Rights Reserved.`}
+          <div className="ft-enky-copyright" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+            <span>{f.copyright || `© 2026 ${name}. All Rights Reserved.`}</span>
+            <ShakilDeveloperCredit />
           </div>
         </div>
       </div>
@@ -1127,7 +1145,7 @@ export function ClassicFooter({
         </div>
         <div className="tabaya-footer-bottom">
           <span>{f.copyright || (language === 'bn' ? `© ২০২৬ ${name}. সর্বস্বত্ব সংরক্ষিত।` : `© 2026 ${name}. All Rights Reserved.`)}</span>
-          <span>Designed & Developed for exceptional performance</span>
+          <ShakilDeveloperCredit />
         </div>
       </div>
     </footer>
@@ -1149,13 +1167,15 @@ export function RenderFooter({
   const logo = resolveBrandLogo(settings?.logo);
   const name = resolveBrandName(settings?.storeName);
 
-  // Custom HTML Mode
+  // Custom HTML Mode (Hardcoded Developer Credit permanently retained below custom HTML)
   if (f.mode === 'custom_html' && f.customHtml && f.customHtml.trim()) {
     return (
-      <div
-        className="custom-html-footer-container"
-        dangerouslySetInnerHTML={{ __html: f.customHtml }}
-      />
+      <div className="custom-html-footer-container">
+        <div dangerouslySetInnerHTML={{ __html: f.customHtml }} />
+        <div style={{ textAlign: 'center', padding: '14px 20px', background: '#090812', borderTop: '1px solid rgba(255,255,255,0.08)', color: '#94a3b8', fontSize: 13 }}>
+          <ShakilDeveloperCredit linkColor="#c4b5fd" />
+        </div>
+      </div>
     );
   }
 
