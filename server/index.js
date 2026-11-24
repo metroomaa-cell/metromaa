@@ -6466,6 +6466,129 @@ const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
 
 // ==========================================
+
+// ==========================================
+// STORE GEMINI API KEY HELPERS & TEST ENDPOINTS
+// ==========================================
+export function getStoreGeminiApiKey() {
+  const ig = getIntegrations() || {};
+  const wa = getWhatsAppSettings() || {};
+  const settings = getSettings() || {};
+  const key = String(
+    ig.geminiApiKey ||
+    ig.ai?.geminiApiKey ||
+    wa.geminiApiKey ||
+    settings.geminiApiKey ||
+    process.env.GEMINI_API_KEY ||
+    ''
+  ).trim();
+  return key;
+}
+
+export function saveStoreGeminiApiKey(rawKey) {
+  const key = String(rawKey || '').trim();
+  const ig = getIntegrations() || {};
+  ig.geminiApiKey = key;
+  if (!ig.whatsapp) ig.whatsapp = {};
+  ig.whatsapp.geminiApiKey = key;
+  saveIntegrations(ig);
+  try {
+    saveWhatsAppSettings({ geminiApiKey: key });
+  } catch (_) {}
+  return key;
+}
+
+app.post('/api/ai-call/test-key', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
+  try {
+    const key = String(req.body?.geminiApiKey || getStoreGeminiApiKey() || '').trim();
+    if (!key) return res.json({ ok: false, error: 'কোনো Gemini API Key পাওয়া যায়নি।' });
+    const testModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    let lastErr = '';
+    for (const m of testModels) {
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(key)}`;
+        const r = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Say OK' }] }], generationConfig: { maxOutputTokens: 10 } })
+        });
+        if (r.ok) {
+          if (req.body?.geminiApiKey && String(req.body.geminiApiKey).trim()) {
+            saveStoreGeminiApiKey(key);
+          }
+          return res.json({ ok: true, model: m, message: `✅ Gemini API Key কাজ করছে (${m}) এবং এই স্টোরের জন্য সেভ হয়েছে!` });
+        }
+        const errData = await r.json().catch(() => ({}));
+        lastErr = errData?.error?.message || `HTTP ${r.status}`;
+      } catch (err) {
+        lastErr = err?.message;
+      }
+    }
+    res.json({ ok: false, error: lastErr || 'Unknown error' });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/admin/ai-copilot/key', adminAuth, (req, res) => {
+  try {
+    const key = getStoreGeminiApiKey();
+    const masked = key ? (key.length > 10 ? `${key.slice(0, 6)}...${key.slice(-4)}` : '******') : '';
+    const ig = getIntegrations() || {};
+    const isStoreSpecific = !!(ig.geminiApiKey || ig.whatsapp?.geminiApiKey);
+    res.json({
+      ok: true,
+      hasKey: !!key,
+      keyMasked: masked,
+      isStoreSpecific,
+      storeName: getSettings()?.storeName || 'METRROMA'
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/admin/ai-copilot/key', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
+  try {
+    const key = String(req.body?.geminiApiKey || '').trim();
+    if (!key) return res.status(400).json({ ok: false, error: 'অনুগ্রহ করে একটি বৈধ Gemini API Key দিন।' });
+    const testModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    let verified = false;
+    let activeModel = '';
+    let lastErr = '';
+    for (const m of testModels) {
+      try {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(key)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Say OK' }] }], generationConfig: { maxOutputTokens: 10 } })
+        });
+        if (r.ok) {
+          verified = true;
+          activeModel = m;
+          break;
+        }
+        const errJson = await r.json().catch(() => ({}));
+        lastErr = errJson?.error?.message || `HTTP ${r.status}`;
+      } catch (err) {
+        lastErr = err?.message;
+      }
+    }
+    if (!verified) {
+      return res.status(400).json({ ok: false, error: lastErr || 'API Key সঠিক নয় বা কোটা সমস্যা।' });
+    }
+    saveStoreGeminiApiKey(key);
+    const storeName = getSettings()?.storeName || 'METRROMA';
+    res.json({
+      ok: true,
+      model: activeModel,
+      message: `✅ "${storeName}" স্টোরের নিজস্ব Gemini API Key সংরক্ষিত ও সক্রিয় হয়েছে!`
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // SAIKA AI COPILOT & VOICE ASSISTANT ENDPOINT
 // ==========================================
 app.post('/api/admin/ai-copilot/ask', adminAuth, async (req, res) => {
