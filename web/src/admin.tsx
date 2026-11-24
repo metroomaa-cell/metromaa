@@ -15192,33 +15192,59 @@ function SettingsAdmin() {
 
                 {/* Social Links List */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {/* Column Headers */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '44px 170px 1fr 48px 90px',
+                    gap: 12,
+                    padding: '0 14px',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#94a3b8',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em'
+                  }}>
+                    <span>Icon</span>
+                    <span>Platform</span>
+                    <span>Profile Link / WhatsApp Phone Number</span>
+                    <span style={{ textAlign: 'center' }}>Color</span>
+                    <span style={{ textAlign: 'center' }}>Action</span>
+                  </div>
+
                   {(() => {
                     const curFooter = f.footer || {};
                     const socialList = normalizeSocialLinks(curFooter);
                     const st = curFooter.socialStyle || {};
                     const isOfficial = st.preset === 'official';
-                    const iconColor = st.iconColor || '#1e293b';
+                    const globalIconColor = st.iconColor || '#1e293b';
 
                     return socialList.map((item: any, idx: number) => {
-                      const thisIconColor = isOfficial ? (OFFICIAL_COLORS[item.platform.toLowerCase()] || iconColor) : iconColor;
+                      const platform = (item.platform || 'facebook').toLowerCase();
+                      const thisIconColor = item.color && item.color.trim()
+                        ? item.color.trim()
+                        : (isOfficial ? (OFFICIAL_COLORS[platform] || globalIconColor) : globalIconColor);
+
                       return (
                         <div
                           key={idx}
                           style={{
-                            display: 'flex',
-                            alignItems: 'center',
+                            display: 'grid',
+                            gridTemplateColumns: '44px 170px 1fr 48px 90px',
                             gap: 12,
+                            alignItems: 'center',
                             background: '#0e0b1d',
                             border: '1px solid rgba(255,255,255,0.08)',
                             borderRadius: 10,
-                            padding: '10px 14px'
+                            padding: '10px 14px',
+                            boxSizing: 'border-box',
+                            width: '100%'
                           }}
                         >
                           {/* Mini Icon Preview */}
                           <div
                             style={{
-                              width: 36,
-                              height: 36,
+                              width: 38,
+                              height: 38,
                               borderRadius: '50%',
                               background: st.bgColor || '#ffffff',
                               border: `1.5px solid ${st.borderColor || '#cbd5e1'}`,
@@ -15226,62 +15252,90 @@ function SettingsAdmin() {
                               alignItems: 'center',
                               justifyContent: 'center',
                               color: thisIconColor,
-                              flexShrink: 0
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
                             }}
                           >
                             <SocialIcon type={item.platform} size={18} color={thisIconColor} />
                           </div>
 
                           {/* Platform Selector */}
-                          <select
-                            value={item.platform}
-                            onChange={(e) => {
-                              const next = [...socialList];
-                              const selectedPlatform = AVAILABLE_PLATFORMS.find((p) => p.id === e.target.value);
-                              next[idx] = {
-                                ...next[idx],
-                                platform: e.target.value,
-                                url: (next[idx].url && next[idx].url !== 'https://facebook.com') ? next[idx].url : (selectedPlatform?.defaultUrl || 'https://')
-                              };
-                              setF({ ...f, footer: { ...curFooter, socialLinks: next } });
-                            }}
-                            style={{
-                              padding: '8px 12px',
-                              borderRadius: 6,
-                              background: '#17142b',
-                              border: '1px solid rgba(255,255,255,0.12)',
-                              color: '#fff',
-                              fontSize: 13,
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              minWidth: 150
-                            }}
-                          >
-                            {AVAILABLE_PLATFORMS.map((p) => (
-                              <option key={p.id} value={p.id}>{p.name}</option>
-                            ))}
-                          </select>
+                          <div style={{ width: '100%' }}>
+                            <select
+                              value={item.platform}
+                              onChange={(e) => {
+                                const next = [...socialList];
+                                const selectedPlatform = AVAILABLE_PLATFORMS.find((p) => p.id === e.target.value);
+                                next[idx] = {
+                                  ...next[idx],
+                                  platform: e.target.value,
+                                  url: (next[idx].url && !next[idx].url.includes('facebook.com')) ? next[idx].url : (selectedPlatform?.defaultUrl || 'https://')
+                                };
+                                setF({ ...f, footer: { ...curFooter, socialLinks: next } });
+                              }}
+                              style={{
+                                width: '100%',
+                                boxSizing: 'border-box',
+                                padding: '9px 12px',
+                                borderRadius: 7,
+                                background: '#17142b',
+                                border: '1px solid rgba(255,255,255,0.12)',
+                                color: '#fff',
+                                fontSize: 13,
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {AVAILABLE_PLATFORMS.map((p) => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
+                          </div>
 
-                          {/* URL Input */}
-                          <input
-                            type="text"
-                            value={item.url}
-                            onChange={(e) => {
-                              const next = [...socialList];
-                              next[idx] = { ...next[idx], url: e.target.value };
-                              setF({ ...f, footer: { ...curFooter, socialLinks: next } });
-                            }}
-                            placeholder="https://..."
-                            style={{
-                              flex: 1,
-                              padding: '8px 12px',
-                              borderRadius: 6,
-                              background: '#17142b',
-                              border: '1px solid rgba(255,255,255,0.12)',
-                              color: '#fff',
-                              fontSize: 13
-                            }}
-                          />
+                          {/* URL / Phone Number Input */}
+                          <div style={{ width: '100%' }}>
+                            <input
+                              type="text"
+                              value={item.url || ''}
+                              onChange={(e) => {
+                                const next = [...socialList];
+                                next[idx] = { ...next[idx], url: e.target.value };
+                                setF({ ...f, footer: { ...curFooter, socialLinks: next } });
+                              }}
+                              placeholder={item.platform === 'whatsapp' ? 'Phone number (e.g. 01878374762) or https://wa.me/...' : 'Profile link (e.g. https://facebook.com/yourpage)'}
+                              style={{
+                                width: '100%',
+                                boxSizing: 'border-box',
+                                padding: '9px 14px',
+                                borderRadius: 7,
+                                background: '#17142b',
+                                border: '1px solid rgba(255,255,255,0.12)',
+                                color: '#fff',
+                                fontSize: 13
+                              }}
+                            />
+                          </div>
+
+                          {/* Individual Color Picker */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Change this icon's color">
+                            <input
+                              type="color"
+                              value={thisIconColor}
+                              onChange={(e) => {
+                                const next = [...socialList];
+                                next[idx] = { ...next[idx], color: e.target.value };
+                                setF({ ...f, footer: { ...curFooter, socialLinks: next } });
+                              }}
+                              style={{
+                                width: 34,
+                                height: 34,
+                                padding: 0,
+                                borderRadius: 7,
+                                border: '1px solid rgba(255,255,255,0.2)',
+                                cursor: 'pointer',
+                                background: 'transparent'
+                              }}
+                            />
+                          </div>
 
                           {/* Remove Button */}
                           <button
@@ -15292,14 +15346,18 @@ function SettingsAdmin() {
                               setF({ ...f, footer: { ...curFooter, socialLinks: next } });
                             }}
                             style={{
+                              width: '100%',
+                              height: 38,
                               background: 'rgba(239, 68, 68, 0.12)',
                               border: '1px solid rgba(239, 68, 68, 0.25)',
                               color: '#ef4444',
-                              borderRadius: 6,
-                              padding: '8px 12px',
+                              borderRadius: 7,
                               cursor: 'pointer',
                               fontSize: 12,
-                              fontWeight: 600
+                              fontWeight: 600,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
                             }}
                             title="Remove Profile"
                           >

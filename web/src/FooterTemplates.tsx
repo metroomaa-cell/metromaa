@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { WhatsAppIcon } from './icons';
 import { tr, useStoreLanguage } from './language';
 import { go } from './cart';
 
@@ -17,6 +16,7 @@ export interface SocialLinkItem {
   id?: string;
   platform: string;
   url: string;
+  color?: string; // Optional custom color per individual icon
 }
 
 export interface SocialStyle {
@@ -47,28 +47,28 @@ export interface FooterSettings {
 }
 
 export const AVAILABLE_PLATFORMS = [
-  { id: 'facebook', name: 'Facebook', defaultUrl: 'https://facebook.com/' },
-  { id: 'instagram', name: 'Instagram', defaultUrl: 'https://instagram.com/' },
-  { id: 'whatsapp', name: 'WhatsApp', defaultUrl: 'https://wa.me/' },
-  { id: 'tiktok', name: 'TikTok', defaultUrl: 'https://tiktok.com/@' },
-  { id: 'youtube', name: 'YouTube', defaultUrl: 'https://youtube.com/@' },
-  { id: 'twitter', name: 'X (Twitter)', defaultUrl: 'https://x.com/' },
-  { id: 'telegram', name: 'Telegram', defaultUrl: 'https://t.me/' },
-  { id: 'pinterest', name: 'Pinterest', defaultUrl: 'https://pinterest.com/' },
-  { id: 'linkedin', name: 'LinkedIn', defaultUrl: 'https://linkedin.com/company/' },
-  { id: 'threads', name: 'Threads', defaultUrl: 'https://threads.net/@' },
-  { id: 'snapchat', name: 'Snapchat', defaultUrl: 'https://snapchat.com/add/' },
-  { id: 'discord', name: 'Discord', defaultUrl: 'https://discord.gg/' },
-  { id: 'reddit', name: 'Reddit', defaultUrl: 'https://reddit.com/r/' },
-  { id: 'custom', name: 'Custom Website / Link', defaultUrl: 'https://' },
+  { id: 'facebook', name: 'Facebook', defaultUrl: 'https://facebook.com/', officialColor: '#1877F2' },
+  { id: 'instagram', name: 'Instagram', defaultUrl: 'https://instagram.com/', officialColor: '#E4405F' },
+  { id: 'tiktok', name: 'TikTok', defaultUrl: 'https://tiktok.com/@', officialColor: '#000000' },
+  { id: 'youtube', name: 'YouTube', defaultUrl: 'https://youtube.com/@', officialColor: '#FF0000' },
+  { id: 'whatsapp', name: 'WhatsApp', defaultUrl: 'https://wa.me/', officialColor: '#25D366' },
+  { id: 'twitter', name: 'X (Twitter)', defaultUrl: 'https://x.com/', officialColor: '#000000' },
+  { id: 'telegram', name: 'Telegram', defaultUrl: 'https://t.me/', officialColor: '#229ED9' },
+  { id: 'pinterest', name: 'Pinterest', defaultUrl: 'https://pinterest.com/', officialColor: '#BD081C' },
+  { id: 'linkedin', name: 'LinkedIn', defaultUrl: 'https://linkedin.com/company/', officialColor: '#0A66C2' },
+  { id: 'threads', name: 'Threads', defaultUrl: 'https://threads.net/@', officialColor: '#000000' },
+  { id: 'snapchat', name: 'Snapchat', defaultUrl: 'https://snapchat.com/add/', officialColor: '#EAAA00' },
+  { id: 'discord', name: 'Discord', defaultUrl: 'https://discord.gg/', officialColor: '#5865F2' },
+  { id: 'reddit', name: 'Reddit', defaultUrl: 'https://reddit.com/r/', officialColor: '#FF4500' },
+  { id: 'custom', name: 'Custom Website / Link', defaultUrl: 'https://', officialColor: '#0f172a' },
 ] as const;
 
 export const OFFICIAL_COLORS: Record<string, string> = {
   facebook: '#1877F2',
   instagram: '#E4405F',
-  whatsapp: '#25D366',
-  youtube: '#FF0000',
   tiktok: '#000000',
+  youtube: '#FF0000',
+  whatsapp: '#25D366',
   twitter: '#000000',
   telegram: '#229ED9',
   pinterest: '#BD081C',
@@ -154,104 +154,137 @@ export function normalizeSocialLinks(footer?: FooterSettings): SocialLinkItem[] 
   return res;
 }
 
-/* Comprehensive SVG Social Icons for all global platforms */
+/**
+ * Official, pixel-perfect brand SVG icons
+ * Sourced directly from official brand guidelines and FontAwesome 6 Pro
+ */
 export function SocialIcon({ type, size = 18, color }: { type: string; size?: number; color?: string }) {
   const fill = color || 'currentColor';
   const cleanType = (type || '').toLowerCase().trim();
 
   switch (cleanType) {
     case 'facebook':
+      // Official Facebook "f" logo
       return (
-        <svg viewBox="0 0 24 24" width={size} height={size} fill={fill}>
-          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+        <svg viewBox="0 0 320 512" width={size} height={size} fill={fill} style={{ display: 'block' }}>
+          <path d="M279.14 288l14.22-92.66h-88.91v-60.13c0-25.35 12.42-50.06 52.24-50.06h40.42V6.26S260.43 0 225.36 0c-73.22 0-121.08 44.38-121.08 124.72v70.62H22.89V288h81.39v224h100.17V288z"/>
         </svg>
       );
     case 'instagram':
+      // Official Instagram glyph
       return (
-        <svg viewBox="0 0 24 24" width={size} height={size} fill={fill}>
-          <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+        <svg viewBox="0 0 448 512" width={size} height={size} fill={fill} style={{ display: 'block' }}>
+          <path d="M224.1 141c-63.6 0-114.9 51.3-114.9 114.9s51.3 114.9 114.9 114.9S339 319.5 339 255.9 287.7 141 224.1 141zm0 189.6c-41.1 0-74.7-33.5-74.7-74.7s33.5-74.7 74.7-74.7 74.7 33.5 74.7 74.7-33.6 74.7-74.7 74.7zm146.4-194.3c0 14.9-12 26.8-26.8 26.8-14.9 0-26.8-12-26.8-26.8s12-26.8 26.8-26.8 26.8 12 26.8 26.8zm76.1 27.2c-1.7-35.9-9.9-67.7-36.2-93.9-26.2-26.2-58-34.4-93.9-36.2-37-2.1-147.9-2.1-184.9 0-35.8 1.7-67.6 9.9-93.9 36.1s-34.4 58-36.2 93.9c-2.1 37-2.1 147.9 0 184.9 1.7 35.9 9.9 67.7 36.2 93.9s58 34.4 93.9 36.2c37 2.1 147.9 2.1 184.9 0 35.9-1.7 67.7-9.9 93.9-36.2 26.2-26.2 34.4-58 36.2-93.9 2.1-37 2.1-147.8 0-184.8zM398.8 388c-7.8 19.6-22.9 34.7-42.6 42.6-29.5 11.7-99.5 9-132.1 9s-102.7 2.6-132.1-9c-19.6-7.8-34.7-22.9-42.6-42.6-11.7-29.5-9-99.5-9-132.1s-2.6-102.7 9-132.1c7.8-19.6 22.9-34.7 42.6-42.6 29.5-11.7 99.5-9 132.1-9s102.7-2.6 132.1 9c19.6 7.8 34.7 22.9 42.6 42.6 11.7 29.5 9 99.5 9 132.1s2.7 102.7-9 132.1z"/>
         </svg>
       );
     case 'tiktok':
+      // Official TikTok musical note logo
       return (
-        <svg viewBox="0 0 24 24" width={size} height={size} fill={fill}>
-          <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.298-.002.595.042.88.13V9.4a6.33 6.33 0 0 0-1-.08A6.34 6.34 0 0 0 3 15.66a6.34 6.34 0 0 0 10.81 4.47 6.27 6.27 0 0 0 1.9-4.47V8.5a8.27 8.27 0 0 0 4.88 1.58V6.69z"/>
+        <svg viewBox="0 0 448 512" width={size} height={size} fill={fill} style={{ display: 'block' }}>
+          <path d="M448 209.91a210.06 210.06 0 0 1-122.77-39.25V349.38A162.55 162.55 0 1 1 185 188.31V278.2a74.62 74.62 0 1 0 52.23 71.18V0l88 0a121.18 121.18 0 0 0 1.86 22.17h0A122.18 122.18 0 0 0 381 102.39a121.43 121.43 0 0 0 67 20.14z"/>
         </svg>
       );
     case 'youtube':
+      // Official YouTube play logo
       return (
-        <svg viewBox="0 0 24 24" width={size} height={size} fill={fill}>
-          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+        <svg viewBox="0 0 576 512" width={size} height={size} fill={fill} style={{ display: 'block' }}>
+          <path d="M549.655 124.083c-6.281-23.65-24.787-42.276-48.284-48.597C458.781 64 288 64 288 64S117.22 64 74.629 75.486c-23.497 6.322-42.003 24.947-48.284 48.597-11.412 42.867-11.412 132.305-11.412 132.305s0 89.438 11.412 132.305c6.281 23.65 24.787 41.5 48.284 47.821C117.22 448 288 448 288 448s170.78 0 213.371-11.486c23.497-6.321 42.003-24.171 48.284-47.821 11.412-42.867 11.412-132.305 11.412-132.305s0-89.438-11.412-132.305zm-317.51 213.583V174.334l142.739 81.666-142.739 81.666z"/>
         </svg>
       );
     case 'whatsapp':
+      // Official WhatsApp bubble & receiver
       return (
-        <svg viewBox="0 0 24 24" width={size} height={size} fill={fill}>
-          <path d="M17.507 14.307c-.283-.141-1.674-.824-1.933-.918-.259-.094-.447-.141-.636.141-.188.282-.73 1.036-.895 1.224-.165.188-.33.212-.612.071-.282-.141-1.192-.439-2.272-1.4-.84-.748-1.407-1.672-1.572-1.954-.165-.282-.018-.435.124-.575.127-.127.283-.33.424-.494.141-.165.1-.33.024-.612-.075-.282-.636-1.53-.872-2.094-.23-.55-.463-.475-.636-.484l-.542-.01c-.188 0-.494.071-.753.353-.259.282-.988.965-.988 2.353 0 1.388 1.012 2.73 1.153 2.918.141.188 1.99 3.04 4.823 4.263.674.292 1.2.466 1.611.597.677.215 1.293.185 1.78.112.543-.081 1.674-.684 1.909-1.344.235-.66.235-1.224.165-1.344-.07-.12-.259-.188-.542-.33zm-5.467 7.42c-2.036 0-3.953-.59-5.58-1.608l-.4-.25-4.144 1.087 1.106-4.04-.26-.414c-1.12-1.785-1.716-3.86-1.716-5.992 0-6.075 4.942-11.017 11.02-11.017 2.943 0 5.71 1.147 7.79 3.228 2.08 2.08 3.226 4.848 3.226 7.792 0 6.077-4.944 11.019-11.022 11.019zm9.394-18.414c-2.508-2.51-5.845-3.893-9.394-3.893-7.31 0-13.26 5.95-13.26 13.26 0 2.336.61 4.617 1.77 6.626l-1.88 6.874 7.034-1.845c1.944 1.06 4.143 1.62 6.39 1.62h.005c7.31 0 13.26-5.95 13.26-13.26 0-3.548-1.382-6.885-3.89-9.395z"/>
+        <svg viewBox="0 0 448 512" width={size} height={size} fill={fill} style={{ display: 'block' }}>
+          <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/>
         </svg>
       );
     case 'twitter':
     case 'x':
+      // Official X (Twitter) logo
       return (
-        <svg viewBox="0 0 24 24" width={size} height={size} fill={fill}>
-          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+        <svg viewBox="0 0 512 512" width={size} height={size} fill={fill} style={{ display: 'block' }}>
+          <path d="M389.2 48h70.6L305.6 224.2 487 464H345L233.7 318.6 106.5 464H35.8L200.7 275.5 26.8 48H172.4L272.9 180.9 389.2 48zM364.4 421.8h39.1L151.1 88h-42L364.4 421.8z"/>
         </svg>
       );
     case 'telegram':
+      // Official Telegram plane
       return (
-        <svg viewBox="0 0 24 24" width={size} height={size} fill={fill}>
-          <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.18.716-1.574 6.44-2.284 9.24-.3 1.185-.737 1.581-1.16 1.62-.919.085-1.616-.607-2.506-1.19-.139-.092-2.174-1.386-2.92-1.748-.746-.362-1.077-.732-.016-1.792.244-.244 4.542-4.16 4.625-4.512.01-.044.02-.19-.07-.27-.09-.08-.22-.053-.32-.03-.13.03-2.29 1.46-6.46 4.28-.61.42-1.16.63-1.66.62-.55-.01-1.6-.31-2.39-.56-.97-.31-1.74-.48-1.67-1.01.04-.28.42-.56 1.15-.86 4.49-1.95 7.49-3.24 9-3.87 4.28-1.78 5.17-2.09 5.75-2.1.13 0 .41.03.6.18.15.13.2.3.22.42-.01.07.01.23-.03.38z"/>
+        <svg viewBox="0 0 496 512" width={size} height={size} fill={fill} style={{ display: 'block' }}>
+          <path d="M248 8C111 8 0 119 0 256s111 248 248 248 248-111 248-248S385 8 248 8zm121.8 169.9l-40.7 191.8c-3 13.6-11.1 16.9-22.4 10.5l-62-45.7-29.9 28.8c-3.3 3.3-6.1 6.1-12.5 6.1l4.4-63.1 114.9-103.8c5-4.4-1.1-6.9-7.7-2.5l-142 89.4-61.2-19.1c-13.3-4.2-13.6-13.3 2.8-19.7l239.1-92.2c11.1-4 20.8 2.7 17.2 19.5z"/>
         </svg>
       );
     case 'pinterest':
+      // Official Pinterest badge
       return (
-        <svg viewBox="0 0 24 24" width={size} height={size} fill={fill}>
-          <path d="M12 0a12 12 0 0 0-4.37 23.18c-.06-.94-.12-2.39.02-3.42l1.04-4.41s-.26-.52-.26-1.3c0-1.22.71-2.13 1.59-2.13.75 0 1.11.56 1.11 1.24 0 .76-.48 1.89-.73 2.94-.21.88.44 1.6 1.31 1.6 1.57 0 2.78-1.66 2.78-4.05 0-2.12-1.52-3.6-3.7-3.6-2.52 0-4 1.89-4 3.84 0 .76.29 1.58.66 2.02.07.09.08.17.06.26l-.25 1.02c-.04.16-.14.2-.32.12-1.19-.55-1.93-2.28-1.93-3.67 0-2.98 2.17-5.72 6.25-5.72 3.28 0 5.83 2.34 5.83 5.46 0 3.26-2.05 5.88-4.9 5.88-.96 0-1.86-.5-2.17-1.09l-.59 2.25c-.21.82-.78 1.85-1.17 2.47A12 12 0 1 0 12 0z"/>
+        <svg viewBox="0 0 384 512" width={size} height={size} fill={fill} style={{ display: 'block' }}>
+          <path d="M204 6.5C101.4 6.5 0 74.9 0 185.6 0 256 39.6 296 63.6 296c9.9 0 15.6-27.6 15.6-35.4 0-9.3-23.7-29.1-23.7-67.8 0-80.4 61.2-137.4 140.4-137.4 68.1 0 118.5 38.7 118.5 109.8 0 53.1-21.3 152.7-90.3 152.7-24.9 0-46.2-18-46.2-43.8 0-38.1 24.9-75 24.9-114.3 0-66.3-93.6-54.3-93.6 25.8 0 16.8 2.1 35.4 9.6 50.7-13.8 59.4-42 147.9-42 209.1 0 18.9 2.7 37.5 4.5 56.4 3.3 3.9 4.8 3.9 8.4 1.5 36.3-50.7 52.8-82.5 73.2-162.9 8.7 16.5 31.8 29.4 57 29.4 99.9 0 148.2-96 148.2-197.4C360 81.5 287.4 6.5 204 6.5z"/>
         </svg>
       );
     case 'linkedin':
+      // Official LinkedIn logo
       return (
-        <svg viewBox="0 0 24 24" width={size} height={size} fill={fill}>
-          <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+        <svg viewBox="0 0 448 512" width={size} height={size} fill={fill} style={{ display: 'block' }}>
+          <path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3zM135.4 416H69V202.2h66.5V416zm-33.2-243c-21.3 0-38.5-17.3-38.5-38.5S80.9 96 102.2 96c21.2 0 38.5 17.3 38.5 38.5 0 21.3-17.2 38.5-38.5 38.5zm282.1 243h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9V416z"/>
         </svg>
       );
     case 'threads':
+      // Official Threads logo
       return (
-        <svg viewBox="0 0 24 24" width={size} height={size} fill={fill}>
-          <path d="M12.186 24C5.454 24 0 18.608 0 12.004 0 5.397 5.454 0 12.186 0c6.643 0 11.968 5.253 12.146 11.758h-3.303C20.852 7.03 16.942 3.25 12.186 3.25c-4.908 0-8.91 3.935-8.91 8.754s4.002 8.754 8.91 8.754c3.968 0 7.37-2.615 8.487-6.237h-3.41c-.78 1.83-2.678 3.107-4.912 3.107-2.923 0-5.326-2.193-5.59-5.06h17.228C24.084 12.92 24.1 13.25 24.1 13.59c0 5.75-4.48 10.41-11.914 10.41z"/>
+        <svg viewBox="0 0 448 512" width={size} height={size} fill={fill} style={{ display: 'block' }}>
+          <path d="M331.5 235.7c2.2 .9 4.2 1.9 6.3 2.8c29.2 14.1 50.6 35.2 61.8 61.4c15.7 36.5 17.2 95.8-30.3 143.2c-36.2 36.1-87.6 52.9-148.7 48.6c-59.5-4.2-108.6-27.4-142.1-67C43.1 382.4 24 321.6 24 248.5c0-73.4 19.2-134.4 55.4-176.4C113.8 28.6 164.7 4.2 226.7 0c61.6-4.2 113.8 15.6 151.2 57.3c35.4 39.5 53.6 96.1 54.1 168.3l-50.6 0c-.5-59.8-14.7-105.7-41.9-136.2c-27.4-30.5-66.2-45-112.5-41.9c-48.4 3.3-88 22.8-114.5 56.4c-26.6 33.7-40.7 82.5-40.7 141.2c0 58.7 14.1 107.5 40.7 141.2c26.6 33.7 66.1 53.2 114.5 56.4c48.6 3.4 89.2-9.7 117.6-38c35.8-35.7 34.6-79.8 23.3-106.1c-6.8-15.8-19.6-28.7-37.1-37.2c-1.3-.6-2.6-1.3-4-1.9c-11.4 50.1-39 88.3-83.3 100.8c-28.2 8-57.8 4.2-79.7-10.4c-21.8-14.5-34.6-38.3-34.6-67.1c0-43.5 32-75.3 80.6-79.6c20.3-1.8 40.8 .2 61.2 6.1zm-84.3 90.6c19.9-1.8 38.6-10.8 51.5-24.8c12.8-14 20.2-32.9 21.6-54.8c-15.8-3.9-31.9-5.2-47.8-3.8c-26.9 2.4-44.5 18.2-44.5 40.9c0 15 6.7 27.2 18.2 34.8c9.7 6.4 22.7 8.3 35.8 7.1l-14.8 .6z"/>
         </svg>
       );
     case 'snapchat':
+      // Official Snapchat ghost
       return (
-        <svg viewBox="0 0 24 24" width={size} height={size} fill={fill}>
-          <path d="M12.001 0c-4.408 0-7.391 3.167-7.391 6.963 0 1.053.305 2.115.829 2.98.118.196.126.335.04.542-.116.279-.444.608-.946.953-.615.423-.889.712-.89 1.157 0 .394.271.741.979.948.337.098.749.167 1.155.195.14.009.24.103.24.244-.002.325-.098.857-.311 1.458-.291.821-.693 1.346-1.162 1.516-.54.195-.733.568-.733.84 0 .376.357.777 1.312.99 1.488.332 3.82.493 5.378.503h.001c.21 0 .37.16.37.37 0 .19-.13.34-.31.37-1.12.19-2.2.4-3.11.75-.43.16-.7.42-.7.71 0 .42.54.81 1.49 1.08 1.44.41 3.66.64 5.2.64 1.54 0 3.76-.23 5.2-.64.95-.27 1.49-.66 1.49-1.08 0-.29-.27-.55-.7-.71-.91-.35-1.99-.56-3.11-.75-.18-.03-.31-.18-.31-.37 0-.21.16-.37.37-.37h.001c1.558-.01 3.89-.171 5.378-.503.955-.213 1.312-.614 1.312-.99 0-.272-.193-.645-.733-.84-.469-.17-.871-.695-1.162-1.516-.213-.601-.309-1.133-.311-1.458 0-.141.1-.235.24-.244.406-.028.818-.097 1.155-.195.708-.207.979-.554.979-.948-.001-.445-.275-.734-.89-1.157-.502-.345-.83-.674-.946-.953-.086-.207-.078-.346.04-.542.524-.865.829-1.927.829-2.98 0-3.796-2.983-6.963-7.391-6.963z"/>
+        <svg viewBox="0 0 512 512" width={size} height={size} fill={fill} style={{ display: 'block' }}>
+          <path d="M495.2 355.4c-4.9-10.4-14.6-17.1-25.6-21.8-21.3-9.1-41.2-14.8-49.9-20.7-7-4.8-10.2-10.4-10.2-17.7 0-14.7 13.7-32.5 19.3-39.6 10.9-13.8 22.3-33.4 22.3-61.9 0-77.9-61.7-141.7-195.1-141.7S60.9 117.8 60.9 195.7c0 28.5 11.4 48.1 22.3 61.9 5.6 7.1 19.3 24.9 19.3 39.6 0 7.3-3.2 12.9-10.2 17.7-8.7 5.9-28.6 11.6-49.9 20.7-11 4.7-20.7 11.4-25.6 21.8-5.3 11.2-3.8 23.3 4 33.1 13.9 17.5 45.4 23.6 74.3 26.8 3.5.4 6 3.4 5.7 6.9-.9 10.4-2.6 30.1-2.6 44.6 0 6.6 4.3 12.4 10.6 14.2 18.2 5.1 48.8 8.9 83.7 8.9 21.6 0 45.1-1.6 68.3-7.5 10.5-2.7 21.6-2.7 32.1 0 23.2 5.9 46.7 7.5 68.3 7.5 34.9 0 65.5-3.8 83.7-8.9 6.3-1.8 10.6-7.6 10.6-14.2 0-14.5-1.7-34.2-2.6-44.6-.3-3.5 2.2-6.5 5.7-6.9 28.9-3.2 60.4-9.3 74.3-26.8 7.8-9.8 9.3-21.9 4-33.1z"/>
         </svg>
       );
     case 'discord':
+      // Official Discord controller face
       return (
-        <svg viewBox="0 0 24 24" width={size} height={size} fill={fill}>
-          <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.893.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+        <svg viewBox="0 0 640 512" width={size} height={size} fill={fill} style={{ display: 'block' }}>
+          <path d="M524.531 69.836a1.5 1.5 0 0 0-.764-.7A485.065 485.065 0 0 0 404.081 32.03a1.816 1.816 0 0 0-1.923.91 337.461 337.461 0 0 0-14.901 30.607 449.214 449.214 0 0 0-134.426 0 304.247 304.247 0 0 0-15.188-30.607 1.877 1.877 0 0 0-1.924-.91 483.682 483.682 0 0 0-119.688 37.107 1.712 1.712 0 0 0-.788.676C39.068 183.651 18.186 294.69 28.43 404.354a2.016 2.016 0 0 0 .765 1.375 487.666 487.666 0 0 0 146.825 74.189 1.9 1.9 0 0 0 2.063-.676A348.2 348.2 0 0 0 208.12 430.4a1.86 1.86 0 0 0-1.019-2.588 321.173 321.173 0 0 1-45.868-21.853 1.885 1.885 0 0 1-.185-3.126 251.047 251.047 0 0 0 9.109-7.13 1.819 1.819 0 0 1 1.9-.256c96.229 43.917 200.41 43.917 295.5 0a1.812 1.812 0 0 1 1.924.233 234.533 234.533 0 0 0 9.132 7.16 1.884 1.884 0 0 1-.162 3.126 301.407 301.407 0 0 1-45.89 21.83 1.875 1.875 0 0 0-1 2.611 391.055 391.055 0 0 0 30.014 48.815 1.864 1.864 0 0 0 2.063.676 486.048 486.048 0 0 0 147.09-74.2 1.822 1.822 0 0 0 .765-1.352c12.264-126.783-20.532-236.912-86.934-334.541zM222.491 337.58c-28.972 0-52.844-26.587-52.844-59.239s23.409-59.241 52.844-59.241c29.665 0 53.306 26.82 52.843 59.239 0 32.654-23.41 59.241-52.843 59.241zm195.38 0c-28.971 0-52.843-26.587-52.843-59.239s23.409-59.241 52.843-59.241c29.667 0 53.307 26.82 52.844 59.239 0 32.654-23.177 59.241-52.844 59.241z"/>
         </svg>
       );
     case 'reddit':
+      // Official Reddit alien
       return (
-        <svg viewBox="0 0 24 24" width={size} height={size} fill={fill}>
-          <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.197-2.512-.73a.326.326 0 0 0-.232-.095z"/>
+        <svg viewBox="0 0 512 512" width={size} height={size} fill={fill} style={{ display: 'block' }}>
+          <path d="M440.3 203.7c-15 0-28.2 6.2-37.9 15.9-35.7-24.7-83.8-40.6-137.1-42.3L293 80.8c.7-3.1-.6-6.4-3.2-8.4-2.6-2-6.1-2.4-9.1-1.1L168.1 120c-7.6-6.4-17.4-10.4-28.1-10.4-24.3 0-44 19.7-44 44 0 14.2 6.8 26.8 17.3 34.9-1.2 6.3-1.8 12.8-1.8 19.5 0 70.8 82.5 128.2 184.2 128.2s184.2-57.4 184.2-128.2c0-6.7-.6-13.2-1.8-19.5 10.6-8.1 17.4-20.7 17.4-34.9-.1-24.3-19.8-43.9-44.1-43.9zM224 232c13.3 0 24 10.7 24 24s-10.7 24-24 24-24-10.7-24-24 10.7-24 24-24zm120 72c-20.8 20.8-60.1 22.2-64 22.2s-43.2-1.4-64-22.2c-3.1-3.1-3.1-8.2 0-11.3 3.1-3.1 8.2-3.1 11.3 0 13.5 13.5 41.5 17.5 52.7 17.5s39.2-4 52.7-17.5c3.1-3.1 8.2-3.1 11.3 0 3.2 3.1 3.2 8.2 0 11.3zm8-24c-13.3 0-24-10.7-24-24s10.7-24 24-24 24 10.7 24 24-10.7 24-24 24z"/>
         </svg>
       );
     case 'custom':
     default:
+      // Universal website / link globe
       return (
-        <svg viewBox="0 0 24 24" width={size} height={size} fill={fill}>
+        <svg viewBox="0 0 24 24" width={size} height={size} fill={fill} style={{ display: 'block' }}>
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
         </svg>
       );
   }
 }
 
+export function formatSocialUrl(platform: string, url: string): string {
+  if (!url || typeof url !== 'string') return '#';
+  const trimmed = url.trim();
+  const p = (platform || '').toLowerCase().trim();
+  if (p === 'whatsapp') {
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+    const digits = trimmed.replace(/[^0-9]/g, '');
+    const cleanNum = digits.startsWith('880') ? digits : ('880' + digits.replace(/^0+/, ''));
+    return `https://wa.me/${cleanNum}`;
+  }
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://') && !trimmed.startsWith('tel:') && !trimmed.startsWith('mailto:')) {
+    return 'https://' + trimmed.replace(/^\/+/, '');
+  }
+  return trimmed;
+}
+
 /**
  * 🌟 Circular Badge Social Row matching user reference image:
- * Features customizable: iconColor, bgColor, borderColor, and official colors preset!
+ * Features customizable per-icon color or global theme colors!
  */
 export function RenderSocialRow({
   footer,
@@ -267,7 +300,7 @@ export function RenderSocialRow({
   const links = normalizeSocialLinks(footer);
   const st = footer?.socialStyle || {};
   const isOfficial = st.preset === 'official';
-  const iconColor = st.iconColor || '#1e293b';
+  const globalIconColor = st.iconColor || '#1e293b';
   const bgColor = st.bgColor || '#ffffff';
   const borderColor = st.borderColor || '#cbd5e1';
 
@@ -275,14 +308,19 @@ export function RenderSocialRow({
     <div className={`ft-universal-socials ${className}`} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
       {links.map((item, idx) => {
         const platform = (item.platform || 'facebook').toLowerCase();
-        const thisIconColor = isOfficial ? (OFFICIAL_COLORS[platform] || iconColor) : iconColor;
+        
+        // Priority: Individual Item Custom Color > Official Preset Color > Global Icon Color
+        const thisIconColor = item.color && item.color.trim()
+          ? item.color.trim()
+          : (isOfficial ? (OFFICIAL_COLORS[platform] || globalIconColor) : globalIconColor);
+
         const thisBgColor = bgColor;
         const thisBorderColor = borderColor;
 
         return (
           <a
             key={idx}
-            href={item.url}
+            href={formatSocialUrl(item.platform, item.url)}
             target="_blank"
             rel="noopener noreferrer"
             title={item.platform}
@@ -299,7 +337,7 @@ export function RenderSocialRow({
               justifyContent: 'center',
               textDecoration: 'none',
               boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
-              transition: 'all 0.2s ease',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
               flexShrink: 0,
             }}
           >
@@ -430,7 +468,7 @@ export function WatchLuxuryFooter({
             </a>
 
             <h4 className="ft-rm-heading" style={{ marginTop: 24 }}>SOCIAL MEDIA</h4>
-            <RenderSocialRow footer={f} size={36} iconSize={17} />
+            <RenderSocialRow footer={f} size={36} iconSize={18} />
           </div>
         </div>
 
@@ -523,7 +561,7 @@ export function AvoraFooter({
           {/* Connect (Universal Social Icons) */}
           <div className="ft-avora-col">
             <h5 className="ft-avora-title">Connect</h5>
-            <RenderSocialRow footer={f} size={32} iconSize={15} />
+            <RenderSocialRow footer={f} size={34} iconSize={16} />
           </div>
 
           {/* Support */}
@@ -648,7 +686,7 @@ export function BoutiqueFooter({
         <div className="ft-btq-bottom-bar">
           <div className="ft-btq-social-block">
             <span className="ft-btq-cursive">Let's connect</span>
-            <RenderSocialRow footer={f} size={34} iconSize={16} />
+            <RenderSocialRow footer={f} size={36} iconSize={17} />
           </div>
 
           <div className="ft-btq-news-block">
@@ -741,7 +779,7 @@ export function EnkyFooter({
             <p className="ft-enky-privacy-note">
               By subscribing, you agree to our Privacy Policy and consent to receive updates.
             </p>
-            <RenderSocialRow footer={f} size={34} iconSize={16} />
+            <RenderSocialRow footer={f} size={36} iconSize={17} />
           </div>
 
           {/* Right: 3 Navigation Columns */}
@@ -840,7 +878,7 @@ export function ClassicFooter({
               <span>{isSkin ? `🌿 ${tr('Product Details & Ingredient Information', language)}` : `🔄 ${tr('7-Day Easy Exchange Policy', language)}`}</span>
             </div>
             <div style={{ marginTop: 18 }}>
-              <RenderSocialRow footer={f} size={34} iconSize={16} />
+              <RenderSocialRow footer={f} size={36} iconSize={17} />
             </div>
           </div>
           <div>
@@ -880,7 +918,7 @@ export function ClassicFooter({
                     fontWeight: 600,
                   }}
                 >
-                  <WhatsAppIcon size={18} variant="official" />
+                  <SocialIcon type="whatsapp" size={18} color="#25D366" />
                   <span>WhatsApp: +{whatsapp.replace(/[^0-9]/g, '')}</span>
                 </a>
               </div>
