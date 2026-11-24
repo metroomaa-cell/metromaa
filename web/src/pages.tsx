@@ -1026,7 +1026,29 @@ function videoEmbed(url: string): { type: 'youtube' | 'facebook' | 'direct'; src
 
 function HomeHeroSlider({ slides }: { slides: any[] }) {
   const language = useStoreLanguage();
-  const activeSlides = useMemo(() => slides.filter((s) => s.active !== false && s.image), [slides]);
+  const isSkin = isSkincareSite();
+  const activeSlides = useMemo(() => {
+    const list = Array.isArray(slides) ? slides.filter((s) => s.active !== false && (s.image || s.mobileImage)) : [];
+    if (list.length > 0) return list;
+    const h = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
+    if (h.includes('secrate')) {
+      return [{
+        id: 'secrate_hero_1',
+        image: '/uploads/banner_secrate_desktop.webp',
+        mobileImage: '/uploads/banner_secrate_mobile.webp',
+        btnLink: 'shop',
+        active: true
+      }];
+    }
+    return [{
+      id: 'default_hero_1',
+      image: '/uploads/banner_beauty_desktop.webp',
+      mobileImage: '/uploads/banner_beauty_mobile.webp',
+      btnLink: 'shop',
+      active: true
+    }];
+  }, [slides]);
+
   const [cur, setCur] = useState(0);
   const [touchStart, setTouchStart] = useState<number | null>(null);
 
@@ -1034,223 +1056,99 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
     if (activeSlides.length <= 1) return;
     const t = setInterval(() => {
       setCur((c) => (c + 1) % activeSlides.length);
-    }, 5500);
+    }, 5000);
     return () => clearInterval(t);
   }, [activeSlides.length]);
 
-  if (activeSlides.length === 0) {
-    const isSkin = isSkincareSite();
-    return (
-      <section className="tabaya-hero clean-banner" style={isSkin ? { background: 'radial-gradient(ellipse at 78% 35%, rgba(104,126,78,.38), transparent 44%), radial-gradient(ellipse at 12% 100%, rgba(174,142,80,.18), transparent 42%), linear-gradient(120deg,#101b16 0%,#1d2b20 54%,#111914 100%)' } : undefined}>
-        <div className="tabaya-hero-bg">
+  const s = activeSlides[cur] || activeSlides[0];
+  const btnLink = String(s?.btnLink || 'shop').trim();
+
+  return (
+    <section className="royal-hero-section">
+      <div className="royal-hero-wrap">
+        <div
+          className="royal-hero-card"
+          onTouchStart={(e) => setTouchStart(e.touches[0].clientX)}
+          onTouchEnd={(e) => {
+            if (touchStart === null) return;
+            const diff = touchStart - e.changedTouches[0].clientX;
+            if (diff > 45) setCur((c) => (c + 1) % activeSlides.length);
+            else if (diff < -45) setCur((c) => (c - 1 + activeSlides.length) % activeSlides.length);
+            setTouchStart(null);
+          }}
+          onClick={(e) => {
+            if (btnLink && !(e.target as HTMLElement).closest('button')) {
+              go(btnLink);
+            }
+          }}
+          style={{ cursor: btnLink ? 'pointer' : 'default' }}
+        >
           <picture>
-            <source media="(max-width: 768px)" srcSet="/uploads/logo_timeboost.png" />
+            {s.mobileImage && <source media="(max-width: 640px)" srcSet={s.mobileImage} />}
             <img
-              src="/uploads/logo_timeboost.png"
-              alt="TimeBoost — For your personal world."
+              key={(s.image || '') + (s.mobileImage || '') + cur}
+              src={s.image || s.mobileImage}
+              alt={s.title || 'Store Hero Banner'}
+              className="royal-hero-img"
               loading="eager"
               fetchPriority="high"
               decoding="async"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
-          </picture>
-        </div>
-      </section>
-    );
-  }
-
-  const s = activeSlides[cur] || activeSlides[0];
-  const isSkin = isSkincareSite();
-
-  const title = String(s.title || '').trim();
-  const subtitle = String(s.subtitle || '').trim();
-  const badge = String(s.badge || '').trim();
-  const description = String(s.description || '').trim();
-  const btnText = String(s.btnText || '').trim();
-  const btnLink = String(s.btnLink || 'shop').trim();
-
-  // If no text is provided, hasContent is false -> NO text, NO overlay, pure clean banner image
-  const hasContent = Boolean(title || subtitle || badge || description || btnText);
-
-  return (
-    <section
-      className={`tabaya-hero ${!hasContent ? 'clean-banner' : ''}`}
-      style={{
-        position: 'relative',
-        overflow: 'hidden',
-        cursor: (!hasContent && btnLink) ? 'pointer' : 'default',
-        ...(isSkincareSite() ? { background: 'radial-gradient(ellipse at 78% 35%, rgba(104,126,78,.38), transparent 44%), radial-gradient(ellipse at 12% 100%, rgba(174,142,80,.18), transparent 42%), linear-gradient(120deg,#101b16 0%,#1d2b20 54%,#111914 100%)' } : {})
-      }}
-      onClick={(e) => {
-        if (!hasContent && btnLink && !(e.target as HTMLElement).closest('button')) {
-          go(btnLink);
-        }
-      }}
-      onTouchStart={(e) => setTouchStart(e.touches[0].clientX)}
-      onTouchEnd={(e) => {
-        if (touchStart === null) return;
-        const diff = touchStart - e.changedTouches[0].clientX;
-        if (diff > 45) setCur((c) => (c + 1) % activeSlides.length);
-        else if (diff < -45) setCur((c) => (c - 1 + activeSlides.length) % activeSlides.length);
-        setTouchStart(null);
-      }}
-    >
-      <div className="tabaya-hero-bg">
-        <picture>
-          {s.mobileImage && <source media="(max-width: 768px)" srcSet={s.mobileImage} />}
-          <img
-            key={(s.image || '') + (s.mobileImage || '') + cur}
-            src={s.image}
-            alt={title || 'Hero Banner'}
-            loading="eager"
-            fetchPriority={cur === 0 ? 'high' : 'auto'}
-            decoding="async"
-            style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.6s ease-in-out' }}
-            onError={(e: any) => {
-              const fallback = isSkincareSite()
-                ? 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=1920&q=85'
-                : '/uploads/img_mvdpqsl1t81m6.webp';
-              if (e.currentTarget.src.endsWith(fallback)) return;
-              e.currentTarget.src = fallback;
-            }}
-          />
-        </picture>
-      </div>
-
-      {hasContent && (
-        <div
-          className="tabaya-hero-overlay"
-          style={isSkincareSite() ? { background: 'linear-gradient(90deg,rgba(12,23,17,.90) 0%,rgba(12,23,17,.58) 60%,rgba(12,23,17,.24) 100%)' } : undefined}
-        />
-      )}
-
-      {/* Navigation Arrows */}
-      {activeSlides.length > 1 && (
-        <>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); setCur((c) => (c - 1 + activeSlides.length) % activeSlides.length); }}
-            aria-label="Previous Slide"
-            style={{
-              position: 'absolute',
-              left: 20,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              zIndex: 10,
-              width: 44,
-              height: 44,
-              borderRadius: '50%',
-              background: 'rgba(0,0,0,0.45)',
-              border: '1px solid rgba(255,255,255,0.25)',
-              color: '#fff',
-              fontSize: 22,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backdropFilter: 'blur(6px)',
-            }}
-          >
-            ‹
-          </button>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); setCur((c) => (c + 1) % activeSlides.length); }}
-            aria-label="Next Slide"
-            style={{
-              position: 'absolute',
-              right: 20,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              zIndex: 10,
-              width: 44,
-              height: 44,
-              borderRadius: '50%',
-              background: 'rgba(0,0,0,0.45)',
-              border: '1px solid rgba(255,255,255,0.25)',
-              color: '#fff',
-              fontSize: 22,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backdropFilter: 'blur(6px)',
-            }}
-          >
-            ›
-          </button>
-        </>
-      )}
-
-      {/* Slide Content Card — only rendered when user entered text */}
-      {hasContent && (
-        <div className="wrap tabaya-hero-wrap">
-          <div className="tabaya-hero-card" key={s.id || cur} style={{ animation: 'fadeIn 0.5s ease' }}>
-            {badge && <span className="tabaya-hero-badge">{tr(badge, language)}</span>}
-            {(title || subtitle) && (
-              <h1 className="tabaya-hero-title serif">
-                {title && tr(title, language)}
-                {subtitle && (
-                  <>
-                    {title && <br />}
-                    <span className="it" style={{ color: '#b48e4c' }}>{tr(subtitle, language)}</span>
-                  </>
-                )}
-              </h1>
-            )}
-            {description && <p className="tabaya-hero-desc">{tr(description, language)}</p>}
-            {btnText && (
-              <div className="tabaya-hero-btns">
-                <button
-                  className="tabaya-btn primary"
-                  onClick={() => go(btnLink || 'shop')}
-                >
-                  {tr(btnText, language)}
-                </button>
-              </div>
-            )}
-            <div className="tabaya-hero-micro">
-              <span>🚚 {tr('Cash on Delivery Nationwide', language)}</span>
-              <span>🔒 {tr('Courier Inspection Policy Applies', language)}</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Pagination Dots */}
-      {activeSlides.length > 1 && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 24,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 10,
-            display: 'flex',
-            gap: 8,
-            alignItems: 'center',
-          }}
-        >
-          {activeSlides.map((_, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={(e) => { e.stopPropagation(); setCur(i); }}
-              aria-label={`Go to slide ${i + 1}`}
-              style={{
-                width: cur === i ? 28 : 8,
-                height: 8,
-                borderRadius: 4,
-                background: cur === i ? '#b48e4c' : 'rgba(255,255,255,0.4)',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                padding: 0,
+              onError={(e: any) => {
+                const fallback = '/uploads/banner_secrate_desktop.webp';
+                if (!e.currentTarget.src.endsWith(fallback)) {
+                  e.currentTarget.src = fallback;
+                }
               }}
             />
-          ))}
+          </picture>
+
+          {/* Navigation Arrows (RoyalMan Style) */}
+          {activeSlides.length > 1 && (
+            <>
+              <button
+                type="button"
+                className="royal-hero-arrow prev"
+                aria-label="Previous Slide"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCur((c) => (c - 1 + activeSlides.length) % activeSlides.length);
+                }}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="royal-hero-arrow next"
+                aria-label="Next Slide"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCur((c) => (c + 1) % activeSlides.length);
+                }}
+              >
+                ›
+              </button>
+            </>
+          )}
         </div>
-      )}
+
+        {/* Pagination Dots Below Banner (RoyalMan Style) */}
+        {activeSlides.length > 1 && (
+          <div className="royal-hero-dots">
+            {activeSlides.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                className={`royal-hero-dot ${cur === i ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCur(i);
+                }}
+                aria-label={`Slide ${i + 1}`}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </section>
   );
 }

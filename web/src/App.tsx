@@ -347,23 +347,23 @@ function Header({ onSearch }: { onSearch: () => void }) {
   return (
     <>
       <AnnouncementBar />
-      <header className="tabaya-header">
+            <header className="tabaya-header">
         <div className="tabaya-header-inner">
-          {/* Left Column: Brand Logo + Mobile Hamburger */}
+          {/* Left Column: Mobile Hamburger & Desktop Logo */}
           <div className="tabaya-header-left">
             <button
               className="tabaya-hamburger-btn"
               onClick={() => setMenu(true)}
               aria-label="Open Navigation Menu"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                 <path d="M4 7h16" />
-                <path d="M4 12h12" />
+                <path d="M4 12h16" />
                 <path d="M4 17h16" />
               </svg>
             </button>
             <div
-              className="tabaya-header-logo"
+              className="tabaya-header-logo desktop-only-logo"
               onClick={() => nav('home')}
               style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}
             >
@@ -376,6 +376,23 @@ function Header({ onSearch }: { onSearch: () => void }) {
                 />
               ) : null}
             </div>
+          </div>
+
+          {/* Mobile Centered Logo */}
+          <div
+            className="tabaya-header-logo-center mobile-only-logo"
+            onClick={() => nav('home')}
+          >
+            {logo ? (
+              <img
+                className="tabaya-header-logo-img"
+                src={logo}
+                alt={storeName}
+                onError={() => setLogo('')}
+              />
+            ) : (
+              <span className="tabaya-header-logo" style={{ fontSize: 20 }}>{storeName}</span>
+            )}
           </div>
 
           {/* Center Column: Navigation Menu (Tabaya Style) */}
@@ -509,72 +526,54 @@ function Header({ onSearch }: { onSearch: () => void }) {
             </ul>
           </nav>
 
-          {/* Right Column: Search Icon, User Icon & Cart Bag */}
+          {/* Right Column: Only Track Order button as requested */}
           <div className="tabaya-header-right">
-            <label className="header-language-wrap" aria-label="Choose website language">
-              <select className="header-language" value={language} onChange={(e) => setStoreLanguage(e.target.value as 'en' | 'bn')} aria-label="Choose website language">
-                <option value="en">EN</option>
-                <option value="bn">BN</option>
-              </select>
-            </label>
-            <button
-              className="tabaya-h-btn"
-              onClick={onSearch}
-              aria-label={tr('Search collections', language)}
-              title="Search"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="6.5" />
-                <path d="m16 16 4.2 4.2" />
-              </svg>
-            </button>
-
             <button
               className={`tabaya-h-btn tabaya-h-track-btn ${route.name === 'track' ? 'active' : ''}`}
               onClick={() => nav('track')}
               aria-label={tr('Track Order', language)}
               title={tr('Track Order', language)}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="1" y="3" width="15" height="13" rx="1" />
                 <polygon points="16 8 20 8 23 11 23 16 16 16 8" />
                 <circle cx="5.5" cy="18.5" r="2.5" />
                 <circle cx="18.5" cy="18.5" r="2.5" />
               </svg>
-            </button>
-
-            <CustomerHeaderIcon onNavigate={nav} />
-
-            <button
-              className="tabaya-h-btn tabaya-h-wishlist-btn"
-              onClick={() => setWishlistOpen(true)}
-              aria-label={tr('My Wishlist', language)}
-              title={tr('My Wishlist', language)}
-              style={{ position: 'relative' }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill={wishlistCount > 0 ? '#ef4444' : 'none'} stroke={wishlistCount > 0 ? '#ef4444' : 'currentColor'} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-              </svg>
-              {wishlistCount > 0 && (
-                <span className="tabaya-h-cart-badge" style={{ background: '#ef4444', color: '#fff' }}>
-                  {wishlistCount}
-                </span>
-              )}
-            </button>
-
-            <button
-              className="tabaya-h-btn tabaya-h-cart-btn"
-              onClick={() => setOpen(true)}
-              aria-label="Shopping Cart"
-              title="Cart"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5.5 8h13l-.9 10.5a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8L5.5 8Z" />
-                <path d="M8.5 8V6.5a3.5 3.5 0 0 1 7 0V8" />
-              </svg>
-              {count > 0 && <span className="tabaya-h-cart-badge">{count}</span>}
+              <span className="track-btn-label" style={{ fontSize: 12.5, fontWeight: 600 }}>{language === 'bn' ? 'ট্র্যাকিং' : 'Tracking'}</span>
             </button>
           </div>
+        </div>
+
+        {/* Full-width Search Bar directly under top bar (RoyalMan style) */}
+        <div className="store-top-search-wrap">
+          <form
+            className="store-top-search-bar"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = e.currentTarget;
+              const input = (form.elements.namedItem('q') as HTMLInputElement)?.value?.trim();
+              if (input) {
+                go('shop?q=' + encodeURIComponent(input));
+              } else {
+                onSearch();
+              }
+            }}
+          >
+            <input
+              type="search"
+              name="q"
+              className="store-top-search-input"
+              placeholder={language === 'bn' ? 'প্রোডাক্ট খুঁজুন...' : 'Search for products'}
+              autoComplete="off"
+            />
+            <button type="submit" className="store-top-search-btn" aria-label="Search">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="6.5" />
+                <path d="m16 16 4.5 4.5" />
+              </svg>
+            </button>
+          </form>
         </div>
       </header>
 
