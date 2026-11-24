@@ -98,37 +98,208 @@ export function resolveBrandName(storeName?: string | null): string {
   return storeName;
 }
 
-export const DEFAULT_COLUMNS: FooterColumn[] = [
-  {
-    title: 'COMPANY',
-    links: [
-      { text: 'About Us', url: 'info/about' },
-      { text: 'Contact Us', url: 'info/contact' },
-      { text: 'Privacy Policy', url: 'info/privacy' },
-      { text: 'Terms & Conditions', url: 'info/terms' },
-      { text: 'Cancellation & Refund', url: 'info/returns' },
+export const TEMPLATE_DEFAULT_CONFIGS: Record<string, {
+  name: string;
+  aboutText?: string;
+  phone?: string;
+  phoneHours?: string;
+  email?: string;
+  address?: string;
+  newsletterTitle?: string;
+  columns: FooterColumn[];
+}> = {
+  watch_luxury: {
+    name: 'Watch & Luxury',
+    aboutText: 'The crown is Yours! Royalman is one of the largest Online Watch store In Bangladesh!',
+    phone: '09613008080',
+    phoneHours: '9 AM - 8 PM',
+    email: 'contact@royalman.com.bd',
+    address: 'House-14/16, Road-4, Block-D, Dhaka Uddan, Mohammadpur, Dhaka',
+    columns: [
+      {
+        title: 'COMPANY',
+        links: [
+          { text: 'About Us', url: 'info/about' },
+          { text: 'Contact Us', url: 'info/contact' },
+          { text: 'Privacy Policy', url: 'info/privacy' },
+          { text: 'Terms & Conditions', url: 'info/terms' },
+          { text: 'Cancellation & Refund Policy', url: 'info/returns' },
+        ],
+      },
+      {
+        title: 'USEFUL LINKS',
+        links: [
+          { text: 'Home', url: 'home' },
+          { text: 'Shop', url: 'shop' },
+          { text: 'Checkout', url: 'checkout' },
+          { text: 'My account', url: 'account' },
+        ],
+      },
     ],
   },
-  {
-    title: 'USEFUL LINKS',
-    links: [
-      { text: 'Home', url: 'home' },
-      { text: 'Shop All', url: 'shop' },
-      { text: 'Track Order', url: 'track' },
-      { text: 'My Account', url: 'account' },
-      { text: 'Shipping & Delivery', url: 'info/shipping' },
+  royalman: {
+    name: 'Watch & Luxury',
+    aboutText: 'The crown is Yours! Royalman is one of the largest Online Watch store In Bangladesh!',
+    phone: '09613008080',
+    phoneHours: '9 AM - 8 PM',
+    email: 'contact@royalman.com.bd',
+    address: 'House-14/16, Road-4, Block-D, Dhaka Uddan, Mohammadpur, Dhaka',
+    columns: [
+      {
+        title: 'COMPANY',
+        links: [
+          { text: 'About Us', url: 'info/about' },
+          { text: 'Contact Us', url: 'info/contact' },
+          { text: 'Privacy Policy', url: 'info/privacy' },
+          { text: 'Terms & Conditions', url: 'info/terms' },
+          { text: 'Cancellation & Refund Policy', url: 'info/returns' },
+        ],
+      },
+      {
+        title: 'USEFUL LINKS',
+        links: [
+          { text: 'Home', url: 'home' },
+          { text: 'Shop', url: 'shop' },
+          { text: 'Checkout', url: 'checkout' },
+          { text: 'My account', url: 'account' },
+        ],
+      },
     ],
   },
-  {
-    title: 'CUSTOMER CARE',
-    links: [
-      { text: 'Order Helpline', url: 'info/contact' },
-      { text: 'Returns & Exchange', url: 'info/returns' },
-      { text: 'Track Order', url: 'track' },
-      { text: 'FAQ & Help', url: 'info/shipping' },
+  avora: {
+    name: 'Avora Style',
+    aboutText: 'AVORA',
+    newsletterTitle: 'Newsletter',
+    columns: [
+      {
+        title: 'Skincare',
+        links: [
+          { text: 'Balms', url: 'shop' },
+          { text: 'Body', url: 'shop' },
+          { text: 'Fragrance', url: 'shop' },
+          { text: 'Sets', url: 'shop' },
+        ],
+      },
+      {
+        title: 'Support',
+        links: [
+          { text: '24/7 Support', url: 'info/contact' },
+          { text: 'Terms & Conditions', url: 'info/terms' },
+          { text: 'Privacy Policy', url: 'info/privacy' },
+        ],
+      },
     ],
   },
-];
+  boutique: {
+    name: 'Boutique Style',
+    phone: '248.879.0833',
+    email: 'info@joyabendmode.com',
+    address: '506 S. Washington Avenue\nRoyal Oak, Michigan 48067',
+    phoneHours: '*by appointment only\nTues, Thurs, & Fri | 11AM-5PM\nWed & Sat | 11AM-7PM\nCLOSED SUNDAY & MONDAY',
+    columns: [
+      {
+        title: 'CONTACT',
+        links: [
+          { text: '248.879.0833', url: 'tel:2488790833' },
+          { text: 'info@joyabendmode.com', url: 'mailto:info@joyabendmode.com' },
+          { text: '506 S. Washington Avenue', url: 'info/contact' },
+          { text: 'Royal Oak, Michigan 48067', url: 'info/contact' },
+        ],
+      },
+      {
+        title: 'HOURS',
+        links: [
+          { text: '*by appointment only', url: '#' },
+          { text: 'Tues, Thurs, & Fri | 11AM-5PM', url: '#' },
+          { text: 'Wed & Sat | 11AM-7PM', url: '#' },
+          { text: 'CLOSED SUNDAY & MONDAY', url: '#' },
+        ],
+      },
+      {
+        title: 'INFORMATION',
+        links: [
+          { text: 'Contact Us', url: 'info/contact' },
+          { text: 'Browse Collections', url: 'shop' },
+          { text: 'Terms & Conditions', url: 'info/terms' },
+          { text: 'Privacy Policy', url: 'info/privacy' },
+        ],
+      },
+    ],
+  },
+  enky: {
+    name: 'Enky Modern',
+    newsletterTitle: 'Join our newsletter to stay up to date on the latest news and updates.',
+    columns: [
+      {
+        title: 'Sitemap',
+        links: [
+          { text: 'About Us', url: 'info/about' },
+          { text: 'Space design', url: 'shop' },
+          { text: 'Customer Stories', url: 'info/about' },
+          { text: 'FAQ', url: 'info/shipping' },
+        ],
+      },
+      {
+        title: 'Partners',
+        links: [
+          { text: 'Architects', url: 'info/contact' },
+          { text: 'Co-Working', url: 'info/contact' },
+          { text: 'Real Estate', url: 'info/contact' },
+        ],
+      },
+      {
+        title: 'Services',
+        links: [
+          { text: 'Furniture as Service', url: 'shop' },
+          { text: 'Second-Hand Marketplace', url: 'shop' },
+          { text: 'Enky Invest', url: 'shop' },
+        ],
+      },
+    ],
+  },
+  classic: {
+    name: 'Classic Tabaya',
+    columns: [
+      {
+        title: 'COLLECTIONS',
+        links: [
+          { text: 'All Collections', url: 'shop' },
+          { text: 'Featured Best Sellers', url: 'shop' },
+          { text: 'New Arrivals', url: 'shop' },
+        ],
+      },
+      {
+        title: 'CUSTOMER CARE',
+        links: [
+          { text: 'Track Your Order', url: 'track' },
+          { text: 'Shipping & Delivery', url: 'info/shipping' },
+          { text: 'Returns & Exchanges', url: 'info/returns' },
+          { text: 'Contact Customer Support', url: 'info/contact' },
+        ],
+      },
+      {
+        title: 'QUICK LINKS',
+        links: [
+          { text: 'About Us', url: 'info/about' },
+          { text: 'Terms of Service', url: 'info/terms' },
+          { text: 'Privacy Policy', url: 'info/privacy' },
+          { text: 'Order Helpline', url: 'info/contact' },
+        ],
+      },
+    ],
+  },
+};
+
+export function getTemplateDefaults(templateId?: string) {
+  const tid = templateId || 'classic';
+  return TEMPLATE_DEFAULT_CONFIGS[tid] || TEMPLATE_DEFAULT_CONFIGS.classic;
+}
+
+export function getTemplateDefaultColumns(templateId?: string): FooterColumn[] {
+  return getTemplateDefaults(templateId).columns;
+}
+
+export const DEFAULT_COLUMNS: FooterColumn[] = TEMPLATE_DEFAULT_CONFIGS.classic.columns;
 
 export function normalizeSocialLinks(footer?: FooterSettings): SocialLinkItem[] {
   if (Array.isArray(footer?.socialLinks) && footer.socialLinks.length > 0) {
@@ -376,14 +547,15 @@ export function WatchLuxuryFooter({
 }) {
   const language = useStoreLanguage();
   const f: FooterSettings = settings?.footer || {};
-  const phone = f.phone || settings?.phone || '+880 1878-374762';
-  const hours = f.phoneHours || '9 AM - 8 PM';
-  const email = f.email || 'support@' + (typeof window !== 'undefined' ? window.location.hostname.replace(/^www\./, '') : 'store.com');
-  const address = f.address || 'House-14/16, Road-4, Block-D, Dhaka Uddan, Mohammadpur, Dhaka';
-  const about = f.aboutText || `${name} - Premium watches, sunglasses and curated lifestyle collections crafted for everyday elegance and presence.`;
-  const cols = Array.isArray(f.columns) && f.columns.length > 0 ? f.columns : DEFAULT_COLUMNS;
-  const col1 = cols[0] || DEFAULT_COLUMNS[0];
-  const col2 = cols[1] || DEFAULT_COLUMNS[1];
+  const tplDef = getTemplateDefaults('watch_luxury');
+  const phone = f.phone || settings?.phone || tplDef.phone || '09613008080';
+  const hours = f.phoneHours || tplDef.phoneHours || '9 AM - 8 PM';
+  const email = f.email || tplDef.email || 'contact@royalman.com.bd';
+  const address = f.address || tplDef.address || 'House-14/16, Road-4, Block-D, Dhaka Uddan, Mohammadpur, Dhaka';
+  const about = f.aboutText || tplDef.aboutText || 'The crown is Yours! Royalman is one of the largest Online Watch store In Bangladesh!';
+  const cols = Array.isArray(f.columns) && f.columns.length > 0 ? f.columns : tplDef.columns;
+  const col1 = cols[0] || tplDef.columns[0];
+  const col2 = cols[1] || tplDef.columns[1];
 
   return (
     <footer className="ft-royalman">
@@ -501,10 +673,12 @@ export function AvoraFooter({
   preview?: boolean;
 }) {
   const f: FooterSettings = settings?.footer || {};
+  const tplDef = getTemplateDefaults('avora');
   const [newsEmail, setNewsEmail] = useState('');
   const [subbed, setSubbed] = useState(false);
-  const cols = Array.isArray(f.columns) && f.columns.length > 0 ? f.columns : DEFAULT_COLUMNS;
-  const col1 = cols[0] || DEFAULT_COLUMNS[0];
+  const cols = Array.isArray(f.columns) && f.columns.length > 0 ? f.columns : tplDef.columns;
+  const col1 = cols[0] || tplDef.columns[0];
+  const col2 = cols[1] || tplDef.columns[1] || { title: 'Support', links: [] };
   const giantText = (f.aboutText && f.aboutText.length < 20 ? f.aboutText : name).toUpperCase();
 
   const handleSub = (e: React.FormEvent) => {
@@ -515,7 +689,7 @@ export function AvoraFooter({
   return (
     <footer className="ft-avora">
       <div className="ft-avora-container">
-        {/* Top 5 columns */}
+        {/* Top 5 columns matching media_1795556291462_807034c2.webp */}
         <div className="ft-avora-top-grid">
           {/* Logo / Brand Name */}
           <div className="ft-avora-brand-col">
@@ -540,7 +714,7 @@ export function AvoraFooter({
 
           {/* Newsletter */}
           <div className="ft-avora-col">
-            <h5 className="ft-avora-title">{f.newsletterTitle || 'Newsletter'}</h5>
+            <h5 className="ft-avora-title">{f.newsletterTitle || tplDef.newsletterTitle || 'Newsletter'}</h5>
             {subbed ? (
               <p style={{ fontSize: 13, color: '#16a34a', margin: '8px 0' }}>✓ Subscribed successfully!</p>
             ) : (
@@ -564,14 +738,15 @@ export function AvoraFooter({
             <RenderSocialRow footer={f} size={34} iconSize={16} />
           </div>
 
-          {/* Support */}
+          {/* Support (Editable Column 2) */}
           <div className="ft-avora-col">
-            <h5 className="ft-avora-title">Support</h5>
+            <h5 className="ft-avora-title">{col2.title}</h5>
             <div className="ft-avora-links">
-              <a href="#info/contact" onClick={(e) => handleLinkClick('info/contact', e)}>24/7 Support</a>
-              <a href="#info/terms" onClick={(e) => handleLinkClick('info/terms', e)}>Terms & Conditions</a>
-              <a href="#info/privacy" onClick={(e) => handleLinkClick('info/privacy', e)}>Privacy Policy</a>
-              <a href="#track" onClick={(e) => handleLinkClick('track', e)}>Track Order</a>
+              {col2.links.map((lnk, idx) => (
+                <a key={idx} href={`#${lnk.url}`} onClick={(e) => handleLinkClick(lnk.url, e)}>
+                  {lnk.text}
+                </a>
+              ))}
             </div>
           </div>
         </div>
@@ -610,12 +785,17 @@ export function BoutiqueFooter({
   preview?: boolean;
 }) {
   const f: FooterSettings = settings?.footer || {};
+  const tplDef = getTemplateDefaults('boutique');
   const [email, setEmail] = useState('');
   const [subbed, setSubbed] = useState(false);
-  const phone = f.phone || settings?.phone || '+880 1878-374762';
-  const emailAddr = f.email || 'info@' + (typeof window !== 'undefined' ? window.location.hostname.replace(/^www\./, '') : 'store.com');
-  const address = f.address || '506 S. Washington Avenue, Dhaka, Bangladesh';
-  const hours = f.phoneHours || 'Tues, Thurs, & Fri | 11AM-5PM\nWed & Sat | 11AM-7PM\nCLOSED SUNDAY & MONDAY';
+  const phone = f.phone || settings?.phone || tplDef.phone || '248.879.0833';
+  const emailAddr = f.email || tplDef.email || 'info@joyabendmode.com';
+  const address = f.address || tplDef.address || '506 S. Washington Avenue\nRoyal Oak, Michigan 48067';
+  const hours = f.phoneHours || tplDef.phoneHours || '*by appointment only\nTues, Thurs, & Fri | 11AM-5PM\nWed & Sat | 11AM-7PM\nCLOSED SUNDAY & MONDAY';
+  const cols = Array.isArray(f.columns) && f.columns.length > 0 ? f.columns : tplDef.columns;
+  const col1 = cols[0] || tplDef.columns[0];
+  const col2 = cols[1] || tplDef.columns[1];
+  const col3 = cols[2] || tplDef.columns[2];
 
   const handleSub = (e: React.FormEvent) => {
     e.preventDefault();
@@ -653,31 +833,47 @@ export function BoutiqueFooter({
         <div className="ft-btq-columns">
           {/* Contact */}
           <div className="ft-btq-col">
-            <h5 className="ft-btq-col-title">CONTACT</h5>
+            <h5 className="ft-btq-col-title">{col1.title}</h5>
             <div className="ft-btq-col-body">
-              <a href={`tel:${phone}`} className="ft-btq-link">{phone}</a>
-              <a href={`mailto:${emailAddr}`} className="ft-btq-link">{emailAddr}</a>
-              <p style={{ marginTop: 8, whiteSpace: 'pre-line' }}>{address}</p>
+              {col1.links && col1.links.length > 0 ? (
+                col1.links.map((lnk, idx) => (
+                  <a key={idx} href={lnk.url.startsWith('http') || lnk.url.startsWith('tel:') || lnk.url.startsWith('mailto:') ? lnk.url : `#${lnk.url}`} onClick={(e) => handleLinkClick(lnk.url, e)} className="ft-btq-link">
+                    {lnk.text}
+                  </a>
+                ))
+              ) : (
+                <>
+                  <a href={`tel:${phone}`} className="ft-btq-link">{phone}</a>
+                  <a href={`mailto:${emailAddr}`} className="ft-btq-link">{emailAddr}</a>
+                  <p style={{ marginTop: 8, whiteSpace: 'pre-line' }}>{address}</p>
+                </>
+              )}
             </div>
           </div>
 
           {/* Hours */}
           <div className="ft-btq-col ft-btq-col-center">
-            <h5 className="ft-btq-col-title">HOURS</h5>
+            <h5 className="ft-btq-col-title">{col2.title}</h5>
             <div className="ft-btq-col-body">
-              <p className="ft-btq-subnote">*by appointment & online orders 24/7</p>
-              <div style={{ whiteSpace: 'pre-line', lineHeight: 1.8 }}>{hours}</div>
+              {col2.links && col2.links.length > 0 ? (
+                col2.links.map((lnk, idx) => (
+                  <div key={idx} style={{ lineHeight: 1.8 }}>{lnk.text}</div>
+                ))
+              ) : (
+                <div style={{ whiteSpace: 'pre-line', lineHeight: 1.8 }}>{hours}</div>
+              )}
             </div>
           </div>
 
           {/* Information */}
           <div className="ft-btq-col ft-btq-col-right">
-            <h5 className="ft-btq-col-title">INFORMATION</h5>
+            <h5 className="ft-btq-col-title">{col3.title}</h5>
             <div className="ft-btq-col-body">
-              <a href="#info/contact" onClick={(e) => handleLinkClick('info/contact', e)}>Contact Us</a>
-              <a href="#shop" onClick={(e) => handleLinkClick('shop', e)}>Browse Collections</a>
-              <a href="#info/terms" onClick={(e) => handleLinkClick('info/terms', e)}>Terms & Conditions</a>
-              <a href="#info/privacy" onClick={(e) => handleLinkClick('info/privacy', e)}>Privacy Policy</a>
+              {col3.links.map((lnk, idx) => (
+                <a key={idx} href={`#${lnk.url}`} onClick={(e) => handleLinkClick(lnk.url, e)} className="ft-btq-link">
+                  {lnk.text}
+                </a>
+              ))}
             </div>
           </div>
         </div>
@@ -738,12 +934,13 @@ export function EnkyFooter({
   preview?: boolean;
 }) {
   const f: FooterSettings = settings?.footer || {};
+  const tplDef = getTemplateDefaults('enky');
   const [email, setEmail] = useState('');
   const [subbed, setSubbed] = useState(false);
-  const cols = Array.isArray(f.columns) && f.columns.length > 0 ? f.columns : DEFAULT_COLUMNS;
-  const col1 = cols[0] || DEFAULT_COLUMNS[0];
-  const col2 = cols[1] || DEFAULT_COLUMNS[1];
-  const col3 = cols[2] || DEFAULT_COLUMNS[2];
+  const cols = Array.isArray(f.columns) && f.columns.length > 0 ? f.columns : tplDef.columns;
+  const col1 = cols[0] || tplDef.columns[0];
+  const col2 = cols[1] || tplDef.columns[1];
+  const col3 = cols[2] || tplDef.columns[2];
 
   const handleSub = (e: React.FormEvent) => {
     e.preventDefault();
@@ -757,7 +954,7 @@ export function EnkyFooter({
           {/* Left: Newsletter Box & Socials */}
           <div className="ft-enky-left-col">
             <p className="ft-enky-news-desc">
-              {f.newsletterTitle || 'Join our newsletter to stay up to date on the latest news and updates.'}
+              {f.newsletterTitle || tplDef.newsletterTitle || 'Join our newsletter to stay up to date on the latest news and updates.'}
             </p>
             {subbed ? (
               <div style={{ padding: '12px 18px', background: '#e2fbe8', color: '#166534', borderRadius: 99, fontSize: 13, fontWeight: 600 }}>
