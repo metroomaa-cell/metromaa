@@ -1877,7 +1877,14 @@ app.put('/api/admin/security-email', adminAuth, requireRole('owner'), (req, res)
   res.json({ ok: true, adminEmail: cleanEmail });
 });
 
-app.get('/api/admin/me', adminAuth, (req, res) => res.json(req.admin));
+app.get('/api/admin/me', adminAuth, (req, res) => {
+  const admin = req.admin || {};
+  const isOwner = admin.role === 'owner';
+  res.json({
+    ...admin,
+    canAccessSaika: isOwner ? true : !!admin.canAccessSaika
+  });
+});
 app.post('/api/admin/logout', adminAuth, (req, res) => {
   const token = req.get('x-admin-token') || '';
   sessions.delete(sessionKey(token));
@@ -1885,7 +1892,7 @@ app.post('/api/admin/logout', adminAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/admin/users', adminAuth, requireRole('owner'), (_q, res) => res.json(getUsers().map((u) => ({ id: u.id, username: u.username, name: u.name, email: u.email || '', role: u.role, skipOtp: !!u.skipOtp, allowedProducts: Array.isArray(u.allowedProducts) ? u.allowedProducts : [] }))));
+app.get('/api/admin/users', adminAuth, requireRole('owner'), (_q, res) => res.json(getUsers().map((u) => ({ id: u.id, username: u.username, name: u.name, email: u.email || '', role: u.role, skipOtp: !!u.skipOtp, allowedProducts: Array.isArray(u.allowedProducts) ? u.allowedProducts : [], canAccessSaika: !!u.canAccessSaika }))));
 
 app.post('/api/admin/users', adminAuth, requireRole('owner'), async (req, res) => {
   const b = req.body || {};
@@ -1896,6 +1903,7 @@ app.post('/api/admin/users', adminAuth, requireRole('owner'), async (req, res) =
   const allowedProducts = Array.isArray(b.allowedProducts) ? b.allowedProducts.map(String) : [];
   const password = String(b.password || '');
   const skipOtp = !!b.skipOtp;
+  const canAccessSaika = !!b.canAccessSaika;
   if (!username || password.length < 4) return res.status(400).json({ error: 'Username and a 4+ character password are required' });
   if (!skipOtp && (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))) {
     return res.status(400).json({ error: 'স্টাফের নিজস্ব ভেরিফিকেশন কোডের জন্য একটি সঠিক ইমেইল ঠিকানা দেওয়া আবশ্যক।' });
@@ -1903,7 +1911,7 @@ app.post('/api/admin/users', adminAuth, requireRole('owner'), async (req, res) =
   const users = getUsers();
   if (users.find((u) => u.username === username)) return res.status(400).json({ error: 'username already exists' });
   const { salt, hash } = makeHash(password);
-  const newUser = { id: 'u' + Date.now().toString(36), username, name, email, role, skipOtp, allowedProducts, salt, hash, createdAt: new Date().toISOString() };
+  const newUser = { id: 'u' + Date.now().toString(36), username, name, email, role, skipOtp, allowedProducts, canAccessSaika, salt, hash, createdAt: new Date().toISOString() };
   users.push(newUser);
   saveUsers(users);
 
@@ -6456,6 +6464,92 @@ if (existsSync(dist)) {
 
 const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
+
+// ==========================================
+// SAIKA AI COPILOT & VOICE ASSISTANT ENDPOINT
+// ==========================================
+app.post('/api/admin/ai-copilot/ask', adminAuth, async (req, res) => {
+  try {
+    const admin = req.admin || {};
+    const isOwner = admin.role === 'owner';
+    if (!isOwner && !admin.canAccessSaika) {
+      return res.status(403).json({ ok: false, error: 'Permission denied: Saika AI access required' });
+    }
+
+    const userMsg = String(req.body?.message || '').trim();
+    if (!userMsg) return res.status(400).json({ ok: false, error: 'Empty message' });
+
+    const settings = getSettings() || {};
+    const storeName = settings.storeName || 'METRROMA';
+    const catalog = getCatalog()?.products || [];
+    const orders = getOrders() || [];
+    const lower = userMsg.toLowerCase();
+    const executedActions = [];
+
+    // Quick Voice Action: Confirm Order
+    const phoneMatch = userMsg.match(/01[3-9]\d{8}/);
+    if (phoneMatch && (lower.includes('confirm') || lower.includes('কনফার্ম'))) {
+      const targetPhone = phoneMatch[0];
+      const found = orders.find((o) => String(o.customer?.phone || '').replace(/\D/g, '').endsWith(targetPhone.slice(-10)));
+      if (found) {
+        updateOrder(found.id, { status: 'confirmed' });
+        executedActions.push({ type: 'order_confirmed', orderId: found.id, customer: found.customer?.name, phone: targetPhone });
+      }
+    }
+
+    // Compact store knowledge for AI prompt
+    const compactCatalog = catalog.slice(0, 50).map((p) => `- ${p.name}: ৳${p.price}, Stock: ${p.stock ?? 0} pcs`).join('\n');
+    const recentOrders = orders.slice(0, 15).map((o) => `[${o.id}] ${o.customer?.name || 'Customer'}: ৳${o.total}, Status: ${o.status}`).join('\n');
+
+    const systemPrompt = `You are "Saika" (সাইকা), the ultra-intelligent, sharp, respectful, and fully empowered AI Chief of Staff for the owner ("বস" / "Boss") of "${storeName}" in Bangladesh.
+- Address the store owner respectfully and affectionately as "বস" (Boss).
+- You have complete live visibility over ${storeName}'s catalog, inventory, orders, and business.
+- You can design features, write production code, plan marketing campaigns, write ad copy, analyze trends, and answer ANY general query outside the store with supreme brilliance.
+- Speak naturally in warm, fluent, professional Bangladeshi Bengali (বাংলা).
+
+LIVE STORE DATA:
+Catalog:
+${compactCatalog}
+
+Recent Orders:
+${recentOrders}`;
+
+    const ig = getIntegrations() || {};
+    const geminiKey = String(ig.geminiApiKey || ig.ai?.geminiApiKey || process.env.GEMINI_API_KEY || '').trim();
+
+    let reply = '';
+    if (geminiKey) {
+      const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+      for (const m of models) {
+        try {
+          const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + geminiKey, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [
+                { role: 'user', parts: [{ text: systemPrompt + '\n\nUser query: ' + userMsg }] }
+              ]
+            })
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) { reply = text; break; }
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (!reply) {
+      reply = `জী বস! আমি সাইকা শুনছি। "${storeName}"-এ বর্তমানে মোট ${catalog.length}টি পণ্য এবং ${orders.length}টি অর্ডার রয়েছে। আপনি কী করতে চান আমাকে বলুন, আমি এখনই গুছিয়ে দিচ্ছি!`;
+    }
+
+    res.json({ ok: true, reply, executedActions });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err.message || err) });
+  }
+});
+
 app.listen(PORT, HOST, () => {
   console.log(`TimeBoost api on http://${HOST}:${PORT}`);
   // Start automated background courier status sync (initial run after 10s, then every 5 mins)
