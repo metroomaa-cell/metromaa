@@ -7,7 +7,22 @@ export function isAdminContext(): boolean {
   try {
     const p = (window.location.pathname || '').toLowerCase();
     const h = (window.location.hash || '').toLowerCase();
-    return p.includes('/admin') || p.includes('/wp-admin') || h.includes('admin');
+    const hasAdminPath = p.includes('/admin') || p.includes('/wp-admin') || p.includes('/staff');
+    const adminHashes = ['admin', 'staff', 'orders', 'catalog', 'inventory', 'finance', 'settings', 'integrations', 'campaigns', 'marketing', 'customers', 'telephony', 'scanner', 'push_popups'];
+    const hasAdminHash = adminHashes.some((k) => h.includes(k));
+    const isToken = typeof localStorage !== 'undefined' && !!localStorage.getItem('dot_admin_token');
+    const isNav = typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('sa_admin_nav');
+    const isAdm = hasAdminPath || hasAdminHash || isNav || isToken;
+    if (isAdm) {
+      const w = window as any;
+      if (w.fbq) {
+        w.fbq = function () {};
+      }
+      if (w.ttq) {
+        w.ttq = { track: function () {}, page: function () {}, identify: function () {} };
+      }
+    }
+    return isAdm;
   } catch {
     return false;
   }
@@ -100,8 +115,8 @@ export function ecView(p: { id: string; name: string; price: number }) {
   try {
     const eventId = uid(`vc_${p.id}`);
     dl({ ecommerce: null });
-    dl({ event: 'view_item', event_id: eventId, eventID: eventId, ecommerce: { currency: CUR, value: p.price, items: [{ item_id: p.id, item_name: p.name, price: p.price, quantity: 1 }] } });
-    dl({ event: 'ViewContent', event_id: eventId, eventID: eventId, content_name: p.name, content_ids: [p.id], content_type: 'product', value: p.price, currency: CUR });
+    dl({ event: 'view_item', event_id: eventId, eventID: eventId, content_id: String(p.id), content_ids: [String(p.id)], content_name: p.name, content_type: 'product', contents: [{ content_id: String(p.id), content_name: p.name, content_type: 'product', quantity: 1, price: p.price }], ecommerce: { currency: CUR, value: p.price, items: [{ item_id: p.id, item_name: p.name, price: p.price, quantity: 1 }] } });
+    dl({ event: 'ViewContent', event_id: eventId, eventID: eventId, content_id: String(p.id), content_name: p.name, content_ids: [String(p.id)], content_type: 'product', contents: [{ content_id: String(p.id), content_name: p.name, content_type: 'product', quantity: 1, price: p.price }], value: p.price, currency: CUR });
     fbTrack('ViewContent', { content_name: p.name, content_ids: [p.id], content_type: 'product', value: p.price, currency: CUR }, false, eventId);
   } catch {}
 }
@@ -111,8 +126,8 @@ export function ecAdd(p: { id: string; name: string; price: number }, qty = 1) {
   try {
     const eventId = uid(`atc_${p.id}`);
     dl({ ecommerce: null });
-    dl({ event: 'add_to_cart', event_id: eventId, eventID: eventId, ecommerce: { currency: CUR, value: p.price * qty, items: [{ item_id: p.id, item_name: p.name, price: p.price, quantity: qty }] } });
-    dl({ event: 'AddToCart', event_id: eventId, eventID: eventId, content_name: p.name, content_ids: [p.id], content_type: 'product', value: p.price * qty, currency: CUR });
+    dl({ event: 'add_to_cart', event_id: eventId, eventID: eventId, content_id: String(p.id), content_ids: [String(p.id)], content_name: p.name, content_type: 'product', contents: [{ content_id: String(p.id), content_name: p.name, content_type: 'product', quantity: qty, price: p.price }], ecommerce: { currency: CUR, value: p.price * qty, items: [{ item_id: p.id, item_name: p.name, price: p.price, quantity: qty }] } });
+    dl({ event: 'AddToCart', event_id: eventId, eventID: eventId, content_id: String(p.id), content_name: p.name, content_ids: [String(p.id)], content_type: 'product', contents: [{ content_id: String(p.id), content_name: p.name, content_type: 'product', quantity: qty, price: p.price }], value: p.price * qty, currency: CUR });
     fbTrack('AddToCart', { content_name: p.name, content_ids: [p.id], content_type: 'product', value: p.price * qty, currency: CUR }, false, eventId);
   } catch {}
 }
@@ -198,11 +213,18 @@ export function ecBeginCheckout(
   try {
     const eventId = uid('ic');
     const uData = buildUserData(customer);
+    const firstId = items[0]?.id ? String(items[0].id) : '';
+    const allIds = items.map((l) => String(l.id));
+    const ttContents = items.map((l) => ({ content_id: String(l.id), content_name: l.name, content_type: 'product', quantity: l.qty, price: l.price }));
     dl({ ecommerce: null });
     dl({
       event: 'begin_checkout',
       event_id: eventId,
       eventID: eventId,
+      content_id: firstId,
+      content_ids: allIds,
+      content_type: 'product',
+      contents: ttContents,
       user_data: uData,
       customer: uData,
       ecommerce: {
@@ -215,6 +237,10 @@ export function ecBeginCheckout(
       event: 'InitiateCheckout',
       event_id: eventId,
       eventID: eventId,
+      content_id: firstId,
+      content_ids: allIds,
+      content_type: 'product',
+      contents: ttContents,
       value,
       currency: CUR,
       num_items: items.length,
@@ -244,11 +270,23 @@ export function ecPurchase(
     const numItems = (items || []).reduce((sum, i) => sum + (Number(i.qty) || 1), 0);
     const uData = buildUserData(customer);
 
+    const ttContents = (items || []).map((l) => ({
+      content_id: String(l.id),
+      content_name: l.name,
+      content_type: 'product',
+      quantity: Number(l.qty) || 1,
+      price: Number(l.price) || 0,
+    }));
+
     dl({ ecommerce: null });
     dl({
       event: 'purchase',
       event_id: String(id),
       eventID: String(id),
+      content_id: contentIds[0] || '',
+      content_ids: contentIds,
+      content_type: 'product',
+      contents: ttContents,
       value: numValue,
       currency: CUR,
       order_id: String(id),

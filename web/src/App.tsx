@@ -9,6 +9,7 @@ import { WhatsAppIcon } from './icons';
 import { setStoreLanguage, setStoreCopyOverrides, tr, useStoreLanguage } from './language';
 import { NotificationWidgets } from './NotificationWidgets';
 import { getTrafficAttribution } from './attribution';
+import { LiveAiCallClient } from './liveAiCall';
 const Admin = lazy(() => import('./admin').then((m) => ({ default: m.Admin })));
 const LoveLockLanding = lazy(() => import('./LoveLockLanding').then((m) => ({ default: m.LoveLockLanding })));
 
@@ -49,7 +50,7 @@ function StoreLoading({ admin = false }: { admin?: boolean }) {
 function Effects() {
   const route = useRoute();
   const isLocalPreview = import.meta.env.DEV;
-  const isAdmin = route.name === 'admin' || (typeof window !== 'undefined' && (/(\/|^)(admin|wp-admin)(\/|$)/i.test(window.location.pathname) || window.location.hash.includes('admin')));
+  const isAdmin = route.name === 'admin' || (typeof window !== 'undefined' && (/(\/|^)(admin|wp-admin|staff)(\/|$)/i.test(window.location.pathname) || window.location.hash.includes('admin') || window.location.hash.includes('staff') || !!localStorage.getItem('dot_admin_token') || !!sessionStorage.getItem('sa_admin_nav')));
 
   useEffect(() => {
     getTrafficAttribution();
@@ -226,6 +227,34 @@ function Effects() {
     addEventListener('scroll', h); h();
     return () => removeEventListener('scroll', h);
   }, []);
+
+  // Preserve storefront scroll position across page refreshes
+  useEffect(() => {
+    if (isAdmin) return;
+    const key = 'store_scroll_' + window.location.pathname + window.location.search;
+    try {
+      const savedY = parseInt(sessionStorage.getItem(key) || '0', 10);
+      if (savedY > 0) {
+        const t1 = setTimeout(() => window.scrollTo(0, savedY), 120);
+        const t2 = setTimeout(() => window.scrollTo(0, savedY), 450);
+        var clearTimers = () => { clearTimeout(t1); clearTimeout(t2); };
+      }
+    } catch {}
+    let timer: any = null;
+    const onScroll = () => {
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        try { sessionStorage.setItem(key, String(Math.round(window.scrollY))); } catch {}
+      }, 200);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (timer) clearTimeout(timer);
+      if (typeof clearTimers === 'function') clearTimers();
+    };
+  }, [route.name, route.param, isAdmin]);
 
   return null;
 }
@@ -561,9 +590,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
                 style={{ maxHeight: 36, width: 'auto', objectFit: 'contain', display: 'block' }}
                 onError={() => setLogo('')}
               />
-            ) : (
-              <span>{storeName}</span>
-            )}
+            ) : null}
           </span>
           <button
             className="tabaya-mmenu-close"
@@ -958,10 +985,283 @@ function SmartWhatsAppChat() {
   const [callMuted, setCallMuted] = useState(false);
   const [showKeypad, setShowKeypad] = useState(false);
   const [callErr, setCallErr] = useState('');
+  const [callQueueInfo, setCallQueueInfo] = useState<{ ticketId: string; serialNumber: string; aheadCount: number; estimatedWaitSec: number; onlineAgents: number; busyAgents: number } | null>(null);
+  const callQueueRef = useRef<any>(null);
+  const [humanAudioMode, setHumanAudioMode] = useState<'speaker' | 'earpiece'>('speaker');
   const uaRef = useRef<any>(null);
   const sessionRef = useRef<any>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const callTimerRef = useRef<any>(null);
+
+  // Smart AI Website Voice Assistant State (Gemini 3.8 Live Real-Time Audio)
+  const [aiCfg, setAiCfg] = useState<{ enabled: boolean; websiteInboundAi: boolean; hasApiKey: boolean; adminOnline: boolean; supportPhone: string }>({ enabled: true, websiteInboundAi: true, hasApiKey: true, adminOnline: true, supportPhone: '' });
+  const [aiCallStatus, setAiCallStatus] = useState<'idle' | 'connecting' | 'ringing' | 'connected' | 'ended' | 'error'>('idle');
+  const aiCallStatusRef = useRef<'idle' | 'connecting' | 'ringing' | 'connected' | 'ended' | 'error'>('idle');
+  const [incomingAiCall, setIncomingAiCall] = useState(false);
+  useEffect(() => { aiCallStatusRef.current = aiCallStatus; }, [aiCallStatus]);
+  const [aiTurns, setAiTurns] = useState<{ role: 'ai' | 'user' | 'sys'; text: string }[]>([]);
+  const [aiMuted, setAiMuted] = useState(false);
+  const [aiSeconds, setAiSeconds] = useState(0);
+  const [aiVol, setAiVol] = useState(0);
+  const [aiTextInput, setAiTextInput] = useState('');
+  const [aiShowKeypad, setAiShowKeypad] = useState(false);
+  const [aiAudioMode, setAiAudioMode] = useState<'speaker' | 'earpiece'>('speaker');
+  const [chatyOpen, setChatyOpen] = useState(false);
+  const aiLiveRef = useRef<LiveAiCallClient | null>(null);
+
+  useEffect(() => {
+    fetch('/api/ai-call/config').then((r) => r.json()).then((d) => {
+      if (d && typeof d.enabled === 'boolean') {
+        setAiCfg({
+          enabled: d.enabled,
+          websiteInboundAi: d.websiteInboundAi !== false,
+          hasApiKey: d.hasApiKey !== false,
+          adminOnline: d.adminOnline !== false,
+          supportPhone: String(d.supportPhone || '').trim()
+        });
+      }
+    }).catch(() => {});
+  }, []);
+
+  const canUseAiCall = aiCfg.enabled && aiCfg.websiteInboundAi && aiCfg.hasApiKey;
+
+  const triggerDirectPhoneFallback = (reasonText?: string) => {
+    const rawNum = String(aiCfg.supportPhone || num || '').replace(/[^\d+]/g, '');
+    const telHref = rawNum ? `tel:${rawNum.startsWith('880') ? '+' + rawNum : rawNum}` : '';
+    setCallErr(
+      reasonText ||
+      (isBn
+        ? 'এই মুহূর্তে অ্যাডমিন প্যানেলে কেউ অ্যাক্টিভ নেই — সরাসরি ফোনে কল করা হচ্ছে।'
+        : 'No agent is active in Admin Panel — opening direct phone call.')
+    );
+    setCallState('error');
+    if (telHref && typeof window !== 'undefined') {
+      try {
+        window.location.href = telHref;
+      } catch (_) {}
+    }
+  };
+
+  useEffect(() => {
+    if (aiCallStatus !== 'connected') return;
+    const t = setInterval(() => setAiSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [aiCallStatus]);
+
+  useEffect(() => {
+    return () => {
+      try { aiLiveRef.current?.hangup(); } catch (_) {}
+    };
+  }, []);
+
+  const stopAiVisitorCall = async () => {
+    aiCallStatusRef.current = 'idle';
+    if (aiLiveRef.current) {
+      try { aiLiveRef.current.hangup(); } catch (_) {}
+      aiLiveRef.current = null;
+    }
+    setAiCallStatus('idle');
+    setAiMuted(false);
+    setAiVol(0);
+    setAiTurns([]);
+  };
+
+  const startAiVisitorCall = async () => {
+    if (aiLiveRef.current && (aiCallStatusRef.current === 'connecting' || aiCallStatusRef.current === 'ringing' || aiCallStatusRef.current === 'connected')) {
+      setOpen(true);
+      setCallMode(true);
+      return;
+    }
+    setCallErr('');
+    if (aiLiveRef.current) {
+      try { aiLiveRef.current.hangup(); } catch (_) {}
+      aiLiveRef.current = null;
+    }
+    setAiTurns([]);
+    setAiSeconds(0);
+    setAiMuted(false);
+    setAiVol(0);
+    setAiCallStatus('connecting');
+
+    const client = new LiveAiCallClient({
+      onStatus: (st, info) => {
+        setAiCallStatus(st);
+        if (st === 'ringing') {
+          setAiTurns([{ role: 'sys', text: isBn ? '📞 রিং হচ্ছে... (কলটি রেকর্ড করা হচ্ছে)' : '📞 Ringing... (Call is recorded)' }]);
+        } else if (st === 'connected') {
+          setAiTurns((prev) => [...prev, { role: 'sys', text: isBn ? '🟢 কল সংযুক্ত হয়েছে — কলটি মানোন্নয়নের জন্য রেকর্ড করা হচ্ছে' : '🟢 Connected — This call is being recorded' }]);
+        } else if (st === 'error') {
+          const errStr = typeof info === 'string' ? info : (info?.error || '');
+          const isMicErr = /মাইক্রোফোন|microphone/i.test(errStr);
+          try { aiLiveRef.current?.hangup(); } catch (_) {}
+          aiLiveRef.current = null;
+          setAiCallStatus('idle');
+          if (isMicErr || info?.fallbackToHuman === false) {
+            setCallErr(errStr);
+          } else {
+            setCallErr(isBn ? '⚠️ AI সংযোগ পাওয়া যায়নি — সরাসরি অ্যাডমিন প্যানেলে কল করা হচ্ছে...' : '⚠️ AI unavailable — connecting directly to Admin Panel...');
+            setTimeout(() => {
+              startLiveCall();
+            }, 600);
+          }
+        } else if (st === 'ended') {
+          setAiCallStatus('idle');
+        }
+      },
+      onTranscript: (role, text) => {
+        if (!text) return;
+        setAiTurns((prev) => {
+          const last = prev[prev.length - 1];
+          if (last && last.role === role) {
+            return [...prev.slice(0, -1), { role, text: last.text + text }];
+          }
+          return [...prev, { role, text }];
+        });
+      },
+      onTransfer: () => {
+        setAiTurns((prev) => [...prev, { role: 'sys', text: isBn ? '🔄 প্রতিনিধির সাথে সংযুক্ত করা হচ্ছে...' : '🔄 Transferring to live agent...' }]);
+        setTimeout(() => {
+          setCallState('connecting');
+          stopAiVisitorCall();
+          startLiveCall(true);
+        }, 900);
+      },
+      onVolume: (lvl) => setAiVol(lvl)
+    });
+
+    // Unlock browser AudioContext synchronously inside user click gesture BEFORE any async fetch
+    client.unlockAudio();
+    aiLiveRef.current = client;
+
+    try {
+      const fresh = await fetch('/api/ai-call/config?_=' + Date.now()).then((r) => r.json()).catch(() => null);
+      if (fresh && typeof fresh.enabled === 'boolean') {
+        setAiCfg({
+          enabled: fresh.enabled,
+          websiteInboundAi: fresh.websiteInboundAi !== false,
+          hasApiKey: fresh.hasApiKey !== false,
+          adminOnline: fresh.adminOnline !== false,
+          supportPhone: String(fresh.supportPhone || '').trim()
+        });
+        if (!fresh.enabled || fresh.websiteInboundAi === false || fresh.hasApiKey === false) {
+          try { client.hangup(); } catch (_) {}
+          aiLiveRef.current = null;
+          setAiCallStatus('idle');
+          startLiveCall();
+          return;
+        }
+      } else if (!canUseAiCall) {
+        try { client.hangup(); } catch (_) {}
+        aiLiveRef.current = null;
+        setAiCallStatus('idle');
+        startLiveCall();
+        return;
+      }
+    } catch (_) {
+      if (!canUseAiCall) {
+        try { client.hangup(); } catch (_) {}
+        aiLiveRef.current = null;
+        setAiCallStatus('idle');
+        startLiveCall();
+        return;
+      }
+    }
+
+    let effectivePhone = callerPhone.trim();
+    let effectiveName = callerName.trim();
+    if (typeof window !== 'undefined') {
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        const qp = (sp.get('phone') || sp.get('p') || '').trim();
+        const qn = (sp.get('name') || '').trim();
+        if (qp && !effectivePhone) effectivePhone = qp;
+        if (qn && !effectiveName) effectiveName = qn;
+        if (!effectivePhone) effectivePhone = localStorage.getItem('visitor_caller_phone') || '';
+        if (!effectiveName) effectiveName = localStorage.getItem('visitor_caller_name') || '';
+      } catch (_) {}
+    }
+
+    const pMatch = typeof window !== 'undefined' ? window.location.pathname.match(/^\/(?:page|landing|p)\/([^/?#]+)/i) : null;
+    const landingSlug = pMatch ? decodeURIComponent(pMatch[1]) : '';
+    await client.start({ mode: 'website_inbound', name: effectiveName, phone: effectivePhone, landingSlug });
+  };
+
+  const sendAiVisitorTurn = () => {
+    const txt = aiTextInput.trim();
+    if (!txt || !aiLiveRef.current) return;
+    setAiTextInput('');
+    setAiTurns((prev) => [...prev, { role: 'user', text: txt }]);
+    aiLiveRef.current.sendText(txt);
+  };
+
+  const toggleAiVisitorMute = () => {
+    const next = !aiMuted;
+    setAiMuted(next);
+    aiLiveRef.current?.setMuted(next);
+  };
+
+  const toggleAiAudioMode = () => {
+    const next = aiAudioMode === 'speaker' ? 'earpiece' : 'speaker';
+    setAiAudioMode(next);
+    aiLiveRef.current?.setAudioOutputMode(next);
+  };
+
+  useEffect(() => {
+    const onOpenSaika = () => {
+      setOpen(true);
+      setCallMode(true);
+      setCallState('form');
+      setCallErr('');
+      setShowTooltip(false);
+      setChatyOpen(false);
+      startAiVisitorCall();
+    };
+    window.addEventListener('open-saika-ai-call', onOpenSaika);
+    const onGlobalTelClick = (e: MouseEvent) => {
+      if (!/^\/(?:page|landing|p)\//i.test(window.location.pathname || '')) return;
+      const t = e.target as HTMLElement | null;
+      const telEl = t?.closest('a[href^="tel:"]') as HTMLElement | null;
+      if (telEl && !telEl.hasAttribute('data-direct-tel')) {
+        e.preventDefault();
+        e.stopPropagation();
+        onOpenSaika();
+      }
+    };
+    document.addEventListener('click', onGlobalTelClick, true);
+    return () => {
+      window.removeEventListener('open-saika-ai-call', onOpenSaika);
+      document.removeEventListener('click', onGlobalTelClick, true);
+    };
+  }, [callerName, callerPhone]);
+
+  // WhatsApp call links prepare the answer screen. Starting media on page load
+  // is unreliable on mobile browsers because microphone/audio access needs a tap.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const isCallTrigger = sp.get('call') === '1' || sp.get('livecall') === '1' || (window.location.hash && window.location.hash.toLowerCase().includes('call'));
+      if (isCallTrigger) {
+        const qp = (sp.get('phone') || sp.get('p') || '').trim();
+        const qn = (sp.get('name') || '').trim();
+        if (qp) {
+          setCallerPhone(qp);
+          try { localStorage.setItem('visitor_caller_phone', qp); } catch (_) {}
+        }
+        if (qn) {
+          setCallerName(qn);
+          try { localStorage.setItem('visitor_caller_name', qn); } catch (_) {}
+        }
+        setOpen(true);
+        setCallMode(true);
+        setCallState('form');
+        setCallErr('');
+        setIncomingAiCall(true);
+        setShowTooltip(false);
+        setChatyOpen(false);
+      }
+    } catch (_) {}
+  }, []);
 
   useEffect(() => {
     if (callState === 'connected') {
@@ -973,23 +1273,69 @@ function SmartWhatsAppChat() {
   }, [callState]);
 
   const stopLiveCall = () => {
-    if (sessionRef.current) {
-      try { sessionRef.current.terminate(); } catch (_) {}
-      sessionRef.current = null;
+    const sess = sessionRef.current;
+    const ua = uaRef.current;
+    sessionRef.current = null;
+    uaRef.current = null;
+    try { window.speechSynthesis?.cancel(); } catch (_) {}
+    if (callQueueRef.current?.ticketId) {
+      fetch('/api/calls/queue/leave', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticketId: callQueueRef.current.ticketId })
+      }).catch(() => {});
+      callQueueRef.current = null;
     }
-    if (uaRef.current) {
-      try { uaRef.current.stop(); } catch (_) {}
-      uaRef.current = null;
+    setCallQueueInfo(null);
+    fetch('/api/calls/visitor-cancel', { method: 'POST' }).catch(() => {});
+    if (sess) {
+      try { sess.terminate(); } catch (_) {}
+    }
+    if (ua) {
+      setTimeout(() => {
+        try { ua.stop(); } catch (_) {}
+      }, 600);
     }
     setCallState('form');
     setCallSecs(0);
     setCallMuted(false);
   };
 
-  const startLiveCall = async () => {
+  const startLiveCall = async (isTransfer: any = false) => {
+    const forceTransfer = isTransfer === true;
     setCallErr('');
+    try {
+      const cfgRes = await fetch('/api/ai-call/config?_=' + Date.now()).then((r) => r.json()).catch(() => null);
+      if (!forceTransfer && cfgRes && cfgRes.adminOnline === false) {
+        triggerDirectPhoneFallback();
+        return;
+      }
+    } catch (_) {}
     setCallState('connecting');
     setCallSecs(0);
+    setHumanAudioMode('speaker');
+    try {
+      const qRes = await fetch('/api/calls/queue/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: callerName.trim() || 'Website Visitor', phone: callerPhone.trim(), dept: callDept })
+      }).then((r) => r.json()).catch(() => null);
+      if (qRes?.ticketId) {
+        callQueueRef.current = qRes;
+        setCallQueueInfo(qRes);
+        try {
+          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const qMsg = isBn
+              ? `${brand} কল সেন্টারে স্বাগতম। আপনার সিরিয়াল নম্বর ${parseInt(qRes.serialNumber, 10)}। ${qRes.aheadCount > 0 ? `আপনার সামনে ${qRes.aheadCount} জন অপেক্ষায় আছেন। ` : ''}অনুগ্রহ করে লাইনে থাকুন, আমাদের প্রতিনিধি এখনই যুক্ত হচ্ছেন।`
+              : `Welcome to ${brand} Call Center. Your serial number is ${parseInt(qRes.serialNumber, 10)}. Please stay on the line.`;
+            const u = new SpeechSynthesisUtterance(qMsg);
+            u.lang = isBn ? 'bn-BD' : 'en-US';
+            window.speechSynthesis.speak(u);
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
     try {
       const JsSIPMod = await import('jssip');
       const JsSIP = JsSIPMod.default || JsSIPMod;
@@ -1016,39 +1362,92 @@ function SmartWhatsAppChat() {
         fetch('/api/calls/visitor-ring', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: callerName.trim() || 'Website Visitor', phone: callerPhone.trim() })
+          body: JSON.stringify({ name: callerName.trim() || 'Website Visitor', phone: callerPhone.trim(), serialNumber: callQueueRef.current?.serialNumber || null })
         }).catch(() => {});
         const session = ua.call('sip:600@timingboost.xyz', {
           mediaConstraints: { audio: true, video: false },
+          pcConfig: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] },
           eventHandlers: {
-            accepted: () => setCallState('connected'),
-            confirmed: () => setCallState('connected'),
+            progress: () => setCallState('ringing'),
+            accepted: () => {
+              try { window.speechSynthesis?.cancel(); } catch (_) {}
+              if (callQueueRef.current?.ticketId) {
+                fetch('/api/calls/queue/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticketId: callQueueRef.current.ticketId }) }).catch(() => {});
+              }
+              setCallState('connected');
+            },
+            confirmed: () => {
+              try { window.speechSynthesis?.cancel(); } catch (_) {}
+              setCallState('connected');
+            },
             ended: () => stopLiveCall(),
-            failed: () => {
+            failed: (ev: any) => {
               if (uaRef.current) {
                 try { uaRef.current.stop(); } catch (_) {}
                 uaRef.current = null;
               }
+              sessionRef.current = null;
               fetch('/api/calls/visitor-missed', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: callerName.trim() || 'Website Visitor', phone: callerPhone.trim() || 'Guest' })
               }).catch(() => {});
-              setCallErr(isBn ? 'এই মুহূর্তে কোনো প্রতিনিধি অনলাইনে নেই বা মাইক্রোফোন অনুমতি দেওয়া হয়নি।' : 'No agent available or microphone permission denied.');
-              setCallState('error');
+              const causeStr = String(ev?.cause || '');
+              const wasRejectedOrBusy = ev?.originator === 'remote' || /busy|reject|declin|terminat|unavailable/i.test(causeStr);
+              if (wasRejectedOrBusy) {
+                const busyMsg = isBn
+                  ? 'এই মুহূর্তে আমাদের প্রতিনিধি ব্যস্ত আছেন। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।'
+                  : 'Our representative is currently busy. Please try again shortly.';
+                setCallErr(busyMsg);
+                setCallState('form');
+                try {
+                  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                    const u = new SpeechSynthesisUtterance(busyMsg);
+                    u.lang = isBn ? 'bn-BD' : 'en-US';
+                    window.speechSynthesis.speak(u);
+                  }
+                } catch (_) {}
+                return;
+              }
+              triggerDirectPhoneFallback(isBn ? 'এই মুহূর্তে কোনো প্রতিনিধি অনলাইনে নেই — সরাসরি ফোনে কল করুন।' : 'No agent available — opening direct phone call.');
             }
           }
         });
         sessionRef.current = session;
-        if (session?.connection) {
-          session.connection.addEventListener('track', (ev: any) => {
-            const rStream = ev.streams?.[0] || new MediaStream([ev.track]);
+        let iceReadyDone = false;
+        let iceTimer: any = null;
+        session.on?.('icecandidate', (ev: any) => {
+          if (iceReadyDone) return;
+          const cand = ev?.candidate?.candidate || '';
+          if (cand.includes('srflx') || cand.includes('relay')) {
+            iceReadyDone = true;
+            if (iceTimer) clearTimeout(iceTimer);
+            try { ev.ready(); } catch (_) {}
+          } else if (!iceTimer) {
+            iceTimer = setTimeout(() => {
+              if (iceReadyDone) return;
+              iceReadyDone = true;
+              try { ev.ready(); } catch (_) {}
+            }, 300);
+          }
+        });
+        const bindRemotePc = (pc: any) => {
+          if (!pc) return;
+          const attach = (rStream: MediaStream) => {
             if (remoteAudioRef.current) {
               remoteAudioRef.current.srcObject = rStream;
+              remoteAudioRef.current.muted = false;
               remoteAudioRef.current.play().catch(() => {});
             }
+          };
+          const tracks = pc.getReceivers?.().map((r: any) => r.track).filter((t: any) => t && t.kind === 'audio') || [];
+          if (tracks.length > 0) attach(new MediaStream(tracks));
+          pc.addEventListener('track', (ev: any) => {
+            attach(ev.streams?.[0] || new MediaStream([ev.track]));
           });
-        }
+        };
+        if (session?.connection) bindRemotePc(session.connection);
+        session?.on?.('peerconnection', (e: any) => { if (e?.peerconnection) bindRemotePc(e.peerconnection); });
       });
 
       ua.on('registrationFailed', () => {
@@ -1188,7 +1587,7 @@ function SmartWhatsAppChat() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                   <button
                     type="button"
-                    onClick={() => { stopLiveCall(); setCallMode(false); setShowKeypad(false); }}
+                    onClick={() => { stopAiVisitorCall(); stopLiveCall(); setCallMode(false); setShowKeypad(false); }}
                     style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: '#e2e8f0', borderRadius: 999, padding: '5px 12px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}
                   >
                     ← {isBn ? 'ফিরে যান' : 'Back'}
@@ -1199,43 +1598,176 @@ function SmartWhatsAppChat() {
                   </span>
                 </div>
 
-                {callState === 'form' || callState === 'error' ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left' }}>
-                    <div style={{ fontSize: 12.5, color: '#cbd5e1', lineHeight: 1.5 }}>
-                      {isBn
-                        ? 'কোনো ব্যালেন্স ছাড়াই সরাসরি ব্রাউজার থেকে আমাদের প্রতিনিধির সাথে কথা বলুন:'
-                        : 'Speak directly with our support agent right from your browser for free:'}
+                {aiCallStatus !== 'idle' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, textAlign: 'center', padding: '4px 0' }}>
+                    {/* Smartphone Active Call Screen */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '10px 8px', borderRadius: 16, background: 'linear-gradient(160deg, rgba(16,185,129,0.16), rgba(14,165,233,0.12))', border: '1px solid rgba(16,185,129,0.3)' }}>
+                      <div style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: '50%',
+                        background: aiCallStatus === 'connected' ? 'linear-gradient(135deg, #10b981, #0ea5e9)' : '#f59e0b',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 26,
+                        boxShadow: `0 0 ${Math.round(10 + aiVol * 28)}px rgba(16,185,129,0.7)`,
+                        transition: 'box-shadow 0.08s ease'
+                      }}>
+                        {aiCallStatus === 'connected' ? '🎧' : '📞'}
+                      </div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>
+                        {isBn ? 'সাইকা (Saika)' : 'Saika'} · {brand}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span>
+                          {aiCallStatus === 'connecting'
+                            ? (isBn ? 'সংযুক্ত হচ্ছে...' : 'Connecting...')
+                            : aiCallStatus === 'ringing'
+                            ? (isBn ? 'রিং হচ্ছে...' : 'Ringing...')
+                            : `⏱️ ${String(Math.floor(aiSeconds / 60)).padStart(2, '0')}:${String(aiSeconds % 60).padStart(2, '0')}`}
+                        </span>
+                        <span style={{ display: 'inline-flex', gap: 2.5, alignItems: 'flex-end', height: 14 }}>
+                          {[0.4, 0.8, 1, 0.65, 0.45].map((m, idx) => (
+                            <span
+                              key={idx}
+                              style={{
+                                width: 3,
+                                height: `${Math.max(3, Math.round((aiCallStatus === 'connected' ? (0.25 + aiVol * 1.4) : 0.25) * m * 14))}px`,
+                                borderRadius: 3,
+                                background: '#38bdf8',
+                                transition: 'height 0.08s ease'
+                              }}
+                            />
+                          ))}
+                        </span>
+                      </div>
+                      <div style={{ marginTop: 4, fontSize: 10.5, fontWeight: 700, color: '#fda4af', background: 'rgba(244,63,94,0.14)', border: '1px solid rgba(244,63,94,0.32)', padding: '3px 9px', borderRadius: 999 }}>
+                        🔴 {isBn ? 'এই কলটি মানোন্নয়নের জন্য রেকর্ড করা হচ্ছে' : 'This call is being recorded'}
+                      </div>
                     </div>
-                    {callErr && (
-                      <div style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(239,68,68,0.16)', border: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5', fontSize: 12 }}>
-                        {callErr}
+
+                    {/* Live Captions */}
+                    {aiTurns.length > 0 && (
+                      <div style={{ maxHeight: 110, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, padding: 8, borderRadius: 12, background: 'rgba(0,0,0,0.32)', border: '1px solid rgba(255,255,255,0.08)', textAlign: 'left' }}>
+                        {aiTurns.slice(-6).map((t, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              alignSelf: t.role === 'user' ? 'flex-end' : t.role === 'sys' ? 'center' : 'flex-start',
+                              maxWidth: '90%',
+                              padding: '5px 9px',
+                              borderRadius: 9,
+                              fontSize: 11.5,
+                              lineHeight: 1.4,
+                              background: t.role === 'user' ? '#0ea5e9' : t.role === 'sys' ? 'rgba(245,158,11,0.16)' : 'rgba(255,255,255,0.1)',
+                              color: t.role === 'sys' ? '#fbbf24' : '#fff'
+                            }}
+                          >
+                            {t.text}
+                          </div>
+                        ))}
                       </div>
                     )}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-                      {[
-                        { id: 'Order', label: isBn ? '🛍️ অর্ডার' : '🛍️ Order' },
-                        { id: 'Tracking', label: isBn ? '📦 ট্র্যাকিং' : '📦 Track' },
-                        { id: 'Advice', label: isBn ? '✨ পরামর্শ' : '✨ Advice' }
-                      ].map((d) => (
-                        <button
-                          key={d.id}
-                          type="button"
-                          onClick={() => setCallDept(d.id as any)}
-                          style={{
-                            padding: '8px 4px',
-                            borderRadius: 10,
-                            fontSize: 11.5,
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            border: callDept === d.id ? '1.5px solid #10b981' : '1px solid rgba(255,255,255,0.12)',
-                            background: callDept === d.id ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)',
-                            color: callDept === d.id ? '#34d399' : '#e2e8f0'
-                          }}
-                        >
-                          {d.label}
-                        </button>
-                      ))}
+
+                    {/* Phone Circular Action Grid: Mute | Speaker/Earpiece | Message | Agent */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+                      <button
+                        type="button"
+                        onClick={toggleAiVisitorMute}
+                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '9px 3px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.1)', background: aiMuted ? 'rgba(245,158,11,0.22)' : 'rgba(255,255,255,0.06)', color: '#fff', cursor: 'pointer' }}
+                      >
+                        <span style={{ fontSize: 17 }}>{aiMuted ? '🔇' : '🎙️'}</span>
+                        <span style={{ fontSize: 10, fontWeight: 700 }}>{aiMuted ? (isBn ? 'আনমিউট' : 'Unmute') : (isBn ? 'মিউট' : 'Mute')}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={toggleAiAudioMode}
+                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '9px 3px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.1)', background: aiAudioMode === 'earpiece' ? 'rgba(139,92,246,0.26)' : 'rgba(56,189,248,0.18)', color: '#fff', cursor: 'pointer' }}
+                      >
+                        <span style={{ fontSize: 17 }}>{aiAudioMode === 'speaker' ? '🔊' : '📱'}</span>
+                        <span style={{ fontSize: 10, fontWeight: 700 }}>{aiAudioMode === 'speaker' ? (isBn ? 'স্পিকার' : 'Speaker') : (isBn ? 'ইয়ারপিস' : 'Earpiece')}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAiShowKeypad((v) => !v)}
+                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '9px 3px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.1)', background: aiShowKeypad ? 'rgba(56,189,248,0.22)' : 'rgba(255,255,255,0.06)', color: '#fff', cursor: 'pointer' }}
+                      >
+                        <span style={{ fontSize: 17 }}>⌨️</span>
+                        <span style={{ fontSize: 10, fontWeight: 700 }}>{isBn ? 'লিখুন' : 'Text'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setCallState('connecting'); stopAiVisitorCall(); startLiveCall(true); }}
+                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '9px 3px', borderRadius: 14, border: '1px solid rgba(16,185,129,0.4)', background: 'rgba(16,185,129,0.16)', color: '#34d399', cursor: 'pointer' }}
+                      >
+                        <span style={{ fontSize: 17 }}>👤</span>
+                        <span style={{ fontSize: 10, fontWeight: 700 }}>{isBn ? 'প্রতিনিধি' : 'Agent'}</span>
+                      </button>
                     </div>
+
+                    {aiShowKeypad && (
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <input
+                          value={aiTextInput}
+                          onChange={(e) => setAiTextInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') sendAiVisitorTurn(); }}
+                          placeholder={isBn ? 'লিখে পাঠান...' : 'Type message...'}
+                          style={{ flex: 1, padding: '8px 10px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: 12.5, outline: 'none' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={sendAiVisitorTurn}
+                          style={{ padding: '0 12px', borderRadius: 10, border: 'none', background: '#10b981', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                        >
+                          ➤
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Hang Up Button */}
+                    <button
+                      type="button"
+                      onClick={stopAiVisitorCall}
+                      style={{ width: '100%', padding: '11px', borderRadius: 999, border: 'none', background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: '#fff', fontWeight: 800, fontSize: 13.5, cursor: 'pointer', boxShadow: '0 6px 18px rgba(220,38,38,0.4)' }}
+                    >
+                      📵 {isBn ? 'কল কাটুন' : 'End Call'}
+                    </button>
+                  </div>
+                ) : callState === 'form' || callState === 'error' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 11, textAlign: 'left', padding: '4px 2px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 14, background: 'linear-gradient(135deg, rgba(16,185,129,0.14), rgba(14,165,233,0.12))', border: '1px solid rgba(56,189,248,0.22)' }}>
+                      <div style={{ width: 42, height: 42, borderRadius: '50%', background: 'linear-gradient(135deg, #10b981, #0ea5e9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0, boxShadow: '0 4px 14px rgba(16,185,129,0.4)' }}>
+                        🎧
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13.5, fontWeight: 800, color: '#fff', letterSpacing: '0.01em' }}>
+                          {isBn ? `সাইকা (Saika) · ${brand}` : `Saika · ${brand} Care`}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.35 }}>
+                          {isBn ? '২৪/৭ ফ্রি HD ভয়েস কল · কোনো ব্যালেন্স লাগবে না' : '24/7 Free HD Voice Call · No Balance Needed'}
+                        </div>
+                      </div>
+                    </div>
+                    {incomingAiCall && (
+                      <div style={{ padding: '9px 11px', borderRadius: 11, background: 'rgba(14,165,233,0.09)', border: '1px solid rgba(56,189,248,0.2)', color: '#cbd5e1', fontSize: 11.5, lineHeight: 1.5 }}>
+                        {isBn ? 'আপনার AI কল প্রস্তুত। কল ধরতে নিচের বোতাম চাপুন এবং মাইক্রোফোন ব্যবহারের অনুমতি দিন।' : 'Your AI call is ready. Tap Answer below and allow microphone access.'}
+                      </div>
+                    )}
+                    {callErr && (
+                      <div style={{ padding: '8px 10px', borderRadius: 10, background: 'rgba(239,68,68,0.16)', border: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5', fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <span>{callErr}</span>
+                        {(aiCfg.supportPhone || num) && (
+                          <a
+                            href={`tel:${String(aiCfg.supportPhone || num).replace(/[^\d+]/g, '').replace(/^880/, '+880')}`}
+                            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 10px', borderRadius: 8, background: '#10b981', color: '#fff', fontWeight: 800, fontSize: 12, textDecoration: 'none' }}
+                          >
+                            <span>📞</span>
+                            <span>{isBn ? 'সরাসরি ফোনে কল করুন' : 'Call Phone Directly'} ({aiCfg.supportPhone || num})</span>
+                          </a>
+                        )}
+                      </div>
+                    )}
                     <input
                       type="text"
                       placeholder={isBn ? 'আপনার নাম (ঐচ্ছিক)' : 'Your Name (optional)'}
@@ -1245,7 +1777,7 @@ function SmartWhatsAppChat() {
                         width: '100%',
                         boxSizing: 'border-box',
                         padding: '10px 13px',
-                        borderRadius: 10,
+                        borderRadius: 12,
                         border: '1px solid rgba(255,255,255,0.14)',
                         background: 'rgba(255,255,255,0.06)',
                         color: '#ffffff',
@@ -1255,14 +1787,14 @@ function SmartWhatsAppChat() {
                     />
                     <input
                       type="tel"
-                      placeholder={isBn ? 'মোবাইল নম্বর (ঐচ্ছিক)' : 'Phone Number (optional)'}
+                      placeholder={isBn ? 'মোবাইল নম্বর · 01XXXXXXXXX (ঐচ্ছিক)' : 'Mobile Number (optional)'}
                       value={callerPhone}
                       onChange={(e) => setCallerPhone(e.target.value)}
                       style={{
                         width: '100%',
                         boxSizing: 'border-box',
                         padding: '10px 13px',
-                        borderRadius: 10,
+                        borderRadius: 12,
                         border: '1px solid rgba(255,255,255,0.14)',
                         background: 'rgba(255,255,255,0.06)',
                         color: '#ffffff',
@@ -1270,31 +1802,53 @@ function SmartWhatsAppChat() {
                         outline: 'none'
                       }}
                     />
+                    {canUseAiCall && (
+                      <button
+                        type="button"
+                        onClick={startAiVisitorCall}
+                        disabled={aiCallStatus === 'connecting'}
+                        style={{
+                          width: '100%',
+                          padding: '13px 16px',
+                          borderRadius: 14,
+                          border: 'none',
+                          background: 'linear-gradient(135deg, #10b981 0%, #0ea5e9 100%)',
+                          color: '#fff',
+                          fontWeight: 800,
+                          fontSize: 13.5,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 8,
+                          boxShadow: '0 8px 24px rgba(16, 185, 129, 0.38)'
+                        }}
+                      >
+                        <span>📞</span>
+                        <span>{aiCallStatus === 'connecting' ? (isBn ? 'সংযুক্ত হচ্ছে...' : 'Connecting...') : incomingAiCall ? (isBn ? '📞 AI কল ধরুন · সাইকা' : '📞 Answer AI Call · Saika') : (isBn ? 'কল করুন · সাইকা (২৪/৭ ফ্রি)' : 'Call Saika (24/7 Free)')}</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={startLiveCall}
                       style={{
                         width: '100%',
-                        padding: '12px 16px',
+                        padding: '10px 14px',
                         borderRadius: 12,
-                        border: 'none',
-                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                        color: '#fff',
+                        border: '1px solid rgba(16,185,129,0.35)',
+                        background: 'rgba(16,185,129,0.08)',
+                        color: '#34d399',
                         fontWeight: 700,
-                        fontSize: 13.5,
+                        fontSize: 12.5,
                         cursor: 'pointer',
-                        marginTop: 4,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: 8,
-                        boxShadow: '0 8px 22px rgba(16, 185, 129, 0.35)'
+                        gap: 6
                       }}
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                      </svg>
-                      <span>{isBn ? 'এখনই ফ্রি কল করুন' : 'Start Free Call Now'}</span>
+                      <span>👤</span>
+                      <span>{isBn ? 'সরাসরি প্রতিনিধির সাথে কথা বলুন' : 'Talk Directly to Human Agent'}</span>
                     </button>
                   </div>
                 ) : (
@@ -1311,13 +1865,28 @@ function SmartWhatsAppChat() {
                     <div style={{ fontSize: 11.5, color: '#94a3b8', marginBottom: 6 }}>
                       {callDept} Desk
                     </div>
-                    <div style={{ fontSize: 14, color: callState === 'connected' ? '#34d399' : '#fbbf24', fontWeight: 700, fontFamily: 'monospace', marginBottom: 16 }}>
+                    <div style={{ fontSize: 14, color: callState === 'connected' ? '#34d399' : '#fbbf24', fontWeight: 700, fontFamily: 'monospace', marginBottom: 8 }}>
                       {callState === 'connecting'
                         ? (isBn ? 'সংযোগ করা হচ্ছে...' : 'Connecting...')
                         : callState === 'ringing'
                         ? (isBn ? 'প্রতিনিধিকে রিং হচ্ছে...' : 'Ringing agent...')
                         : `${String(Math.floor(callSecs / 60)).padStart(2, '0')}:${String(callSecs % 60).padStart(2, '0')}`}
                     </div>
+                    <div style={{ display: 'inline-block', marginBottom: 10, fontSize: 10.5, fontWeight: 700, color: '#fda4af', background: 'rgba(244,63,94,0.14)', border: '1px solid rgba(244,63,94,0.32)', padding: '3px 10px', borderRadius: 999 }}>
+                      🔴 {isBn ? 'এই কলটি মানোন্নয়নের জন্য রেকর্ড করা হচ্ছে' : 'This call is being recorded'}
+                    </div>
+                    {callQueueInfo && callState !== 'connected' && (
+                      <div style={{ margin: '0 auto 12px', padding: '8px 12px', borderRadius: 12, background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.32)', textAlign: 'center' }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: '#7dd3fc' }}>
+                          🎫 {isBn ? `আপনার সিরিয়াল: #${callQueueInfo.serialNumber}` : `Your Serial: #${callQueueInfo.serialNumber}`}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 2 }}>
+                          {callQueueInfo.aheadCount > 0
+                            ? (isBn ? `⏳ আপনার সামনে ${callQueueInfo.aheadCount} জন অপেক্ষায় আছেন` : `⏳ ${callQueueInfo.aheadCount} caller(s) ahead`)
+                            : (isBn ? '🟢 আপনিই পরবর্তী কলার — প্রতিনিধি যুক্ত হচ্ছেন' : '🟢 You are next — connecting agent')}
+                        </div>
+                      </div>
+                    )}
 
                     {callState === 'connected' && showKeypad && (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, maxWidth: 210, margin: '0 auto 14px' }}>
@@ -1361,6 +1930,20 @@ function SmartWhatsAppChat() {
                             title={callMuted ? 'Unmute' : 'Mute'}
                           >
                             {callMuted ? '🔇' : '🎙️'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = humanAudioMode === 'speaker' ? 'earpiece' : 'speaker';
+                              setHumanAudioMode(next);
+                              if (remoteAudioRef.current) {
+                                remoteAudioRef.current.volume = next === 'earpiece' ? 0.32 : 1.0;
+                              }
+                            }}
+                            style={{ width: 42, height: 42, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.15)', background: humanAudioMode === 'earpiece' ? '#8b5cf6' : 'rgba(56,189,248,0.2)', color: '#fff', cursor: 'pointer', fontSize: 16 }}
+                            title={humanAudioMode === 'speaker' ? 'Speaker' : 'Earpiece'}
+                          >
+                            {humanAudioMode === 'speaker' ? '🔊' : '📱'}
                           </button>
                           <button
                             type="button"
@@ -1484,83 +2067,90 @@ function SmartWhatsAppChat() {
             <span className="secrate-wa-fab-close">✕</span>
           </button>
         ) : (
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              height: 44,
-              padding: '4px',
-              borderRadius: 999,
-              background: 'rgba(13, 18, 30, 0.92)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid rgba(52, 211, 153, 0.38)',
-              boxShadow: '0 10px 28px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(255, 255, 255, 0.05) inset',
-              gap: 2
-            }}
-          >
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
+            {/* WordPress Chaty-style Expandable Channel List */}
+            {chatyOpen && (
+              <>
+                <button
+                  id="secrate-free-call-btn"
+                  type="button"
+                  onClick={() => {
+                    const isLanding = /^\/(?:page|landing|p)\//i.test(window.location.pathname || '');
+                    setOpen(true);
+                    setCallMode(true);
+                    setCallState('form');
+                    setCallErr('');
+                    setShowTooltip(false);
+                    setChatyOpen(false);
+                    if (isLanding) {
+                      startAiVisitorCall();
+                    }
+                  }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: 'none', background: 'transparent', padding: 0, cursor: 'pointer' }}
+                  title={canUseAiCall ? (isBn ? 'ফ্রি লাইভ কল (সাইকা ২৪/৭)' : 'Free Live Call') : (isBn ? 'ফ্রি কল (প্রতিনিধি)' : 'Free Live Call')}
+                >
+                  <span style={{ background: '#0f172a', color: '#f8fafc', fontSize: 11.5, fontWeight: 700, padding: '5px 11px', borderRadius: 999, boxShadow: '0 6px 18px rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.12)', whiteSpace: 'nowrap' }}>
+                    {canUseAiCall ? (isBn ? '📞 ফ্রি কল (সাইকা)' : '📞 Free Call (Saika)') : (isBn ? '📞 ফ্রি কল (প্রতিনিধি)' : '📞 Free Call (Agent)')}
+                  </span>
+                  <span style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 22px rgba(14, 165, 233, 0.45)', border: '2px solid rgba(255,255,255,0.92)' }}>
+                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                    </svg>
+                  </span>
+                </button>
+                <button
+                  id="secrate-wa-toggle-btn"
+                  type="button"
+                  onClick={() => {
+                    setCallMode(false);
+                    setOpen(true);
+                    setShowTooltip(false);
+                    setChatyOpen(false);
+                  }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: 'none', background: 'transparent', padding: 0, cursor: 'pointer' }}
+                  aria-label="Toggle WhatsApp Smart Chat"
+                  title="WhatsApp Concierge"
+                >
+                  <span style={{ background: '#0f172a', color: '#f8fafc', fontSize: 11.5, fontWeight: 700, padding: '5px 11px', borderRadius: 999, boxShadow: '0 6px 18px rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.12)', whiteSpace: 'nowrap' }}>
+                    {isBn ? '💬 হোয়াটসঅ্যাপ' : '💬 WhatsApp'}
+                  </span>
+                  <span style={{ width: 48, height: 48, borderRadius: '50%', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 22px rgba(37, 211, 102, 0.45)', border: '2px solid #25D366', overflow: 'hidden' }}>
+                    <img src="/whatsapp-official.png" alt="WhatsApp" style={{ width: 34, height: 34, objectFit: 'contain' }} />
+                  </span>
+                </button>
+              </>
+            )}
+
+            {/* WordPress Chaty Main Circular Message Toggle Button */}
             <button
-              id="secrate-free-call-btn"
               type="button"
               onClick={() => {
-                setOpen(true);
-                setCallMode(true);
-                setCallState('form');
-                setCallErr('');
+                setChatyOpen((v) => !v);
                 setShowTooltip(false);
               }}
+              aria-label="Contact & Live Call Menu"
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                height: 36,
-                padding: '0 12px',
-                borderRadius: 999,
-                border: 'none',
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                width: 56,
+                height: 56,
+                borderRadius: '50%',
+                border: '2px solid rgba(255,255,255,0.9)',
+                background: chatyOpen ? '#0f172a' : 'linear-gradient(135deg, #4f46e5 0%, #0ea5e9 100%)',
                 color: '#ffffff',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                letterSpacing: '0.01em',
-                boxShadow: '0 2px 10px rgba(16, 185, 129, 0.35)'
-              }}
-              title={isBn ? 'কোনো টাকা ছাড়াই ব্রাউজার থেকে সরাসরি কথা বলুন' : 'Free Live Voice Call'}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-              </svg>
-              <span>{isBn ? 'ফ্রি কল' : 'Free Call'}</span>
-            </button>
-            <button
-              id="secrate-wa-toggle-btn"
-              type="button"
-              onClick={() => {
-                setCallMode(false);
-                setOpen(true);
-                setShowTooltip(false);
-              }}
-              style={{
-                display: 'inline-flex',
+                display: 'flex',
                 alignItems: 'center',
-                gap: 6,
-                height: 36,
-                padding: '0 11px 0 9px',
-                borderRadius: 999,
-                border: 'none',
-                background: 'transparent',
-                color: '#f8fafc',
-                fontSize: 12,
-                fontWeight: 600,
+                justifyContent: 'center',
                 cursor: 'pointer',
-                whiteSpace: 'nowrap'
+                boxShadow: '0 10px 28px rgba(79, 70, 229, 0.45)',
+                transition: 'transform 0.2s ease'
               }}
-              aria-label="Toggle WhatsApp Smart Chat"
-              title="WhatsApp Concierge"
             >
-              <WhatsAppIcon size={20} variant="official" />
-              <span>{isBn ? 'চ্যাট' : 'Chat'}</span>
+              {chatyOpen ? (
+                <span style={{ fontSize: 22, fontWeight: 700, lineHeight: 1 }}>✕</span>
+              ) : (
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-3 11H7v-2h10v2zm0-3H7V8h10v2z" />
+                </svg>
+              )}
             </button>
           </div>
         )}

@@ -1,4 +1,4 @@
-// Zero-dependency native .xlsx (OpenXML) generator for METRROMA Orders
+// Zero-dependency native .xlsx (OpenXML) generator for SECRATE Orders
 // Produces genuine Microsoft Excel (.xlsx) workbooks with:
 // - Exact columns A to O (including Customer Name & Phone Number)
 // - Full-row color coding based on Order Status
@@ -140,7 +140,7 @@ export function exportOrdersExcel(
   orders: any[],
   prodMap?: Record<string, any>,
   landingMap?: Record<string, any>,
-  filePrefix = 'metrroma-orders'
+  filePrefix = 'secrate-orders'
 ) {
   if (!Array.isArray(orders) || orders.length === 0) {
     alert('কোনো অর্ডার পাওয়া যায়নি।');

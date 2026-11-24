@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF5D6" />
+      <stop offset="20%" stop-color="#FCE182" />
+      <stop offset="50%" stop-color="#D4AF37" />
+      <stop offset="80%" stop-color="#B8860B" />
+      <stop offset="100%" stop-color="#F3D063" />
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="54" fill="#0d0e14" stroke="url(#goldGrad)" stroke-width="4" />
+  <circle cx="60" cy="60" r="46" fill="none" stroke="url(#goldGrad)" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.8" />
+  <line x1="60" y1="8" x2="60" y2="17" stroke="url(#goldGrad)" stroke-width="3" stroke-linecap="round" />
+  <line x1="60" y1="103" x2="60" y2="112" stroke="url(#goldGrad)" stroke-width="3" stroke-linecap="round" />
+  <line x1="8" y1="60" x2="17" y2="60" stroke="url(#goldGrad)" stroke-width="3" stroke-linecap="round" />
+  <line x1="103" y1="60" x2="112" y2="60" stroke="url(#goldGrad)" stroke-width="3" stroke-linecap="round" />
+  <path d="M36 36 L84 36 L84 46 L65 46 L65 84 L55 84 L55 46 L36 46 Z" fill="url(#goldGrad)" />
+  <path d="M63 47 L80 62 L67 65 L76 84 L57 67 L68 64 Z" fill="#FFFFFF" opacity="0.95" />
+  <circle cx="60" cy="60" r="4" fill="url(#goldGrad)" />
+</svg>

@@ -4,12 +4,38 @@ import JsSIP from 'jssip';
 import './admin.css';
 import { taka, getCategories, fetchMasterColors, createMasterColor, deleteMasterColor, autoDetectCategoryAndSub, isWellnessOrExcludedCategory, type MasterColor } from './api';
 import { WhatsAppIcon } from './icons';
-import { STORE_COPY_KEYS } from './language';
+import { STORE_COPY_KEYS, getStoreLanguage, setStoreLanguage, tr, useStoreLanguage } from './language';
 import { PushPopupsAdmin } from './PushPopupsAdmin';
+import { EmailsAdmin } from './EmailsAdmin';
 import { exportOrdersExcel } from './exportOrdersExcel';
+import { LiveAiCallClient } from './liveAiCall';
+import { AdminBrowserCall } from './WebCall';
+import { AdminTopNavbar } from './AdminTopNavbar';
+import { SecrateAiAssistant } from './SecrateAiAssistant';
+import { EcomDriveDashboard } from './EcomDriveDashboard';
 
 const KEY = 'dot_admin';
+const adminTranslate = (text: string) => tr(text, getStoreLanguage());
 const getTok = () => localStorage.getItem(KEY) || '';
+function getAdminSiteDomain() {
+  if (typeof window === 'undefined') return 'store';
+  return window.location.hostname.replace(/^www\./, '') || 'store';
+}
+function getAdminSiteBrand() {
+  try {
+    const cached = localStorage.getItem('metromaa_cached_settings');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed?.storeName && parsed.storeName !== 'dot.') return String(parsed.storeName);
+    }
+  } catch {}
+  if (typeof window === 'undefined') return 'Store';
+  const h = window.location.hostname.toLowerCase();
+  if (h.includes('secrate')) return 'Secrate';
+  if (h.includes('metrroma') || h.includes('metromaa')) return 'Metrroma';
+  if (h.includes('timingboost') || h.includes('timeboost')) return 'TimeBoost';
+  return 'Store';
+}
 function qrSvg(text: string) {
   try { const qr = qrcode(0, 'M'); qr.addData(text); qr.make(); return qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); }
   catch { return ''; }
@@ -27,7 +53,7 @@ async function aFetch(path: string, opts: any = {}) {
   return res;
 }
 
-const STATUSES = ['pending', 'incomplete', 'approved', 'hold', 'confirmed', 'shipped', 'delivered', 'cancelled', 'return'];
+const STATUSES = ['pending', 'incomplete', 'approved', 'hold', 'confirmed', 'shipped', 'delivered', 'cancelled', 'return', 'lost'];
 const COURIERS = ['Pathao', 'Steadfast', 'RedX', 'Sundarban', 'eCourier', 'Paperfly'];
 function timeAgo(iso: string) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -51,6 +77,41 @@ function detectDistrict(addr: string) {
   const a = (addr || '').toLowerCase();
   const hit = BD_DISTRICTS.find((d) => a.includes(d));
   return hit ? hit.charAt(0).toUpperCase() + hit.slice(1) : '';
+}
+function normalizeBDMobile(value: string) {
+  const bnDigits: Record<string, string> = { '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9' };
+  let digits = String(value || '').replace(/[০-৯]/g, (d) => bnDigits[d] || d).replace(/\D/g, '');
+  if (digits.startsWith('880')) digits = digits.slice(2);
+  if (digits.length === 10 && digits.startsWith('1')) digits = `0${digits}`;
+  return digits;
+}
+const isValidBDMobile = (value: string) => /^01[3-9]\d{8}$/.test(normalizeBDMobile(value));
+const COURIER_SCORE_CACHE_KEY = 'dot_admin_courier_scores_v3';
+const COURIER_SCORE_CACHE_TTL = 24 * 60 * 60 * 1000;
+let courierScoreSessionCache: Record<string, any> | null = null;
+function getCourierScoreSessionCache() {
+  if (courierScoreSessionCache) return courierScoreSessionCache;
+  const cache: Record<string, any> = {};
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(COURIER_SCORE_CACHE_KEY) || '{}');
+    const now = Date.now();
+    Object.entries(saved && typeof saved === 'object' ? saved : {}).forEach(([phone, value]: [string, any]) => {
+      if (isValidBDMobile(phone) && Array.isArray(value?.couriers) && now - Number(value?.at || 0) < COURIER_SCORE_CACHE_TTL) cache[phone] = value;
+    });
+  } catch {}
+  courierScoreSessionCache = cache;
+  return cache;
+}
+function persistCourierScoreSessionCache(cache: Record<string, any>) {
+  try {
+    const now = Date.now();
+    const stable = Object.entries(cache)
+      .filter(([phone, value]) => isValidBDMobile(phone) && !value?.loading && !value?.error && Array.isArray(value?.couriers) && now - Number(value?.at || 0) < COURIER_SCORE_CACHE_TTL)
+      .sort((a, b) => Number(b[1]?.at || 0) - Number(a[1]?.at || 0))
+      .slice(0, 500);
+    sessionStorage.setItem(COURIER_SCORE_CACHE_KEY, JSON.stringify(Object.fromEntries(stable)));
+    courierScoreSessionCache = cache;
+  } catch {}
 }
 function suggestCourier(district: string) {
   const d = district.toLowerCase();
@@ -940,7 +1001,7 @@ export function MediaPickerModal({
                   style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', border: '1px solid rgba(255,255,255,0.2)' }}
                 />
                 <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                  <div style={{ fontSize: 11, color: '#94a3b8' }}>Selected Image:</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>{adminTranslate("Selected Image:")}</div>
                   <div style={{ fontSize: 12, color: '#34d399', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {selected}
                   </div>
@@ -1530,6 +1591,12 @@ function slipBody(o: any) {
     ? `<div class="exchange-banner">⚠️ [EXCHANGE PARCEL] কাস্টমার থেকে আগের পার্সেলটি রিসিভ করে নতুন পার্সেল দিন!</div>`
     : '';
 
+  // Close Box Delivery Banner
+  const isClosedBox = Boolean(o.closeBox || o.isClosedBox);
+  const closedBoxBanner = isClosedBox
+    ? `<div style="background:#fef2f2;color:#b91c1c;border:2px dashed #ef4444;border-radius:6px;padding:6px 10px;font-size:12.5px;font-weight:800;margin-bottom:8px;text-align:center;">🔒 [CLOSED BOX DELIVERY] টাকা পরিশোধ ছাড়া প্যাকেট খোলা সম্পূর্ণ নিষেধ!</div>`
+    : '';
+
   // Clean note (do not repeat exchange text if already in exchange banner)
   const rawNote = String(o.customer && o.customer.note ? o.customer.note : '').trim();
   const isDuplicateExchange = rawNote.toUpperCase().includes('EXCHANGE') || rawNote.includes('আগের পার্সেলটি') || rawNote.includes('এক্সচেঞ্জ') || rawNote.includes('হ্যান্ডওভার');
@@ -1546,6 +1613,7 @@ function slipBody(o: any) {
         <div class="invoice-block">Invoice <strong>#${o.id}</strong> &middot; ${dateStr}</div>
       </div>
       ${exchangeBanner}
+      ${closedBoxBanner}
       <div class="shipto-box">
         <div class="shipto-head">
           <span class="tag-shipto">SHIP TO</span>
@@ -1586,26 +1654,117 @@ function printSlips(list: any[]) {
   if (!list.length) return;
   updateLiveSettingsCache();
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const slipsHtml = list.map(slipBody).map(s => s.trim()).join('');
-  const filename = list.length === 1 ? `timeboost-slip-${list[0].id}.pdf` : `timeboost-slips-${list.length}-orders.pdf`;
+  const getPrimaryKey = (o: any) => {
+    const it = Array.isArray(o?.items) && o.items[0] ? o.items[0] : null;
+    if (!it) return 'Other';
+    const sku = String(it.sku || '').trim();
+    const nm = String(it.name || 'Product').trim();
+    return sku ? `[${sku}] ${nm}` : nm;
+  };
+
+  // Group & sort orders by primary SKU/Product so 1 printer outputs each SKU consecutively
+  const sortedList = [...list].sort((a, b) => getPrimaryKey(a).localeCompare(getPrimaryKey(b), undefined, { numeric: true, sensitivity: 'base' }));
+
+  // Build Master Pick-List counts across all items
+  const pickMap = new Map<string, { label: string; qty: number; orders: number }>();
+  for (const o of sortedList) {
+    const seenInOrder = new Set<string>();
+    for (const it of (Array.isArray(o?.items) ? o.items : [])) {
+      const sku = String(it?.sku || '').trim();
+      const nm = String(it?.name || 'Product').trim();
+      const varTxt = String(it?.variantTitle || it?.color || '').trim();
+      const key = `${sku}|${nm}|${varTxt}`;
+      const label = `${sku ? `[${sku}] ` : ''}${nm}${varTxt && varTxt !== nm ? ` (${varTxt})` : ''}`;
+      const cur = pickMap.get(key) || { label, qty: 0, orders: 0 };
+      cur.qty += Math.max(1, parseInt(it?.qty || 1, 10) || 1);
+      if (!seenInOrder.has(key)) { cur.orders += 1; seenInOrder.add(key); }
+      pickMap.set(key, cur);
+    }
+  }
+
+  const esc = (v: any) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c));
+  const groupKeys = Array.from(new Set(sortedList.map(getPrimaryKey)));
+
+  const bodyChunks: string[] = [];
+  for (let gIdx = 0; gIdx < groupKeys.length; gIdx++) {
+    const gk = groupKeys[gIdx];
+    const groupOrders = sortedList.filter((o) => getPrimaryKey(o) === gk);
+    if (sortedList.length > 1) {
+      let totalPieces = 0;
+      const colorCounts = new Map<string, number>();
+      let prodName = gk;
+      let prodSku = '';
+      for (const o of groupOrders) {
+        const items = Array.isArray(o?.items) ? o.items : [];
+        const firstIt = items[0];
+        if (firstIt) {
+          if (firstIt.name) prodName = String(firstIt.name).trim();
+          if (firstIt.sku) prodSku = String(firstIt.sku).trim();
+        }
+        for (const it of items) {
+          const q = Math.max(1, parseInt(it?.qty || 1, 10) || 1);
+          totalPieces += q;
+          const col = String(it?.color || it?.variantTitle || '').trim();
+          const cLabel = col && col !== prodName ? col : 'Standard';
+          colorCounts.set(cLabel, (colorCounts.get(cLabel) || 0) + q);
+        }
+      }
+      const colorRows = Array.from(colorCounts.entries()).sort((a, b) => b[1] - a[1]);
+      bodyChunks.push(`<div class="slip-page smart-extra-slip" style="break-inside:avoid;page-break-inside:avoid;page-break-after:always;">
+        <div class="slip-card" style="padding:10px 12px;border:2px solid #0f172a;background:#fff;color:#0f172a;font-family:'Hind Siliguri','Inter',sans-serif;display:flex;flex-direction:column;justify-content:space-between;box-sizing:border-box;break-inside:avoid;page-break-inside:avoid;">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #0f172a;padding-bottom:4px;margin-bottom:6px;">
+              <span style="font-size:10.5px;font-weight:900;letter-spacing:0.5px;text-transform:uppercase;">📦 BATCH ${gIdx + 1} / ${groupKeys.length}</span>
+              ${prodSku ? `<span style="font-size:10.5px;font-weight:900;background:#0f172a;color:#fff;padding:1px 7px;border-radius:4px;">SKU: ${esc(prodSku)}</span>` : ''}
+            </div>
+            <div style="font-size:12.5px;font-weight:900;line-height:1.3;margin-bottom:6px;">${esc(prodName)}</div>
+            <div style="font-size:10.5px;font-weight:800;color:#334155;margin-bottom:4px;">কালার ও পিস হিসাব:</div>
+            <div style="display:flex;flex-direction:column;gap:3px;">
+              ${colorRows.map(([cName, cQty]) => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;border-bottom:1px dashed #cbd5e1;padding-bottom:2px;">
+                <span style="font-weight:700;">• ${esc(cName)}</span>
+                <span style="font-weight:900;">${cQty} pcs</span>
+              </div>`).join('')}
+            </div>
+          </div>
+          <div style="margin-top:8px;padding:6px 10px;background:#0f172a;color:#fff;border-radius:6px;display:flex;justify-content:space-between;align-items:center;font-size:11.5px;font-weight:900;">
+            <span>মোট: ${totalPieces} পিস</span>
+            <span>${groupOrders.length} টি অর্ডার</span>
+          </div>
+        </div>
+      </div>`);
+    }
+    for (const o of groupOrders) {
+      bodyChunks.push(slipBody(o).trim());
+    }
+  }
+
+  const slipsHtml = bodyChunks.join('');
+  const filename = sortedList.length === 1 ? `timeboost-slip-${sortedList[0].id}.pdf` : `timeboost-slips-${sortedList.length}-orders-sku-sorted.pdf`;
   const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><base href="${origin}/"><title>${filename}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800;900&display=swap"><style id="dynamicSlipStyle">${SLIP_PRINT_CSS}</style><style>
-  .top-toolbar { position: sticky; top: 0; left: 0; right: 0; background: #0f172a; color: #ffffff; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 999999; font-family: 'Inter', 'Hind Siliguri', sans-serif; }
+  .top-toolbar { position: sticky; top: 0; left: 0; right: 0; background: #0f172a; color: #ffffff; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 999999; font-family: 'Inter', 'Hind Siliguri', sans-serif; flex-wrap: wrap; }
   .top-toolbar .info { font-size: 13px; font-weight: 600; color: #cbd5e1; }
   .top-toolbar .info strong { color: #ffffff; }
-  .top-toolbar .actions { display: flex; gap: 8px; align-items: center; }
-  .top-btn { background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 7px 16px; border-radius: 6px; font-weight: 700; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s; box-shadow: 0 2px 8px rgba(99,102,241,0.4); }
+  .top-toolbar .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .top-btn { background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); color: #ffffff; border: 1px solid rgba(255,255,255,0.2); padding: 7px 14px; border-radius: 6px; font-weight: 700; font-size: 12.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s; box-shadow: 0 2px 8px rgba(99,102,241,0.4); }
   .top-btn:hover { opacity: 0.92; transform: translateY(-1px); }
-  .top-btn-close { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: #e2e8f0; padding: 7px 12px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer; }
+  .top-btn-close { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: #e2e8f0; padding: 7px 12px; border-radius: 6px; font-weight: 600; font-size: 12.5px; cursor: pointer; }
+  body.hide-smart-extras .smart-extra-slip { display: none !important; }
   @media print { .top-toolbar { display: none !important; } }
   </style><script>
-    var hasPrinted = false;
     var currentMode = '75-100';
+    var showExtras = true;
     function triggerPrint() {
       try {
         window.print();
       } catch (e) {
         console.error('Print trigger error:', e);
       }
+    }
+    function toggleSmartExtras() {
+      showExtras = !showExtras;
+      document.body.classList.toggle('hide-smart-extras', !showExtras);
+      var btn = document.getElementById('extrasToggleBtn');
+      if (btn) btn.innerHTML = showExtras ? '📋 Pick-List & Dividers: <strong>ON</strong>' : '📋 Pick-List & Dividers: <strong>OFF</strong>';
     }
     function cyclePaperMode() {
       var b = document.body;
@@ -1626,9 +1785,8 @@ function printSlips(list: any[]) {
         btn.innerHTML = '🏷️ Paper: <strong>Default (75×100mm)</strong>';
       }
     }
-    // Auto-trigger print reliably
     setTimeout(triggerPrint, 400);
-  <\/script></head><body><div class="top-toolbar no-print"><div class="info">📄 <strong>${list.length} Order Slip(s)</strong> &middot; Calibrated for 75&times;100mm (Zero Blank Pages)</div><div class="actions"><button class="top-btn" id="formatToggleBtn" onclick="cyclePaperMode()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;box-shadow:none;">🏷️ Paper: <strong>Default (75&times;100mm)</strong></button><button class="top-btn" onclick="triggerPrint()" style="background:#22c55e;color:#000;font-weight:900;box-shadow:0 0 12px rgba(34,197,94,0.6);">🖨️ Print Slips / Save PDF</button><button class="top-btn-close" onclick="window.close()">✕ Close</button></div></div><div class="print-slips-wrapper">${slipsHtml}</div></body></html>`;
+  <\/script></head><body><div class="top-toolbar no-print"><div class="info">📄 <strong>${sortedList.length} Order Slip(s)</strong> &middot; <strong>${groupKeys.length} SKU Group(s)</strong> (Auto-Sorted)</div><div class="actions"><button class="top-btn" id="extrasToggleBtn" onclick="toggleSmartExtras()" style="background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.45);color:#6ee7b7;box-shadow:none;">📋 Pick-List &amp; Dividers: <strong>ON</strong></button><button class="top-btn" id="formatToggleBtn" onclick="cyclePaperMode()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:#fff;box-shadow:none;">🏷️ Paper: <strong>Default (75&times;100mm)</strong></button><button class="top-btn" onclick="triggerPrint()" style="background:#22c55e;color:#000;font-weight:900;box-shadow:0 0 12px rgba(34,197,94,0.6);">🖨️ Print Slips / Save PDF</button><button class="top-btn-close" onclick="window.close()">✕ Close</button></div></div><div class="print-slips-wrapper">${slipsHtml}</div></body></html>`;
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
 }
@@ -1664,6 +1822,7 @@ const I = {
   integrations: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M7 3v4M13 3v4M4 7h12v3a6 6 0 0 1-12 0V7z" /><path d="M10 16v2" /></svg>,
   landings: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10 2.5c2.5 2 3.8 5 3.8 8.5A3.8 3.8 0 0 1 10 14.8 3.8 3.8 0 0 1 6.2 11c0-3.5 1.3-6.5 3.8-8.5z" /><path d="M6.5 13.5 4 16l2.5.3M13.5 13.5 16 16l-2.5.3" /></svg>,
   media: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="4" width="14" height="12" rx="2" /><circle cx="7.5" cy="8.5" r="1.4" /><path d="M4 14l4-3.5 3 2.5 3-3 2 2.5" /></svg>,
+  emails: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2.5" y="4" width="15" height="12" rx="2" /><path d="M3 5l7 6 7-6" /></svg>,
 };
 
 export interface AdminWhatsAppTarget {
@@ -1685,6 +1844,12 @@ export interface AdminIPCallTarget {
   name?: string;
   orderId?: string;
   product?: string;
+  note?: string;
+  serialNumber?: number;
+  address?: string;
+  tier?: string;
+  isAiTransfer?: boolean;
+  transferId?: string;
 }
 
 export function triggerAdminIPCall(target: AdminIPCallTarget) {
@@ -1704,7 +1869,9 @@ function isCourierHoldOrderGlobal(o: any): boolean {
 }
 
 function getSmartWhatsAppMessage(o: any): string {
-  if (!o) return 'আসসালামু আলাইকুম! timingboost.xyz থেকে আপনার সাথে যোগাযোগ করা হচ্ছে।';
+  const siteDomain = getAdminSiteDomain();
+  const siteBrand = getAdminSiteBrand();
+  if (!o) return `আসসালামু আলাইকুম! ${siteDomain} থেকে আপনার সাথে যোগাযোগ করা হচ্ছে।`;
   const name = o.customer?.name ? String(o.customer.name).trim() : 'সম্মানিত গ্রাহক';
   const orderId = String(o.id || '').replace(/^DOT-/i, '');
   const total = o.total || 0;
@@ -1715,28 +1882,28 @@ function getSmartWhatsAppMessage(o: any): string {
   }
 
   if (o.status === 'incomplete') {
-    return `আসসালামু আলাইকুম ${name}! timingboost.xyz থেকে লক্ষ্য করলাম "${itemTitle}" এর অর্ডারটি আপনি সম্পন্ন করেননি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট প্রদেয় মূল্য: ৳${total}। তথ্য নিশ্চিত করতে হ্যাঁ লিখে জানান।`;
+    return `আসসালামু আলাইকুম ${name}! ${siteDomain} থেকে লক্ষ্য করলাম "${itemTitle}" এর অর্ডারটি আপনি সম্পন্ন করেননি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট প্রদেয় মূল্য: ৳${total}। তথ্য নিশ্চিত করতে হ্যাঁ লিখে জানান।`;
   }
   if (isCourierHoldOrderGlobal(o)) {
     const courName = o.courier?.name || 'কুরিয়ার';
     const cons = o.courier?.consignment ? ` (Consignment #${o.courier.consignment})` : '';
     const note = o.courier?.riderNote ? ` (কারণ: ${o.courier.riderNote})` : '';
-    return `আসসালামু আলাইকুম ${name}, TimeBoost থেকে আপনার অর্ডারটি (#${orderId}, ৳${total}) ডেলিভারি করার জন্য কুরিয়ার ${courName}${cons} যোগাযোগ করেছিল কিন্তু পার্সেলটি বর্তমানে হোল্ডে আছে${note}। অনুগ্রহ করে ফোনটি খোলা রাখুন যাতে রাইডার পার্সেলটি পৌঁছে দিতে পারেন। ধন্যবাদ!`;
+    return `আসসালামু আলাইকুম ${name}, ${siteBrand} থেকে আপনার অর্ডারটি (#${orderId}, ৳${total}) ডেলিভারি করার জন্য কুরিয়ার ${courName}${cons} যোগাযোগ করেছিল কিন্তু পার্সেলটি বর্তমানে হোল্ডে আছে${note}। অনুগ্রহ করে ফোনটি খোলা রাখুন যাতে রাইডার পার্সেলটি পৌঁছে দিতে পারেন। ধন্যবাদ!`;
   }
   if (o.status === 'approved' || o.status === 'confirmed') {
-    return `আসসালামু আলাইকুম ${name}! timingboost.xyz এ আপনার অর্ডারটি (#${orderId}) সফলভাবে কনফার্ম করা হয়েছে। মোট প্রদেয় মূল্য: ৳${total} (ক্যাশ অন ডেলিভারি)। খুব শীঘ্রই পার্সেলটি কুরিয়ারে হস্তান্তর করা হবে। ধন্যবাদ!`;
+    return `আসসালামু আলাইকুম ${name}! ${siteDomain} এ আপনার অর্ডারটি (#${orderId}) সফলভাবে কনফার্ম করা হয়েছে। মোট প্রদেয় মূল্য: ৳${total} (ক্যাশ অন ডেলিভারি)। খুব শীঘ্রই পার্সেলটি কুরিয়ারে হস্তান্তর করা হবে। ধন্যবাদ!`;
   }
   if (o.status === 'shipped') {
     const courName = o.courier?.name ? ` (${o.courier.name}${o.courier.consignment ? ` - ট্র্যাকিং: #${o.courier.consignment}` : ''})` : '';
-    return `আসসালামু আলাইকুম ${name}! timingboost.xyz থেকে আপনার অর্ডারটি (#${orderId}) কুরিয়ারে${courName} পাঠানো হয়েছে। আগামী ২-৩ দিনের মধ্যে পার্সেলটি পেয়ে যাবেন। অনুগ্রহ করে ডেলিভারির সময় ৳${total} প্রস্তুত রাখুন। ধন্যবাদ!`;
+    return `আসসালামু আলাইকুম ${name}! ${siteDomain} থেকে আপনার অর্ডারটি (#${orderId}) কুরিয়ারে${courName} পাঠানো হয়েছে। আগামী ২-৩ দিনের মধ্যে পার্সেলটি পেয়ে যাবেন। অনুগ্রহ করে ডেলিভারির সময় ৳${total} প্রস্তুত রাখুন। ধন্যবাদ!`;
   }
   if (o.status === 'delivered') {
-    return `আসসালামু আলাইকুম ${name}! timingboost.xyz থেকে আপনার অর্ডারটি (#${orderId}) সফলভাবে ডেলিভারি হয়েছে। আমাদের পণ্যটি আপনার কেমন লেগেছে তা জানিয়ে সহায়তা করবেন। ধন্যবাদ!`;
+    return `আসসালামু আলাইকুম ${name}! ${siteDomain} থেকে আপনার অর্ডারটি (#${orderId}) সফলভাবে ডেলিভারি হয়েছে। আমাদের পণ্যটি আপনার কেমন লেগেছে তা জানিয়ে সহায়তা করবেন। ধন্যবাদ!`;
   }
   if (o.status === 'hold') {
-    return `আসসালামু আলাইকুম ${name}! timingboost.xyz থেকে আপনার অর্ডার (#${orderId}) সংক্রান্ত তথ্য যাচাইয়ের জন্য যোগাযোগ করা হচ্ছে। অনুগ্রহ করে একটু রিপ্লাই দিয়ে সাহায্য করবেন। ধন্যবাদ!`;
+    return `আসসালামু আলাইকুম ${name}! ${siteDomain} থেকে আপনার অর্ডার (#${orderId}) সংক্রান্ত তথ্য যাচাইয়ের জন্য যোগাযোগ করা হচ্ছে। অনুগ্রহ করে একটু রিপ্লাই দিয়ে সাহায্য করবেন। ধন্যবাদ!`;
   }
-  return `আসসালামু আলাইকুম ${name}! timingboost.xyz থেকে আপনার অর্ডার (#${orderId}) সংক্রান্ত বিষয়ে যোগাযোগ করা হচ্ছে। যেকোনো সহায়তার জন্য আমাদের জানান। ধন্যবাদ!`;
+  return `আসসালামু আলাইকুম ${name}! ${siteDomain} থেকে আপনার অর্ডার (#${orderId}) সংক্রান্ত বিষয়ে যোগাযোগ করা হচ্ছে। যেকোনো সহায়তার জন্য আমাদের জানান। ধন্যবাদ!`;
 }
 
 function QuickWhatsAppModal() {
@@ -1901,7 +2068,7 @@ function QuickWhatsAppModal() {
               </div>
               <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
                 To: <b style={{ color: '#e2e8f0' }}>{custName}</b> ({target.phone})
-                {orderId && <span style={{ marginLeft: 8, color: '#38bdf8' }}>Order #{orderId}</span>}
+                {orderId && <span style={{ marginLeft: 8, color: '#38bdf8' }}>{adminTranslate("Order #")}{orderId}</span>}
               </div>
             </div>
           </div>
@@ -2009,7 +2176,7 @@ function QuickWhatsAppModal() {
                 type="button"
                 className="sa-btn ghost sa-mini"
                 disabled={sending}
-                onClick={() => setMessage(`আসসালামু আলাইকুম ${custName}! timingboost.xyz থেকে আপনার অর্ডারটি কনফার্ম করার জন্য আপনার ডেলিভারি ঠিকানা ও ফোন নাম্বারটি একটু কনফার্ম করবেন কি? ধন্যবাদ!`)}
+                onClick={() => setMessage(`আসসালামু আলাইকুম ${custName}! ${getAdminSiteDomain()} থেকে আপনার অর্ডারটি কনফার্ম করার জন্য আপনার ডেলিভারি ঠিকানা ও ফোন নাম্বারটি একটু কনফার্ম করবেন কি? ধন্যবাদ!`)}
                 style={{ fontSize: 11, padding: '3px 8px' }}
               >
                 📍 ঠিকানা যাচাই
@@ -2114,11 +2281,80 @@ function QuickWhatsAppModal() {
   );
 }
 
+function getAdminDefaultStore() {
+  if (typeof window === 'undefined') return 'Store';
+  const h = window.location.hostname.toLowerCase();
+  if (h.includes('secrate')) return 'Secrate';
+  if (h.includes('metrroma') || h.includes('metromaa')) return 'Metrroma';
+  if (h.includes('timingboost') || h.includes('timeboost')) return 'TimeBoost';
+  return 'Store';
+}
+
+function applyAdminSettings(
+  s: any,
+  setStore: (v: string) => void,
+  setBrandIcon: (v: string) => void,
+  setBrandLogo: (v: string) => void
+) {
+  const name = s?.storeName || getAdminDefaultStore();
+  setStore(name);
+  const icon = s?.favicon && !s.favicon.includes('img_mvsqgtsqxzgig') && !s.favicon.includes('img_mvddqd311xu5c') ? s.favicon : '';
+  const logo = s?.logo && !s.logo.includes('img_mvsqgtsqxzgig') && !s.logo.includes('img_mvddqd311xu5c') ? s.logo : '';
+  setBrandIcon(icon);
+  setBrandLogo(logo);
+  if (typeof document !== 'undefined') {
+    if (icon) {
+      let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = icon;
+    } else {
+      document.querySelectorAll("link[rel*='icon'], link[rel='apple-touch-icon']").forEach((el) => el.remove());
+    }
+  }
+}
+
 export function Admin() {
+  const adminLanguage = useStoreLanguage();
+  const adminText = (text: string) => tr(text, adminLanguage);
   const [authed, setAuthed] = useState(() => !!getTok());
-  const [nav, setNav] = useState('dashboard');
-  const [store, setStore] = useState('TimeBoost');
+  const [adminTheme, setAdminTheme] = useState<'dark' | 'light'>(() => {
+    try { return localStorage.getItem('sa_admin_theme') === 'light' ? 'light' : 'dark'; } catch { return 'dark'; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('sa_admin_theme', adminTheme); } catch {}
+  }, [adminTheme]);
+  const [nav, setNav] = useState(() => {
+    try {
+      const h = (window.location.hash || '').replace(/^#/, '').trim();
+      if (h) return h;
+      return sessionStorage.getItem('sa_admin_nav') || 'dashboard';
+    } catch { return 'dashboard'; }
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('sa_admin_nav', nav);
+      if (window.location.hash !== '#' + nav) {
+        window.history.replaceState(null, '', '#' + nav);
+      }
+    } catch {}
+  }, [nav]);
+  useEffect(() => {
+    const onHash = () => {
+      const h = (window.location.hash || '').replace(/^#/, '').trim();
+      if (h) setNav(h);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  const [store, setStore] = useState(() => getAdminDefaultStore());
+  const [brandIcon, setBrandIcon] = useState('');
+  const [brandLogo, setBrandLogo] = useState('');
   const [me, setMe] = useState<any>(null);
+  const [webOrderLandings, setWebOrderLandings] = useState<any[]>([]);
   const [orderTotal, setOrderTotal] = useState<number | null>(null);
   const [lastSeen, setLastSeen] = useState<number | null>(null);
   const [navq, setNavq] = useState('');
@@ -2131,8 +2367,22 @@ export function Admin() {
   }, []);
   useEffect(() => {
     if (!authed) return;
-    fetch('/api/settings').then((r) => r.json()).then((s) => setStore(s.storeName || 'TimeBoost')).catch(() => {});
+    fetch('/api/settings').then((r) => r.json()).then((s) => applyAdminSettings(s, setStore, setBrandIcon, setBrandLogo)).catch(() => {});
+    const onSettingsUpdated = (e: any) => applyAdminSettings(e?.detail || {}, setStore, setBrandIcon, setBrandLogo);
+    window.addEventListener('store-settings-updated', onSettingsUpdated);
     aFetch('/admin/me').then((r) => (r.ok ? r.json() : null)).then((m) => { if (m) setMe(m); else { localStorage.removeItem(KEY); setAuthed(false); } }).catch(() => {});
+    return () => window.removeEventListener('store-settings-updated', onSettingsUpdated);
+  }, [authed]);
+  useEffect(() => {
+    if (!authed) return;
+    let active = true;
+    const loadLandingMenu = () => aFetch('/landings')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: any[]) => { if (active) setWebOrderLandings(Array.isArray(rows) ? rows : []); })
+      .catch(() => {});
+    loadLandingMenu();
+    window.addEventListener('admin-landings-updated', loadLandingMenu);
+    return () => { active = false; window.removeEventListener('admin-landings-updated', loadLandingMenu); };
   }, [authed]);
   useEffect(() => {
     if (!authed) return;
@@ -2141,30 +2391,39 @@ export function Admin() {
       if (!o) return; const n = o.length;
       setOrderTotal(n);
       if (prevTotal.current === null) setLastSeen((ls) => (ls === null ? n : ls));
-      else if (n > prevTotal.current) { beep(); if (document.title.indexOf('🔴') < 0) document.title = '🔴 new order — TimeBoost Admin'; }
+      else if (n > prevTotal.current) { beep(); if (document.title.indexOf('🔴') < 0) document.title = `🔴 new order — ${store} Admin`; }
       prevTotal.current = n;
     }).catch(() => {});
     check();
     const t = setInterval(check, 25000);
     return () => clearInterval(t);
-  }, [authed]);
-  useEffect(() => { if (!authed) return; if (nav === 'orders' && orderTotal != null) { setLastSeen(orderTotal); document.title = 'TimeBoost Admin'; } }, [nav, orderTotal, authed]);
+  }, [authed, store]);
+  useEffect(() => { if (!authed) return; if (nav === 'orders' && orderTotal != null) { setLastSeen(orderTotal); document.title = `${store} Admin`; } }, [nav, orderTotal, authed, store]);
 
   // Real-time Staff Presence & Active Time Heartbeat
   useEffect(() => {
     if (!authed) return;
     let lastActiveTime = Date.now();
     const markActive = () => { lastActiveTime = Date.now(); };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        lastActiveTime = Date.now();
+        sendPing();
+      }
+    };
     window.addEventListener('mousemove', markActive, { passive: true });
     window.addEventListener('keydown', markActive, { passive: true });
     window.addEventListener('touchstart', markActive, { passive: true });
     window.addEventListener('scroll', markActive, { passive: true });
     window.addEventListener('click', markActive, { passive: true });
+    window.addEventListener('focus', markActive, { passive: true });
+    document.addEventListener('visibilitychange', onVisibility);
 
     const sendPing = () => {
+      const idleMs = Date.now() - lastActiveTime;
       const isVisible = document.visibilityState !== 'hidden';
-      const isRecentlyActive = (Date.now() - lastActiveTime) < 120000;
-      const isActive = isVisible && isRecentlyActive;
+      // 5m active window while tab is visible; 3m grace window when switching to courier/WhatsApp/Facebook tabs
+      const isActive = isVisible ? idleMs < 300000 : idleMs < 180000;
       aFetch('/admin/heartbeat', {
         method: 'POST',
         body: JSON.stringify({ active: isActive, currentPath: nav })
@@ -2180,21 +2439,404 @@ export function Admin() {
       window.removeEventListener('touchstart', markActive);
       window.removeEventListener('scroll', markActive);
       window.removeEventListener('click', markActive);
+      window.removeEventListener('focus', markActive);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [authed, nav]);
   if (!authed) return <Login onDone={() => setAuthed(true)} />;
   const role = me?.role || 'owner';
-  const allowed = role === 'staff' ? ['dashboard', 'orders', 'scanner', 'customers', 'calls']
-    : role === 'manager' ? ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'calls', 'push_popups', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings']
-      : ['dashboard', 'orders', 'scanner', 'finance', 'whatsapp', 'calls', 'push_popups', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings'];
-  if (role === 'manager' && !allowed.includes('reviews')) allowed.push('reviews');
+  const perms = me?.permissions || {};
+  const allowed = role === 'owner'
+    ? ['dashboard', 'orders', 'scanner', 'campaigns', 'finance', 'reports', 'payment_gateways', 'whatsapp', 'message_marketing', 'calls', 'emails', 'push_popups', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings']
+    : role === 'manager'
+      ? [
+          'dashboard', 'orders', 'scanner', 'calls', 'emails', 'push_popups', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings',
+          ...(perms.canViewCampaigns !== false ? ['campaigns'] : []),
+          ...(perms.canViewWhatsApp !== false ? ['whatsapp'] : []),
+          ...(perms.canViewWhatsApp !== false ? ['message_marketing'] : []),
+          ...(perms.canViewFinance !== false ? ['finance', 'reports'] : []),
+        ]
+      : [
+          'dashboard', 'orders', 'scanner', 'customers', 'calls', 'emails',
+          ...(perms.canViewCampaigns ? ['campaigns'] : []),
+          ...(perms.canViewWhatsApp ? ['whatsapp'] : []),
+          ...(perms.canViewWhatsApp ? ['message_marketing'] : []),
+          ...(perms.canViewFinance ? ['finance', 'reports'] : []),
+        ];
   const cur = allowed.includes(nav) ? nav : 'dashboard';
   const newOrders = cur === 'orders' || lastSeen == null || orderTotal == null ? 0 : Math.max(0, orderTotal - lastSeen);
-  const item = (id: string, icon: any, label: string, badge?: number) => allowed.includes(id) && (!navq || label.toLowerCase().includes(navq.toLowerCase()))
-    ? <button className={cur === id ? 'on' : ''} onClick={() => { setNav(id); setMobileMenuOpen(false); }}>{icon}<span>{label}</span>{badge ? <i className="sa-ntf">{badge}</i> : null}</button>
-    : null;
+  const [unreadEmails, setUnreadEmails] = useState(0);
+  const [showGlobalCreateOrder, setShowGlobalCreateOrder] = useState(false);
+  const [staffAlertCount, setStaffAlertCount] = useState(0);
+  const [ordersSearch, setOrdersSearch] = useState('');
+
+  useEffect(() => {
+    fetch('/api/mail/list?folder=inbox', {
+      headers: { 'x-admin-token': getTok() }
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.ok && d.counts?.unread != null) {
+          setUnreadEmails(d.counts.unread);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!authed) return;
+    const loadStaffAlerts = () => {
+      aFetch('/admin/staff/notifications')
+        .then((r) => r.ok ? r.json() : null)
+        .then((d) => {
+          if (d && typeof d.unreadCount === 'number') {
+            setStaffAlertCount(d.unreadCount);
+          }
+        })
+        .catch(() => {});
+    };
+    loadStaffAlerts();
+    const t = setInterval(loadStaffAlerts, 20000);
+    return () => clearInterval(t);
+  }, [authed]);
+
+  const totalNotificationCount = (newOrders || 0) + (unreadEmails || 0) + (staffAlertCount || 0);
+  const quickSearchRef = useRef<HTMLInputElement>(null);
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('sa_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try { localStorage.setItem('sa_sidebar_collapsed', String(next)); } catch {}
+      return next;
+    });
+  };
+
+  const [activeSubItem, setActiveSubItem] = useState<string>(() => ({
+    orders: 'Order List', scanner: 'Scan To Update', fraud: 'Fraud & Risk Protection',
+    campaigns: 'Ad Profit Analysis', products: 'Product List', categories: 'Categories',
+    colors: 'Color Palette', landings: 'Landing Pages', media: 'Media Library',
+    whatsapp: 'WhatsApp Automation', emails: 'Business Webmail', push_popups: 'Push Notifications',
+    message_marketing: 'Message Marketing',
+    reviews: 'Customer Reviews', finance: 'Finance Dashboard', reports: 'Profit & Loss', payment_gateways: 'Payment Gateways', coupons: 'Coupons & Discounts',
+    customers: 'Customer CRM', calls: 'Dashboard', staff: 'Staff & Roles',
+    integrations: 'Integrations (APIs)', settings: 'Store Settings', backup: 'Backup & Restore',
+  } as Record<string, string>)[nav] || 'Order List');
+  const [pinnedPages, setPinnedPages] = useState<Array<{ id: string; label: string }>>(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('sa_pinned_pages') || '[]');
+      return Array.isArray(parsed) ? parsed.filter((p) => p && typeof p.id === 'string' && typeof p.label === 'string').slice(0, 8) : [];
+    } catch { return []; }
+  });
+  const [adsSubTab, setAdsSubTab] = useState<'dashboard' | 'meta' | 'spend' | 'profit' | 'tiktok' | 'google'>('profit');
+  const [financeSection, setFinanceSection] = useState<'dashboard' | 'accounts' | 'income' | 'courier' | 'cashflow' | 'assets'>('dashboard');
+  const [reportSection, setReportSection] = useState('profit_loss');
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const groupForNav: Record<string, string> = {
+      orders: 'approved_orders', scanner: 'approved_orders', fraud: 'approved_orders',
+      campaigns: 'ads', products: 'inventory', categories: 'inventory', colors: 'inventory', landings: 'inventory', media: 'inventory',
+      whatsapp: 'messages', message_marketing: 'messages', emails: 'messages', push_popups: 'messages', finance: 'finance', reports: 'reports', payment_gateways: 'purchase', coupons: 'purchase',
+      customers: 'task_followup', reviews: 'task_followup', calls: 'call_center', staff: 'work_inbox', integrations: 'work_inbox', settings: 'work_inbox', backup: 'work_inbox',
+    };
+    const currentGroup = cur === 'integrations' && activeSubItem === 'Courier API Setup'
+      ? 'approved_orders'
+      : cur === 'finance' && activeSubItem === 'Courier Invoice Upload' ? 'approved_orders' : groupForNav[cur];
+    const groups = ['approved_orders', 'ads', 'web_orders', 'inventory', 'messages', 'purchase', 'finance', 'reports', 'task_followup', 'call_center', 'work_inbox'];
+    let savedGroup = '';
+    try {
+      const saved = sessionStorage.getItem('sa_sidebar_open_groups');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          savedGroup = groups.filter((group) => parsed[group] === true).at(-1) || '';
+        }
+      }
+    } catch {}
+    const activeGroup = currentGroup || savedGroup || 'approved_orders';
+    return Object.fromEntries(groups.map((group) => [group, group === activeGroup]));
+  });
+
+  const toggleGroup = (id: string) => {
+    setOpenGroups((prev) => {
+      const shouldOpen = !prev[id];
+      return Object.fromEntries(Object.keys(prev).map((group) => [group, group === id && shouldOpen]));
+    });
+  };
+
+  useEffect(() => {
+    try { sessionStorage.setItem('sa_sidebar_open_groups', JSON.stringify(openGroups)); } catch {}
+  }, [openGroups]);
+
+  const togglePinnedPage = (page: { id: string; label: string }) => {
+    setPinnedPages((prev) => {
+      const exists = prev.some((p) => p.id === page.id && p.label === page.label);
+      const next = exists ? prev.filter((p) => p.id !== page.id || p.label !== page.label) : [...prev, page].slice(-8);
+      try { localStorage.setItem('sa_pinned_pages', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const navToGroup: Record<string, string> = {
+      orders: 'approved_orders',
+      scanner: 'approved_orders',
+      fraud: 'approved_orders',
+      campaigns: 'ads',
+      products: 'inventory',
+      categories: 'inventory',
+      colors: 'inventory',
+      landings: 'inventory',
+      media: 'inventory',
+      whatsapp: 'messages',
+      emails: 'messages',
+      push_popups: 'messages',
+      finance: 'finance',
+      reports: 'reports',
+      coupons: 'purchase',
+      customers: 'task_followup',
+      reviews: 'task_followup',
+      calls: 'call_center',
+      staff: 'work_inbox',
+      integrations: 'work_inbox',
+      settings: 'work_inbox',
+      backup: 'work_inbox',
+    };
+    const isWebOrderEntry = cur === 'orders' && (activeSubItem === 'Store Orders' || /^\d+ · /.test(activeSubItem));
+    const g = cur === 'integrations' && activeSubItem === 'Courier API Setup'
+      ? 'approved_orders'
+      : isWebOrderEntry
+      ? 'web_orders'
+      : cur === 'finance' && activeSubItem === 'Courier Invoice Upload'
+      ? 'approved_orders'
+      : cur === 'customers' && activeSubItem === 'Contacts'
+      ? 'call_center'
+      : navToGroup[cur];
+    if (g && !openGroups[g]) {
+      setOpenGroups((prev) => Object.fromEntries(Object.keys(prev).map((group) => [group, group === g])));
+    }
+  }, [cur, activeSubItem]);
+
+  const renderRootItem = (id: string, icon: any, label: string, badge?: number) => {
+    if (!allowed.includes(id)) return null;
+    const localizedLabel = adminText(label);
+    const match = !navq || label.toLowerCase().includes(navq.toLowerCase()) || localizedLabel.toLowerCase().includes(navq.toLowerCase());
+    if (!match) return null;
+    const active = cur === id;
+    return (
+      <button
+        key={id}
+        type="button"
+        className={`sa-nav-root-btn ${active ? 'on' : ''}`}
+        title={localizedLabel}
+        onClick={() => { setNav(id); setNavq(''); setMobileMenuOpen(false); }}
+      >
+        {icon}
+        <span className="sa-btn-label" style={{ flex: 1 }}>{localizedLabel}</span>
+        {badge ? <i className="sa-ntf">{badge}</i> : null}
+      </button>
+    );
+  };
+
+  const renderSubItem = (id: string, label: string, badge?: number, customAction?: () => void) => {
+    if (!allowed.includes(id)) return null;
+    const localizedLabel = adminText(label);
+    const match = !navq || label.toLowerCase().includes(navq.toLowerCase()) || localizedLabel.toLowerCase().includes(navq.toLowerCase());
+    if (!match) return null;
+    const active = cur === id && activeSubItem === label;
+    const pinned = pinnedPages.some((p) => p.id === id && p.label === label);
+    return (
+      <div key={label} className="sa-sub-row">
+        <button
+          type="button"
+          className={`sa-sub-item ${active ? 'on' : ''}`}
+          title={localizedLabel}
+          onClick={() => {
+            setActiveSubItem(label);
+            if (customAction) customAction();
+            else setNav(id);
+            setNavq('');
+            setMobileMenuOpen(false);
+          }}
+        >
+          <span>{localizedLabel}</span>
+          {badge ? <i className="sa-ntf" style={{ fontSize: 10, padding: '1px 6px' }}>{badge}</i> : null}
+        </button>
+        <button
+          type="button"
+          className={`sa-pin-page ${pinned ? 'on' : ''}`}
+          aria-label={`${pinned ? 'Unpin' : 'Pin'} ${label}`}
+          title={`${pinned ? 'Unpin' : 'Pin'} ${label}`}
+          onClick={(e) => { e.stopPropagation(); togglePinnedPage({ id, label }); }}
+        >{pinned ? '★' : '☆'}</button>
+      </div>
+    );
+  };
+
+  const openSidebarPage = (page: { id: string; label: string }) => {
+    if (page.id === 'orders') {
+      const filter = page.label === 'Preorders' ? 'pending' : page.label === 'Orders Dashboard' ? 'confirmed' : page.label === 'Ready to Ship' ? 'ready_to_ship' : 'all';
+      navigateOrders(page.label, filter);
+      return;
+    }
+    if (page.id === 'calls' && ['Reports', 'Call Records & Audit'].includes(page.label)) {
+      navigateToCallSection(page.label, 'records');
+      return;
+    }
+    if (page.id === 'calls' && ['Dashboard', 'IP Phone Calling'].includes(page.label)) {
+      navigateToCallSection(page.label, 'wallboard');
+      return;
+    }
+    if (page.id === 'calls' && page.label === 'My Phone Setup') {
+      navigateToCallSection(page.label, 'phone_setup');
+      return;
+    }
+    if (page.label === 'Courier Invoice Upload') {
+      navigateToCourierReconcile();
+      return;
+    }
+    if (page.id === 'campaigns') {
+      const tab = page.label === 'Meta Ads' ? 'meta' : page.label === 'Ads Dashboard' ? 'dashboard' : page.label === 'Record Ad Spend' ? 'spend' : page.label === 'TikTok Ads' ? 'tiktok' : page.label === 'Google Ads' ? 'google' : 'profit';
+      setAdsSubTab(tab as any);
+    }
+    setActiveSubItem(page.label);
+    setNav(page.id);
+    setNavq('');
+    setMobileMenuOpen(false);
+  };
+
+  const navigateOrders = (label: string, filter = 'all', search = '', bulkActions = false, range = 'all', landingFilter = '') => {
+    const view = { filter, search, bulkActions, range, landingFilter };
+    if (cur === 'orders') {
+        window.dispatchEvent(new CustomEvent('orders-navigate', { detail: view }));
+    } else {
+      try {
+        sessionStorage.removeItem('orders_status_filter');
+        sessionStorage.removeItem('orders_search_query');
+        sessionStorage.removeItem('orders_campaign_filter');
+        sessionStorage.setItem('orders_initial_view', JSON.stringify(view));
+      } catch {}
+    }
+    setActiveSubItem(label);
+    setNav('orders');
+    setNavq('');
+    setMobileMenuOpen(false);
+  };
+
+  const navigateFinanceSection = (tab: 'dashboard' | 'accounts' | 'income' | 'courier' | 'cashflow' | 'assets', label: string) => {
+    setFinanceSection(tab);
+    setActiveSubItem(label);
+    setNav('finance');
+    setNavq('');
+    setMobileMenuOpen(false);
+  };
+
+  const navigateReport = (section: string, label: string) => {
+    setReportSection(section);
+    setActiveSubItem(label);
+    setNav('reports');
+    setNavq('');
+    setMobileMenuOpen(false);
+  };
+
+  const navigateToCallSection = (label: string, section: 'wallboard' | 'records' | 'phone_setup') => {
+    if (cur === 'calls') {
+      window.dispatchEvent(new CustomEvent('calls-navigate-section', { detail: section }));
+    } else {
+      try { sessionStorage.setItem('calls_focus_section', section); } catch {}
+    }
+    setActiveSubItem(label);
+    setNav('calls');
+    setNavq('');
+    setMobileMenuOpen(false);
+  };
+
+  const navigateToCourierReconcile = () => {
+    setFinanceSection('courier');
+    if (cur === 'finance') {
+      window.dispatchEvent(new Event('finance-focus-courier-reconcile'));
+    } else {
+      try { sessionStorage.setItem('finance_focus_courier_reconcile', '1'); } catch {}
+    }
+    setActiveSubItem('Courier Invoice Upload');
+    setNav('finance');
+    setNavq('');
+    setMobileMenuOpen(false);
+  };
+
+  const renderGroup = (
+    groupId: string,
+    title: string,
+    icon: any,
+    children: { id: string; label: string; badge?: number; action?: () => void }[],
+    badgeCount?: number
+  ) => {
+    const visibleChildren = children.filter((c) => allowed.includes(c.id));
+    if (visibleChildren.length === 0) return null;
+
+    const localizedTitle = adminText(title);
+    const titleMatches = !!navq && (title.toLowerCase().includes(navq.toLowerCase()) || localizedTitle.toLowerCase().includes(navq.toLowerCase()));
+    const filteredChildren = !navq || titleMatches
+      ? visibleChildren
+      : visibleChildren.filter((c) => c.label.toLowerCase().includes(navq.toLowerCase()) || adminText(c.label).toLowerCase().includes(navq.toLowerCase()));
+    const matchesQuery = !navq || titleMatches || filteredChildren.length > 0;
+    if (!matchesQuery) return null;
+
+    const isChildActive = visibleChildren.some((c) => cur === c.id && activeSubItem === c.label);
+    const isOpen = !!openGroups[groupId] || (!!navq && matchesQuery);
+
+    return (
+      <div key={groupId} className="sa-grp-wrap" style={{ display: 'flex', flexDirection: 'column' }}>
+        <button
+          type="button"
+          className={`sa-accordion-header ${isChildActive ? 'active-parent' : ''}`}
+          title={localizedTitle}
+          onClick={() => {
+            if (sidebarCollapsed) {
+              setSidebarCollapsed(false);
+              setOpenGroups((prev) => ({ ...prev, [groupId]: true }));
+            } else {
+              toggleGroup(groupId);
+            }
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+            {icon}
+            <span className="sa-btn-label">{localizedTitle}</span>
+          </div>
+          <div className="sa-grp-right" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {badgeCount ? <i className="sa-ntf">{badgeCount}</i> : null}
+            <svg
+              className={`sa-accordion-chevron ${isOpen ? 'expanded' : ''}`}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+            >
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </div>
+        </button>
+
+        {!sidebarCollapsed && isOpen && (
+          <div className="sa-sub-tree">
+            {filteredChildren.map((c) => renderSubItem(c.id, c.label, c.badge, c.action))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div className="sa">
+    <div className={`sa ${sidebarCollapsed ? 'collapsed' : ''} ${adminTheme === 'light' ? 'sa-light' : ''}`} data-admin-theme={adminTheme}>
       {/* Top Mobile Bar */}
       <header className="sa-mobile-header">
         <button
@@ -2219,7 +2861,10 @@ export function Admin() {
           </svg>
         </button>
 
-        <div className="sa-mobile-brand">
+        <div className="sa-mobile-brand" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {brandIcon ? (
+            <img src={brandIcon} alt="" style={{ width: 22, height: 22, borderRadius: 6, objectFit: 'contain', flexShrink: 0 }} onError={() => setBrandIcon('')} />
+          ) : null}
           <span className="sa-mobile-brand-name">{store}</span>
           <span className="sa-mobile-badge">ADMIN</span>
         </div>
@@ -2252,51 +2897,467 @@ export function Admin() {
       )}
 
       {/* Navigation Sidebar / Drawer */}
-      <aside className={`sa-side ${mobileMenuOpen ? 'open' : ''}`}>
+      <aside className={`sa-side ${sidebarCollapsed ? 'collapsed' : ''} ${mobileMenuOpen ? 'open' : ''}`}>
+        {/* Border Collapse / Expand Toggle Button matching user screenshot */}
+        <button
+          type="button"
+          className="sa-collapse-toggle"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleSidebar();
+          }}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+          }}
+          title={sidebarCollapsed ? 'Expand sidebar (সব মেনু দেখুন)' : 'Collapse to icons (শুধু আইকন দেখুন)'}
+          aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14, pointerEvents: 'none' }}>
+            <rect x="3" y="3" width="18" height="18" rx="3.5" />
+            <line x1="9" y1="3" x2="9" y2="21" strokeWidth="2.2" />
+            {sidebarCollapsed ? (
+              <polyline points="13 9 16 12 13 15" strokeWidth="2" />
+            ) : (
+              <polyline points="16 9 13 12 16 15" strokeWidth="2" />
+            )}
+          </svg>
+        </button>
+
         <div className="sa-side-header-mob">
-          <div className="sa-brand">{store}<em>admin</em></div>
-          <button className="sa-side-close" onClick={() => setMobileMenuOpen(false)} aria-label="Close menu">
+          <div className="sa-brand" style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            {brandIcon ? (
+              <img src={brandIcon} alt="" style={{ width: 26, height: 26, borderRadius: 7, objectFit: 'contain', flexShrink: 0 }} onError={() => setBrandIcon('')} />
+            ) : null}
+            <>{store}<em>admin</em></>
+          </div>
+          <button className="sa-side-close" onClick={() => setMobileMenuOpen(false)} aria-label={adminTranslate("Close menu")}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
-        <div className="sa-brand sa-brand-desktop">{store}<em>admin</em></div>
-        <div className="sa-search-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.4-3.4" /></svg><input placeholder="Search" value={navq} onChange={(e) => setNavq(e.target.value)} /></div>
-        <div className="sa-menu-label">Menu</div>
-        <nav className="sa-nav">
-          {item('dashboard', I.home, 'Home')}
-          {item('orders', I.orders, 'Orders', newOrders)}
-          {item('scanner', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1.5"/><line x1="7" y1="12" x2="17" y2="12"/></svg>, 'QR Scanner')}
-          {item('finance', <FinanceIcon />, 'Finance & Ledger')}
-          {item('whatsapp', <WhatsAppIcon size={18} variant="official" className="ci" />, 'WhatsApp Automation')}
-          {item('calls', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>, 'IP Calling & Audit')}
-          {item('push_popups', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>, 'Push & Pop-ups')}
-          {item('backup', <BackupIcon />, 'Backup & Restore')}
-          {item('customers', I.customers, 'Customers')}
-          {item('products', I.products, 'Products')}
-          {item('categories', I.categories, 'Categories')}
-          {item('reviews', I.customers, 'Product Reviews')}
-          {item('colors', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><circle cx="12" cy="12" r="10"/><path d="M12 2a7 7 0 0 0-7 7c0 3 2 4.5 4 4.5 1 0 2 1 2 2 0 1.5-1 2.5-1 4.5a2 2 0 0 0 2 2 10 10 0 0 0 0-20z"/></svg>, 'Color Palette')}
-          {item('landings', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>, 'Landing Pages')}
-          {item('media', I.media, 'Media')}
-          {item('coupons', I.coupons, 'Coupons')}
-          {item('fraud', <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="ci"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, 'Fraud Detector')}
-          {item('staff', I.customers, 'Staff')}
-          {item('integrations', I.integrations, 'Integrations')}
-          {item('settings', I.settings, 'Settings')}
+        <div className="sa-brand sa-brand-desktop" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {brandIcon ? (
+            <img src={brandIcon} alt="" style={{ width: 26, height: 26, borderRadius: 7, objectFit: 'contain', flexShrink: 0 }} onError={() => setBrandIcon('')} />
+          ) : brandLogo ? (
+            <img src={brandLogo} alt="" style={{ maxHeight: 26, maxWidth: sidebarCollapsed ? 30 : 110, objectFit: 'contain', flexShrink: 0 }} onError={() => setBrandLogo('')} />
+          ) : null}
+          <span className="sa-brand-text">{brandIcon || !brandLogo ? store : ''}<em>admin</em></span>
+        </div>
+
+        {/* Quick Search with CTRL K Shortcut Badge */}
+        <div
+          className="sa-qs-wrapper"
+          onClick={() => {
+            if (sidebarCollapsed) {
+              setSidebarCollapsed(false);
+              setTimeout(() => {
+                quickSearchRef.current?.focus();
+                quickSearchRef.current?.select();
+              }, 150);
+            }
+          }}
+          title={sidebarCollapsed ? 'Quick Search (Click to expand)' : undefined}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.4-3.4" />
+          </svg>
+          <input
+            ref={quickSearchRef}
+            type="search"
+            name="sa_menu_filter_quick"
+            autoComplete="off"
+            placeholder={adminText('Quick Search')}
+            value={navq}
+            onChange={(e) => setNavq(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const q = navq.trim();
+              if (/^\d{6,}$/.test(q) || /^dot-/i.test(q)) {
+                  navigateOrders('Order List', 'all', q);
+                }
+              }
+            }}
+          />
+          {navq ? (
+            <button
+              type="button"
+              className="sa-qs-clear-btn"
+              onClick={(e) => { e.stopPropagation(); setNavq(''); }}
+              style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 13, padding: '0 2px' }}
+              title="Clear search"
+            >
+              ✕
+            </button>
+          ) : (
+            <span className="sa-qs-badge">FILTER</span>
+          )}
+        </div>
+
+        {/* Scrollable Navigation Items */}
+        <nav className="sa-side-nav-container">
+          {/* Root Items: Dashboard & Search */}
+          {renderRootItem(
+            'dashboard',
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ width: 18, height: 18, flexShrink: 0 }}>
+              <rect x="3" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="14" width="7" height="7" rx="1.5" />
+              <rect x="3" y="14" width="7" height="7" rx="1.5" />
+            </svg>,
+            'Dashboard'
+          )}
+
+          <button
+            type="button"
+            className="sa-nav-root-btn"
+            title={adminTranslate("Search")}
+            onClick={() => {
+              if (sidebarCollapsed) {
+                setSidebarCollapsed(false);
+                setTimeout(() => {
+                  quickSearchRef.current?.focus();
+                  quickSearchRef.current?.select();
+                }, 150);
+              } else {
+                quickSearchRef.current?.focus();
+                quickSearchRef.current?.select();
+              }
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ width: 18, height: 18, flexShrink: 0 }}>
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.4-3.4" />
+            </svg>
+            <span className="sa-btn-label" style={{ flex: 1 }}>{adminTranslate("Search")}</span>
+          </button>
+
+          {!navq && pinnedPages.some((p) => allowed.includes(p.id)) && (
+            <div className="sa-sidebar-shortcuts">
+              <div className="sa-sec-label">PINNED</div>
+              {pinnedPages.filter((p) => allowed.includes(p.id)).map((p) => (
+                <div className="sa-sub-row" key={`pin-${p.id}-${p.label}`}>
+                  <button type="button" className={`sa-sub-item ${cur === p.id && activeSubItem === p.label ? 'on' : ''}`} onClick={() => openSidebarPage(p)} title={p.label}>
+                    <span>★ {p.label}</span>
+                  </button>
+                  <button type="button" className="sa-pin-page on" aria-label={`Unpin ${p.label}`} title={`Unpin ${p.label}`} onClick={() => togglePinnedPage(p)}>★</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Section: OPERATIONS */}
+          <div className="sa-sec-label">OPERATIONS</div>
+
+          {/* 1. Web Orders */}
+          {renderGroup(
+            'web_orders',
+            'Web Orders',
+            <svg className="sa-grp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ width: 18, height: 18, flexShrink: 0 }}>
+              <circle cx="12" cy="12" r="10" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>,
+            [
+              { id: 'orders', label: 'Store Orders', action: () => navigateOrders('Store Orders', 'all', '', false, 'all', '__store__') },
+              ...webOrderLandings.map((landing, index) => {
+                const landingLabel = `${String(index + 1).padStart(2, '0')} · ${String(landing?.title || landing?.name || landing?.slug || 'Landing Page').trim()}`;
+                return {
+                  id: 'orders',
+                  label: landingLabel,
+                  action: () => navigateOrders(landingLabel, 'all', '', false, 'all', String(landing?.slug || landing?.id || '')),
+                };
+              }),
+            ]
+          )}
+
+          {/* 2. Approved Orders */}
+          {renderGroup(
+            'approved_orders',
+            'Approved Orders',
+            <svg className="sa-grp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ width: 18, height: 18, flexShrink: 0 }}>
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+              <rect x="8" y="2" width="8" height="4" rx="1" />
+              <path d="m9 14 2 2 4-4" />
+            </svg>,
+            [
+              { id: 'orders', label: 'Order List', badge: newOrders, action: () => navigateOrders('Order List') },
+              { id: 'orders', label: 'Orders Dashboard', action: () => navigateOrders('Orders Dashboard', 'confirmed') },
+              { id: 'orders', label: 'Preorders', action: () => navigateOrders('Preorders', 'pending') },
+              { id: 'orders', label: 'Bulk Order Actions', action: () => navigateOrders('Bulk Order Actions', 'all', '', true) },
+              { id: 'scanner', label: 'Scan To Update' },
+              { id: 'finance', label: 'Courier Invoice Upload', action: navigateToCourierReconcile },
+              { id: 'integrations', label: 'Courier API Setup' },
+              { id: 'fraud', label: 'Fraud & Risk Protection' },
+            ],
+            newOrders
+          )}
+
+          {/* 3. Ads (Exact Match with User Screenshot) */}
+          {renderGroup(
+            'ads',
+            'Ads',
+            <svg className="sa-grp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18, flexShrink: 0 }}>
+              <path d="m3 11 18-5v12L3 14v-3z" />
+              <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+            </svg>,
+            [
+              { id: 'campaigns', label: 'Ads Dashboard', action: () => { setNav('campaigns'); setAdsSubTab('dashboard'); setActiveSubItem('Ads Dashboard'); setMobileMenuOpen(false); } },
+              { id: 'campaigns', label: 'Meta Ads', action: () => { setNav('campaigns'); setAdsSubTab('meta'); setActiveSubItem('Meta Ads'); setMobileMenuOpen(false); } },
+              { id: 'campaigns', label: 'Record Ad Spend', action: () => { setNav('campaigns'); setAdsSubTab('spend'); setActiveSubItem('Record Ad Spend'); setMobileMenuOpen(false); } },
+              { id: 'campaigns', label: 'Ad Profit Analysis', action: () => { setNav('campaigns'); setAdsSubTab('profit'); setActiveSubItem('Ad Profit Analysis'); setMobileMenuOpen(false); } },
+              { id: 'campaigns', label: 'TikTok Ads', action: () => { setNav('campaigns'); setAdsSubTab('tiktok'); setActiveSubItem('TikTok Ads'); setMobileMenuOpen(false); } },
+              { id: 'campaigns', label: 'Google Ads', action: () => { setNav('campaigns'); setAdsSubTab('google'); setActiveSubItem('Google Ads'); setMobileMenuOpen(false); } },
+            ]
+          )}
+
+          {/* 4. Inventory */}
+          {renderGroup(
+            'inventory',
+            'Inventory',
+            <svg className="sa-grp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ width: 18, height: 18, flexShrink: 0 }}>
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+              <line x1="12" y1="22.08" x2="12" y2="12" />
+            </svg>,
+            [
+              { id: 'products', label: 'Product List' },
+              { id: 'categories', label: 'Categories' },
+              { id: 'colors', label: 'Color Palette' },
+              { id: 'landings', label: 'Landing Pages' },
+              { id: 'media', label: 'Media Library' },
+            ]
+          )}
+
+          {/* 5. Messages */}
+          {renderGroup(
+            'messages',
+            'Messages',
+            <svg className="sa-grp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ width: 18, height: 18, flexShrink: 0 }}>
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+            </svg>,
+            [
+              { id: 'whatsapp', label: 'WhatsApp Automation' },
+              { id: 'message_marketing', label: 'Message Marketing' },
+              { id: 'emails', label: 'Business Webmail', badge: unreadEmails },
+              { id: 'push_popups', label: 'Push Notifications' },
+              { id: 'reviews', label: 'Customer Reviews' },
+            ],
+            unreadEmails
+          )}
+
+          {/* 6. Purchase */}
+          {renderGroup(
+            'purchase',
+            'Purchase',
+            <svg className="sa-grp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ width: 18, height: 18, flexShrink: 0 }}>
+              <circle cx="9" cy="21" r="1" />
+              <circle cx="20" cy="21" r="1" />
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+            </svg>,
+            [
+              { id: 'payment_gateways', label: 'Payment Gateways' },
+              { id: 'coupons', label: 'Coupons & Discounts' },
+            ]
+          )}
+
+          {renderGroup(
+            'finance',
+            'Finance',
+            <svg className="sa-grp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ width: 18, height: 18, flexShrink: 0 }}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg>,
+            [
+              { id: 'finance', label: 'Finance Dashboard', action: () => navigateFinanceSection('dashboard', 'Finance Dashboard') },
+              { id: 'finance', label: 'Accounts & Bank', action: () => navigateFinanceSection('accounts', 'Accounts & Bank') },
+              { id: 'finance', label: 'Income & Expense', action: () => navigateFinanceSection('income', 'Income & Expense') },
+              { id: 'finance', label: 'Courier Settlement', action: () => navigateFinanceSection('courier', 'Courier Settlement') },
+              { id: 'finance', label: 'Cash Flow', action: () => navigateFinanceSection('cashflow', 'Cash Flow') },
+              { id: 'finance', label: 'Asset Management', action: () => navigateFinanceSection('assets', 'Asset Management') },
+            ]
+          )}
+
+          {renderGroup(
+            'reports',
+            'Reports',
+            <svg className="sa-grp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ width: 18, height: 18, flexShrink: 0 }}><path d="M4 19V5M4 19h17"/><path d="m7 15 4-4 3 2 6-7"/></svg>,
+            [
+              { id: 'reports', label: 'Profit & Loss', action: () => navigateReport('profit_loss', 'Profit & Loss') },
+              { id: 'reports', label: 'Order Report', action: () => navigateReport('orders', 'Order Report') },
+              { id: 'reports', label: 'Courier Report', action: () => navigateReport('courier', 'Courier Report') },
+              { id: 'reports', label: 'Product Report', action: () => navigateReport('products', 'Product Report') },
+              { id: 'reports', label: 'Employee Report', action: () => navigateReport('employees', 'Employee Report') },
+              { id: 'reports', label: 'Call Center Report', action: () => navigateReport('calls', 'Call Center Report') },
+              { id: 'reports', label: 'Customer Report', action: () => navigateReport('customers', 'Customer Report') },
+              { id: 'reports', label: 'Business Reports', action: () => navigateReport('business', 'Business Reports') },
+            ]
+          )}
+
+          {/* 6. Task & Follow-up */}
+          {renderGroup(
+            'task_followup',
+            'Task & Follow-up',
+            <svg className="sa-grp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ width: 18, height: 18, flexShrink: 0 }}>
+              <path d="M9 11l3 3L22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>,
+            [
+              { id: 'customers', label: 'Customer CRM' },
+              { id: 'reviews', label: 'Customer Feedback' },
+            ]
+          )}
+
+          {/* 7. Call Center */}
+          {renderGroup(
+            'call_center',
+            'Call Center',
+            <svg className="sa-grp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ width: 18, height: 18, flexShrink: 0 }}>
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+            </svg>,
+            [
+              { id: 'calls', label: 'Dashboard', action: () => navigateToCallSection('Dashboard', 'wallboard') },
+              { id: 'calls', label: 'Reports', action: () => navigateToCallSection('Reports', 'records') },
+              { id: 'customers', label: 'Contacts', action: () => { setActiveSubItem('Contacts'); setNav('customers'); setNavq(''); setMobileMenuOpen(false); } },
+              { id: 'calls', label: 'My Phone Setup', action: () => navigateToCallSection('My Phone Setup', 'phone_setup') },
+            ]
+          )}
+
+          {/* 8. Work Inbox */}
+          {renderGroup(
+            'work_inbox',
+            'Work Inbox',
+            <svg className="sa-grp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ width: 18, height: 18, flexShrink: 0 }}>
+              <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+              <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+            </svg>,
+            [
+              { id: 'staff', label: 'Staff & Roles' },
+              { id: 'integrations', label: 'Integrations (APIs)' },
+              { id: 'settings', label: 'Store Settings' },
+              { id: 'backup', label: 'Backup & Restore' },
+            ]
+          )}
         </nav>
         <div className="sa-side-foot">
           {me && <div className="sa-who">{me.name} · <span className="dim">{me.role}</span></div>}
-          <a onClick={() => { location.href = '/'; }}>↗ View store</a>
-          <button onClick={() => { localStorage.removeItem(KEY); setAuthed(false); }}>Log out</button>
+          <a onClick={() => { location.href = '/'; }} title={adminTranslate("View store")}>
+            <span className="sa-foot-icon">↗</span>
+            <span className="sa-btn-label"> {adminText('View store')}</span>
+          </a>
+          <button onClick={() => { localStorage.removeItem(KEY); setAuthed(false); }} title={adminTranslate("Log out")}>
+            <span className="sa-foot-icon">🚪</span>
+            <span className="sa-btn-label"> {adminText('Log out')}</span>
+          </button>
         </div>
       </aside>
-      <main className="sa-main">
-        {cur === 'dashboard' && <Dashboard onNav={setNav} />}
-        {cur === 'orders' && <OrdersAdmin />}
+      <div className="sa-app-content">
+        <AdminTopNavbar
+          searchQuery={ordersSearch}
+          onSearchChange={(q) => {
+            setOrdersSearch(q);
+            if (q && cur !== 'orders') {
+              setNav('orders');
+              setActiveSubItem('Order List');
+            }
+            window.dispatchEvent(new CustomEvent('orders-set-search', { detail: q }));
+          }}
+          onSearchClick={() => {
+            if (cur !== 'orders') {
+              setNav('orders');
+              setActiveSubItem('Order List');
+            }
+          }}
+          onNewOrderClick={() => {
+            if (cur === 'orders') {
+              window.dispatchEvent(new CustomEvent('open-create-order-modal'));
+            }
+            setShowGlobalCreateOrder(true);
+          }}
+          onWebOrderListClick={() => {
+            setOpenGroups((prev) => ({ ...prev, web_orders: true }));
+            navigateOrders('Store Orders', 'all', '', false, 'all', '__all_web__');
+          }}
+          onOrderListClick={() => {
+            setOpenGroups((prev) => ({ ...prev, approved_orders: true }));
+            navigateOrders('Order List', 'all', '', false, 'all', '');
+          }}
+          onSendMessageClick={(channel = 'whatsapp') => {
+            setOpenGroups((prev) => ({ ...prev, messages: true }));
+            if (channel === 'message_marketing') {
+              setActiveSubItem('Message Marketing');
+              setNav('message_marketing');
+            } else if (channel === 'emails') {
+              setActiveSubItem('Business Webmail');
+              setNav('emails');
+            } else {
+              setActiveSubItem('WhatsApp Automation');
+              setNav('whatsapp');
+            }
+            setNavq('');
+            setMobileMenuOpen(false);
+          }}
+          onExportCsvClick={() => {
+            if (cur !== 'orders') {
+              setNav('orders');
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('admin-export-csv'));
+              }, 150);
+            } else {
+              window.dispatchEvent(new CustomEvent('admin-export-csv'));
+            }
+          }}
+          onImportCsvClick={() => {
+            if (cur !== 'orders') {
+              setNav('orders');
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('admin-import-csv'));
+              }, 150);
+            } else {
+              window.dispatchEvent(new CustomEvent('admin-import-csv'));
+            }
+          }}
+          onAiClick={() => window.dispatchEvent(new CustomEvent('open-secrate-ai'))}
+          adminLanguage={adminLanguage}
+          onLanguageToggle={() => setStoreLanguage(adminLanguage === 'en' ? 'bn' : 'en')}
+          adminTheme={adminTheme}
+          onThemeToggle={() => setAdminTheme((t) => t === 'dark' ? 'light' : 'dark')}
+          notificationCount={totalNotificationCount}
+          onNotificationClick={() => window.dispatchEvent(new CustomEvent('toggle-staff-notifications'))}
+          user={me}
+          onViewStore={() => window.open('/', '_blank')}
+          onLogout={() => { localStorage.removeItem(KEY); setAuthed(false); }}
+        />
+        <main className="sa-main">
+        {cur === 'dashboard' && <Dashboard onNav={(tab) => {
+          const label = tab === 'products' ? 'Product List' : tab === 'scanner' ? 'Scan To Update' : tab;
+          setActiveSubItem(label);
+          setNav(tab);
+        }} onOrdersView={(label, filter, search = '', range = 'all') => navigateOrders(label, filter, search, false, range)} />}
+        {cur === 'orders' && (
+          <OrdersAdmin
+            searchQuery={ordersSearch}
+            onSearchChange={(q) => setOrdersSearch(q)}
+            onNavigateIntegrations={() => setNav('integrations')}
+          />
+        )}
         {cur === 'scanner' && <ScannerAdmin />}
-        {cur === 'finance' && <FinanceAdmin />}
+        {cur === 'campaigns' && (
+          <CampaignAnalyticsAdmin
+            activeTab={adsSubTab}
+            onTabChange={(t, lbl) => {
+              setAdsSubTab(t);
+              if (lbl) setActiveSubItem(lbl);
+            }}
+            onViewOrders={(camp) => {
+              sessionStorage.setItem('orders_campaign_filter', camp);
+              setNav('orders');
+            }}
+          />
+        )}
+        {cur === 'finance' && <FinanceAdmin selectedTab={financeSection} onTabChange={(tab) => { setFinanceSection(tab); const item = ({ dashboard: 'Finance Dashboard', accounts: 'Accounts & Bank', income: 'Income & Expense', courier: 'Courier Settlement', cashflow: 'Cash Flow', assets: 'Asset Management' } as Record<string, string>)[tab]; if (item) setActiveSubItem(item); }} />}
+        {cur === 'reports' && <ReportsAdmin reportType={reportSection} />}
+        {cur === 'payment_gateways' && <PaymentGatewaysAdmin />}
         {cur === 'whatsapp' && <WhatsAppAdmin />}
+        {cur === 'message_marketing' && <MessageMarketingAdmin />}
         {cur === 'calls' && <CallsAdmin />}
+        {cur === 'emails' && <EmailsAdmin onUnreadChange={setUnreadEmails} />}
         {cur === 'push_popups' && <PushPopupsAdmin />}
         {cur === 'backup' && <BackupAdmin />}
         {cur === 'customers' && <CustomersAdmin />}
@@ -2309,9 +3370,21 @@ export function Admin() {
         {cur === 'coupons' && <CouponsAdmin />}
         {cur === 'fraud' && <FraudDetectorAdmin />}
         {cur === 'staff' && <StaffAdmin />}
-        {cur === 'integrations' && <IntegrationsAdmin />}
+        {cur === 'integrations' && <IntegrationsAdmin focusCourier={activeSubItem === 'Courier API Setup'} />}
         {cur === 'settings' && <SettingsAdmin />}
       </main>
+      </div>
+
+      {showGlobalCreateOrder && (
+        <CreateOrderModal
+          onClose={() => setShowGlobalCreateOrder(false)}
+          onCreated={(newOrder) => {
+            setShowGlobalCreateOrder(false);
+            window.dispatchEvent(new CustomEvent('admin-orders-updated', { detail: newOrder }));
+            setNav('orders');
+          }}
+        />
+      )}
 
       {/* Fixed Bottom App Navigation Bar */}
       <nav className="sa-bottom-nav" aria-label="Quick mobile navigation">
@@ -2324,7 +3397,7 @@ export function Admin() {
             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
             <polyline points="9 22 9 12 15 12 15 22"/>
           </svg>
-          <span>Home</span>
+          <span>{adminTranslate("Home")}</span>
         </button>
 
         <button
@@ -2340,7 +3413,7 @@ export function Admin() {
             </svg>
             {newOrders > 0 && <span className="sa-bnav-badge">{newOrders}</span>}
           </div>
-          <span>Orders</span>
+          <span>{adminTranslate("Orders")}</span>
         </button>
 
         <button
@@ -2367,7 +3440,7 @@ export function Admin() {
             <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
             <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
           </svg>
-          <span>Customers</span>
+          <span>{adminTranslate("Customers")}</span>
         </button>
 
         <button
@@ -2385,6 +3458,356 @@ export function Admin() {
       </nav>
       <QuickWhatsAppModal />
       <WebCallDialer />
+      <GlobalCommandSearch onNav={(tab) => {
+        const label = tab === 'products' ? 'Product List' : tab === 'customers' ? 'Customer CRM' : tab;
+        setActiveSubItem(label);
+        setNav(tab);
+      }} onOrderSelect={(order) => navigateOrders('Order List', 'all', String(order.id || ''))} />
+      <StaffNotificationBell />
+      <SecrateAiAssistant />
+    </div>
+  );
+}
+
+function GlobalCommandSearch({ onNav, onOrderSelect }: { onNav: (tab: string) => void; onOrderSelect: (order: any) => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState<{ orders: any[]; products: any[]; customers: any[] }>({ orders: [], products: [], customers: [] });
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setOpen((v) => !v);
+      } else if (e.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    const onOpen = (e: any) => {
+      setOpen(true);
+      if (e?.detail?.query) setQ(e.detail.query);
+    };
+    window.addEventListener('open-global-search', onOpen);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('open-global-search', onOpen);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open || !q.trim()) {
+      setResults({ orders: [], products: [], customers: [] });
+      return;
+    }
+    const t = setTimeout(() => {
+      aFetch('/admin/global-search?q=' + encodeURIComponent(q.trim()))
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d) setResults(d); })
+        .catch(() => {});
+    }, 180);
+    return () => clearTimeout(t);
+  }, [q, open]);
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className="sa-quick-search-fab"
+        onClick={() => setOpen(true)}
+        title="Quick Search (Ctrl + K)"
+        style={{
+          position: 'fixed', bottom: 18, right: 104, zIndex: 9989,
+          height: 40, display: 'inline-flex', alignItems: 'center', gap: 7,
+          padding: '0 15px', borderRadius: 999,
+          background: 'rgba(15, 23, 42, 0.88)', backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(148, 163, 184, 0.28)',
+          color: '#f1f5f9', fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.45)', whiteSpace: 'nowrap'
+        }}
+      >
+        <span>🔍</span>
+        <span>Ctrl+K</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="sa-quick-search-overlay" onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '10vh' }}>
+      <div className="sa-quick-search-dialog" onClick={(e) => e.stopPropagation()} style={{ width: '92%', maxWidth: 560, background: '#131122', border: '1px solid rgba(139, 92, 246, 0.5)', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.75)', overflow: 'hidden' }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 16 }}>🔍</span>
+          <input
+            autoFocus
+            placeholder="Order ID, ফোন নম্বর, প্রোডাক্ট বা কাস্টমার খুঁজুন..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', fontSize: 14, outline: 'none' }}
+          />
+          <button type="button" onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14 }}>ESC</button>
+        </div>
+        <div style={{ maxHeight: 380, overflowY: 'auto', padding: 12 }}>
+          {!q.trim() ? (
+            <div style={{ fontSize: 12.5, color: '#94a3b8', textAlign: 'center', padding: 20 }}>টাইপ শুরু করুন — অর্ডার, ফোন, প্রোডাক্ট বা কাস্টমার সাথে সাথে চলে আসবে।</div>
+          ) : (
+            <>
+              {results.orders.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', textTransform: 'uppercase', marginBottom: 6 }}>{adminTranslate("Orders")}</div>
+                  {results.orders.map((o) => (
+                    <div key={o.id} onClick={() => { onOrderSelect(o); setOpen(false); }} style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', marginBottom: 4, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                      <span><strong>#{o.id}</strong> · {o.name} ({o.phone})</span>
+                      <span style={{ color: '#34d399', fontWeight: 700 }}>৳{o.total} · {o.status}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {results.products.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#60a5fa', textTransform: 'uppercase', marginBottom: 6 }}>{adminTranslate("Products")}</div>
+                  {results.products.map((p) => (
+                    <div key={p.id} onClick={() => { onNav('products'); setOpen(false); }} style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', marginBottom: 4, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                      <span>{p.name}</span>
+                      <span style={{ color: '#93c5fd', fontWeight: 700 }}>৳{p.price} (Stock: {p.stock ?? '∞'})</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {results.customers.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#34d399', textTransform: 'uppercase', marginBottom: 6 }}>{adminTranslate("Customers")}</div>
+                  {results.customers.map((c, idx) => (
+                    <div key={idx} onClick={() => { onNav('customers'); setOpen(false); }} style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', marginBottom: 4, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                      <span>{c.name}</span>
+                      <span style={{ color: '#cbd5e1' }}>{c.phone}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {results.orders.length === 0 && results.products.length === 0 && results.customers.length === 0 && (
+                <div style={{ fontSize: 12.5, color: '#64748b', textAlign: 'center', padding: 20 }}>কিছুই পাওয়া যায়নি</div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StaffNotificationBell() {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<{ notifications: any[]; dueReminders: any[]; unreadCount: number }>({
+    notifications: [], dueReminders: [], unreadCount: 0
+  });
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [saveFaqFlags, setSaveFaqFlags] = useState<Record<string, boolean>>({});
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [replyStatus, setReplyStatus] = useState<Record<string, string>>({});
+
+  const loadNotifs = () => {
+    aFetch('/admin/staff/notifications')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setData(d); })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    loadNotifs();
+    const t = setInterval(loadNotifs, 20000);
+    const onToggle = () => setOpen((v) => !v);
+    window.addEventListener('toggle-staff-notifications', onToggle);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener('toggle-staff-notifications', onToggle);
+    };
+  }, []);
+
+  const markAllRead = async () => {
+    await aFetch('/admin/staff/notifications/read', { method: 'POST', body: JSON.stringify({}) }).catch(() => {});
+    loadNotifs();
+  };
+
+  const sendEscalationReply = async (n: any) => {
+    const text = (replyDrafts[n.id] || '').trim();
+    if (!text) return;
+    setSendingId(n.id);
+    try {
+      const res = await aFetch('/admin/whatsapp/escalation-reply', {
+        method: 'POST',
+        body: JSON.stringify({
+          notificationId: n.id,
+          phone: n.phone,
+          replyText: text,
+          saveToFaq: saveFaqFlags[n.id] !== false,
+          customerQuestion: n.customerQuestion || '',
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || 'Failed');
+      setReplyStatus((prev) => ({ ...prev, [n.id]: json.savedFaq ? '✅ WhatsApp-এ পাঠানো হয়েছে + AI FAQ-তে সেভ হয়েছে!' : '✅ WhatsApp-এ পাঠানো হয়েছে!' }));
+      setReplyDrafts((prev) => ({ ...prev, [n.id]: '' }));
+      loadNotifs();
+    } catch (e: any) {
+      setReplyStatus((prev) => ({ ...prev, [n.id]: '❌ ' + (e?.message || 'Error') }));
+    } finally {
+      setSendingId(null);
+    }
+  };
+
+  const count = data.unreadCount || 0;
+  return (
+    <div className="sa-alert-dock" style={{ position: 'fixed', bottom: 18, right: 20, zIndex: 9990 }}>
+      {open && (
+        <div className="sa-alert-panel" style={{
+          width: 340,
+          maxHeight: 420,
+          overflowY: 'auto',
+          marginBottom: 10,
+          background: '#131122',
+          border: '1px solid rgba(139, 92, 246, 0.45)',
+          borderRadius: 14,
+          boxShadow: '0 16px 40px rgba(0,0,0,0.6)',
+          padding: 14
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            <strong style={{ fontSize: 13.5, color: '#fff' }}>🔔 Staff Alerts &amp; Follow-ups</strong>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {data.notifications.some((n) => !n.read) && (
+                <button type="button" onClick={markAllRead} style={{ background: 'none', border: 'none', color: '#a78bfa', fontSize: 11.5, cursor: 'pointer', fontWeight: 600 }}>{adminTranslate("Mark read")}</button>
+              )}
+              <button type="button" onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 14, cursor: 'pointer' }}>✕</button>
+            </div>
+          </div>
+
+          {data.dueReminders.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#fbbf24', textTransform: 'uppercase', marginBottom: 6 }}>⏰ Due Hold Follow-ups ({data.dueReminders.length})</div>
+              {data.dueReminders.map((r) => (
+                <div key={r.id} style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', marginBottom: 6, fontSize: 12 }}>
+                  <div style={{ fontWeight: 700, color: '#fde68a' }}>{adminTranslate("Order #")}{r.orderId} · {r.customerName}</div>
+                  <div style={{ color: '#cbd5e1', fontSize: 11 }}>{r.customerPhone} · Status: {r.status}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {data.notifications.length === 0 && data.dueReminders.length === 0 ? (
+            <div style={{ textAlign: 'center', color: '#64748b', fontSize: 12.5, padding: '18px 0' }}>কোনো নতুন নোটিফিকেশন নেই</div>
+          ) : (
+            data.notifications.map((n) => (
+              <div key={n.id} style={{
+                padding: '9px 10px',
+                borderRadius: 10,
+                background: n.type === 'wa_escalation' && !n.read
+                  ? 'rgba(245, 158, 11, 0.14)'
+                  : n.read ? 'rgba(255,255,255,0.03)' : 'rgba(139, 92, 246, 0.14)',
+                border: n.type === 'wa_escalation' && !n.read
+                  ? '1px solid rgba(245, 158, 11, 0.45)'
+                  : n.read ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(139, 92, 246, 0.35)',
+                marginBottom: 8,
+                fontSize: 12
+              }}>
+                {n.type === 'wa_escalation' && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: '#fbbf24' }}>🤖 AI Escalation · {n.customerName || n.phone}</span>
+                    <span style={{ fontSize: 10, color: '#94a3b8' }}>{n.phone}</span>
+                  </div>
+                )}
+                <div style={{ color: '#f8fafc', lineHeight: 1.4 }}>{n.message}</div>
+                {n.escalateReason && (
+                  <div style={{ fontSize: 10.5, color: '#fca5a5', marginTop: 3 }}>কারণ: {n.escalateReason}</div>
+                )}
+                {n.type === 'wa_escalation' && (
+                  <div style={{ marginTop: 8, paddingTop: 7, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                    <textarea
+                      rows={2}
+                      placeholder="এখান থেকেই কাস্টমারকে WhatsApp রিপ্লাই লিখুন..."
+                      value={replyDrafts[n.id] || ''}
+                      onChange={(e) => setReplyDrafts((prev) => ({ ...prev, [n.id]: e.target.value }))}
+                      style={{
+                        width: '100%',
+                        background: 'rgba(0,0,0,0.35)',
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        borderRadius: 7,
+                        color: '#fff',
+                        fontSize: 11.5,
+                        padding: '6px 8px',
+                        resize: 'vertical',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, gap: 6 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: '#cbd5e1', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={saveFaqFlags[n.id] !== false}
+                          onChange={(e) => setSaveFaqFlags((prev) => ({ ...prev, [n.id]: e.target.checked }))}
+                        />
+                        <span>AI-কে শেখান (FAQ)</span>
+                      </label>
+                      <button
+                        type="button"
+                        disabled={sendingId === n.id || !(replyDrafts[n.id] || '').trim()}
+                        onClick={() => sendEscalationReply(n)}
+                        style={{
+                          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                          border: 'none',
+                          borderRadius: 6,
+                          color: '#fff',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '5px 10px',
+                          cursor: 'pointer',
+                          opacity: sendingId === n.id ? 0.6 : 1,
+                        }}
+                      >
+                        {sendingId === n.id ? 'পাঠানো হচ্ছে...' : 'WhatsApp-এ পাঠান ➤'}
+                      </button>
+                    </div>
+                    {replyStatus[n.id] && (
+                      <div style={{ fontSize: 10.5, color: replyStatus[n.id].startsWith('✅') ? '#4ade80' : '#f87171', marginTop: 4 }}>
+                        {replyStatus[n.id]}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4 }}>
+                  {n.createdAt ? new Date(n.createdAt).toLocaleString('bn-BD', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }) : ''}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      <button
+        type="button"
+        className={`sa-alert-toggle ${count > 0 ? 'has-count' : 'is-empty'}`}
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 7,
+          padding: '10px 15px',
+          borderRadius: 999,
+          background: count > 0 ? 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)' : '#1a172b',
+          border: '1px solid rgba(139, 92, 246, 0.45)',
+          color: '#fff',
+          fontWeight: 700,
+          fontSize: 13,
+          cursor: 'pointer',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.45)'
+        }}
+        title="Staff Mentions & Hold Follow-up Reminders"
+      >
+        <span>🔔</span>
+        {count > 0 && (
+          <span style={{ background: '#ef4444', color: '#fff', borderRadius: 999, padding: '1px 7px', fontSize: 11, fontWeight: 800 }}>
+            {count}
+          </span>
+        )}
+      </button>
     </div>
   );
 }
@@ -2577,7 +4000,7 @@ function Video1OtpVerify({
         <>
           <div className="v1-badge-pill">
             <span className="v1-pulse-dot" />
-            <span>Two-Step Verification</span>
+            <span>{adminTranslate("Two-Step Verification")}</span>
           </div>
 
           <div className="v1-shield-wrapper">
@@ -2592,7 +4015,7 @@ function Video1OtpVerify({
             </div>
           </div>
 
-          <h2 className="v1-title">Enter Verification Code</h2>
+          <h2 className="v1-title">{adminTranslate("Enter Verification Code")}</h2>
           <p className="v1-subtitle">
             We've sent a 6-digit security code to
             <span className="v1-email-tag">
@@ -2655,7 +4078,7 @@ function Video1OtpVerify({
                 <span className="v1-btn-spinner" /> Verifying…
               </span>
             ) : (
-              <span>Verify & Continue →</span>
+              <span>{adminTranslate("Verify & Continue →")}</span>
             )}
           </button>
 
@@ -2726,7 +4149,7 @@ function Video1OtpVerify({
             </svg>
           </div>
 
-          <h2 className="v1-title" style={{ fontSize: 21 }}>Verified successfully</h2>
+          <h2 className="v1-title" style={{ fontSize: 21 }}>{adminTranslate("Verified successfully")}</h2>
           <p className="v1-subtitle" style={{ margin: '0 0 10px' }}>Your identity has been verified.</p>
 
           <div className="v1-badge">
@@ -2757,6 +4180,7 @@ function Video1OtpVerify({
 
 function Login({ onDone }: { onDone: () => void }) {
   const [mode, setMode] = useState<'login' | 'otp' | 'forgot' | 'reset'>('login');
+  const [brand, setBrand] = useState<{ name: string; icon: string }>({ name: getAdminDefaultStore(), icon: '' });
   const [u, setU] = useState('owner');
   const [p, setP] = useState('');
   const [otp, setOtp] = useState('');
@@ -2768,6 +4192,16 @@ function Login({ onDone }: { onDone: () => void }) {
   const [successMsg, setSuccessMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const [countdown, setCountdown] = useState(0);
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then((r) => r.json())
+      .then((s) => {
+        const icon = s?.favicon && !s.favicon.includes('img_mvsqgtsqxzgig') && !s.favicon.includes('img_mvddqd311xu5c') ? s.favicon : '';
+        setBrand({ name: s?.storeName || getAdminDefaultStore(), icon });
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (countdown <= 0) return;
@@ -2863,15 +4297,20 @@ function Login({ onDone }: { onDone: () => void }) {
         />
       ) : (
         <div className="sa-login-card" style={{ maxWidth: 420 }}>
-          <div className="sa-brand big">dot<span>.</span><em>admin</em></div>
+          <div className="sa-brand big" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {brand.icon ? (
+              <img src={brand.icon} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'contain', flexShrink: 0 }} />
+            ) : null}
+            <>{brand.name}<em>admin</em></>
+          </div>
           
           {mode === 'login' && (
             <>
-              <p>Sign in to manage your store.</p>
-              <input placeholder="Username" value={u} onChange={(e) => setU(e.target.value)} />
-              <input type="password" placeholder="Password" value={p} onChange={(e) => setP(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submitLogin()} />
+              <p>{adminTranslate("Sign in to manage your store.")}</p>
+              <input placeholder={adminTranslate("Username")} value={u} onChange={(e) => setU(e.target.value)} />
+              <input type="password" placeholder={adminTranslate("Password")} value={p} onChange={(e) => setP(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submitLogin()} />
               <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '-4px 0 12px' }}>
-                <a style={{ fontSize: 12.5, color: '#8b5cf6', cursor: 'pointer', textDecoration: 'none' }} onClick={() => { setMode('forgot'); setErr(''); setSuccessMsg(''); }}>Forgot password?</a>
+                <a style={{ fontSize: 12.5, color: '#8b5cf6', cursor: 'pointer', textDecoration: 'none' }} onClick={() => { setMode('forgot'); setErr(''); setSuccessMsg(''); }}>{adminTranslate("Forgot password?")}</a>
               </div>
               {err && <div className="err2" style={{ marginBottom: 12 }}>{err}</div>}
               {successMsg && <div style={{ color: '#4ade80', fontSize: 13, marginBottom: 12 }}>{successMsg}</div>}
@@ -2882,7 +4321,7 @@ function Login({ onDone }: { onDone: () => void }) {
 
           {mode === 'forgot' && (
             <>
-              <h2 style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 6 }}>Reset Password</h2>
+              <h2 style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 6 }}>{adminTranslate("Reset Password")}</h2>
               <p style={{ fontSize: 13.5, color: '#94a3b8', marginBottom: 16 }}>Enter your admin username or email to receive a password reset code.</p>
               <input placeholder="Username or Email" value={u} onChange={(e) => setU(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submitForgot()} style={{ marginBottom: 14 }} />
               {err && <div className="err2" style={{ marginBottom: 12 }}>{err}</div>}
@@ -2895,7 +4334,7 @@ function Login({ onDone }: { onDone: () => void }) {
 
           {mode === 'reset' && (
             <>
-              <h2 style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 6 }}>Set New Password</h2>
+              <h2 style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 6 }}>{adminTranslate("Set New Password")}</h2>
               <p style={{ fontSize: 13.5, color: '#94a3b8', marginBottom: 14 }}>Enter the 6-digit code sent to <b style={{ color: '#e2e8f0' }}>{maskedEmail}</b> and your new password.</p>
               <input
                 autoFocus
@@ -2939,552 +4378,8 @@ const BackupIcon = () => (
   </svg>
 );
 
-function Dashboard({ onNav }: { onNav?: (tab: string) => void }) {
-  const [orders, setOrders] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  const [period, setPeriod] = useState<'today' | 'yesterday' | '7d' | 'this_month' | 'all'>('7d');
-  const [chartMetric, setChartMetric] = useState<'revenue' | 'orders'>('revenue');
-  const [sel, setSel] = useState<any>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-
-  const load = (silent = false) => {
-    aFetch('/orders')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => setOrders(Array.isArray(d) ? d : []))
-      .catch(() => { if (!silent) setOrders([]); });
-    fetch('/api/products')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d) => setProducts(Array.isArray(d) ? d : []))
-      .catch(() => { if (!silent) setProducts([]); });
-  };
-
-  useEffect(() => {
-    load();
-    const t = setInterval(() => load(true), 5000);
-    const onOrdersUpdated = () => load(true);
-    window.addEventListener('admin-orders-updated', onOrdersUpdated);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('admin-orders-updated', onOrdersUpdated);
-    };
-  }, []);
-
-  // Time period filtering
-  const filteredOrders = useMemo(() => {
-    const list = Array.isArray(orders) ? orders : [];
-    const now = new Date();
-    return list.filter((o) => {
-      const d = new Date(o.createdAt);
-      if (period === 'today') {
-        return d.toDateString() === now.toDateString();
-      }
-      if (period === 'yesterday') {
-        const y = new Date();
-        y.setDate(y.getDate() - 1);
-        return d.toDateString() === y.toDateString();
-      }
-      if (period === '7d') {
-        return now.getTime() - d.getTime() <= 7 * 86400000;
-      }
-      if (period === 'this_month') {
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      }
-      return true; // 'all'
-    });
-  }, [orders, period]);
-
-  // Operational Funnel Counts
-  const funnel = useMemo(() => {
-    const pending = filteredOrders.filter((o) => o.status === 'pending' || o.status === 'incomplete').length;
-    const confirmed = filteredOrders.filter((o) => o.status === 'confirmed' || o.status === 'approved').length;
-    const transit = filteredOrders.filter((o) => ['shipped', 'hold'].includes(o.status)).length;
-    const delivered = filteredOrders.filter((o) => o.status === 'delivered').length;
-    const returns = filteredOrders.filter((o) => o.status === 'return').length;
-    const cancelled = filteredOrders.filter((o) => o.status === 'cancelled').length;
-    return { pending, confirmed, transit, delivered, returns, cancelled, total: filteredOrders.length };
-  }, [filteredOrders]);
-
-  // Executive Financial Metrics
-  const deliveredOrders = useMemo(() => filteredOrders.filter((o) => o.status === 'delivered'), [filteredOrders]);
-  const deliveredRevenue = useMemo(() => deliveredOrders.reduce((s, o) => s + o.total, 0), [deliveredOrders]);
-
-  const inTransitOrders = useMemo(() => filteredOrders.filter((o) => ['shipped', 'hold'].includes(o.status)), [filteredOrders]);
-  const inTransitRevenue = useMemo(() => inTransitOrders.reduce((s, o) => s + o.total, 0), [inTransitOrders]);
-
-  const activeOrders = useMemo(() => filteredOrders.filter((o) => o.status !== 'cancelled'), [filteredOrders]);
-  const grossSales = useMemo(() => activeOrders.reduce((s, o) => s + o.total, 0), [activeOrders]);
-
-  const pendingCount = useMemo(() => filteredOrders.filter((o) => o.status === 'pending' || o.status === 'incomplete').length, [filteredOrders]);
-
-  const completed = useMemo(() => filteredOrders.filter((o) => ['delivered', 'cancelled', 'return'].includes(o.status)), [filteredOrders]);
-  const successRate = useMemo(() => {
-    if (!completed.length) return deliveredOrders.length > 0 ? 100 : null;
-    return Math.round((deliveredOrders.length / completed.length) * 100);
-  }, [completed, deliveredOrders]);
-
-  const aov = useMemo(() => (activeOrders.length ? Math.round(grossSales / activeOrders.length) : 0), [activeOrders, grossSales]);
-
-  const lostOrders = useMemo(() => filteredOrders.filter((o) => ['cancelled', 'return'].includes(o.status)), [filteredOrders]);
-  const lostAmount = useMemo(() => lostOrders.reduce((s, o) => s + o.total, 0), [lostOrders]);
-
-  const lowStockProducts = useMemo(() => (Array.isArray(products) ? products : []).filter((p) => p.stock != null && p.stock <= 5 && !p.soldOut), [products]);
-
-  // Dynamic Chart Generation
-  const chartDays = useMemo(() => {
-    const daysCount = period === 'today' || period === 'yesterday' ? 1 : period === 'this_month' ? 30 : 7;
-    const days: { label: string; rev: number; count: number }[] = [];
-    for (let i = daysCount - 1; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      const dayOrders = activeOrders.filter((o) => (o.createdAt || '').slice(0, 10) === key);
-      const rev = dayOrders.reduce((s, o) => s + o.total, 0);
-      days.push({
-        label: d.toLocaleDateString('en-GB', { day: 'numeric', month: daysCount > 7 ? 'numeric' : undefined }),
-        rev,
-        count: dayOrders.length,
-      });
-    }
-    return days;
-  }, [activeOrders, period]);
-
-  const maxChartVal = useMemo(() => {
-    if (chartMetric === 'orders') return Math.max(1, ...chartDays.map((d) => d.count));
-    return Math.max(1, ...chartDays.map((d) => d.rev));
-  }, [chartDays, chartMetric]);
-
-  const peakDay = useMemo(() => {
-    if (!chartDays.length) return null;
-    return chartDays.reduce((max, d) => (d.rev > max.rev ? d : max), chartDays[0]);
-  }, [chartDays]);
-
-  const avgDailyRev = useMemo(() => {
-    if (!chartDays.length) return 0;
-    const total = chartDays.reduce((s, d) => s + d.rev, 0);
-    return Math.round(total / chartDays.length);
-  }, [chartDays]);
-
-  // Sales Channel & Ad Attribution
-  const channelStats = useMemo(() => {
-    const map: Record<string, { label: string; rev: number; count: number; color?: string }> = {};
-    activeOrders.forEach((o) => {
-      const info = resolveOrderSource(o);
-      const src = info.label;
-      if (!map[src]) map[src] = { label: src, rev: 0, count: 0, color: info.color };
-      map[src].rev += o.total;
-      map[src].count++;
-    });
-    const list = Object.values(map).sort((a, b) => b.rev - a.rev);
-    return list;
-  }, [activeOrders]);
-
-  // Logistics & Courier Performance
-  const courierBreakdown = useMemo(() => {
-    const map: Record<string, { name: string; total: number; delivered: number; transit: number; rev: number }> = {};
-    filteredOrders.forEach((o) => {
-      const name = o.courier?.name || 'Unassigned';
-      if (!map[name]) map[name] = { name, total: 0, delivered: 0, transit: 0, rev: 0 };
-      map[name].total++;
-      if (o.status === 'delivered') map[name].delivered++;
-      if (['shipped', 'hold'].includes(o.status)) map[name].transit++;
-      if (o.status !== 'cancelled') map[name].rev += o.total;
-    });
-    return Object.values(map).sort((a, b) => b.total - a.total);
-  }, [filteredOrders]);
-
-  // Top Selling Products
-  const topProducts = useMemo(() => {
-    const map: Record<string, { name: string; qty: number; rev: number; image?: string }> = {};
-    activeOrders.forEach((o) => {
-      (o.items || []).forEach((it: any) => {
-        if (!map[it.name]) map[it.name] = { name: it.name, qty: 0, rev: 0, image: it.image };
-        map[it.name].qty += it.qty || 1;
-        map[it.name].rev += it.subtotal || (it.price * (it.qty || 1));
-      });
-    });
-    return Object.values(map).sort((a, b) => b.rev - a.rev).slice(0, 5);
-  }, [activeOrders]);
-
-  return (
-    <>
-      {/* Top Header with Date Period Switcher & Live Indicator */}
-      <div className="sa-top" style={{ alignItems: 'flex-start' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h1 style={{ margin: 0 }}>Executive Business Dashboard</h1>
-            <span className="sa-live-badge"><span className="pulse-dot" /> Live Data</span>
-          </div>
-          <p className="dim small" style={{ margin: '4px 0 0' }}>
-            Real-time cash flow, delivery pipeline, marketing channels &amp; warehouse intelligence
-          </p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <div className="sa-period-tabs">
-            <button className={period === 'today' ? 'on' : ''} onClick={() => setPeriod('today')}>Today</button>
-            <button className={period === 'yesterday' ? 'on' : ''} onClick={() => setPeriod('yesterday')}>Yesterday</button>
-            <button className={period === '7d' ? 'on' : ''} onClick={() => setPeriod('7d')}>7 Days</button>
-            <button className={period === 'this_month' ? 'on' : ''} onClick={() => setPeriod('this_month')}>This Month</button>
-            <button className={period === 'all' ? 'on' : ''} onClick={() => setPeriod('all')}>All Time</button>
-          </div>
-          <button className="sa-btn small" onClick={() => load()} title="Reload latest data">
-            Refresh
-          </button>
-        </div>
-      </div>
-
-      {/* Real-time Order Pipeline Funnel */}
-      <div className="dash-funnel-strip">
-        <div className="dash-funnel-card f-pending" onClick={() => onNav?.('orders')} title="Click to view pending orders">
-          <div className="dash-funnel-top">
-            <span className="dash-funnel-icon" aria-hidden="true" />
-            <span className="dash-funnel-count">{funnel.pending}</span>
-          </div>
-          <div className="dash-funnel-label">Pending Orders</div>
-          <div className="dash-funnel-sub">Needs call &amp; approval</div>
-        </div>
-
-        <div className="dash-funnel-card f-confirmed" onClick={() => onNav?.('orders')} title="Click to view approved orders">
-          <div className="dash-funnel-top">
-            <span className="dash-funnel-icon" aria-hidden="true" />
-            <span className="dash-funnel-count">{funnel.confirmed}</span>
-          </div>
-          <div className="dash-funnel-label">Approved &amp; Ready</div>
-          <div className="dash-funnel-sub">Ready to pack &amp; book</div>
-        </div>
-
-        <div className="dash-funnel-card f-transit" onClick={() => onNav?.('orders')} title="Click to view shipped orders">
-          <div className="dash-funnel-top">
-            <span className="dash-funnel-icon" aria-hidden="true" />
-            <span className="dash-funnel-count">{funnel.transit}</span>
-          </div>
-          <div className="dash-funnel-label">In Courier Transit</div>
-          <div className="dash-funnel-sub">Shipped with rider</div>
-        </div>
-
-        <div className="dash-funnel-card f-delivered" onClick={() => onNav?.('orders')} title="Click to view delivered orders">
-          <div className="dash-funnel-top">
-            <span className="dash-funnel-icon" aria-hidden="true" />
-            <span className="dash-funnel-count">{funnel.delivered}</span>
-          </div>
-          <div className="dash-funnel-label">Delivered Orders</div>
-          <div className="dash-funnel-sub">Cash safely collected</div>
-        </div>
-
-        <div className="dash-funnel-card f-return" onClick={() => onNav?.('orders')} title="Click to view return orders">
-          <div className="dash-funnel-top">
-            <span className="dash-funnel-icon" aria-hidden="true" />
-            <span className="dash-funnel-count">{funnel.returns}</span>
-          </div>
-          <div className="dash-funnel-label">Returns Received</div>
-          <div className="dash-funnel-sub">Returned parcels</div>
-        </div>
-
-        <div className="dash-funnel-card f-cancelled" onClick={() => onNav?.('orders')} title="Click to view cancelled orders">
-          <div className="dash-funnel-top">
-            <span className="dash-funnel-icon" aria-hidden="true" />
-            <span className="dash-funnel-count">{funnel.cancelled}</span>
-          </div>
-          <div className="dash-funnel-label">Cancelled Orders</div>
-          <div className="dash-funnel-sub">Rejected / cancelled</div>
-        </div>
-      </div>
-
-      {/* 6 Executive Financial Stat Cards */}
-      <div className="sa-exec-grid">
-        {/* Delivered / Realized Cash */}
-        <div className="sa-exec-card card-delivered">
-          <div className="exec-card-head">
-            <span className="exec-card-title">Realized Revenue</span>
-            <span className="exec-card-pill p-delivered">Cash Collected</span>
-          </div>
-          <div className="exec-card-val">{taka(deliveredRevenue)}</div>
-          <div className="exec-card-sub">{deliveredOrders.length} orders safely delivered &amp; collected</div>
-        </div>
-
-        {/* In Courier Transit */}
-        <div className="sa-exec-card card-transit">
-          <div className="exec-card-head">
-            <span className="exec-card-title">Pipeline Cash</span>
-            <span className="exec-card-pill p-transit">In Transit</span>
-          </div>
-          <div className="exec-card-val">{taka(inTransitRevenue)}</div>
-          <div className="exec-card-sub">{inTransitOrders.length} parcels currently with courier</div>
-        </div>
-
-        {/* Gross Sales */}
-        <div className="sa-exec-card card-gross">
-          <div className="exec-card-head">
-            <span className="exec-card-title">Gross Sales</span>
-            <span className="exec-card-pill p-gross">Active Demand</span>
-          </div>
-          <div className="exec-card-val">{taka(grossSales)}</div>
-          <div className="exec-card-sub">{activeOrders.length} active orders placed in period</div>
-        </div>
-
-        {/* Delivery Success Rate */}
-        <div className="sa-exec-card card-rate">
-          <div className="exec-card-head">
-            <span className="exec-card-title">Delivery Success Rate</span>
-            <span className="exec-card-pill p-rate">{successRate == null ? 'Pending' : successRate >= 75 ? 'Optimal' : 'Needs Focus'}</span>
-          </div>
-          <div className="exec-card-val">
-            {successRate == null ? 'No data' : `${successRate}%`}
-          </div>
-          {successRate != null && (
-            <div className="rate-mini-bar">
-              <div className="rate-mini-bar-fill" style={{ width: `${successRate}%` }} />
-            </div>
-          )}
-          <div className="exec-card-sub" style={{ marginTop: 6 }}>
-            {completed.length ? `${deliveredOrders.length} delivered · ${lostOrders.length} lost/returned` : 'Awaiting completed shipments'}
-          </div>
-        </div>
-
-        {/* Average Order Value */}
-        <div className="sa-exec-card card-aov">
-          <div className="exec-card-head">
-            <span className="exec-card-title">Avg Order Value (AOV)</span>
-            <span className="exec-card-pill p-aov">Cart Basket</span>
-          </div>
-          <div className="exec-card-val">{taka(aov)}</div>
-          <div className="exec-card-sub">Average cart value per buying customer</div>
-        </div>
-
-        {/* Lost / Return & Cancel */}
-        <div className="sa-exec-card card-loss">
-          <div className="exec-card-head">
-            <span className="exec-card-title">Lost Sales</span>
-            <span className="exec-card-pill p-loss">Cancel / Return</span>
-          </div>
-          <div className="exec-card-val">{taka(lostAmount)}</div>
-          <div className="exec-card-sub">{lostOrders.length} orders cancelled or returned</div>
-        </div>
-      </div>
-
-      {/* Row 2: Sales Trend Chart & Sales Channel Attribution */}
-      <div className="dash-section-head">
-        <div className="dash-section-title">Revenue &amp; Channel Attribution</div>
-      </div>
-      <div className="dash-grid-2">
-        {/* Interactive Chart */}
-        <div className="sa-card">
-          <div className="sa-card-h" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2>Sales &amp; Order Volume Trend</h2>
-            <div style={{ display: 'flex', gap: 6, background: '#181624', padding: 2, borderRadius: 8 }}>
-              <button className={'chart-mode-btn' + (chartMetric === 'revenue' ? ' on' : '')} onClick={() => setChartMetric('revenue')}>
-                Revenue (৳)
-              </button>
-              <button className={'chart-mode-btn' + (chartMetric === 'orders' ? ' on' : '')} onClick={() => setChartMetric('orders')}>
-                Orders
-              </button>
-            </div>
-          </div>
-          <div className="chart" style={{ height: 210 }}>
-            {chartDays.map((d, i) => {
-              const currentVal = chartMetric === 'orders' ? d.count : d.rev;
-              const fillPct = Math.round((currentVal / maxChartVal) * 100);
-              return (
-                <div className="bar" key={i}>
-                  <div className="barwrap" title={`${d.label}: ${taka(d.rev)} (${d.count} orders)`}>
-                    <div className="barfill" style={{ height: Math.max(3, fillPct) + '%' }} />
-                  </div>
-                  <span>{d.label}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="chart-summary-footer">
-            <div className="chart-summary-stat">
-              <span>Peak Day:</span> <strong>{peakDay ? `${peakDay.label} (${taka(peakDay.rev)})` : 'N/A'}</strong>
-            </div>
-            <div className="chart-summary-stat">
-              <span>Daily Avg:</span> <strong>{taka(avgDailyRev)}</strong>
-            </div>
-            <div className="chart-summary-stat">
-              <span>Period Volume:</span> <strong>{activeOrders.length} orders</strong>
-            </div>
-          </div>
-        </div>
-
-        {/* Sales by Traffic / Ad Source */}
-        <div className="sa-card">
-          <div className="sa-card-h">
-            <h2>Traffic &amp; Ad Attribution</h2>
-          </div>
-          <div className="channel-list">
-            {channelStats.length === 0 && <div className="sa-empty">No channel data in this period.</div>}
-            {channelStats.map((ch) => {
-              const pct = grossSales > 0 ? Math.round((ch.rev / grossSales) * 100) : 0;
-              return (
-                <div className="channel-item" key={ch.label}>
-                  <div className="channel-row-top">
-                    <span><b>{ch.label}</b> · {ch.count} order{ch.count !== 1 ? 's' : ''}</span>
-                    <span className="mono">{taka(ch.rev)} ({pct}%)</span>
-                  </div>
-                  <div className="channel-bar-bg">
-                    <div className="channel-bar-fill" style={{ width: `${pct}%`, background: ch.color || 'var(--primary)' }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Row 3: Courier Logistics & Top Products / Inventory Alerts */}
-      <div className="dash-section-head">
-        <div className="dash-section-title">Logistics &amp; Product Intelligence</div>
-        {onNav && (
-          <button className="sa-btn small" onClick={() => onNav('scanner')}>
-            Open QR Scanner →
-          </button>
-        )}
-      </div>
-      <div className="dash-grid-2">
-        {/* Courier Performance Card */}
-        <div className="sa-card">
-          <div className="sa-card-h">
-            <h2>Courier Delivery Breakdown</h2>
-          </div>
-          <div className="courier-breakdown-list">
-            {courierBreakdown.length === 0 && <div className="sa-empty">No shipments in this period.</div>}
-            {courierBreakdown.map((c) => (
-              <div className="courier-b-row" key={c.name}>
-                <div>
-                  <b style={{ color: '#fff', fontSize: 13.5 }}>{c.name}</b>
-                  <div className="dim small" style={{ marginTop: 2 }}>
-                    {c.total} shipment{c.total !== 1 ? 's' : ''} · {c.delivered} delivered · {c.transit} in transit
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div className="mono" style={{ color: '#34d399', fontWeight: 600 }}>{taka(c.rev)}</div>
-                  <div className="dim small">{c.total ? Math.round((c.delivered / c.total) * 100) : 0}% success</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Top Selling Products & Low Stock Warnings */}
-        <div className="sa-card">
-          <div className="sa-card-h" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2>Products &amp; Stock Health</h2>
-            {lowStockProducts.length > 0 && (
-              <span className="stock-pill-low">⚠️ {lowStockProducts.length} Low Stock</span>
-            )}
-          </div>
-          <div className="stock-alert-box">
-            {lowStockProducts.length > 0 && (
-              <div style={{ marginBottom: 12, paddingBottom: 10, borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#f87171', textTransform: 'uppercase', marginBottom: 6 }}>
-                  Critical Inventory Warnings
-                </div>
-                {lowStockProducts.slice(0, 3).map((p) => (
-                  <div className="stock-alert-item" key={p.id}>
-                    <span style={{ color: '#fecdd3' }}>{p.name}</span>
-                    <span className="stock-pill-low">Only {p.stock} left</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 6 }}>
-              Top Selling Products
-            </div>
-            {topProducts.length === 0 && <div className="sa-empty">No sales in this period.</div>}
-            {topProducts.map((p) => (
-              <div className="stock-alert-item" key={p.name}>
-                <span>{p.name} <span className="dim small">({p.qty} sold)</span></span>
-                <span className="mono" style={{ color: '#a78bfa', fontWeight: 600 }}>{taka(p.rev)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Row 4: Recent Orders Table (Clickable to open Order Modal) */}
-      <div className="dash-section-head">
-        <div className="dash-section-title">Recent Orders Activity</div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button
-            className="sa-btn small primary sa-dashboard-create-order"
-            onClick={() => setShowCreateModal(true)}
-          >
-            <span className="sa-create-order-plus" aria-hidden="true">+</span>
-            Create new order (Phone / WhatsApp)
-          </button>
-          {onNav && (
-            <button className="sa-btn small" onClick={() => onNav('orders')}>
-              View All Orders ({orders.length}) →
-            </button>
-          )}
-        </div>
-      </div>
-      <div className="sa-card">
-        <table className="sa-table rows">
-          <thead>
-            <tr>
-              <th>Order</th>
-              <th>Date</th>
-              <th>Customer</th>
-              <th>Origin</th>
-              <th style={{ textAlign: 'center' }}>IP Call</th>
-              <th>Courier</th>
-              <th>Status</th>
-              <th className="r">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredOrders.slice(0, 8).map((o) => (
-              <tr key={o.id} onClick={() => setSel(o)} style={{ cursor: 'pointer' }}>
-                <td className="mono" style={{ fontWeight: 600 }}>{o.id}</td>
-                <td className="dim small">{ago(o.createdAt)}</td>
-                <td>
-                  <b>{o.customer.name}</b>
-                  <div className="dim small">{o.customer.phone}</div>
-                </td>
-                <td><span className="sa-tag-source">🌐 {originLabel(o.source)}</span></td>
-                <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
-                  <button
-                    type="button"
-                    className="sa-btn ghost sa-mini"
-                    style={{ color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.45)', background: 'rgba(16, 185, 129, 0.12)', padding: '3px 8px', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                    onClick={() => triggerAdminIPCall({ order: o, phone: o.customer?.phone, name: o.customer?.name, orderId: o.id, product: o.items?.[0]?.name })}
-                    title="Call customer via IP Softphone"
-                  >
-                    📞 Call
-                  </button>
-                </td>
-                <td>
-                  {o.courier?.name ? (
-                    <span>{o.courier.name}{o.courier.consignment ? ` #${o.courier.consignment}` : ''}</span>
-                  ) : (
-                    <span className="dim">Unassigned</span>
-                  )}
-                </td>
-                <td><Badge s={o.status} /></td>
-                <td className="r mono" style={{ fontWeight: 700 }}>{taka(o.total)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {filteredOrders.length === 0 && <div className="sa-empty">No orders found for this period.</div>}
-      </div>
-
-      {/* Create Order Modal & Order Modal Drawer */}
-      {showCreateModal && (
-        <CreateOrderModal
-          onClose={() => setShowCreateModal(false)}
-          onCreated={(newOrder) => {
-            setShowCreateModal(false);
-            window.dispatchEvent(new CustomEvent('admin-orders-updated', { detail: newOrder }));
-            load(true);
-            setSel(newOrder);
-          }}
-        />
-      )}
-      {sel && <OrderDrawer o={sel} orders={orders} onClose={() => setSel(null)} onSaved={() => { setSel(null); load(true); }} />}
-    </>
-  );
+function Dashboard({ onNav, onOrdersView }: { onNav?: (tab: string) => void; onOrdersView?: (label: string, filter: string, search?: string, range?: string) => void }) {
+  return <EcomDriveDashboard onNav={onNav} onOrdersView={onOrdersView} aFetch={aFetch} />;
 }
 
 const cleanItemDisplay = (item: any) => {
@@ -3541,7 +4436,7 @@ const getStatusBadgeStyle = (status: string) => {
   }
 };
 
-function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated: (newOrder: any) => void }) {
+function CreateOrderModal({ onClose, onCreated, orders = [] }: { onClose: () => void; onCreated: (newOrder: any) => void; orders?: any[] }) {
   const [source, setSource] = useState<'phone_call' | 'whatsapp' | 'facebook' | 'manual'>('phone_call');
   const [status, setStatus] = useState('confirmed');
   const [name, setName] = useState('');
@@ -3549,33 +4444,30 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
   const [address, setAddress] = useState('');
   const [district, setDistrict] = useState('');
   const [thana, setThana] = useState('');
-  const [area, setArea] = useState<'inside' | 'outside'>('outside');
+  const [area, setArea] = useState<'' | 'inside' | 'outside'>('');
   const [note, setNote] = useState('');
   const [adminNote, setAdminNote] = useState('');
 
   // Products
   const [catalog, setCatalog] = useState<any[]>([]);
-  const [items, setItems] = useState<any[]>([
-    {
-      id: 'pmv7bramh',
-      name: 'ম্যাজিক লাভ লক কনডম (৬.৭ ইঞ্চি)',
-      price: 999,
-      qty: 1,
-      image: '/landing/package-6-7.jpg',
-    }
-  ]);
+  const [items, setItems] = useState<any[]>([]);
   const [selectedCatalogId, setSelectedCatalogId] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [showProductDropdown, setShowProductDropdown] = useState(false);
 
   // Pricing
-  const [delivery, setDelivery] = useState(0); // Free delivery default for landing promo
+  const [delivery, setDelivery] = useState(0);
+  const [deliveryInside, setDeliveryInside] = useState(80);
+  const [deliveryOutside, setDeliveryOutside] = useState(130);
+  const [confirmedOrderSnapshot, setConfirmedOrderSnapshot] = useState('');
   const [discount, setDiscount] = useState(0);
 
   // Fraud check
   const [fraud, setFraud] = useState<any>(null);
   const [fraudLoading, setFraudLoading] = useState(false);
   const [fraudMsg, setFraudMsg] = useState('');
+  const [showCustomerHistory, setShowCustomerHistory] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(true);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -3584,7 +4476,12 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
     Promise.all([
       fetch('/api/products').then((r) => r.json()).catch(() => []),
       fetch('/api/landings').then((r) => r.json()).catch(() => []),
-    ]).then(([prods, landings]) => {
+      fetch('/api/settings').then((r) => r.json()).catch(() => ({})),
+    ]).then(([prods, landings, storeSettings]) => {
+      const inside = Number(storeSettings?.deliveryInside);
+      const outside = Number(storeSettings?.deliveryOutside);
+      if (Number.isFinite(inside) && inside >= 0) setDeliveryInside(inside);
+      if (Number.isFinite(outside) && outside >= 0) setDeliveryOutside(outside);
       const combined: any[] = [];
       const seen = new Set();
 
@@ -3602,6 +4499,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                   sku: pkg.sku || '',
                   category: 'Landing Promo / Wellness',
                   image: pkg.image || L.heroImage || '/landing/package-6-7.jpg',
+                  stock: pkg.stock,
                 });
               }
             }
@@ -3621,47 +4519,56 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
               sku: p.sku || '',
               category: p.category || 'Store Product',
               image: p.image || (Array.isArray(p.images) ? p.images[0] : ''),
+              stock: p.stock,
+              inStock: p.inStock,
             });
           }
         }
       }
-
-      // 3. Fallback popular adult wellness & sleeve items
-      const hotWellnessItems = [
-        { id: 'hot_ll67', name: 'যাদের পেনিস ৪ ইঞ্চি থেকে ৫.৫ ইঞ্চি তাদের জন্য ৬.৭ (লাভ লক কনডম)', price: 899, sku: 'LL6.7', category: 'Love Lock', image: '/uploads/img_mv7u70cc5edq0.jpg' },
-        { id: 'hot_ll57', name: '৩.৫ থেকে ৪ ইঞ্চি পেনিস এর জন্য সাইজ ৫.৭ (লাভ লক কনডম)', price: 1190, sku: 'LL5.7', category: 'Love Lock', image: '/uploads/img_mv9njraqylyt3.webp' },
-        { id: 'hot_ll8', name: '৬ ইঞ্চি পেনিস এর জন্য সাইজ ৮ (লাভ লক কনডম)', price: 1190, sku: 'LL8', category: 'Love Lock', image: '/uploads/img_mv7n9xfvjcfif.jpg' },
-        { id: 'hot_bc', name: 'Belt Condom ( Free Size )', price: 1800, sku: 'BC', category: 'Belt Condom', image: '/uploads/img_mvjrc118tfffg.webp' },
-        { id: 'hot_softcore', name: 'SoftCore Realistic Male Pleasure Cup', price: 3150, sku: 'CUP', category: 'Male Pleasure', image: '/uploads/img_mv7u70cc5edq0.jpg' },
-        { id: 'hot_dildo9', name: 'KOXTEN Up Down Remote Control Vibrator Realistic Dildo 9 inch', price: 3500, sku: 'DILDO9', category: 'Adult Wellness', image: '' },
-        { id: 'hot_finger_tiger', name: 'Tiger Tip Finger Sleeve', price: 799, sku: 'FINGER', category: 'Sleeve', image: '' },
-        { id: 'hot_finger_aspot', name: 'A-Spot Finger Condom', price: 899, sku: 'FINGER', category: 'Finger Condom', image: '' },
-        { id: 'hot_combo', name: 'লাভ লক ২ পিস স্পেশাল কম্বো', price: 1799, sku: 'COMBO', category: 'Combo Pack', image: '/landing/package-6-7.jpg' },
-      ];
-
-      for (const hot of hotWellnessItems) {
-        if (!seen.has(hot.id) && !combined.some((c) => (c.sku && c.sku === hot.sku) || c.name.toLowerCase().includes(hot.sku.toLowerCase()))) {
-          combined.push(hot);
-        }
-      }
-
       setCatalog(combined);
-    });
+    }).finally(() => setCatalogLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (area === 'inside') setDelivery(deliveryInside);
+    else if (area === 'outside') setDelivery(deliveryOutside);
+  }, [area, deliveryInside, deliveryOutside]);
 
   const handleAddressChange = (val: string) => {
     setAddress(val);
     const d = detectDistrict(val);
     if (d && !district) {
       setDistrict(d);
-      setArea(d.toLowerCase() === 'dhaka' ? 'inside' : 'outside');
+    }
+  };
+
+  const normalizedPhone = normalizeBDMobile(phone);
+  const validPhone = isValidBDMobile(phone);
+  const matchingCustomerOrders = useMemo(() => {
+    if (!validPhone) return [];
+    return orders
+      .filter((o) => normalizeBDMobile(o.customer?.phone || '') === normalizedPhone)
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  }, [orders, normalizedPhone, validPhone]);
+  const latestCustomerOrder = matchingCustomerOrders[0];
+
+  const applyPreviousCustomerDetails = () => {
+    const customer = latestCustomerOrder?.customer;
+    if (!customer) return;
+    if (!name.trim() && customer.name) setName(customer.name);
+    if (!address.trim() && customer.address) setAddress(customer.address);
+    if (!district.trim() && customer.district) setDistrict(customer.district);
+    if (!thana.trim() && customer.thana) setThana(customer.thana);
+    if (customer.area === 'inside' || customer.area === 'outside') {
+      setArea(customer.area);
+      setDelivery(customer.area === 'inside' ? deliveryInside : deliveryOutside);
     }
   };
 
   const runFraudCheck = async () => {
-    const clean = phone.trim().replace(/\D/g, '');
-    if (!clean || clean.length < 11) {
-      setFraudMsg('Enter a valid 11-digit phone number.');
+    const clean = normalizeBDMobile(phone);
+    if (!isValidBDMobile(clean)) {
+      setFraudMsg('Enter a valid 11-digit Bangladesh mobile number.');
       return;
     }
     setFraudLoading(true);
@@ -3683,22 +4590,20 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
     }
   };
 
-  const handleAddPreset = (presetItem: any) => {
-    setItems((prev) => [...prev, { ...presetItem }]);
-  };
-
   const handleSelectProduct = (prod: any) => {
     if (!prod) return;
-    setItems((prev) => [
-      ...prev,
-      {
+    setItems((prev) => {
+      const existingIndex = prev.findIndex((item) => item.id === prod.id && !String(item.id || '').startsWith('custom_'));
+      if (existingIndex >= 0) return prev.map((item, index) => index === existingIndex ? { ...item, qty: Number(item.qty || 1) + 1 } : item);
+      return [...prev, {
         id: prod.id || `item_${Date.now()}`,
         name: prod.name,
+        sku: prod.sku || '',
         price: Number(prod.price || 0),
         qty: 1,
         image: prod.image || (Array.isArray(prod.images) ? prod.images[0] : ''),
-      }
-    ]);
+      }];
+    });
     setProductSearch('');
     setShowProductDropdown(false);
   };
@@ -3726,9 +4631,9 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
     }
     return catalog.filter((p) => {
       const name = (p.name || '').toLowerCase();
-      const sku = (p.sku || '').toLowerCase();
+      const skus = [p.sku, ...(Array.isArray(p.skus) ? p.skus : [])].map((sku: any) => String(sku || '').toLowerCase());
       const cat = (p.category || '').toLowerCase();
-      return name.includes(q) || sku.includes(q) || cat.includes(q);
+      return name.includes(q) || skus.some((sku: string) => sku.includes(q)) || cat.includes(q);
     }).slice(0, 35);
   }, [catalog, productSearch]);
 
@@ -3750,17 +4655,42 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
   const computedItemsTotal = items.reduce((s, it) => s + (Number(it.price || 0) * Math.max(1, Number(it.qty || 1))), 0);
   const grandTotal = Math.max(0, computedItemsTotal + Number(delivery || 0) - Number(discount || 0));
+  const orderConfirmationKey = JSON.stringify({
+    source, name: name.trim(), phone: normalizedPhone, address: address.trim(), district: district.trim(),
+    thana: thana.trim(), area, note: note.trim(), items: items.map(({ id, name: itemName, sku, price, qty }) => ({ id, name: itemName, sku, price, qty })), delivery, discount
+  });
+  const customerConfirmedCurrentOrder = confirmedOrderSnapshot === orderConfirmationKey;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const clean = phone.trim().replace(/\D/g, '');
-    if (!clean || clean.length < 11) {
-      setError('Enter a valid 11-digit mobile number.');
+    const clean = normalizeBDMobile(phone);
+    if (!isValidBDMobile(clean)) {
+      setError('Enter a valid 11-digit Bangladesh mobile number.');
       return;
     }
-    if (items.length === 0) {
-      setError('Select at least one product.');
+    if (!name.trim()) {
+      setError('Enter the customer name.');
+      return;
+    }
+    if (!address.trim() || !district.trim() || !thana.trim()) {
+      setError('Enter the full address, district, and subdistrict/thana.');
+      return;
+    }
+    if (!area) {
+      setError('Select and confirm the delivery area.');
+      return;
+    }
+    if (items.length === 0 || items.some((it) => !String(it.name || '').trim() || !Number.isFinite(Number(it.price)) || Number(it.price) <= 0 || !Number.isInteger(Number(it.qty)) || Number(it.qty) < 1)) {
+      setError('Each item must have a name, a quantity of at least 1, and a valid price above zero.');
+      return;
+    }
+    if (Number(discount) > computedItemsTotal + Number(delivery || 0)) {
+      setError('The discount cannot exceed the item total plus delivery charge.');
+      return;
+    }
+    if (!customerConfirmedCurrentOrder) {
+      setError('Confirm the items, address, and COD total with the customer before saving.');
       return;
     }
     setBusy(true);
@@ -3771,7 +4701,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
           source,
           status,
           customer: {
-            name: name.trim() || 'Phone Customer',
+            name: name.trim(),
             phone: clean,
             address: address.trim(),
             district: district.trim(),
@@ -3783,6 +4713,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
           items,
           delivery,
           discount,
+          customerConfirmed: true,
         }),
       });
       if (!res.ok) {
@@ -3800,20 +4731,20 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
   return (
     <div className="sa-modal-wrap" onClick={onClose} style={{ zIndex: 1000 }}>
-      <div className="sa-modal" style={{ width: 'min(760px, 96%)', maxHeight: '92vh', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+      <div className="sa-modal create-order-modal" style={{ width: 'min(900px, 96%)', maxHeight: '94vh', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
         <div className="sa-modal-h" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 24 }}>🛍️</span>
             <div>
-              <h3 style={{ margin: 0, fontSize: 17, color: '#fff' }}>Create a new order (Manual / Phone / WhatsApp)</h3>
-              <div className="dim small" style={{ marginTop: 2 }}>Add orders received by phone or WhatsApp directly to the system.</div>
+              <h3 style={{ margin: 0, fontSize: 17, color: '#fff' }}>Create a New Order</h3>
+              <div className="dim small" style={{ marginTop: 2 }}>Add an order from a phone call, WhatsApp, or Messenger after verifying the details.</div>
             </div>
           </div>
           <button className="sa-btn-subtle" onClick={onClose} style={{ fontSize: 20, color: '#94a3b8', padding: '4px 10px', background: 'transparent', border: 'none', cursor: 'pointer' }}>✕</button>
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
-          <div className="sa-modal-b" style={{ padding: '20px 24px', overflowY: 'auto', gap: 18 }}>
+          <div className="sa-modal-b create-order-body" style={{ padding: '20px 24px', overflowY: 'auto', gap: 18 }}>
             {error && (
               <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef4444', color: '#fca5a5', padding: '10px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
                 ⚠️ {error}
@@ -3823,14 +4754,14 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
             {/* 1. Order Source Selection */}
             <div>
               <label style={{ fontSize: 11.5, fontWeight: 700, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, display: 'block' }}>
-                Order source
+                Order Source
               </label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {[
-                  { key: 'phone_call', icon: <span style={{ fontSize: 13 }}>☎</span>, label: 'Phone call', color: '#3b82f6' },
+                  { key: 'phone_call', icon: <span style={{ fontSize: 13 }}>☎</span>, label: 'Phone Call', color: '#3b82f6' },
                   { key: 'whatsapp', icon: <WhatsAppIcon size={16} variant="official" />, label: 'WhatsApp', color: '#25D366' },
                   { key: 'facebook', icon: <span style={{ fontSize: 13 }}>f</span>, label: 'Facebook Messenger', color: '#6366f1' },
-                  { key: 'manual', icon: <span style={{ fontSize: 13 }}>+</span>, label: 'Manual entry', color: '#8b5cf6' },
+                  { key: 'manual', icon: <span style={{ fontSize: 13 }}>+</span>, label: 'Manual Entry', color: '#8b5cf6' },
                 ].map((s) => (
                   <button
                     key={s.key}
@@ -3861,39 +4792,53 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
             {/* 2. Customer Information */}
             <div style={{ background: '#181624', padding: 16, borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span>Customer details</span>
+                <span>Customer Details</span>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 12 }}>
                 <div>
-                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Customer name</label>
+                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>{adminTranslate("Customer Name") + " "}<span style={{ color: '#ef4444' }}>*</span></label>
                   <input
                     type="text"
-                    placeholder="Customer Name"
+                    required
+                    autoComplete="name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
                 </div>
 
                 <div>
-                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Mobile number <span style={{ color: '#ef4444' }}>*</span></label>
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>{adminTranslate("Mobile Number") + " "}<span style={{ color: '#ef4444' }}>*</span></label>
+                  <div className="create-order-phone-row" style={{ display: 'flex', gap: 6 }}>
                     <input
                       type="tel"
                       required
-                      placeholder="01XXXXXXXXX"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      maxLength={16}
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) => { setPhone(e.target.value); setFraud(null); setShowCustomerHistory(false); }}
+                      onBlur={() => { if (isValidBDMobile(phone)) setPhone(normalizeBDMobile(phone)); }}
                     />
                     <button
                       type="button"
                       className="sa-btn secondary"
                       onClick={runFraudCheck}
-                      disabled={fraudLoading || phone.length < 11}
+                      disabled={fraudLoading || !validPhone}
                       title="Check courier delivery success history"
                       style={{ whiteSpace: 'nowrap', fontSize: 12, padding: '0 10px' }}
                     >
-                      {fraudLoading ? 'Checking…' : 'Check history'}
+                      {fraudLoading ? 'Checking…' : 'Courier check'}
+                    </button>
+                    <button
+                      type="button"
+                      className="sa-btn ghost"
+                      onClick={() => setShowCustomerHistory((open) => !open)}
+                      disabled={!validPhone}
+                      title="See previous orders from this phone number"
+                      style={{ whiteSpace: 'nowrap', fontSize: 12, padding: '0 10px' }}
+                    >
+                      Past orders {validPhone ? `(${matchingCustomerOrders.length})` : ''}
                     </button>
                   </div>
                 </div>
@@ -3907,11 +4852,38 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                   <MultiCourierFraudReport fraud={fraud} />
                 </div>
               )}
+              {showCustomerHistory && validPhone && (
+                <div style={{ marginBottom: 14, padding: 12, border: '1px solid rgba(56,189,248,.25)', borderRadius: 10, background: 'rgba(14,165,233,.07)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <div style={{ color: '#e0f2fe', fontSize: 12.5, fontWeight: 700 }}>Previous orders for this number: {matchingCustomerOrders.length}</div>
+                    {latestCustomerOrder?.customer && (
+                      <button type="button" className="sa-btn ghost" onClick={applyPreviousCustomerDetails} style={{ fontSize: 11, padding: '5px 9px' }}>Fill Empty Fields</button>
+                    )}
+                  </div>
+                  {matchingCustomerOrders.length ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {matchingCustomerOrders.slice(0, 4).map((o) => (
+                        <div key={o.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '7px 9px', borderRadius: 7, background: 'rgba(255,255,255,.035)', fontSize: 11.5 }}>
+                          <span style={{ color: '#cbd5e1', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            #{String(o.id || '').replace(/^DOT-/, '')} · {(o.items || []).map((it: any) => it.name).filter(Boolean).slice(0, 2).join(', ') || 'No items'}
+                          </span>
+                          <span style={{ color: o.status === 'delivered' ? '#34d399' : o.status === 'cancelled' ? '#f87171' : '#fbbf24', whiteSpace: 'nowrap' }}>
+                            {o.status} · {taka(o.total)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ color: '#94a3b8', fontSize: 12 }}>No previous orders found for this number.</div>
+                  )}
+                </div>
+              )}
 
               <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Delivery address</label>
+                <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Full Delivery Address <span style={{ color: '#ef4444' }}>*</span></label>
                 <textarea
-                  placeholder="Street, building, area, subdistrict, and district"
+                  required
+                  autoComplete="street-address"
                   rows={2}
                   value={address}
                   onChange={(e) => handleAddressChange(e.target.value)}
@@ -3920,34 +4892,41 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
                 <div>
-                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>District</label>
+                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>{adminTranslate("District") + " "}<span style={{ color: '#ef4444' }}>*</span></label>
                   <input
                     type="text"
-                    placeholder="e.g. Dhaka, Chittagong"
+                    required
                     value={district}
                     onChange={(e) => {
                       setDistrict(e.target.value);
-                      if (e.target.value.toLowerCase() === 'dhaka') setArea('inside');
+                      const districtValue = e.target.value.trim().toLowerCase();
+                      if (districtValue.includes('dhaka') || districtValue.includes('ঢাকা')) {
+                        setArea('inside');
+                        setDelivery(deliveryInside);
+                      } else if (area === 'inside') {
+                        setArea('');
+                        setDelivery(0);
+                      }
                     }}
                   />
                 </div>
 
                 <div>
-                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Subdistrict / Thana</label>
+                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Subdistrict / Thana <span style={{ color: '#ef4444' }}>*</span></label>
                   <input
                     type="text"
-                    placeholder="e.g. Mirpur, Sadar"
+                    required
                     value={thana}
                     onChange={(e) => setThana(e.target.value)}
                   />
                 </div>
 
                 <div>
-                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Delivery area</label>
+                  <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Confirm Delivery Area <span style={{ color: '#ef4444' }}>*</span></label>
                   <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                     <button
                       type="button"
-                      onClick={() => { setArea('inside'); setDelivery(60); }}
+                      onClick={() => { setArea('inside'); setDelivery(deliveryInside); }}
                       style={{
                         flex: 1,
                         padding: '8px 6px',
@@ -3960,11 +4939,11 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                         cursor: 'pointer'
                       }}
                     >
-                      Inside Dhaka (৳60)
+                      Inside Dhaka ({taka(deliveryInside)})
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setArea('outside'); setDelivery(120); }}
+                      onClick={() => { setArea('outside'); setDelivery(deliveryOutside); }}
                       style={{
                         flex: 1,
                         padding: '8px 6px',
@@ -3977,44 +4956,27 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                         cursor: 'pointer'
                       }}
                     >
-                      Outside Dhaka (৳120)
+                      Outside Dhaka ({taka(deliveryOutside)})
                     </button>
                   </div>
                 </div>
               </div>
-            </div>
 
             {/* 3. Items Selection */}
-            <div style={{ background: '#181624', padding: 16, borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div className="create-order-products" style={{ background: '#181624', padding: 16, borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9' }}>Products</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9' }}>{adminTranslate("Products")}</span>
                 <span style={{ fontSize: 12, color: '#a78bfa' }}>{items.length} item(s)</span>
               </div>
 
-              {/* Quick Preset Buttons for Love Lock */}
-              <div style={{ marginBottom: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 11.5, color: '#94a3b8', alignSelf: 'center', marginRight: 4 }}>Quick add:</span>
-                {[
-                  { id: 'lovelock-6-7', name: 'লাভ লক ম্যাজিক কনডম (৬.৭ ইঞ্চি)', price: 999, image: '/landing/package-6-7.jpg' },
-                  { id: 'lovelock-5-7', name: 'লাভ লক ম্যাজিক কনডম (৫.৭ ইঞ্চি)', price: 999, image: '/landing/package-5-7.jpg' },
-                  { id: 'lovelock-combo-2', name: 'লাভ লক ২ পিস স্পেশাল কম্বো', price: 1799, image: '/landing/banner-product.png' },
-                ].map((p, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    className="sa-btn-subtle"
-                    onClick={() => handleAddPreset(p)}
-                    style={{ fontSize: 11.5, padding: '4px 10px', background: 'rgba(255,255,255,0.06)', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)' }}
-                  >
-                    + {p.name} ({taka(p.price)})
-                  </button>
-                ))}
+              <div style={{ marginBottom: 12, color: '#94a3b8', fontSize: 11.5 }}>
+                {catalogLoading ? 'Loading product catalog…' : catalog.length ? `Choose from the current catalog (${catalog.length} products)` : 'Catalog unavailable. Verify the name and price when adding a custom item.'}
               </div>
 
               {/* Items List */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
                 {items.map((it, idx) => (
-                  <div
+                  <div className="create-order-item-row"
                     key={idx}
                     style={{
                       display: 'flex',
@@ -4029,7 +4991,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                     {it.image && (
                       <img src={it.image} alt="" style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', border: '1px solid rgba(255,255,255,0.1)' }} />
                     )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="create-order-item-name" style={{ flex: 1, minWidth: 0 }}>
                       <input
                         type="text"
                         value={it.name}
@@ -4037,33 +4999,36 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                         style={{ background: 'transparent', border: 'none', padding: 0, fontWeight: 600, fontSize: 13, color: '#f1f5f9' }}
                       />
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div className="create-order-item-price" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ fontSize: 12, color: '#94a3b8' }}>Price: ৳</span>
                       <input
                         type="number"
+                        min="0"
+                        step="1"
                         value={it.price}
                         onChange={(e) => handleUpdateItem(idx, { price: Number(e.target.value) || 0 })}
                         style={{ width: 80, padding: '4px 8px', fontSize: 13, textAlign: 'right' }}
                       />
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontSize: 12, color: '#94a3b8' }}>Quantity:</span>
+                    <div className="create-order-item-qty" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ fontSize: 12, color: '#94a3b8' }}>{adminTranslate("Quantity:")}</span>
                       <input
                         type="number"
                         min="1"
+                        step="1"
                         value={it.qty}
                         onChange={(e) => handleUpdateItem(idx, { qty: Math.max(1, parseInt(e.target.value, 10) || 1) })}
                         style={{ width: 55, padding: '4px 6px', fontSize: 13, textAlign: 'center' }}
                       />
                     </div>
-                    <span style={{ width: 75, textAlign: 'right', fontWeight: 700, color: '#34d399', fontSize: 13.5 }}>
+                    <span className="create-order-item-subtotal" style={{ width: 75, textAlign: 'right', fontWeight: 700, color: '#34d399', fontSize: 13.5 }}>
                       {taka((it.price || 0) * (it.qty || 1))}
                     </span>
                     <button
                       type="button"
                       onClick={() => handleRemoveItem(idx)}
                       style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', padding: 4 }}
-                      title="Remove"
+                      title={adminTranslate("Remove")}
                     >
                       🗑️
                     </button>
@@ -4086,7 +5051,6 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                         setShowProductDropdown(true);
                       }}
                       onFocus={() => setShowProductDropdown(true)}
-                      placeholder="পণ্য বা SKU দিয়ে সার্চ করুন (e.g. Love lock, Belt, 6.7, 8, Cup, Dildo)..."
                       style={{
                         width: '100%',
                         padding: '10px 34px 10px 34px',
@@ -4118,7 +5082,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                           padding: 4,
                           fontSize: 13,
                         }}
-                        title="Clear"
+                        title={adminTranslate("Clear")}
                       >
                         ✕
                       </button>
@@ -4161,14 +5125,14 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', fontSize: 11, color: '#94a3b8', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: 4 }}>
                         <span style={{ fontWeight: 600 }}>
-                          {productSearch ? `সার্চ ফলাফল (${filteredCatalog.length})` : `জনপ্রিয় / ক্যাটালগ পণ্য (${catalog.length}) — ক্লিক করে যোগ করুন`}
+                          {productSearch ? `Search Results (${filteredCatalog.length})` : `Popular / Catalog Products (${catalog.length}) — Click to Add`}
                         </span>
                         <button
                           type="button"
                           onClick={() => setShowProductDropdown(false)}
                           style={{ background: 'transparent', border: 'none', color: '#a78bfa', cursor: 'pointer', fontSize: 11 }}
                         >
-                          বন্ধ করুন ✕
+                          Close ✕
                         </button>
                       </div>
 
@@ -4206,7 +5170,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                               {p.name}
                             </div>
                             <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
-                              {p.sku && <span style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: 4 }}>SKU: {p.sku}</span>}
+                              {(p.skus?.length || p.sku) && <span style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: 4 }}>SKU: {Array.from(new Set([p.sku, ...(Array.isArray(p.skus) ? p.skus : [])].filter(Boolean))).join(', ')}</span>}
                               {p.category && <span>{p.category}</span>}
                             </div>
                           </div>
@@ -4215,7 +5179,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                               {taka(p.price)}
                             </span>
                             <span style={{ background: '#7c3aed', color: '#fff', fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 5 }}>
-                              + যোগ করুন
+                              + Add
                             </span>
                           </div>
                         </div>
@@ -4223,14 +5187,14 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
                       {filteredCatalog.length === 0 && (
                         <div style={{ padding: 14, textAlign: 'center', color: '#94a3b8', fontSize: 12.5 }}>
-                          <div>কোনো পণ্য মেলেনি: "{productSearch}"</div>
+                          <div>No products found for: "{productSearch}"</div>
                           <button
                             type="button"
                             onClick={() => handleAddCustomItem(productSearch)}
                             className="sa-btn-subtle"
                             style={{ marginTop: 8, fontSize: 12, padding: '4px 12px', background: 'rgba(124, 58, 237, 0.2)', border: '1px solid #7c3aed', color: '#c4b5fd' }}
                           >
-                            + "{productSearch}" কাস্টম আইটেম হিসেবে যোগ করুন
+                            + Add "{productSearch}" as a Custom Item
                           </button>
                         </div>
                       )}
@@ -4242,7 +5206,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 {catalog.length > 0 && (
                   <details style={{ marginTop: 8, fontSize: 12, color: '#94a3b8' }}>
                     <summary style={{ cursor: 'pointer', userSelect: 'none', padding: '2px 0' }}>
-                      অথবা ড্রপডাউন লিস্ট থেকে বেছে নিন ({catalog.length}টি পণ্য)
+                      Or choose from the dropdown ({catalog.length} products)
                     </summary>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
                       <select
@@ -4250,7 +5214,7 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                         onChange={(e) => setSelectedCatalogId(e.target.value)}
                         style={{ flex: 1, padding: '6px 8px', fontSize: 12 }}
                       >
-                        <option value="">-- ড্রপডাউন থেকে পণ্য নির্বাচন করুন --</option>
+                        <option value="">-- Select a product --</option>
                         {catalog.map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.name} — {taka(p.price)}
@@ -4273,28 +5237,30 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
             </div>
 
             {/* 4. Pricing Calculation */}
-            <div style={{ background: '#181624', padding: 16, borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div className="create-order-pricing" style={{ background: '#181624', padding: 16, borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9', marginBottom: 12 }}>
-                Pricing summary
+                Order Summary
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13.5 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8' }}>
-                  <span>Items subtotal:</span>
+                  <span>Items Subtotal:</span>
                   <span style={{ color: '#fff', fontWeight: 600 }}>{taka(computedItemsTotal)}</span>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ color: '#94a3b8' }}>Delivery charge:</span>
+                    <span style={{ color: '#94a3b8' }}>Delivery Charge:</span>
                     <button type="button" className="sa-btn-subtle" onClick={() => setDelivery(0)} style={{ fontSize: 11, padding: '2px 6px', background: delivery === 0 ? '#10b981' : 'rgba(255,255,255,0.06)', color: '#fff' }}>Free (৳0)</button>
-                    <button type="button" className="sa-btn-subtle" onClick={() => setDelivery(60)} style={{ fontSize: 11, padding: '2px 6px', background: delivery === 60 ? '#3b82f6' : 'rgba(255,255,255,0.06)', color: '#fff' }}>Inside Dhaka (৳60)</button>
-                    <button type="button" className="sa-btn-subtle" onClick={() => setDelivery(120)} style={{ fontSize: 11, padding: '2px 6px', background: delivery === 120 ? '#3b82f6' : 'rgba(255,255,255,0.06)', color: '#fff' }}>Outside Dhaka (৳120)</button>
+                    <button type="button" className="sa-btn-subtle" onClick={() => { setArea('inside'); setDelivery(deliveryInside); }} style={{ fontSize: 11, padding: '2px 6px', background: delivery === deliveryInside && area === 'inside' ? '#3b82f6' : 'rgba(255,255,255,0.06)', color: '#fff' }}>Inside Dhaka ({taka(deliveryInside)})</button>
+                    <button type="button" className="sa-btn-subtle" onClick={() => { setArea('outside'); setDelivery(deliveryOutside); }} style={{ fontSize: 11, padding: '2px 6px', background: delivery === deliveryOutside && area === 'outside' ? '#3b82f6' : 'rgba(255,255,255,0.06)', color: '#fff' }}>Outside Dhaka ({taka(deliveryOutside)})</button>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span>৳</span>
                     <input
                       type="number"
+                      min="0"
+                      step="1"
                       value={delivery}
                       onChange={(e) => setDelivery(Math.max(0, Number(e.target.value) || 0))}
                       style={{ width: 75, padding: '3px 8px', textAlign: 'right' }}
@@ -4308,6 +5274,8 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                     <span>−৳</span>
                     <input
                       type="number"
+                      min="0"
+                      step="1"
                       value={discount}
                       onChange={(e) => setDiscount(Math.max(0, Number(e.target.value) || 0))}
                       style={{ width: 75, padding: '3px 8px', textAlign: 'right', color: '#f87171' }}
@@ -4316,16 +5284,24 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 10, marginTop: 4 }}>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>Total due (cash on delivery):</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>Cash on Delivery Total:</span>
                   <span style={{ fontSize: 20, fontWeight: 800, color: '#34d399' }}>{taka(grandTotal)}</span>
                 </div>
+                <label className="create-order-confirmation">
+                  <input
+                    type="checkbox"
+                    checked={customerConfirmedCurrentOrder}
+                    onChange={(e) => setConfirmedOrderSnapshot(e.target.checked ? orderConfirmationKey : '')}
+                  />
+                  <span>I confirmed the items, address, and COD total with the customer.</span>
+                </label>
               </div>
             </div>
 
             {/* 5. Status & Admin Note */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
               <div>
-                <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Order status</label>
+                <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Order Status</label>
                 <select value={status} onChange={(e) => setStatus(e.target.value)}>
                   <option value="confirmed">Confirmed — ready to book with courier</option>
                   <option value="pending">Pending — confirm later</option>
@@ -4333,38 +5309,42 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
               </div>
 
               <div>
-                <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Admin / caller note</label>
+                <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>Admin / Call Note</label>
                 <input
                   type="text"
-                  placeholder="e.g. Customer asked for a call this afternoon"
                   value={adminNote}
                   onChange={(e) => setAdminNote(e.target.value)}
                 />
               </div>
             </div>
+            </div>
           </div>
 
-          <div className="sa-modal-f" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="sa-modal-f create-order-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <button type="button" className="sa-btn ghost" onClick={onClose} disabled={busy}>
               Cancel
             </button>
-            <button
-              type="submit"
-              className="sa-btn primary"
-              disabled={busy}
-              style={{
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                color: '#fff',
-                fontWeight: 700,
-                padding: '10px 24px',
-                fontSize: 15,
-                border: 'none',
-                boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)',
-                cursor: 'pointer'
-              }}
-            >
-              {busy ? 'Creating order…' : 'Save order'}
-            </button>
+            <div className="create-order-footer-action">
+              <div className="create-order-footer-total"><span>COD Total</span><strong>{taka(grandTotal)}</strong></div>
+              <button
+                type="submit"
+                className="sa-btn primary"
+                disabled={busy || !customerConfirmedCurrentOrder}
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: '#fff',
+                  fontWeight: 700,
+                  padding: '10px 24px',
+                  fontSize: 14,
+                  border: 'none',
+                  boxShadow: '0 4px 14px rgba(16, 185, 129, 0.26)',
+                  cursor: busy || !customerConfirmedCurrentOrder ? 'not-allowed' : 'pointer',
+                  opacity: customerConfirmedCurrentOrder ? 1 : 0.58
+                }}
+              >
+                {busy ? 'Saving Order…' : '✓ Save Order'}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -4372,23 +5352,1338 @@ function CreateOrderModal({ onClose, onCreated }: { onClose: () => void; onCreat
   );
 }
 
-function OrdersAdmin() {
+// -----------------------------------------------------------------------------
+// BULK ORDER IMPORT MODAL (EXCEL .xlsx, .xls & CSV)
+// -----------------------------------------------------------------------------
+function CatalogProductSearchSelect({
+  options,
+  value,
+  onChange,
+  placeholder = 'পণ্যের নাম বা SKU লিখে খুঁজুন',
+  ariaLabel = 'Search catalog products by name or SKU',
+}: {
+  options: Array<{ value: string; label: string }>;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  ariaLabel?: string;
+}) {
+  const selected = options.find((option) => option.value === value);
+  const [query, setQuery] = useState(selected?.label || '');
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) setQuery(selected?.label || '');
+  }, [value]);
+
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const filtered = options
+    .filter((option) => !normalizedQuery || option.label.toLocaleLowerCase().includes(normalizedQuery))
+    .slice(0, 8);
+
+  return (
+    <div style={{ width: '100%', minWidth: 0 }}>
+      <input
+        type="search"
+        value={query}
+        aria-label={ariaLabel}
+        placeholder={placeholder}
+        autoComplete="off"
+        onFocus={() => setOpen(true)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 140)}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setOpen(true);
+          if (value) onChange('');
+        }}
+        style={{ width: '100%', boxSizing: 'border-box', minHeight: 38, padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(139,92,246,.5)', background: '#19162a', color: '#f4efff', fontSize: 12, outline: 'none' }}
+      />
+      {open && (
+        <div style={{ marginTop: 4, maxHeight: 190, overflowY: 'auto', border: '1px solid rgba(139,92,246,.42)', borderRadius: 8, background: '#1b1727', boxShadow: '0 10px 28px rgba(0,0,0,.34)' }}>
+          {filtered.length ? filtered.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                onChange(option.value);
+                setQuery(option.label);
+                setOpen(false);
+              }}
+              style={{ display: 'block', width: '100%', padding: '8px 10px', textAlign: 'left', border: 0, borderBottom: '1px solid rgba(255,255,255,.06)', background: option.value === value ? 'rgba(139,92,246,.2)' : 'transparent', color: option.value === value ? '#e9ddff' : '#d8d1e4', fontSize: 11.5, cursor: 'pointer' }}
+            >
+              {option.label}
+            </button>
+          )) : (
+            <div style={{ padding: '9px 10px', color: '#aaa2b7', fontSize: 11.5 }}>কোনো matching product বা SKU পাওয়া যায়নি</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BulkOrderImportModal({
+  onClose,
+  onSuccess,
+  allProducts = [],
+}: {
+  onClose: () => void;
+  onSuccess: (count: number) => void;
+  allProducts?: any[];
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [parsedRows, setParsedRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errMsg, setErrMsg] = useState('');
+  const [defaultStatus, setDefaultStatus] = useState('confirmed');
+  const [defaultCloseBox, setDefaultCloseBox] = useState(false);
+  const [allowUncataloguedProducts, setAllowUncataloguedProducts] = useState(false);
+  const [duplicateCheckUnavailable, setDuplicateCheckUnavailable] = useState(false);
+  const [existingOrderProductKeys, setExistingOrderProductKeys] = useState<Map<string, string>>(new Map());
+  const [bulkCatalogSelection, setBulkCatalogSelection] = useState('');
+  const [landingPackages, setLandingPackages] = useState<any[]>([]);
+
+  const importProductKeys = (value: any) => {
+    const keys = new Set<string>();
+    const sku = String(value.sku || value.sourceSku || value.productSku || '').trim().toUpperCase();
+    const productId = String(value.matchedProductId || value.productId || value.id || '').trim();
+    const name = String(value.matchedProductTitle || value.product || value.sourceProduct || value.productName || value.name || value.title || '')
+      .normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+    if (sku) keys.add(`sku:${sku}`);
+    if (productId) keys.add(`id:${productId}`);
+    if (name) keys.add(`name:${name}`);
+    return keys;
+  };
+  const markImportDuplicates = (rows: any[], savedProducts: Map<string, string>) => {
+    const seenProducts = new Map<string, string>();
+    return rows.map((row) => {
+      const phoneKey = normalizeBDMobile(String(row.phone || ''));
+      const productKeys = importProductKeys(row);
+      if (!phoneKey || !productKeys.size) return { ...row, isDuplicate: false, duplicateReason: '', skipDuplicate: false };
+      const fileMatch = [...productKeys].map((key) => seenProducts.get(`${phoneKey}|${key}`)).find(Boolean);
+      const savedMatch = [...productKeys].map((key) => savedProducts.get(`${phoneKey}|${key}`)).find(Boolean);
+      const duplicateReason = fileMatch
+        ? `এই ফাইলে একই ফোন ও পণ্যের আরেকটি row আছে (${fileMatch})`
+        : savedMatch ? `আগের অর্ডার ${savedMatch}-এ একই ফোন ও পণ্য পাওয়া গেছে` : '';
+      productKeys.forEach((key) => seenProducts.set(`${phoneKey}|${key}`, row.rowNum));
+      return {
+        ...row,
+        isDuplicate: Boolean(duplicateReason),
+        duplicateReason,
+        skipDuplicate: duplicateReason ? Boolean(row.skipDuplicate) : false,
+      };
+    });
+  };
+
+  useEffect(() => {
+    let active = true;
+    aFetch('/landings')
+      .then((response) => response.ok ? response.json() : [])
+      .then((landings: any[]) => {
+        if (!active || !Array.isArray(landings)) return;
+        const packages = landings.flatMap((landing: any) => (Array.isArray(landing?.packages) ? landing.packages : [])
+          .filter((pkg: any) => pkg && pkg.id != null)
+          .map((pkg: any) => {
+            const sku = String(pkg.sku || '').trim();
+            return {
+              id: `landing-package:${String(landing.slug || landing.id || 'page')}:${String(pkg.id)}`,
+              name: String(pkg.title || landing.productTitle || landing.title || 'Landing page package').trim(),
+              price: Number(pkg.price) || 0,
+              sku,
+              skus: sku ? [sku] : [],
+              landingPageTitle: String(landing.productTitle || landing.title || landing.slug || 'Landing page').trim(),
+              landingSlug: String(landing.slug || ''),
+              landingPackageId: String(pkg.id),
+              isLandingPackage: true,
+            };
+          }));
+        setLandingPackages(packages);
+      })
+      .catch(() => { if (active) setLandingPackages([]); });
+    return () => { active = false; };
+  }, []);
+
+  // Download Sample Excel (.xlsx) matching exact format
+  const downloadSampleExcel = async () => {
+    try {
+      const XLSX = await import('xlsx');
+      const ws_data = [
+        ['Order Date', 'Order Number', 'Products', 'Customer Name', 'Mobile Number', 'Address', 'Sale Price', 'Shipping Charge', 'Discount', 'Tracking ID', 'Note', 'User', 'Source', 'Channel', 'SKU', 'Total Amount'],
+        ['18-Nov-2026', 'SS-6361', 'যাদের পেনিস ৪ ইঞ্চি থেকে ৫.৫ ইঞ্চি তাদের জন্য ৬.৭ দাম', 'mddd', '01313423898', 'কেরানীরহাট সাতকানিয়া চট্টগ্রাম', 899, 0, 0, '', '', 'Tonmoy Hasan', 'Website', 'Facebook', 'LOVE-LOCK-6IN', 899],
+        ['18-Nov-2026', 'SS-6329', 'যাদের পেনিস ৬ ইঞ্চি এর বড় তাদের জন্য - ৮ ইঞ্চি', 'Ariful Islam', '01846800458', 'Plot B 401 bscic Fatullah Narayanganj', 1199, 0, 0, '', '', 'md shihab', 'Website', 'Facebook', 'LOVE-LOCK-80IN', 1199],
+        ['18-Nov-2026', 'SS-6344', 'যাদের পেনিস ৪ ইঞ্চি থেকে ৫.৫ ইঞ্চি তাদের জন্য ৬.৭ দাম', 'mozaharul', '01580930501', '762/10 মনিপুর, মিরপুর 2 ঢাকা', 899, 0, 0, '', 'Agami kalke sokal 12 tar age percle dite hobe', 'md shihab', 'Website', 'Facebook', 'LOVE-LOCK-6IN', 899]
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      ws['!cols'] = [
+        { wch: 13 }, { wch: 12 }, { wch: 36 }, { wch: 16 }, { wch: 15 },
+        { wch: 32 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 12 },
+        { wch: 25 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 12 }
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Orders');
+      XLSX.writeFile(wb, 'orders-sample-template.xlsx');
+    } catch (e: any) {
+      alert('Error creating sample template: ' + e.message);
+    }
+  };
+
+  // Download Sample CSV (.csv) matching exact format
+  const downloadSampleCSV = () => {
+    const csvContent =
+      'Order Date,Order Number,Products,Customer Name,Mobile Number,Address,Sale Price,Shipping Charge,Discount,Tracking ID,Note,User,Source,Channel,SKU,Total Amount\n' +
+      '18-Nov-2026,SS-6361,যাদের পেনিস ৪ ইঞ্চি থেকে ৫.৫ ইঞ্চি তাদের জন্য ৬.৭ দাম,mddd,01313423898,কেরানীরহাট সাতকানিয়া চট্টগ্রাম,899,0,0,,,Tonmoy Hasan,Website,Facebook,LOVE-LOCK-6IN,899\n' +
+      '18-Nov-2026,SS-6329,যাদের পেনিস ৬ ইঞ্চি এর বড় তাদের জন্য - ৮ ইঞ্চি,Ariful Islam,01846800458,Plot B 401 bscic Fatullah Narayanganj,1199,0,0,,,md shihab,Website,Facebook,LOVE-LOCK-80IN,1199\n' +
+      '18-Nov-2026,SS-6344,যাদের পেনিস ৪ ইঞ্চি থেকে ৫.৫ ইঞ্চি তাদের জন্য ৬.৭ দাম,mozaharul,01580930501,"762/10 মনিপুর, মিরপুর 2 ঢাকা",899,0,0,,Agami kalke sokal 12 tar age percle dite hobe,md shihab,Website,Facebook,LOVE-LOCK-6IN,899\n';
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'orders-sample-template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+          // Parse spreadsheet data; product matching is limited to exact SKU matches.
+  const handleFile = async (selectedFile: File) => {
+    setErrMsg('');
+    setAllowUncataloguedProducts(false);
+    setDuplicateCheckUnavailable(false);
+    setLoading(true);
+    setFile(selectedFile);
+    try {
+      let existingOrders: any[] = [];
+      try {
+        const existingResponse = await aFetch('/orders');
+        if (existingResponse.ok) {
+          const data = await existingResponse.json();
+          existingOrders = Array.isArray(data) ? data : [];
+        } else setDuplicateCheckUnavailable(true);
+      } catch { setDuplicateCheckUnavailable(true); }
+      const XLSX = await import('xlsx');
+      const data = await selectedFile.arrayBuffer();
+      // Some order exports report a worksheet range that ends too early. Ignore
+      // that metadata so SheetJS scans the real cells and doesn't drop rows.
+      const workbook = XLSX.read(data, { type: 'array', nodim: true });
+      if (!workbook.SheetNames.length) {
+        setErrMsg('ফাইলে কোনো ডাটা পাওয়া যায়নি (Empty spreadsheet)');
+        setParsedRows([]);
+        setLoading(false);
+        return;
+      }
+      const normalizeHeader = (value: any) => String(value || '').trim().toLowerCase().replace(/[^a-z0-9\u0980-\u09ff]/g, '');
+      const headerGroups = [
+        ['order number', 'order id', 'invoice', 'অর্ডার নম্বর'],
+        ['customer name', 'name', 'customer', 'recipient', 'নাম', 'গ্রাহকের নাম'],
+        ['mobile number', 'phone', 'mobile', 'phone number', 'customer phone', 'ফোন', 'মোবাইল'],
+        ['address', 'delivery address', 'full address', 'ঠিকানা', 'এড্রেস'],
+        ['products', 'product name', 'product', 'item', 'পণ্য', 'পণ্যের নাম'],
+        ['sale price', 'price', 'দাম', 'total amount', 'total', 'মোট'],
+      ].map((group) => group.map(normalizeHeader));
+      const findHeaderRow = (rows: any[][]) => {
+        for (let index = 0; index < Math.min(20, rows.length); index++) {
+          const cells = new Set(rows[index].map(normalizeHeader).filter(Boolean));
+          const matches = headerGroups.reduce((count, aliases) => count + (aliases.some((alias) => cells.has(alias)) ? 1 : 0), 0);
+          if (matches >= 2) return index;
+        }
+        return -1;
+      };
+      const sheetData = workbook.SheetNames.map((sheetName: string) => {
+        const rows: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '' });
+        const headerRowIndex = findHeaderRow(rows);
+        if (headerRowIndex < 0) return null;
+        const headers = rows[headerRowIndex].map((header) => String(header || '').trim());
+        return { sheetName, headers, headerRowIndex, rows };
+      }).filter(Boolean) as Array<{ sheetName: string; headers: string[]; headerRowIndex: number; rows: any[][] }>;
+      if (!sheetData.length) {
+        setErrMsg('কোনো sheet-এ Order/Customer/Phone/Address কলামের header পাওয়া যায়নি। Sample template-এর কলাম নাম ব্যবহার করুন।');
+        setParsedRows([]);
+        setLoading(false);
+        return;
+      }
+      const headers: string[] = [];
+      const canonicalHeaderIndex = new Map<string, number>();
+      sheetData.forEach(({ headers: sheetHeaders }) => sheetHeaders.forEach((header) => {
+        const key = normalizeHeader(header);
+        if (key && !canonicalHeaderIndex.has(key)) {
+          canonicalHeaderIndex.set(key, headers.length);
+          headers.push(header);
+        }
+      }));
+      const dataRows = sheetData.flatMap(({ sheetName, headers: sheetHeaders, headerRowIndex, rows }) => rows
+        .slice(headerRowIndex + 1)
+        .map((sourceRow, index) => {
+          const rowArr = Array(headers.length).fill('');
+          sheetHeaders.forEach((header, columnIndex) => {
+            const targetIndex = canonicalHeaderIndex.get(normalizeHeader(header));
+            if (targetIndex !== undefined) rowArr[targetIndex] = sourceRow[columnIndex] ?? '';
+          });
+          return { rowArr, rowNum: sheetData.length === 1 ? index + headerRowIndex + 2 : `${sheetName} · ${index + headerRowIndex + 2}` };
+        })
+        .filter(({ rowArr }) => rowArr.some((cell) => String(cell || '').trim().length > 0)));
+
+      const mapped = dataRows
+        .map(({ rowArr, rowNum }) => {
+          const row: Record<string, string> = {};
+          headers.forEach((h, colIdx) => {
+            row[h] = String(rowArr[colIdx] ?? '').trim();
+          });
+
+          const getVal = (...keys: string[]) => {
+            for (const k of keys) {
+              const foundKey = Object.keys(row).find((rk) => rk.trim().toLowerCase() === k.trim().toLowerCase());
+              if (foundKey && row[foundKey] !== undefined && row[foundKey] !== '') {
+                return String(row[foundKey]).trim();
+              }
+            }
+            return '';
+          };
+
+          const orderDateValue = getVal('Order Date', 'Date', 'তারিখ');
+          const orderDateSerial = Number(orderDateValue);
+          const excelDate = orderDateValue && Number.isFinite(orderDateSerial) && orderDateSerial >= 20000 && orderDateSerial <= 80000
+            ? XLSX.SSF.parse_date_code(orderDateSerial)
+            : null;
+          const orderDate = excelDate
+            ? `${excelDate.y}-${String(excelDate.m).padStart(2, '0')}-${String(excelDate.d).padStart(2, '0')}`
+            : orderDateValue;
+          const orderNumber = getVal('Order Number', 'Order ID', 'Invoice', 'অর্ডার নম্বর');
+          const rawProduct = getVal('Products', 'Product Name', 'Product', 'Item', 'পণ্য', 'পণ্যের নাম');
+          const name = getVal('Customer Name', 'Name', 'Customer', 'নাম', 'গ্রাহকের নাম', 'Recipient');
+          const phone = getVal('Mobile Number', 'Phone', 'Mobile', 'Phone Number', 'Customer Phone', 'ফোন', 'মোবাইল');
+          const address = getVal('Address', 'Delivery Address', 'Full Address', 'ঠিকানা', 'এড্রেস');
+          const salePriceRaw = getVal('Sale Price', 'Price', 'দাম');
+          const parseMoney = (value: string) => {
+            if (!value) return null;
+            const normalized = value.replace(/[৳,\s]/g, '');
+            if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return null;
+            const amount = Number(normalized);
+            return Number.isFinite(amount) ? amount : null;
+          };
+          let salePrice = parseMoney(salePriceRaw);
+          const shippingChargeRaw = getVal('Shipping Charge', 'Delivery Fee', 'Delivery', 'ডেলিভারি চার্জ');
+          const parsedShipping = (shippingChargeRaw && shippingChargeRaw.trim() !== '') ? parseMoney(shippingChargeRaw) : 0;
+          const discountRaw = getVal('Discount', 'ছাড়');
+          const parsedDiscount = (discountRaw && discountRaw.trim() !== '') ? parseMoney(discountRaw) : 0;
+          const trackingId = getVal('Tracking ID', 'Consignment', 'ট্র্যাকিং');
+          const note = getVal('Note', 'Notes', 'Special Note', 'মন্তব্য');
+          const user = getVal('User', 'Staff', 'Created By', 'ব্যবহারকারী');
+          const source = getVal('Source', 'উৎস');
+          const channel = getVal('Channel', 'মাধ্যম');
+          const skuRaw = getVal('SKU', 'Item Code', 'Code', 'এসকেইউ');
+          const totalRaw = getVal('Total Amount', 'Total', 'Price', 'মোট');
+          let total = parseMoney(totalRaw);
+
+          const shippingCharge = parsedShipping != null && parsedShipping >= 0 ? parsedShipping : 0;
+          const discount = parsedDiscount != null && parsedDiscount >= 0 ? parsedDiscount : 0;
+          if (salePrice == null || salePrice <= 0) {
+            if (total != null && total > 0) {
+              salePrice = Math.max(0, total - shippingCharge + discount);
+            }
+          }
+
+          // -------------------------------------------------------------
+          // Match only an exact SKU; never guess a product from similar wording.
+          // -------------------------------------------------------------
+          let matchedProduct: any = null;
+          let matchedVariant: any = null;
+          let skuMatchCount = 0;
+          let exactNameMatchCount = 0;
+          let finalSku = skuRaw;
+          let finalProductName = rawProduct || skuRaw;
+
+          // Use exact catalog data only. Similar-looking product names are not proof of identity.
+          const matchCandidates = [...(Array.isArray(allProducts) ? allProducts : []), ...landingPackages];
+          if (matchCandidates.length) {
+            for (const p of matchCandidates) {
+              const vars = Array.isArray(p.variations) ? p.variations : (Array.isArray(p.variants) ? p.variants : []);
+              const baseSkuMatch = skuRaw && [p.sku, ...(Array.isArray(p.skus) ? p.skus : [])].some((sku: any) => String(sku || '').trim().toUpperCase() === skuRaw.trim().toUpperCase());
+              const variantSkuMatch = skuRaw && vars.find((v: any) => v.sku && String(v.sku).trim().toUpperCase() === skuRaw.trim().toUpperCase());
+              if (baseSkuMatch || variantSkuMatch) {
+                skuMatchCount += 1;
+                matchedProduct = p;
+                matchedVariant = variantSkuMatch || null;
+              }
+              for (const v of vars) {
+                const variantFullName = `${String(p.name || '').trim()} — ${String(v.title || '').trim()}`.trim().toLowerCase();
+                if (!skuRaw && rawProduct && (rawProduct.trim().toLowerCase() === variantFullName || rawProduct.trim().toLowerCase() === String(v.title || '').trim().toLowerCase())) {
+                  exactNameMatchCount += 1;
+                  matchedProduct = p;
+                  matchedVariant = v;
+                }
+              }
+              if (!skuRaw && rawProduct && rawProduct.trim().toLowerCase() === String(p.name || '').trim().toLowerCase()) {
+                exactNameMatchCount += 1;
+                matchedProduct = p;
+                matchedVariant = null;
+              }
+            }
+          }
+          const ambiguousSkuMatch = skuMatchCount > 1;
+          const ambiguousNameMatch = !skuRaw && exactNameMatchCount > 1;
+
+          if (matchedProduct) {
+            finalProductName = matchedVariant ? `${matchedProduct.name} — ${matchedVariant.title}` : (rawProduct || matchedProduct.name);
+            finalSku = skuRaw || (matchedVariant && matchedVariant.sku) || matchedProduct.sku || '';
+          }
+
+          const phoneDigits = /e[+-]?\d+$/i.test(phone) ? String(Math.trunc(Number(phone))) : phone.replace(/\D/g, '');
+          let cleanPhone = phoneDigits;
+          if (/^8801[3-9]\d{8}$/.test(cleanPhone)) cleanPhone = `0${cleanPhone.slice(3)}`;
+          else if (/^1[3-9]\d{8}$/.test(cleanPhone)) cleanPhone = `0${cleanPhone}`;
+          const isValidPhone = /^01[3-9]\d{8}$/.test(cleanPhone);
+          if (total == null && salePrice != null) total = salePrice + (shippingCharge || 0) - (discount || 0);
+          const rowErrors: string[] = [];
+          const rowWarnings: string[] = [];
+          if (!isValidPhone) rowErrors.push('সঠিক বাংলাদেশি ফোন নম্বর নেই');
+          if (!orderNumber) rowErrors.push('ডুপ্লিকেট ঠেকাতে Order Number/ID প্রয়োজন');
+          if (!name) rowErrors.push('গ্রাহকের নাম নেই');
+          if (!address) rowErrors.push('ঠিকানা নেই');
+          if (!rawProduct && !skuRaw) rowErrors.push('প্রোডাক্টের নাম বা SKU নেই');
+          if (ambiguousSkuMatch) rowErrors.push('এই SKU একাধিক প্রোডাক্টে আছে—ক্যাটালগ ঠিক করুন');
+          if (ambiguousNameMatch) rowErrors.push('এই নামে একাধিক ক্যাটালগ পণ্য আছে—SKU দিন');
+          if (skuRaw && skuMatchCount === 0) rowWarnings.push('SKU বর্তমান ক্যাটালগে নেই—ফাইলের নাম/SKU অপরিবর্তিত থাকবে');
+          else if (!skuRaw && !exactNameMatchCount) rowWarnings.push('নামটি বর্তমান ক্যাটালগে নেই—এটি custom item হিসেবে থাকবে');
+          if (salePrice == null || salePrice <= 0) rowErrors.push('সঠিক Sale Price নেই');
+          if (parsedShipping == null || parsedShipping < 0) rowErrors.push('Shipping Charge ভুল');
+          if (parsedDiscount == null || parsedDiscount < 0) rowErrors.push('Discount ভুল');
+          if (total == null || total <= 0) rowErrors.push('সঠিক Total Amount নেই');
+          if (salePrice != null && shippingCharge != null && discount != null && total != null && totalRaw && salePriceRaw && Math.abs(total - (salePrice + shippingCharge - discount)) > 2) {
+            rowErrors.push('Sale Price + Shipping − Discount এর সঙ্গে Total মিলছে না');
+          }
+          const isValid = rowErrors.length === 0;
+
+          return {
+            rowNum,
+            orderDate,
+            orderNumber,
+            name,
+            phone: cleanPhone || phone,
+            isValidPhone,
+            isValid,
+            address,
+            product: finalProductName,
+            sku: finalSku,
+            sourceProduct: rawProduct || skuRaw,
+            sourceSku: skuRaw,
+            qty: 1,
+            matchedProductTitle: matchedProduct ? matchedProduct.name : '',
+            matchedProductId: matchedProduct?.id || '',
+            matchedVariantId: matchedVariant?.id || '',
+            matchedProductImage: matchedVariant?.image || matchedVariant?.images?.[0] || matchedProduct?.images?.[0] || matchedProduct?.image || '',
+            matchedLandingSlug: matchedProduct?.isLandingPackage ? matchedProduct.landingSlug : '',
+            matchedLandingPackageId: matchedProduct?.isLandingPackage ? matchedProduct.landingPackageId : '',
+            isAutoMatched: Boolean(matchedProduct),
+            matchValidationErrors: [
+              ...(ambiguousSkuMatch ? ['এই SKU একাধিক প্রোডাক্টে আছে—ক্যাটালগ ঠিক করুন'] : []),
+              ...(ambiguousNameMatch ? ['এই নামে একাধিক ক্যাটালগ পণ্য আছে—SKU দিন'] : []),
+            ],
+            matchValidationWarnings: [
+              ...(skuRaw && skuMatchCount === 0 ? ['SKU বর্তমান ক্যাটালগে নেই—ফাইলের নাম/SKU অপরিবর্তিত থাকবে'] : []),
+              ...(!skuRaw && rawProduct && !exactNameMatchCount ? ['নামটি বর্তমান ক্যাটালগে নেই—এটি custom item হিসেবে থাকবে'] : []),
+            ],
+            salePrice: salePrice || 0,
+            delivery: shippingCharge || 0,
+            discount: discount || 0,
+            total: total || 0,
+            errors: rowErrors,
+            warnings: rowWarnings,
+            trackingId,
+            note,
+            user,
+            source: source || 'Website',
+            channel: channel || 'Facebook',
+            status: defaultStatus,
+          };
+        });
+
+      const seenOrderNumbers = new Set<string>();
+      const getPhoneKey = (value: any) => normalizeBDMobile(String(value || ''));
+      const savedCustomerProducts = new Map<string, string>();
+      existingOrders.forEach((order: any) => {
+        const phoneKey = getPhoneKey(order.customer?.phone || order.phone);
+        if (!phoneKey) return;
+        const items = Array.isArray(order.items) && order.items.length ? order.items : [order];
+        items.forEach((item: any) => importProductKeys(item).forEach((productKey) => {
+          const key = `${phoneKey}|${productKey}`;
+          if (!savedCustomerProducts.has(key)) savedCustomerProducts.set(key, String(order.id || order.orderNumber || 'আগের অর্ডার'));
+        }));
+      });
+      setExistingOrderProductKeys(savedCustomerProducts);
+      for (const row of mapped) {
+        const key = String(row.orderNumber || '').trim().toLowerCase();
+        if (key && seenOrderNumbers.has(key)) {
+          row.errors.push(`এই ফাইলেই Order Number ${row.orderNumber} একাধিকবার আছে`);
+          row.isValid = false;
+        }
+        if (key) seenOrderNumbers.add(key);
+      }
+      setParsedRows(markImportDuplicates(mapped, savedCustomerProducts));
+    } catch (err: any) {
+      setErrMsg('ফাইলটি পড়তে সমস্যা হয়েছে: ' + err.message);
+      setParsedRows([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const validCount = parsedRows.filter((r) => r.isValid).length;
+  const invalidCount = parsedRows.length - validCount;
+  const duplicateCount = parsedRows.filter((r) => r.isValid && r.isDuplicate).length;
+  const skippedDuplicateCount = parsedRows.filter((r) => r.isValid && r.isDuplicate && r.skipDuplicate).length;
+  const importCount = parsedRows.filter((r) => r.isValid && !r.skipDuplicate).length;
+  const warningCount = parsedRows.filter((r) => r.isValid && !r.skipDuplicate && r.warnings?.length > 0).length;
+  const setDuplicateSkip = (skip: boolean) => setParsedRows((rows) => rows.map((row) => row.isValid && row.isDuplicate ? { ...row, skipDuplicate: skip } : row));
+
+  const resolveCatalogSelection = (selection: string) => {
+    if (!selection) return { product: null, variant: null };
+    try {
+      const [productId, variantId] = JSON.parse(selection);
+      const product = allProducts.find((item: any) => String(item.id) === String(productId))
+        || landingPackages.find((item: any) => String(item.id) === String(productId))
+        || null;
+      const variants = Array.isArray(product?.variations) ? product.variations : (Array.isArray(product?.variants) ? product.variants : []);
+      const variant = product && variantId ? variants.find((item: any) => String(item.id) === String(variantId)) || null : null;
+      return { product, variant };
+    } catch {
+      return { product: null, variant: null };
+    }
+  };
+
+  const getCatalogPrice = (product: any, variant: any) => Number(variant?.price) > 0 ? Number(variant.price) : Number(product?.price) || 0;
+  const getCatalogSku = (product: any, variant: any) => String(variant?.sku || product?.sku || product?.skus?.[0] || '').trim();
+  const getCatalogProductName = (product: any, variant: any) => variant
+    ? `${product.name} — ${variant.title || variant.name || ''}`.trim()
+    : product.name;
+
+  const handleCatalogProductSelection = (rowNum: number | string, selection: string) => {
+    const { product: selectedProduct, variant: selectedVariant } = resolveCatalogSelection(selection);
+
+    setParsedRows((rows) => markImportDuplicates(rows.map((row) => {
+      if (row.rowNum !== rowNum) return row;
+      const matchErrors = row.matchValidationErrors || [];
+      const matchWarnings = row.matchValidationWarnings || [];
+      const errors = (row.errors || []).filter((message: string) => !matchErrors.includes(message));
+      const warnings = (row.warnings || []).filter((message: string) => !matchWarnings.includes(message));
+
+      if (!selectedProduct) {
+        errors.push(...matchErrors);
+        warnings.push(...matchWarnings);
+        return {
+          ...row,
+          product: row.sourceProduct || '',
+          sku: row.sourceSku || '',
+          matchedProductTitle: '',
+          matchedProductId: '',
+          matchedVariantId: '',
+          matchedProductImage: '',
+          matchedLandingSlug: '',
+          matchedLandingPackageId: '',
+          isAutoMatched: false,
+          errors,
+          warnings,
+          isValid: errors.length === 0,
+        };
+      }
+
+      const selectedSku = getCatalogSku(selectedProduct, selectedVariant);
+      const productName = getCatalogProductName(selectedProduct, selectedVariant);
+      return {
+        ...row,
+        product: productName,
+        sku: selectedSku,
+        matchedProductTitle: selectedProduct.name,
+        matchedProductId: selectedProduct.id,
+        matchedVariantId: selectedVariant?.id || '',
+        matchedProductImage: selectedVariant?.image || selectedVariant?.images?.[0] || selectedProduct.images?.[0] || selectedProduct.image || '',
+        matchedLandingSlug: selectedProduct.isLandingPackage ? selectedProduct.landingSlug : '',
+        matchedLandingPackageId: selectedProduct.isLandingPackage ? selectedProduct.landingPackageId : '',
+        isAutoMatched: true,
+        errors,
+        warnings,
+        isValid: errors.length === 0,
+      };
+    }), existingOrderProductKeys));
+  };
+
+  const importProductOptions = allProducts.flatMap((product: any) => {
+    const baseOption = { value: JSON.stringify([String(product.id), '']), label: `${product.name}${product.sku ? ` · ${product.sku}` : (product.skus?.[0] ? ` · ${product.skus[0]}` : '')}`, productName: product.name };
+    const variants = Array.isArray(product.variations) ? product.variations : (Array.isArray(product.variants) ? product.variants : []);
+    return [baseOption, ...variants.map((variant: any) => ({
+      value: JSON.stringify([String(product.id), String(variant.id || '')]),
+      label: `${product.name} — ${variant.title || [variant.size, variant.color].filter(Boolean).join(' / ') || 'Variant'} · ${variant.sku || product.sku || product.skus?.[0] || 'No SKU'}`,
+      productName: product.name,
+    }))];
+  }).concat(landingPackages.map((product: any) => ({
+    value: JSON.stringify([String(product.id), '']),
+    label: `Landing · ${product.landingPageTitle} — ${product.name} · ${product.sku || 'SKU নেই'}`,
+    productName: product.name,
+  })));
+
+  const applyCatalogProductToAllRows = () => {
+    const { product, variant } = resolveCatalogSelection(bulkCatalogSelection);
+    if (!product) return;
+    const catalogPrice = getCatalogPrice(product, variant);
+    if (!Number.isFinite(catalogPrice) || catalogPrice <= 0) {
+      setErrMsg('নির্বাচিত পণ্যের সঠিক ক্যাটালগ মূল্য নেই; আগে পণ্যের মূল্য ঠিক করুন।');
+      return;
+    }
+    const productName = getCatalogProductName(product, variant);
+    const sku = getCatalogSku(product, variant);
+    setAllowUncataloguedProducts(false);
+    setErrMsg('');
+    setParsedRows((rows) => markImportDuplicates(rows.map((row) => {
+      const matchErrors = row.matchValidationErrors || [];
+      const matchWarnings = row.matchValidationWarnings || [];
+      const replacedErrors = [
+        'প্রোডাক্টের নাম বা SKU নেই',
+        'সঠিক Sale Price নেই',
+        'সঠিক Total Amount নেই',
+        'Sale Price + Shipping − Discount এর সঙ্গে Total মিলছে না',
+        'Discount পণ্যের মূল্য ও ডেলিভারি চার্জের চেয়ে বেশি।',
+      ];
+      const errors = (row.errors || []).filter((message: string) => !matchErrors.includes(message) && !replacedErrors.includes(message));
+      const warnings = (row.warnings || []).filter((message: string) => !matchWarnings.includes(message));
+      const delivery = Number(row.delivery) || 0;
+      const discount = Number(row.discount) || 0;
+      const total = catalogPrice + delivery - discount;
+      if (discount > catalogPrice + delivery) errors.push('Discount পণ্যের মূল্য ও ডেলিভারি চার্জের চেয়ে বেশি।');
+      if (total <= 0) errors.push('সঠিক Total Amount নেই');
+
+      return {
+        ...row,
+        product: productName,
+        sku,
+        matchedProductTitle: product.name,
+        matchedProductId: product.id,
+        matchedVariantId: variant?.id || '',
+        matchedProductImage: variant?.image || variant?.images?.[0] || product.images?.[0] || product.image || '',
+        matchedLandingSlug: product.isLandingPackage ? product.landingSlug : '',
+        matchedLandingPackageId: product.isLandingPackage ? product.landingPackageId : '',
+        isAutoMatched: true,
+        salePrice: catalogPrice,
+        total,
+        errors,
+        warnings,
+        isValid: errors.length === 0,
+      };
+    }), existingOrderProductKeys));
+  };
+
+  // Submit bulk orders to backend
+  const handleImport = async () => {
+    if (!importCount) {
+      alert('ইমপোর্ট করার জন্য কোনো সঠিক অর্ডার নেই!');
+      return;
+    }
+    if (warningCount > 0 && !allowUncataloguedProducts) {
+      setErrMsg('ক্যাটালগে না-মেলা পণ্যগুলো ফাইলের তথ্য হিসেবেই সংরক্ষণ করতে নিচের নিশ্চিতকরণটি দিন।');
+      return;
+    }
+    setSubmitting(true);
+    setErrMsg('');
+    try {
+      const ordersToSubmit = parsedRows
+        .filter((r) => r.isValid && !r.skipDuplicate)
+        .map((r) => ({
+          orderNumber: r.orderNumber,
+          orderDate: r.orderDate,
+          name: r.name,
+          phone: r.phone,
+          address: r.address,
+          product: r.product,
+          sku: r.sku,
+          productId: r.matchedProductId || undefined,
+          variantId: r.matchedVariantId || undefined,
+          image: r.matchedProductImage || undefined,
+          landingSlug: r.matchedLandingSlug || undefined,
+          landingPackageId: r.matchedLandingPackageId || undefined,
+          qty: 1,
+          price: r.salePrice,
+          total: r.total,
+          delivery: r.delivery,
+          discount: r.discount,
+          status: defaultStatus,
+          closeBox: defaultCloseBox,
+          trackingId: r.trackingId,
+          note: r.note,
+          user: r.user,
+          source: r.source,
+          channel: r.channel,
+        }));
+
+      const res = await aFetch('/admin/orders/bulk-import', {
+        method: 'POST',
+        body: JSON.stringify({
+          orders: ordersToSubmit,
+          defaultStatus,
+          closeBox: defaultCloseBox,
+          allowUncataloguedProducts,
+        }),
+      }).then((r) => r.json());
+
+      if (res.ok && !res.errors?.length) {
+        onSuccess(res.count);
+      } else if (res.ok) {
+        setErrMsg(`Import হয়েছে ${res.count}টি; ${res.errors.length}টি row বাদ গেছে। ${res.errors.slice(0, 3).map((e: any) => e.error || e).join(' | ')}`);
+      } else {
+        const details = Array.isArray(res.errors) ? res.errors.slice(0, 5).map((e: any) => e.error || e).join(' | ') : '';
+        setErrMsg('ইমপোর্ট ব্যর্থ: ' + (details || res.error || 'Server error'));
+      }
+    } catch (err: any) {
+      setErrMsg('নেটওয়ার্ক ত্রুটি: ' + err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        backdropFilter: 'blur(5px)',
+        zIndex: 99999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        style={{
+          background: '#13111c',
+          border: '1px solid rgba(139, 92, 246, 0.38)',
+          borderRadius: 16,
+          width: 'min(1120px, 98vw)',
+          maxWidth: 1120,
+          maxHeight: '92vh',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
+          color: '#f8fafc',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Modal Header */}
+        <div
+          style={{
+            padding: '16px 22px',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'linear-gradient(110deg, #211a35 0%, #171421 70%, #13111c 100%)',
+          }}
+        >
+          <div>
+            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>📤</span>
+              <span>Import Orders from Excel / CSV</span>
+            </h3>
+            <p style={{ margin: '4px 0 0 0', fontSize: 12.5, color: '#94a3b8' }}>
+              এক্সেল (.xlsx, .xls) অথবা CSV ফাইল আপলোড করে এক ক্লিকে সকল অর্ডার ডাটাবেজে যুক্ত করুন
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#94a3b8',
+              fontSize: 22,
+              cursor: 'pointer',
+              lineHeight: 1,
+              padding: 4,
+            }}
+          >
+            &times;
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div style={{ padding: 22, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* Sample Templates Bar */}
+          <div
+            style={{
+              background: 'rgba(51, 65, 85, 0.4)',
+              border: '1px solid #334155',
+              borderRadius: 10,
+              padding: '12px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 10,
+            }}
+          >
+            <div style={{ fontSize: 13, color: '#cbd5e1' }}>
+              <strong>💡 সঠিক ফরম্যাট দেখতে স্যাম্পল ফাইল ডাউনলোড করুন:</strong>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={downloadSampleExcel}
+                style={{
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  border: '1px solid rgba(16, 185, 129, 0.4)',
+                  color: '#6ee7b7',
+                  borderRadius: 6,
+                  padding: '6px 12px',
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <span>📊 Sample Excel (.xlsx)</span>
+              </button>
+              <button
+                type="button"
+                onClick={downloadSampleCSV}
+                style={{
+                  background: 'rgba(56, 189, 248, 0.15)',
+                  border: '1px solid rgba(56, 189, 248, 0.4)',
+                  color: '#7dd3fc',
+                  borderRadius: 6,
+                  padding: '6px 12px',
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <span>📄 Sample CSV (.csv)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Upload Dropzone */}
+          <div
+            style={{
+              border: '2px dashed #475569',
+              borderRadius: 12,
+              padding: '24px 20px',
+              textAlign: 'center',
+              background: 'rgba(30, 41, 59, 0.5)',
+              position: 'relative',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const dropped = e.dataTransfer.files?.[0];
+              if (dropped) handleFile(dropped);
+            }}
+          >
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                opacity: 0,
+                cursor: 'pointer',
+                width: '100%',
+                height: '100%',
+              }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleFile(f);
+              }}
+            />
+            <div style={{ fontSize: 34, marginBottom: 8 }}>📁</div>
+            <div style={{ fontSize: 14.5, fontWeight: 600, color: '#e2e8f0' }}>
+              {file ? `সিলেক্টেড ফাইল: ${file.name}` : 'ফাইল ড্রপ করুন অথবা ক্লিক করে সিলেক্ট করুন'}
+            </div>
+            <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
+              সাপোর্টেড ফরম্যাট: .xlsx, .xls, .csv (কলামে নাম, ফোন, ঠিকানা ও প্রোডাক্ট থাকতে হবে)
+            </div>
+            {loading && (
+              <div style={{ marginTop: 12, fontSize: 13, color: '#38bdf8' }}>
+                ডাটা পার্স করা হচ্ছে... অনুগ্রহ করে অপেক্ষা করুন ⏳
+              </div>
+            )}
+          </div>
+
+          {/* Options Bar: Status Choice & Close Box */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: 14,
+              background: '#1e293b',
+              padding: '14px 18px',
+              borderRadius: 10,
+              border: '1px solid #334155',
+            }}
+          >
+            {/* Status Selection */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
+                ⚙️ অর্ডারগুলোর প্রাথমিক স্ট্যাটাস (Initial Status):
+              </label>
+              <select
+                value={defaultStatus}
+                onChange={(e) => setDefaultStatus(e.target.value)}
+                style={{
+                  width: '100%',
+                  background: '#0f172a',
+                  border: '1px solid #475569',
+                  color: '#fff',
+                  borderRadius: 6,
+                  padding: '7px 10px',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="confirmed">Confirmed (Ready to ship / কুরিয়ারের জন্য প্রস্তুত)</option>
+                <option value="pending">Pending (কল করে কনফার্ম করা হবে)</option>
+                <option value="approved">{adminTranslate("Approved")}</option>
+                <option value="hold">{adminTranslate("Hold")}</option>
+                <option value="shipped">{adminTranslate("Shipped")}</option>
+              </select>
+              <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
+                * ফাইলে আলাদা Status কলাম থাকলে সেই কলামের স্ট্যাটাস অগ্রাধিকার পাবে।
+              </span>
+            </div>
+
+            {/* Close Box Delivery Toggle */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
+                🔒 ক্লোজড বক্স ডেলিভারি (Close Box System):
+              </label>
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  background: defaultCloseBox ? 'rgba(239, 68, 68, 0.2)' : 'rgba(15, 23, 42, 0.6)',
+                  border: defaultCloseBox ? '1px solid #ef4444' : '1px solid #475569',
+                  borderRadius: 6,
+                  padding: '7px 12px',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={defaultCloseBox}
+                  onChange={(e) => setDefaultCloseBox(e.target.checked)}
+                  style={{ width: 16, height: 16, cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: 13, color: defaultCloseBox ? '#fca5a5' : '#cbd5e1', fontWeight: 600 }}>
+                  🔒 Close Box Delivery (মূল্য পরিশোধ ছাড়া খোলা নিষেধ)
+                </span>
+              </label>
+              <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
+                * কুরিয়ার বুকিং নোট ও ডেলিভারি স্লিপে বোল্ড ওয়ার্নিং যাবে।
+              </span>
+            </div>
+          </div>
+
+          {/* Validation & Preview Summary */}
+          {parsedRows.length > 0 && (
+            <div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: 8,
+                  fontSize: 13,
+                }}
+              >
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <span style={{ fontWeight: 700, color: '#f8fafc' }}>
+                    মোট পাওয়া গেছে: {parsedRows.length} টি সারি
+                  </span>
+                  <span style={{ color: '#4ade80', background: 'rgba(74, 222, 128, 0.15)', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
+                    ✓ যাচাই পাস: {validCount} টি
+                  </span>
+                  {invalidCount > 0 && (
+                    <span style={{ color: '#f87171', background: 'rgba(248, 113, 113, 0.15)', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
+                      ⚠️ ত্রুটিযুক্ত: {invalidCount} টি (বাদ যাবে)
+                    </span>
+                  )}
+                  {duplicateCount > 0 && (
+                    <span style={{ color: '#fbbf24', background: 'rgba(251, 191, 36, .12)', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
+                      ⚠ একই ফোন + পণ্য: {duplicateCount} টি
+                    </span>
+                  )}
+                </div>
+                <span style={{ fontSize: 11.5, color: '#94a3b8' }}>সর্বোচ্চ ২০টি row দেখানো হচ্ছে:</span>
+              </div>
+
+              {duplicateCheckUnavailable && (
+                <div style={{ margin: '8px 0', padding: '9px 12px', border: '1px solid rgba(251,191,36,.3)', borderRadius: 8, background: 'rgba(120,53,15,.12)', color: '#fcd34d', fontSize: 12 }}>
+                  ⚠ আগের অর্ডারের সঙ্গে মিলিয়ে দেখা যায়নি; ফাইলের ভেতরের duplicate-গুলো তবুও চেক করা হয়েছে।
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'end', margin: '12px 0', padding: 14, borderRadius: 12, background: 'linear-gradient(110deg, rgba(139,92,246,.12), rgba(19,17,28,.92))', border: '1px solid rgba(139,92,246,.32)' }}>
+                <div style={{ minWidth: 260, flex: '1 1 360px' }}>
+                    <label style={{ display: 'block', marginBottom: 7, color: '#e9ddff', fontSize: 12.5, fontWeight: 700 }}>একই পণ্য / Landing package সব row-তে বসান</label>
+                  <CatalogProductSearchSelect
+                    options={importProductOptions.map((option: any) => {
+                      const { product, variant } = resolveCatalogSelection(option.value);
+                      const price = getCatalogPrice(product, variant);
+                      return { ...option, label: `${option.label} · ${price > 0 ? `৳${price}` : 'মূল্য নেই'}` };
+                    })}
+                    value={bulkCatalogSelection}
+                    onChange={setBulkCatalogSelection}
+                    placeholder="পণ্যের নাম বা SKU লিখে খুঁজুন"
+                    ariaLabel="Search products or SKU to apply to all rows"
+                  />
+                  <div style={{ marginTop: 6, color: '#a9a2b8', fontSize: 11.5, lineHeight: 1.45 }}>
+                    প্রয়োগ করলে সব row-তে একই পণ্য, SKU ও নির্বাচিত catalog/landing package-এর মূল্য বসবে। প্রতিটি row-এর delivery charge ও discount রেখে total নতুন করে হিসাব হবে।
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={!bulkCatalogSelection || !parsedRows.length}
+                  onClick={applyCatalogProductToAllRows}
+                  style={{ minHeight: 40, padding: '0 16px', borderRadius: 9, border: '1px solid #9b72ff', background: !bulkCatalogSelection ? '#393047' : 'linear-gradient(110deg,#7c3aed,#8b5cf6)', color: '#fff', fontWeight: 700, cursor: !bulkCatalogSelection ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', boxShadow: bulkCatalogSelection ? '0 5px 16px rgba(124,58,237,.28)' : 'none' }}
+                >
+                  সব row-তে প্রয়োগ
+                </button>
+              </div>
+
+              {/* Preview Table */}
+              {duplicateCount > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, margin: '10px 0', padding: '10px 12px', border: '1px solid rgba(251,191,36,.3)', borderRadius: 9, background: 'rgba(120,53,15,.12)', color: '#fde68a', fontSize: 12 }}>
+                  <span>একই ফোন নম্বরে একই SKU/পণ্যের আগের অর্ডার বা এই ফাইলের আরেকটি সারি পাওয়া গেছে। ডিফল্টভাবে সব সারি রাখা হবে।</span>
+                  <button type="button" onClick={() => setDuplicateSkip(skippedDuplicateCount !== duplicateCount)} style={{ border: '1px solid rgba(251,191,36,.5)', borderRadius: 7, padding: '6px 10px', background: 'rgba(251,191,36,.12)', color: '#fde68a', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    {skippedDuplicateCount === duplicateCount ? 'সব duplicate আবার অন্তর্ভুক্ত করুন' : 'সব duplicate বাদ দিন'}
+                  </button>
+                </div>
+              )}
+              <div style={{ overflowX: 'auto', border: '1px solid rgba(255,255,255,.1)', borderRadius: 10, background: '#171421' }}>
+                <table style={{ width: '100%', minWidth: 1030, borderCollapse: 'collapse', fontSize: 12, textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ background: '#211a35', color: '#b9adc9', borderBottom: '1px solid rgba(255,255,255,.1)' }}>
+                      <th style={{ padding: '8px 10px' }}>#</th>
+                      <th style={{ padding: '8px 10px' }}>নাম</th>
+                      <th style={{ padding: '8px 10px' }}>ফোন</th>
+                      <th style={{ padding: '8px 10px' }}>ঠিকানা</th>
+                      <th style={{ padding: '8px 10px' }}>প্রোডাক্ট</th>
+                      <th style={{ padding: '8px 10px' }}>মোট</th>
+                      <th style={{ padding: '8px 10px' }}>স্ট্যাটাস</th>
+                      <th style={{ padding: '8px 10px' }}>ক্লোজড বক্স</th>
+                      <th style={{ padding: '8px 10px' }}>যাচাই</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parsedRows.slice(0, 20).map((r, i) => (
+                      <tr
+                        key={i}
+                        style={{
+                          borderBottom: '1px solid rgba(255,255,255,.07)',
+                          background: !r.isValid ? 'rgba(239, 68, 68, 0.09)' : r.isDuplicate ? 'rgba(251, 191, 36, 0.055)' : 'transparent',
+                        }}
+                      >
+                        <td style={{ padding: '8px 10px', color: '#64748b' }}>{r.rowNum}</td>
+                        <td style={{ padding: '8px 10px', fontWeight: 600, color: '#e2e8f0' }}>{r.name}</td>
+                        <td style={{ padding: '8px 10px', color: r.isValidPhone ? '#4ade80' : '#f87171', fontWeight: 600 }}>
+                          {r.phone} {!r.isValidPhone && '(Invalid)'}
+                        </td>
+                        <td style={{ padding: '8px 10px', color: '#cbd5e1', maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {r.address}
+                        </td>
+                        <td style={{ padding: '8px 10px', color: '#cbd5e1', minWidth: 230 }}>
+                          <div style={{ marginBottom: 5 }}>{r.product} (x{r.qty})</div>
+                          <CatalogProductSearchSelect
+                            options={importProductOptions}
+                            value={r.matchedProductId ? JSON.stringify([String(r.matchedProductId), String(r.matchedVariantId || '')]) : ''}
+                            onChange={(selection) => handleCatalogProductSelection(r.rowNum, selection)}
+                            placeholder="পণ্য / SKU খুঁজুন"
+                            ariaLabel={`Search product or SKU for import row ${r.rowNum}`}
+                          />
+                          {r.matchedProductId && <div style={{ marginTop: 4, color: '#c4b5fd', fontSize: 10 }}>ক্যাটালগ SKU: {r.sku || 'SKU নেই'}</div>}
+                        </td>
+                        <td style={{ padding: '8px 10px', fontWeight: 700, color: '#f59e0b' }}>
+                          ৳{r.total || '0'}
+                        </td>
+                        <td style={{ padding: '8px 10px' }}>
+                          <span
+                            style={{
+                              background: '#334155',
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              fontSize: 11,
+                              textTransform: 'capitalize',
+                            }}
+                          >
+                            {r.rowStatus || defaultStatus}
+                          </span>
+                        </td>
+                        <td style={{ padding: '8px 10px' }}>
+                          {(r.isClosedBox || defaultCloseBox) ? (
+                            <span style={{ color: '#ef4444', fontWeight: 700, fontSize: 11 }}>🔒 YES</span>
+                          ) : (
+                            <span style={{ color: '#64748b', fontSize: 11 }}>NO</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '8px 10px', color: !r.isValid ? '#fca5a5' : r.warnings?.length ? '#d7c6ff' : r.isDuplicate ? '#fbbf24' : '#a78bfa', maxWidth: 230, lineHeight: 1.5 }}>
+                          {!r.isValid ? r.errors?.join(' • ') : <>
+                            {r.isDuplicate && <div style={{ color: '#fbbf24', marginBottom: 5 }}>⚠ {r.duplicateReason}</div>}
+                            {r.warnings?.length ? `⚠ ${r.warnings.join(' • ')}` : !r.isDuplicate ? 'সঠিক' : null}
+                            {r.isDuplicate && <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, color: r.skipDuplicate ? '#fca5a5' : '#fde68a', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                              <input type="checkbox" checked={Boolean(r.skipDuplicate)} onChange={(e) => setParsedRows((rows) => rows.map((item) => item.rowNum === r.rowNum ? { ...item, skipDuplicate: e.target.checked } : item))} style={{ accentColor: '#f59e0b' }} />
+                              এই row বাদ দিন
+                            </label>}
+                          </>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {invalidCount > 0 && (
+                <div style={{ marginTop: 8, padding: '9px 12px', border: '1px solid rgba(248,113,113,.35)', borderRadius: 8, background: 'rgba(127,29,29,.15)', color: '#fca5a5', fontSize: 12 }}>
+                  <strong>যে row-গুলো import হবে না:</strong>{' '}
+                  {parsedRows.filter((r) => !r.isValid).map((r) => `Row ${r.rowNum}: ${r.errors.join(', ')}`).join(' | ')}
+                </div>
+              )}
+              {skippedDuplicateCount > 0 && (
+                <div style={{ marginTop: 8, padding: '9px 12px', border: '1px solid rgba(251,191,36,.3)', borderRadius: 8, background: 'rgba(120,53,15,.12)', color: '#fde68a', fontSize: 12 }}>
+                  <strong>{skippedDuplicateCount}টি duplicate row বাদ দেওয়া হয়েছে।</strong> চাইলে উপরের বাটন দিয়ে আবার অন্তর্ভুক্ত করতে পারবেন।
+                </div>
+              )}
+              {warningCount > 0 && (
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 8, padding: '10px 12px', border: '1px solid rgba(251,191,36,.35)', borderRadius: 8, background: 'rgba(120,53,15,.16)', color: '#fde68a', fontSize: 12, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={allowUncataloguedProducts} onChange={(e) => setAllowUncataloguedProducts(e.target.checked)} style={{ width: 16, height: 16, flex: '0 0 16px', marginTop: 2, accentColor: '#8b5cf6' }} />
+                  <span><strong>{warningCount}টি row-এর পণ্য বর্তমান ক্যাটালগে নেই।</strong> আমি যাচাই করেছি; ফাইলের পণ্যের নাম ও SKU অপরিবর্তিত রেখে custom order item হিসেবে import করতে সম্মতি দিচ্ছি।</span>
+                </label>
+              )}
+            </div>
+          )}
+
+          {errMsg && (
+            <div style={{ padding: '10px 14px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef4444', borderRadius: 8, color: '#fca5a5', fontSize: 13 }}>
+              ❌ {errMsg}
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div
+          style={{
+            padding: '14px 22px',
+            borderTop: '1px solid #1e293b',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 12,
+            background: '#090d16',
+          }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            style={{
+              background: 'transparent',
+              border: '1px solid #475569',
+              color: '#cbd5e1',
+              padding: '8px 16px',
+              borderRadius: 8,
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            বাতিল
+          </button>
+          <button
+            type="button"
+            onClick={handleImport}
+            disabled={submitting || importCount === 0 || (warningCount > 0 && !allowUncataloguedProducts)}
+            style={{
+              background: importCount > 0 && (warningCount === 0 || allowUncataloguedProducts) ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : '#334155',
+              border: 'none',
+              color: '#ffffff',
+              padding: '8px 20px',
+              borderRadius: 8,
+              fontSize: 13.5,
+              fontWeight: 700,
+              cursor: importCount > 0 && !submitting && (warningCount === 0 || allowUncataloguedProducts) ? 'pointer' : 'not-allowed',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              boxShadow: importCount > 0 && (warningCount === 0 || allowUncataloguedProducts) ? '0 4px 14px rgba(16, 185, 129, 0.4)' : 'none',
+            }}
+          >
+            {submitting ? (
+              <span>ইমপোর্ট হচ্ছে... ⏳</span>
+            ) : (
+              <span>🚀 {importCount} টি অর্ডার ইমপোর্ট করুন</span>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OrdersAdmin({
+  onNavigateIntegrations,
+  searchQuery,
+  onSearchChange,
+}: {
+  onNavigateIntegrations: () => void;
+  searchQuery?: string;
+  onSearchChange?: (q: string) => void;
+}) {
   const [orders, setOrders] = useState<any[]>([]);
+  const [savedCallSummaries, setSavedCallSummaries] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
-  const [range, setRange] = useState('all');
+  const [initialOrdersView] = useState<any>(() => {
+    try {
+      const raw = sessionStorage.getItem('orders_initial_view');
+      if (!raw) return null;
+      sessionStorage.removeItem('orders_initial_view');
+      return JSON.parse(raw);
+    } catch { return null; }
+  });
+  const [filter, setFilter] = useState(() => {
+    if (initialOrdersView) {
+      try { sessionStorage.removeItem('orders_status_filter'); } catch {}
+      const requested = String(initialOrdersView.filter || 'all');
+      if (['all', ...STATUSES, 'courier_hold', 'exchange', 'ready_to_ship'].includes(requested)) return requested;
+      return 'all';
+    }
+    try {
+      const saved = sessionStorage.getItem('orders_status_filter');
+      if (saved) {
+        sessionStorage.removeItem('orders_status_filter');
+        return saved;
+      }
+    } catch {}
+    return 'all';
+  });
+  const [range, setRange] = useState(() => {
+    const saved = String(initialOrdersView?.range || 'all');
+    return ['all', '1', 'yesterday', '7', '14', '30', '90', 'custom'].includes(saved) ? saved : 'all';
+  });
+  const [customDateFrom, setCustomDateFrom] = useState('');
+  const [customDateTo, setCustomDateTo] = useState('');
   const [sort, setSort] = useState('new');
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(() => {
+    if (searchQuery != null && searchQuery !== '') return searchQuery;
+    if (initialOrdersView) {
+      try { sessionStorage.removeItem('orders_search_query'); } catch {}
+      return typeof initialOrdersView.search === 'string' ? initialOrdersView.search : '';
+    }
+    try {
+      const saved = sessionStorage.getItem('orders_search_query');
+      if (saved) {
+        sessionStorage.removeItem('orders_search_query');
+        return saved;
+      }
+    } catch {}
+    return '';
+  });
+
+  useEffect(() => {
+    if (searchQuery !== undefined && searchQuery !== q) {
+      setQ(searchQuery);
+    }
+  }, [searchQuery]);
+  const [campaignFilter, setCampaignFilter] = useState(() => {
+    const saved = sessionStorage.getItem('orders_campaign_filter') || '';
+    if (saved) sessionStorage.removeItem('orders_campaign_filter');
+    return saved;
+  });
+  const [landingFilter, setLandingFilter] = useState(() => String(initialOrdersView?.landingFilter || ''));
+  const [skuFilter, setSkuFilter] = useState('');
+  const [courierFilter, setCourierFilter] = useState('');
+  const [bulkActionsHint, setBulkActionsHint] = useState(() => Boolean(initialOrdersView?.bulkActions));
+  const [repeatCustomerTarget, setRepeatCustomerTarget] = useState<{ phone: string; name: string } | null>(null);
+  const skuOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const o of (Array.isArray(orders) ? orders : [])) {
+      for (const it of (Array.isArray(o?.items) ? o.items : [])) {
+        const sku = String(it?.sku || '').trim();
+        const nm = String(it?.name || '').trim();
+        const key = sku || nm;
+        if (key && !map.has(key)) {
+          map.set(key, sku && nm ? `[${sku}] ${nm}` : key);
+        }
+      }
+    }
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [orders]);
+  const campaignOptions = useMemo(() => {
+    const set = new Set<string>();
+    (Array.isArray(orders) ? orders : []).forEach((o) => {
+      const c = String(o?.attribution?.campaign || '').trim();
+      if (c) set.add(c);
+    });
+    return Array.from(set).sort();
+  }, [orders]);
   const switchTab = (tab: string) => {
     setFilter(tab);
     setRange('all');
     setPage(1);
+    if (tab === 'shipped') {
+      setShippedLayout('board');
+      setCourierStatusFilter('all');
+    }
   };
+
+  useEffect(() => {
+    const onSetFilter = (e: any) => {
+      if (e?.detail) switchTab(e.detail);
+    };
+    const onSetSearch = (e: any) => {
+      if (e?.detail != null) {
+        setQ(e.detail);
+        switchTab('all');
+      }
+    };
+    const onNavigate = (e: any) => {
+      const next = e?.detail || {};
+      switchTab(next.filter || 'all');
+      setQ(String(next.search || ''));
+      setRange(String(next.range || 'all'));
+      setCustomDateFrom('');
+      setCustomDateTo('');
+      setCampaignFilter('');
+      setSkuFilter('');
+      setLandingFilter(String(next.landingFilter || ''));
+      setBulkActionsHint(Boolean(next.bulkActions));
+    };
+    const onOpenBulkActions = () => setBulkActionsHint(true);
+    const onOpenCreate = () => setShowCreateModal(true);
+    window.addEventListener('orders-set-filter', onSetFilter);
+    window.addEventListener('orders-set-search', onSetSearch);
+    window.addEventListener('orders-navigate', onNavigate);
+    window.addEventListener('orders-open-bulk-actions', onOpenBulkActions);
+    window.addEventListener('open-create-order-modal', onOpenCreate);
+    return () => {
+      window.removeEventListener('orders-set-filter', onSetFilter);
+      window.removeEventListener('orders-set-search', onSetSearch);
+      window.removeEventListener('orders-navigate', onNavigate);
+      window.removeEventListener('orders-open-bulk-actions', onOpenBulkActions);
+      window.removeEventListener('open-create-order-modal', onOpenCreate);
+    };
+  }, []);
   const [sel, setSel] = useState<any>(null);
   const [exchangeOrderTarget, setExchangeOrderTarget] = useState<any>(null);
   const [allProductsList, setAllProductsList] = useState<any[]>([]);
   const [accountsList, setAccountsList] = useState<any[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [bulkCloseBox, setBulkCloseBox] = useState(false);
   const [picked, setPicked] = useState<Record<string, boolean>>({});
   const prevCount = useRef<number | null>(null);
   const [toast, setToast] = useState('');
@@ -4443,10 +6738,15 @@ function OrdersAdmin() {
     }).catch(() => {});
     aFetch('/landings').then((r) => (r.ok ? r.json() : [])).then((lps: any[]) => { const lm: any = {}; (Array.isArray(lps) ? lps : []).forEach((lp) => { if (lp?.slug) lm[lp.slug] = lp; }); setLandingMap(lm); }).catch(() => {});
   }, []);
-  const [courierOpts, setCourierOpts] = useState<string[]>(COURIERS);
+  const [courierOpts, setCourierOpts] = useState<string[]>([]);
+  const courierFilterOptions = useMemo(() => Array.from(new Set([
+    ...courierOpts,
+    ...(Array.isArray(orders) ? orders.map((o: any) => String(o?.courier?.name || '').trim()).filter(Boolean) : []),
+  ])).sort((a, b) => a.localeCompare(b)), [courierOpts, orders]);
   useEffect(() => {
     aFetch('/admin/integrations').then((r) => (r.ok ? r.json() : null)).then((d) => {
-      const couriers = (d?.couriers || []).filter((c: any) => c.enabled);
+      const nativeProviders = ['pathao', 'steadfast', 'carrybee', 'redx'];
+      const couriers = (d?.couriers || []).filter((c: any) => c.enabled && (c.bookUrl || nativeProviders.includes(String(c.provider || '').toLowerCase())));
       setAccountsList(couriers);
       const labels = couriers.map((c: any) => c.label).filter(Boolean);
       if (labels.length) setCourierOpts(labels);
@@ -4460,17 +6760,25 @@ function OrdersAdmin() {
   const defaultCourierFor = (o: any) => {
     const dist = o.customer?.district || detectDistrict(o.customer?.address || '');
     const sugg = suggestCourier(dist);
-    if (courierOpts.includes(sugg)) return sugg;
-    return courierOpts[0] || 'Pathao';
+    const suggestedAccount = accountsList.find((a: any) => a.enabled && (a.label === sugg || String(a.provider || '').toLowerCase() === sugg.toLowerCase()));
+    const existingAccount = accountsList.find((a: any) => a.enabled && a.id === o.courier?.accountId);
+    return existingAccount?.label || suggestedAccount?.label || accountsList.find((a: any) => a.enabled)?.label || '';
   };
 
   const handleSendToCourier = async (o: any) => {
-    const courierName = selectedCourierMap[o.id] || o.courier?.name || defaultCourierFor(o);
+    const selected = selectedCourierMap[o.id] || defaultCourierFor(o);
+    const account = accountsList.find((a: any) => a.enabled && (a.id === selected || a.label === selected || a.provider === selected));
+    if (!account) {
+      setToast('No active courier API account. Configure one in Integrations (APIs).');
+      setTimeout(() => setToast(''), 4000);
+      return;
+    }
+    const courierName = account.label || account.provider;
     setBookingId(o.id);
     try {
       const r = await aFetch('/admin/courier/book', {
         method: 'POST',
-        body: JSON.stringify({ orderId: o.id, courierName })
+        body: JSON.stringify({ orderId: o.id, accountId: account.id, courierName })
       }).then((x) => x.json());
       if (r.ok) {
         setOrders((os) => os.map((x) => (x.id === o.id ? { ...x, status: 'shipped', courier: r.courier || { name: courierName } } : x)));
@@ -4507,6 +6815,8 @@ function OrdersAdmin() {
   const phoneCount = useMemo(() => { const m: Record<string, number> = {}; (Array.isArray(orders) ? orders : []).forEach((o) => { const p = o?.customer?.phone; if (p) m[p] = (m[p] || 0) + 1; }); return m; }, [orders]);
   const successByPhone = useMemo(() => { const m: Record<string, { d: number; c: number }> = {}; (Array.isArray(orders) ? orders : []).forEach((o) => { const p = o?.customer?.phone; if (!p) return; if (!m[p]) m[p] = { d: 0, c: 0 }; if (o.status === 'delivered') m[p].d++; else if (o.status === 'cancelled') m[p].c++; }); return m; }, [orders]);
   const ratioFor = (phone: string) => { const r = successByPhone[phone]; if (!r || r.d + r.c === 0) return null; return Math.round((r.d / (r.d + r.c)) * 100); };
+  const [courierHistoryByPhone, setCourierHistoryByPhone] = useState<Record<string, any>>({});
+  const courierHistoryCache = useRef<Record<string, any>>(getCourierScoreSessionCache());
   const quickStatus = async (id: string, status: string) => {
     setOrders((os) => (Array.isArray(os) ? os : []).map((x) => (x.id === id ? { ...x, status } : x)));
     setSel((prev: any) => (prev && prev.id === id ? { ...prev, status } : prev));
@@ -4519,16 +6829,122 @@ function OrdersAdmin() {
       }
     } catch {}
   };
+  const saveManualCallLog = async (order: any, outcome: 'talked' | 'attempted') => {
+    try {
+      const res = await aFetch('/orders/' + encodeURIComponent(order.id) + '/manual-call', {
+        method: 'POST',
+        body: JSON.stringify({ outcome })
+      });
+      const updated = await res.json();
+      if (!res.ok) throw new Error(updated?.error || 'Could not save call note');
+      setOrders((current) => (Array.isArray(current) ? current : []).map((x) => x.id === order.id ? updated : x));
+      setSel((current: any) => current?.id === order.id ? updated : current);
+      setToast(outcome === 'talked' ? 'Call marked: spoke with customer' : 'Call attempt saved');
+      setTimeout(() => setToast(''), 2500);
+    } catch (error: any) {
+      setToast(error?.message || 'Could not save call note');
+      setTimeout(() => setToast(''), 3500);
+    }
+  };
+  const [lostViewMode, setLostViewMode] = useState<'unreturned' | 'confirmed'>('confirmed');
+  const [shippedViewMode, setShippedViewMode] = useState<'unprinted' | 'printed' | 'all'>('unprinted');
+  const [shippedLayout, setShippedLayout] = useState<'list' | 'board'>('board');
+  const [courierStatusFilter, setCourierStatusFilter] = useState<'all' | 'booked' | 'picked_up' | 'in_transit' | 'out_for_delivery' | 'delivered' | 'returned' | 'hold' | 'cancelled' | 'lost' | 'unknown'>('all');
+  const getCourierStatusGroup = (o: any): 'booked' | 'picked_up' | 'in_transit' | 'out_for_delivery' | 'delivered' | 'returned' | 'hold' | 'cancelled' | 'lost' | 'unknown' => {
+    const raw = String(o?.courier?.liveStatus || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const orderStatus = String(o?.status || '').toLowerCase();
+    if (orderStatus === 'delivered') return 'delivered';
+    if (orderStatus === 'return') return 'returned';
+    if (orderStatus === 'cancelled') return 'cancelled';
+    if (orderStatus === 'lost') return 'lost';
+    if (orderStatus === 'hold' || orderStatus === 'courier_hold') return 'hold';
+    if (!raw) return 'unknown';
+    if (/return|returned|rto|partial_delivered/.test(raw)) return 'returned';
+    if (/cancel|canceled|cancelled|rejected/.test(raw)) return 'cancelled';
+    if (/lost|missing|damaged/.test(raw)) return 'lost';
+    if (/not_delivered|undelivered|delivery_failed|failed|hold|resched|delay|unreach|not_available|attempt/.test(raw)) return 'hold';
+    if (/delivered|successful|completed/.test(raw)) return 'delivered';
+    if (/out_for_delivery|delivery_in_progress|assigned_for_delivery|last_mile/.test(raw)) return 'out_for_delivery';
+    if (/picked_up|pickup_assigned|collected|picked/.test(raw)) return 'picked_up';
+    if (/in_transit|intransit|at_hub|sorting|dispatch/.test(raw)) return 'in_transit';
+    if (/created|booked|confirmed|accepted|pending|pickup_requested|pickup_pending/.test(raw)) return 'booked';
+    return 'unknown';
+  };
+  const isCourierPickedOrInTransit = (o: any): boolean => {
+    const ls = String(o?.courier?.liveStatus || '').toLowerCase();
+    return /\b(picked|picked_up|in_transit|intransit|at_hub|out_for_delivery|delivery_in_progress|at_the_sorting_hub|received_at_last_mile_hub|dispatched)\b/.test(ls);
+  };
+  const isHandedOrPrintedOrder = (o: any): boolean => !!(o?.slipPrintedAt || isCourierPickedOrInTransit(o));
+  const markOrdersPrinted = async (list: any[]) => {
+    const nowIso = new Date().toISOString();
+    const ids = new Set(list.map((o) => o.id));
+    setOrders((os) => (Array.isArray(os) ? os : []).map((x) => (ids.has(x.id) ? { ...x, slipPrintedAt: nowIso, slipPrintCount: (x.slipPrintCount || 0) + 1 } : x)));
+    await Promise.all(list.map((o) => aFetch('/orders/' + o.id, {
+      method: 'PATCH',
+      body: JSON.stringify({ slipPrintedAt: nowIso, slipPrintCount: (o.slipPrintCount || 0) + 1 })
+    }).catch(() => {})));
+  };
+  const handleSafePrint = async (list: any[], mode: 'slips' | 'pdf' | 'invoices') => {
+    if (!list.length) return;
+    const already = list.filter((o) => isHandedOrPrintedOrder(o));
+    const fresh = list.filter((o) => !isHandedOrPrintedOrder(o));
+    let target = list;
+    if (already.length > 0 && fresh.length > 0) {
+      if (confirm(`⚠️ এর মধ্যে ${already.length} টি পার্সেল আগেই প্রিন্ট/কুরিয়ারে হ্যান্ডওভার করা হয়েছে!\n\nডাবল পাঠানো এড়াতে শুধু নতুন ${fresh.length} টি প্রিন্ট করবেন?`)) {
+        target = fresh;
+      } else if (!confirm(`তাহলে কি পুরোনোসহ সবগুলো (${list.length} টি) প্রিন্ট করতে চান?`)) {
+        return;
+      }
+    } else if (already.length > 0 && fresh.length === 0) {
+      if (!confirm(`⚠️ সতর্কতা: এই সবগুলো (${already.length} টি) পার্সেল আগেই প্রিন্ট বা কুরিয়ারে হ্যান্ডওভার করা হয়েছে!\n\nডাবল পাঠানো এড়াতে নিশ্চিত হয়ে নিন। আবার প্রিন্ট করবেন?`)) {
+        return;
+      }
+    }
+    if (mode === 'pdf') downloadSlipsPdf(target);
+    else if (mode === 'invoices') printInvoices(target);
+    else printSlips(target);
+    await markOrdersPrinted(target);
+  };
+  const markReturnReceived = async (id: string) => {
+    const nowIso = new Date().toISOString();
+    setOrders((os) => (Array.isArray(os) ? os : []).map((x) => (x.id === id ? { ...x, returnReceivedAt: nowIso } : x)));
+    setToast(`Order #${id} → Return Received ✓`);
+    setTimeout(() => setToast(''), 2500);
+    try {
+      await aFetch('/orders/' + id, { method: 'PATCH', body: JSON.stringify({ returnReceivedAt: nowIso }) });
+    } catch {}
+  };
   const isCourierHoldOrder = (o: any): boolean => {
     if (!o) return false;
     const st = String(o.status || '').toLowerCase();
-    if (['delivered', 'return', 'cancelled'].includes(st)) return false;
+    if (['delivered', 'return', 'cancelled', 'lost'].includes(st)) return false;
     if (st === 'courier_hold') return true;
     const hasConsignment = !!(o.courier && o.courier.consignment);
     if (!hasConsignment) return false;
     if (st === 'hold') return true;
     const ls = String(o.courier?.liveStatus || '').toLowerCase();
     return /hold|resched|delay|attempt|unreach|not_available/.test(ls);
+  };
+  const isLostParcelOrder = (o: any): boolean => {
+    if (!o) return false;
+    const st = String(o.status || '').toLowerCase();
+    if (st === 'lost') return true;
+    if (o.lossClaim) return true;
+    const ls = String(o.courier?.liveStatus || '').toLowerCase();
+    return /\b(lost|missing|damaged)\b/.test(ls);
+  };
+  const isReturnReceivedOrder = (o: any): boolean => {
+    if (!o) return false;
+    if (o.returnReceivedAt) return true;
+    return Array.isArray(o.history) && o.history.some((h: any) => /return received|restocked via qr/i.test(String(h?.note || '')));
+  };
+  const isUnreturnedCourierOrder = (o: any): boolean => {
+    if (!o || isLostParcelOrder(o) || isReturnReceivedOrder(o)) return false;
+    if (!o.courier?.consignment) return false;
+    const st = String(o.status || '').toLowerCase();
+    if (st === 'cancelled') return false;
+    const ls = String(o.courier?.liveStatus || '').toLowerCase();
+    return st === 'return' || /\b(return|returned|rto|partial_delivered)\b/.test(ls);
   };
 
   const getOrderEventTime = (o: any, statusFilter: string): number => {
@@ -4561,6 +6977,11 @@ function OrdersAdmin() {
       if (statusFilter === 'return') {
         if (o.returnedAt) return new Date(o.returnedAt).getTime();
       }
+      if (statusFilter === 'lost') {
+        if (o.lossClaim?.flaggedAt) return new Date(o.lossClaim.flaggedAt).getTime();
+        if (o.courier?.courierUpdatedAt) return new Date(o.courier.courierUpdatedAt).getTime();
+        if (o.courier?.lastSync) return new Date(o.courier.lastSync).getTime();
+      }
       if (statusFilter === 'cancelled') {
         if (o.cancelledAt) return new Date(o.cancelledAt).getTime();
       }
@@ -4575,7 +6996,20 @@ function OrdersAdmin() {
     const now = new Date();
     if (rangeVal === '1') {
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      return time >= startOfToday;
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - 1;
+      return time >= startOfToday && time <= endOfToday;
+    }
+    if (rangeVal === 'yesterday') {
+      const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      return time >= startOfYesterday && time < startOfToday;
+    }
+    if (rangeVal === 'custom') {
+      const from = customDateFrom ? new Date(`${customDateFrom}T00:00:00`).getTime() : null;
+      const to = customDateTo ? new Date(`${customDateTo}T23:59:59.999`).getTime() : null;
+      if (from == null && to == null) return false;
+      if (from != null && to != null && from > to) return false;
+      return (from == null || time >= from) && (to == null || time <= to);
     }
     const days = parseInt(rangeVal, 10);
     if (isNaN(days)) return true;
@@ -4586,16 +7020,60 @@ function OrdersAdmin() {
   const shown = useMemo(() => {
     const query = q.trim().toLowerCase();
     const list = (Array.isArray(orders) ? orders : []).filter((o) => {
-      if (filter === 'courier_hold') {
+      const taggedLanding = Array.isArray(o?.tags) ? o.tags.find((tag: any) => String(tag || '').toLowerCase().startsWith('landing:')) : '';
+      const sourceLanding = String(o?.source || '').toLowerCase().startsWith('landing:') ? String(o.source).slice(8) : '';
+      const orderLanding = String(o?.landing || o?.landingSlug || sourceLanding || taggedLanding?.slice?.(8) || '').trim().toLowerCase().replace(/^\/?l\//, '').replace(/^landing:/, '').replace(/^landing_/, '');
+      const isManual = ['manual', 'phone_call', 'whatsapp', 'phone'].includes(String(o?.source || o?.channel || '').toLowerCase());
+      if (landingFilter === '__all_web__' || landingFilter === '__web__') {
+        if (isManual) return false;
+      } else if (landingFilter === '__store__') {
+        if (orderLanding || isManual) return false;
+      } else if (landingFilter) {
+        const landing = Object.values(landingMap).find((lp: any) => String(lp?.slug || lp?.id || '').toLowerCase() === landingFilter.toLowerCase()) as any;
+        const candidates = [landingFilter, landing?.slug, landing?.id, ...(Array.isArray(landing?.aliases) ? landing.aliases : [])]
+          .filter(Boolean)
+          .map((value) => String(value).trim().toLowerCase().replace(/^\/?l\//, '').replace(/^landing:/, '').replace(/^landing_/, ''));
+        if (!orderLanding || !candidates.includes(orderLanding)) return false;
+      }
+      if (filter === 'ready_to_ship') {
+        if (!['approved', 'confirmed'].includes(String(o.status || '').toLowerCase()) || o.courier?.consignment) return false;
+      } else if (filter === 'courier_hold') {
         if (!isCourierHoldOrder(o)) return false;
+      } else if (filter === 'lost') {
+        if (lostViewMode === 'unreturned') {
+          if (!isUnreturnedCourierOrder(o)) return false;
+        } else {
+          if (!isLostParcelOrder(o)) return false;
+        }
       } else if (filter === 'hold') {
         if (o.status !== 'hold' || isCourierHoldOrder(o)) return false;
       } else if (filter === 'exchange') {
         if (!o.isExchange && o.exchangeStatus !== 'exchange_in_progress') return false;
+      } else if (filter === 'shipped') {
+        if (shippedLayout === 'board') {
+          if (!o.courier?.consignment && o.status !== 'shipped') return false;
+          if (!['shipped', 'delivered', 'return', 'hold', 'courier_hold', 'cancelled', 'lost'].includes(String(o.status || '').toLowerCase())) return false;
+        } else {
+          if (o.status !== 'shipped') return false;
+          if (shippedViewMode === 'unprinted' && isHandedOrPrintedOrder(o)) return false;
+          if (shippedViewMode === 'printed' && !isHandedOrPrintedOrder(o)) return false;
+          if (courierStatusFilter !== 'all' && getCourierStatusGroup(o) !== courierStatusFilter) return false;
+        }
       } else if (filter !== 'all' && o.status !== filter) return false;
       const eventTime = getOrderEventTime(o, filter);
       if (!matchesOrderRange(eventTime, range)) return false;
-      if (query && !(o.id + ' ' + (o.customer?.name || '') + ' ' + (o.customer?.phone || '') + ' ' + (o.source || '') + ' ' + (o.courier?.consignment || '') + ' ' + (o.courier?.riderNote || '')).toLowerCase().includes(query)) return false;
+      if (campaignFilter) {
+        const oc = String(o?.attribution?.campaign || '').trim();
+        if (campaignFilter === '__direct__') { if (oc) return false; }
+        else if (oc !== campaignFilter) return false;
+      }
+      if (skuFilter) {
+        const hasSku = (Array.isArray(o?.items) ? o.items : []).some((it: any) => String(it?.sku || '').trim() === skuFilter || String(it?.name || '').trim() === skuFilter);
+        if (!hasSku) return false;
+      }
+      if (courierFilter && String(o?.courier?.name || 'Unassigned').trim().toLowerCase() !== courierFilter.toLowerCase()) return false;
+      const itemsText = (Array.isArray(o?.items) ? o.items : []).map((it: any) => `${it?.sku || ''} ${it?.name || ''}`).join(' ');
+      if (query && !(o.id + ' ' + (o.customer?.name || '') + ' ' + (o.customer?.phone || '') + ' ' + (o.source || '') + ' ' + (o.attribution?.campaign || '') + ' ' + (o.courier?.consignment || '') + ' ' + (o.courier?.riderNote || '') + ' ' + itemsText).toLowerCase().includes(query)) return false;
       return true;
     });
     return list.sort((a, b) => {
@@ -4604,36 +7082,123 @@ function OrdersAdmin() {
       const tB = getOrderEventTime(b, filter);
       return sort === 'old' ? (tA - tB) : (tB - tA);
     });
-  }, [orders, filter, range, sort, q]);
+  }, [orders, filter, lostViewMode, shippedViewMode, shippedLayout, courierStatusFilter, range, customDateFrom, customDateTo, sort, q, campaignFilter, skuFilter, courierFilter, landingFilter, landingMap]);
   const PAGE = 25;
   const [page, setPage] = useState(1);
-  useEffect(() => { setPage(1); }, [filter, range, sort, q]);
+  useEffect(() => { setPage(1); }, [filter, range, customDateFrom, customDateTo, sort, q, campaignFilter, skuFilter, courierFilter, courierStatusFilter, landingFilter]);
   const pageCount = Math.max(1, Math.ceil(shown.length / PAGE));
   const curPage = Math.min(page, pageCount);
   const paged = shown.slice((curPage - 1) * PAGE, curPage * PAGE);
+  const visibleOrderIds = JSON.stringify(paged.map((order) => String(order.id || '')).filter(Boolean));
+  useEffect(() => {
+    let active = true;
+    const orderIds = JSON.parse(visibleOrderIds) as string[];
+    if (!orderIds.length) return () => { active = false; };
+    aFetch('/calls/order-summaries', {
+      method: 'POST',
+      body: JSON.stringify({ orderIds })
+    }).then(async (res) => {
+      if (!res.ok) throw new Error('Could not load call summaries');
+      return res.json();
+    }).then((data) => {
+      if (active && data?.summaries) setSavedCallSummaries((current) => ({ ...current, ...data.summaries }));
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [visibleOrderIds]);
+  const visiblePhoneKeys = Array.from(new Set(paged.map((o) => normalizeBDMobile(o?.customer?.phone || '')).filter((p) => isValidBDMobile(p))));
+  const visiblePhoneKey = visiblePhoneKeys.join(',');
+  useEffect(() => {
+    const phoneKeys = visiblePhoneKey ? visiblePhoneKey.split(',') : [];
+    let cancelled = false;
+    setCourierHistoryByPhone((current) => {
+      const next = { ...current };
+      phoneKeys.forEach((phone) => {
+        const cached = courierHistoryCache.current[phone];
+        if (cached && !cached.loading) next[phone] = cached;
+      });
+      return next;
+    });
+    const now = Date.now();
+    const missing = phoneKeys.filter((phone) => {
+      const cached = courierHistoryCache.current[phone];
+      return !cached || (!cached.loading && now - Number(cached.at || 0) > (cached.error ? 60_000 : COURIER_SCORE_CACHE_TTL));
+    });
+    missing.forEach((phone) => { courierHistoryCache.current[phone] = { loading: true, at: now }; });
+    if (missing.length) setCourierHistoryByPhone((current) => {
+      const next = { ...current };
+      missing.forEach((phone) => { next[phone] = { loading: true, at: now }; });
+      return next;
+    });
+    let nextIndex = 0;
+    const worker = async () => {
+      while (!cancelled) {
+        const phone = missing[nextIndex++];
+        if (!phone) return;
+        let result: any;
+        try {
+          const response = await aFetch('/admin/fraud/check', { method: 'POST', body: JSON.stringify({ phone }) });
+          const data = await response.json().catch(() => null);
+          const couriers = Array.isArray(data?.couriers) ? data.couriers.map((c: any) => ({
+            courier: String(c?.courier || ''),
+            source: String(c?.source || ''),
+            total: Number(c?.total) || 0,
+            delivered: Number(c?.delivered) || 0,
+            cancelled: Number(c?.cancelled) || 0,
+            status: String(c?.status || ''),
+            notice: String(c?.notice || '').slice(0, 180),
+            rating: String(c?.rating || '').slice(0, 80),
+          })) : [];
+          result = response.ok && data && data.ok !== false && !data.error ? { couriers, at: Date.now() } : { error: true, at: Date.now() };
+        } catch {
+          result = { error: true, at: Date.now() };
+        }
+        courierHistoryCache.current[phone] = result;
+        if (!result.error) persistCourierScoreSessionCache(courierHistoryCache.current);
+        setCourierHistoryByPhone((current) => ({ ...current, [phone]: result }));
+      }
+    };
+    void Promise.all(Array.from({ length: Math.min(3, missing.length) }, () => worker()));
+    return () => { cancelled = true; };
+  }, [visiblePhoneKey]);
   const pickedIds = Object.keys(picked).filter((k) => picked[k]);
   const allChecked = paged.length > 0 && paged.every((o) => picked[o.id]);
+  const courierBoardColumns: Array<{ key: Exclude<typeof courierStatusFilter, 'all'>; label: string; color: string }> = [
+    { key: 'booked', label: 'Booked / Pickup pending', color: '#60a5fa' },
+    { key: 'picked_up', label: 'Picked up', color: '#34d399' },
+    { key: 'in_transit', label: 'In transit', color: '#38bdf8' },
+    { key: 'out_for_delivery', label: 'Out for delivery', color: '#a78bfa' },
+    { key: 'delivered', label: 'Delivered', color: '#22c55e' },
+    { key: 'returned', label: 'Returned / RTO', color: '#f97316' },
+    { key: 'hold', label: 'Hold / Issue', color: '#fbbf24' },
+    { key: 'cancelled', label: 'Cancelled', color: '#fb7185' },
+    { key: 'lost', label: 'Lost / Missing', color: '#f87171' },
+    { key: 'unknown', label: 'Status needs sync', color: '#94a3b8' },
+  ];
   const toggleAll = () => { const n = { ...picked }; if (allChecked) paged.forEach((o) => delete n[o.id]); else paged.forEach((o) => (n[o.id] = true)); setPicked(n); };
   const bulkBookCouriers = async () => {
     const eligibleIds = pickedIds.filter((id) => {
       const ord = (Array.isArray(orders) ? orders : []).find((x) => x.id === id);
-      return ord && ['approved', 'confirmed'].includes(String(ord.status || '').toLowerCase());
+      return ord && ['approved', 'confirmed'].includes(String(ord.status || '').toLowerCase()) && !ord.courier?.consignment;
     });
     if (!eligibleIds.length) {
-      alert('শুধুমাত্র Approved বা Confirmed স্ট্যাটাসের অর্ডার কুরিয়ারে পাঠানো যাবে।');
+      alert('Only Approved or Confirmed orders without an existing courier shipment can be booked.');
       return;
     }
     setSyncingAll(true);
     try {
       const res = await aFetch('/admin/courier/bulk-book', {
         method: 'POST',
-        body: JSON.stringify({ orderIds: eligibleIds, courierMap: selectedCourierMap }),
+        body: JSON.stringify({ orderIds: eligibleIds, courierMap: selectedCourierMap, closeBox: bulkCloseBox }),
       }).then((r) => r.json());
-      if (res.ok) {
-        const successes = (res.results || []).filter((x: any) => x.ok).length;
-        setToast(`${successes} order(s) booked & shipped with courier!`);
+      if (Array.isArray(res.results)) {
+        const successes = res.results.filter((x: any) => x.ok);
+        const failures = res.results.filter((x: any) => !x.ok);
+        setToast(`${successes.length}/${eligibleIds.length} order(s) booked; ${failures.length} failed`);
         setTimeout(() => setToast(''), 4000);
-        setPicked({});
+        if (failures.length) {
+          const failureSummary = failures.slice(0, 15).map((x: any) => `#${x.orderId}: ${x.error || 'Booking failed'}`).join('\n');
+          alert(`এই অর্ডারগুলো কুরিয়ারে বুক হয়নি; সেগুলো নির্বাচিত রাখা হয়েছে।\n\n${failureSummary}${failures.length > 15 ? `\n…আরও ${failures.length - 15}টি ব্যর্থ` : ''}`);
+        }
         load();
       } else {
         alert('Bulk booking error: ' + (res.error || 'Failed'));
@@ -4662,7 +7227,6 @@ function OrdersAdmin() {
       return;
     }
     await Promise.all(pickedIds.map((id) => aFetch('/orders/' + id, { method: 'PATCH', body: JSON.stringify({ status }) })));
-    setPicked({});
     load();
   };
   const bulkCourier = async (name: string) => {
@@ -4696,7 +7260,6 @@ function OrdersAdmin() {
     );
     setToast(`${pickedIds.length} order(s) assigned to ${name}`);
     setTimeout(() => setToast(''), 3000);
-    setPicked({});
     load();
   };
   const pickedOrders = useMemo(() => {
@@ -4705,6 +7268,13 @@ function OrdersAdmin() {
     const extra = (Array.isArray(orders) ? orders : []).filter((o) => picked[o.id] && !shownSet.has(o.id));
     return [...inShown, ...extra];
   }, [shown, orders, picked]);
+  const pickedOrderTotal = useMemo(() => pickedOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0), [pickedOrders]);
+  const courierReadySelected = useMemo(() => pickedOrders.filter((o) => ['approved', 'confirmed'].includes(String(o.status || '').toLowerCase()) && !o.courier?.consignment), [pickedOrders]);
+  const bulkCourierChoice = useMemo(() => {
+    if (!pickedOrders.length) return '';
+    const assignedNames = Array.from(new Set(pickedOrders.map((o) => String(o.courier?.name || '').trim()).filter(Boolean)));
+    return assignedNames.length === 1 && pickedOrders.every((o) => String(o.courier?.name || '').trim() === assignedNames[0]) ? assignedNames[0] : '';
+  }, [pickedOrders]);
   const shownTotal = useMemo(() => shown.reduce((s, o) => s + o.total, 0), [shown]);
   const liveTotal = useMemo(() => shown.filter((o) => o.status !== 'cancelled').reduce((s, o) => s + o.total, 0), [shown]);
   const courierRatio = useMemo(() => {
@@ -4712,59 +7282,60 @@ function OrdersAdmin() {
     shown.forEach((o) => { const n = o.courier && o.courier.name ? o.courier.name : 'unassigned'; c[n] = (c[n] || 0) + 1; });
     return Object.entries(c).sort((a, b) => b[1] - a[1]);
   }, [shown]);
+
+  // Global Top Bar Event Listeners for Orders Actions
+  useEffect(() => {
+    const handleSync = () => syncAllCouriers();
+    const handleExport = () => {
+      if (pickedOrders.length > 0) {
+        exportCSV(pickedOrders, prodMap, landingMap, `secrate-selected-${pickedOrders.length}-orders`);
+      } else {
+        exportCSV(shown, prodMap, landingMap, filter !== 'all' ? `secrate-${filter}-orders` : 'secrate-orders');
+      }
+    };
+    const handleImport = () => setShowImportModal(true);
+    const handleCreate = () => setShowCreateModal(true);
+
+    window.addEventListener('admin-sync-couriers', handleSync);
+    window.addEventListener('admin-export-csv', handleExport);
+    window.addEventListener('admin-import-csv', handleImport);
+    window.addEventListener('admin-create-order', handleCreate);
+
+    return () => {
+      window.removeEventListener('admin-sync-couriers', handleSync);
+      window.removeEventListener('admin-export-csv', handleExport);
+      window.removeEventListener('admin-import-csv', handleImport);
+      window.removeEventListener('admin-create-order', handleCreate);
+    };
+  }, [syncAllCouriers, pickedOrders, shown, prodMap, landingMap, filter]);
+
   return (
     <>
-      <div className="sa-top">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h1>Orders</h1>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', padding: '3px 8px', borderRadius: 999, border: '1px solid rgba(34, 197, 94, 0.3)', fontWeight: 600 }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 6px #22c55e' }}></span>
-            Live Updates Active
-          </span>
-          {toast && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, background: '#8b5cf6', color: '#fff', padding: '4px 10px', borderRadius: 6, fontWeight: 600 }}>
-              ✓ {toast}
-            </span>
-          )}
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 9999, display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, background: 'rgba(124, 58, 237, 0.95)', backdropFilter: 'blur(10px)', color: '#fff', padding: '8px 18px', borderRadius: 10, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+          ✓ {toast}
         </div>
-        <div className="sa-toprow">
-          <div className="sa-search-wrap">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="sa-search-ico"><path d="M9 17A8 8 0 1 0 9 1a8 8 0 0 0 0 16zM19 19l-4.35-4.35" /></svg>
-            <input className="sa-search" placeholder="Search ID, name, phone, source…" value={q} onChange={(e) => setQ(e.target.value)} />
-            {q && <button className="sa-search-clear" type="button" onClick={() => setQ('')}>×</button>}
+      )}
+      {bulkActionsHint && (
+        <div className="sa-card sa-bulk-guide" role="status">
+          <div>
+            <strong>{adminTranslate("Bulk Order Actions")}</strong>
+            <span>Select order rows below to update status, assign a courier, print slips, or export selected orders.</span>
           </div>
-          <button
-            className="sa-btn-create-order"
-            onClick={() => setShowCreateModal(true)}
-            type="button"
-          >
-            <span style={{ fontSize: 14 }}>➕</span>
-            <span>Create New Order (Phone / WhatsApp)</span>
-          </button>
-          <button className="sa-btn ghost" onClick={syncAllCouriers} disabled={syncingAll} title="Fetch latest status for all active courier shipments">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" className={syncingAll ? 'spin' : ''} style={{ width: 13, height: 13, marginRight: 6 }}><path d="M13.5 7a5.5 5.5 0 0 0-9.4-3L2 6" /><path d="M2.5 9a5.5 5.5 0 0 0 9.4 3L14 10" /><path d="M2 2.5V6h3.5M14 13.5V10h-3.5" /></svg>
-            {syncingAll ? 'Syncing…' : 'Sync Couriers'}
-          </button>
-          <button
-            className="sa-btn ghost"
-            onClick={() =>
-              pickedOrders.length > 0
-                ? exportCSV(pickedOrders, prodMap, landingMap, `secrate-selected-${pickedOrders.length}-orders`)
-                : exportCSV(shown, prodMap, landingMap, filter !== 'all' ? `secrate-${filter}-orders` : 'timeboost-orders')
-            }
-            style={
-              pickedOrders.length > 0
-                ? { borderColor: 'rgba(139, 92, 246, 0.6)', background: 'rgba(139, 92, 246, 0.14)', color: '#ddd6fe', fontWeight: 700 }
-                : undefined
-            }
-            title={pickedOrders.length > 0 ? `Download CSV of ${pickedOrders.length} selected order(s)` : 'Download CSV of orders'}
-          >
-            {pickedOrders.length > 0 ? `📥 Export Selected CSV (${pickedOrders.length})` : '📥 Export CSV'}
-          </button>
+          <button type="button" className="sa-btn ghost sa-mini" onClick={() => setBulkActionsHint(false)} aria-label="Dismiss bulk order actions guide">Got it</button>
         </div>
-      </div>
-      <div className="sa-toolbar">
-        <div className="sa-filters">
+      )}
+      <div className="sa-toolbar sa-orders-filter-panel">
+        <div className="sa-filters sa-orders-status-filters">
+          <button
+            type="button"
+            className={filter === 'ready_to_ship' ? 'on' : ''}
+            onClick={() => switchTab('ready_to_ship')}
+            title="Approved or confirmed orders without an existing courier consignment"
+          >
+            <span>📦 Ready to Ship</span>
+            <span className="sa-filter-count">{(Array.isArray(orders) ? orders : []).filter((o) => ['approved', 'confirmed'].includes(String(o.status || '').toLowerCase()) && !o.courier?.consignment).length}</span>
+          </button>
           {['all', ...STATUSES].map((s) => {
             const allList = Array.isArray(orders) ? orders : [];
             const cnt =
@@ -4772,12 +7343,19 @@ function OrdersAdmin() {
                 ? allList.length
                 : s === 'hold'
                 ? allList.filter((o) => o.status === 'hold' && !isCourierHoldOrder(o)).length
+                : s === 'lost'
+                ? allList.filter((o) => isLostParcelOrder(o)).length
                 : allList.filter((o) => o.status === s).length;
             const chCount = s === 'shipped' ? allList.filter((o) => isCourierHoldOrder(o)).length : 0;
+            const isLostTab = s === 'lost';
             return (
               <Fragment key={s}>
-                <button className={filter === s ? 'on' : ''} onClick={() => switchTab(s)}>
-                  <span>{s === 'all' ? 'All' : s}</span>
+                <button
+                  className={filter === s ? 'on' : ''}
+                  onClick={() => switchTab(s)}
+                  title={isLostTab ? 'Parcels marked Lost / Missing / Damaged at Courier' : undefined}
+                >
+                  <span>{s === 'all' ? 'All' : isLostTab ? '🚨 Lost Parcel' : s}</span>
                   <span className="sa-filter-count">{cnt}</span>
                 </button>
                 {s === 'shipped' && (
@@ -4785,26 +7363,10 @@ function OrdersAdmin() {
                     type="button"
                     className={filter === 'courier_hold' ? 'on' : ''}
                     onClick={() => switchTab('courier_hold')}
-                    style={
-                      filter === 'courier_hold'
-                        ? { background: 'rgba(245, 158, 11, 0.25)', borderColor: '#f59e0b', color: '#fef3c7', fontWeight: 700 }
-                        : chCount > 0
-                        ? { borderColor: 'rgba(245, 158, 11, 0.55)', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.08)' }
-                        : { borderColor: 'rgba(245, 158, 11, 0.3)', color: '#d97706' }
-                    }
                     title="Parcels held/rescheduled/attempted at Courier"
                   >
                     <span>⚠️ Courier Hold</span>
-                    <span
-                      className="sa-filter-count"
-                      style={{
-                        background: chCount > 0 ? '#f59e0b' : 'rgba(245, 158, 11, 0.25)',
-                        color: chCount > 0 ? '#000' : '#fde68a',
-                        fontWeight: 800,
-                      }}
-                    >
-                      {chCount}
-                    </span>
+                    <span className="sa-filter-count">{chCount}</span>
                   </button>
                 )}
               </Fragment>
@@ -4817,119 +7379,315 @@ function OrdersAdmin() {
                 type="button"
                 className={filter === 'exchange' ? 'on' : ''}
                 onClick={() => switchTab('exchange')}
-                style={filter === 'exchange' ? { background: 'rgba(168, 85, 247, 0.25)', borderColor: '#a855f7', color: '#e9d5ff' } : { borderColor: 'rgba(168, 85, 247, 0.4)', color: '#c084fc' }}
               >
                 <span>🔄 Exchange</span>
-                <span className="sa-filter-count" style={{ background: 'rgba(168, 85, 247, 0.35)', color: '#fff' }}>{exCount}</span>
+                <span className="sa-filter-count">{exCount}</span>
               </button>
             );
           })()}
         </div>
         <div className="sa-rightctl">
-          <select className="sa-mini" value={range} onChange={(e) => setRange(e.target.value)}><option value="all">All time</option><option value="1">Today</option><option value="7">7 days</option><option value="30">30 days</option></select>
-          <select className="sa-mini" value={sort} onChange={(e) => setSort(e.target.value)}><option value="new">Newest</option><option value="old">Oldest</option><option value="high">Highest ৳</option></select>
-        </div>
-      </div>
-      {pickedIds.length > 0 && (
-        <div className="sa-bulk">
-          <span>{pickedIds.length} selected</span>
-          {pickedOrders.some((o) => ['approved', 'confirmed'].includes(String(o.status || '').toLowerCase()) && !(o.courier && o.courier.consignment)) && (
-            <button
-              type="button"
-              onClick={bulkBookCouriers}
-              disabled={syncingAll}
-              style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#fff', fontWeight: 700, border: 'none', padding: '6px 14px', borderRadius: 8, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            >
-              🚚 Bulk Ship &amp; Book Courier
+          {skuOptions.length > 0 && (
+            <select className="sa-mini" value={skuFilter} onChange={(e) => setSkuFilter(e.target.value)} style={{ maxWidth: 200 }} title="Filter orders by Product / SKU">
+              <option value="">📦 All SKUs / Products</option>
+              {skuOptions.map(([k, lbl]) => <option key={k} value={k}>📦 {lbl}</option>)}
+            </select>
+          )}
+          {campaignOptions.length > 0 && (
+            <select className="sa-mini" value={campaignFilter} onChange={(e) => setCampaignFilter(e.target.value)} style={{ maxWidth: 190 }} title="Filter orders by Ads Campaign">
+              <option value="">🎯 All Campaigns</option>
+              <option value="__direct__">Direct / No Campaign</option>
+              {campaignOptions.map((c) => <option key={c} value={c}>🎯 {c}</option>)}
+            </select>
+          )}
+          {courierOpts.length > 0 && (
+            <select className="sa-mini" value={courierFilter} onChange={(e) => setCourierFilter(e.target.value)} title="Filter orders by courier">
+              <option value="">🚚 All couriers</option>
+              <option value="Unassigned">{adminTranslate("Unassigned")}</option>
+              {courierFilterOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
+          <select className="sa-mini" value={range} onChange={(e) => setRange(e.target.value)} title="Filter orders by date">
+            <option value="all">{adminTranslate("All time")}</option>
+            <option value="1">{adminTranslate("Today")}</option>
+            <option value="yesterday">{adminTranslate("Yesterday")}</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="custom">📅 Custom dates…</option>
+          </select>
+          {range === 'custom' && (
+            <div style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '4px 7px', borderRadius: 9, background: 'rgba(15,23,42,0.72)', border: '1px solid rgba(139,92,246,0.32)' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#94a3b8', fontSize: 11 }}>
+                From
+                <input type="date" className="sa-mini" aria-label="Start date" value={customDateFrom} max={customDateTo || undefined} onChange={(e) => setCustomDateFrom(e.target.value)} style={{ width: 142 }} />
+              </label>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#94a3b8', fontSize: 11 }}>
+                To
+                <input type="date" className="sa-mini" aria-label="End date" value={customDateTo} min={customDateFrom || undefined} onChange={(e) => setCustomDateTo(e.target.value)} style={{ width: 142 }} />
+              </label>
+              <button type="button" className="sa-btn sa-mini ghost" title="Clear custom date range" onClick={() => { setCustomDateFrom(''); setCustomDateTo(''); setRange('all'); }}>{adminTranslate("Clear")}</button>
+            </div>
+          )}
+          <select className="sa-mini" value={sort} onChange={(e) => setSort(e.target.value)}><option value="new">{adminTranslate("Newest")}</option><option value="old">Oldest</option><option value="high">Highest ৳</option></select>
+          <button
+            type="button"
+            className="sa-btn ghost sa-mini"
+            onClick={syncAllCouriers}
+            disabled={syncingAll}
+            title="Fetch latest status for all active courier shipments"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 28, padding: '0 8px', borderRadius: 6, fontSize: 11.5 }}
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" className={syncingAll ? 'spin' : ''} style={{ width: 12, height: 12 }}>
+              <path d="M13.5 7a5.5 5.5 0 0 0-9.4-3L2 6" />
+              <path d="M2.5 9a5.5 5.5 0 0 0 9.4 3L14 10" />
+              <path d="M2 2.5V6h3.5M14 13.5V10h-3.5" />
+            </svg>
+            <span>{syncingAll ? 'Syncing…' : 'Sync Couriers'}</span>
+          </button>
+          {landingFilter && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.35)', color: '#38bdf8', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>
+              🌐 {landingFilter === '__all_web__' ? 'Web Orders' : landingFilter === '__store__' ? 'Store Orders' : `Landing: ${landingFilter}`}
+              <button type="button" onClick={() => setLandingFilter('')} title="Clear web order filter" style={{ background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: 0, fontSize: 12, lineHeight: 1 }}>✕</button>
+            </span>
+          )}
+          {q && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, background: 'rgba(167, 139, 250, 0.15)', border: '1px solid rgba(167, 139, 250, 0.35)', color: '#c4b5fd', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>
+              🔍 "{q}"
+              <button type="button" onClick={() => { setQ(''); onSearchChange?.(''); }} title="Clear search" style={{ background: 'none', border: 'none', color: '#c4b5fd', cursor: 'pointer', padding: 0, fontSize: 12, lineHeight: 1 }}>✕</button>
+            </span>
+          )}
+          {(q || skuFilter || campaignFilter || courierFilter || range !== 'all' || landingFilter) && (
+            <button type="button" className="sa-btn ghost sa-orders-clear-filters" onClick={() => { setQ(''); onSearchChange?.(''); setSkuFilter(''); setCampaignFilter(''); setCourierFilter(''); setLandingFilter(''); setRange('all'); setCustomDateFrom(''); setCustomDateTo(''); }}>
+              Clear filters
             </button>
           )}
-          <select className="bulksel" value="" onChange={(e) => { if (e.target.value) bulk(e.target.value); }}>
-            <option value="">Change status…</option>
-            {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select className="bulksel" value="" onChange={(e) => { if (e.target.value) bulkCourier(e.target.value); }}>
-            <option value="">Assign courier…</option>
-            {courierOpts.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <button
-            type="button"
-            onClick={() => exportCSV(pickedOrders, prodMap, landingMap, `secrate-selected-${pickedOrders.length}-orders`)}
-            style={{ background: 'rgba(139, 92, 246, 0.2)', border: '1px solid rgba(139, 92, 246, 0.5)', color: '#e9d5ff', fontWeight: 700 }}
-          >
-            📥 Download CSV ({pickedOrders.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => downloadSlipsPdf(pickedOrders)}
+        </div>
+      </div>
+      {filter === 'shipped' && (() => {
+        const allShipped = (Array.isArray(orders) ? orders : []).filter((o) => o.status === 'shipped');
+        const allCourierShipments = (Array.isArray(orders) ? orders : []).filter((o) =>
+          (!!o.courier?.consignment || o.status === 'shipped') && ['shipped', 'delivered', 'return', 'hold', 'courier_hold', 'cancelled', 'lost'].includes(String(o.status || '').toLowerCase())
+        );
+        const unprintedCount = allShipped.filter((o) => !isHandedOrPrintedOrder(o)).length;
+        const printedCount = allShipped.filter((o) => isHandedOrPrintedOrder(o)).length;
+        const courierStatusOptions: Array<{ key: typeof courierStatusFilter; label: string }> = [
+          { key: 'all', label: 'All courier statuses' },
+          { key: 'booked', label: 'Booked / Pickup pending' },
+          { key: 'picked_up', label: 'Picked up' },
+          { key: 'in_transit', label: 'In transit' },
+          { key: 'out_for_delivery', label: 'Out for delivery' },
+          { key: 'delivered', label: 'Delivered (courier status)' },
+          { key: 'returned', label: 'Returned / RTO' },
+          { key: 'hold', label: 'Hold / Issue' },
+          { key: 'cancelled', label: 'Cancelled' },
+          { key: 'lost', label: 'Lost / Missing' },
+          { key: 'unknown', label: 'Status needs sync' },
+        ];
+        return (
+          <div
             style={{
-              background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
-              color: '#ffffff',
-              border: 'none',
-              fontWeight: 700,
-              borderRadius: 8,
-              padding: '6px 14px',
-              cursor: 'pointer',
-              display: 'inline-flex',
+              display: 'flex',
+              flexWrap: 'wrap',
               alignItems: 'center',
-              gap: 6,
-              boxShadow: '0 2px 10px rgba(139, 92, 246, 0.35)',
+              justifyContent: 'space-between',
+              gap: 10,
+              padding: '10px 14px',
+              marginBottom: 12,
+              borderRadius: 10,
+              background: 'rgba(139, 92, 246, 0.08)',
+              border: '1px solid rgba(139, 92, 246, 0.25)',
+              color: '#e2e8f0',
+              fontSize: 13,
             }}
-            title="Download delivery slips as PDF for selected orders"
           >
-            📄 Download PDF ({pickedOrders.length})
-          </button>
-          <button
-            onClick={() => printSlips(pickedOrders)}
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+              <button
+                type="button"
+                className={`sa-btn sa-mini ${shippedLayout === 'board' ? '' : 'ghost'}`}
+                onClick={() => { setShippedLayout('board'); setShippedViewMode('all'); setCourierStatusFilter('all'); }}
+              >
+                🧱 Courier status columns
+              </button>
+              <button
+                type="button"
+                className={`sa-btn sa-mini ${shippedLayout === 'list' ? '' : 'ghost'}`}
+                onClick={() => setShippedLayout('list')}
+              >
+                ☰ Order list
+              </button>
+              {shippedLayout === 'list' && <>
+              <button
+                type="button"
+                className={`sa-btn sa-mini ${shippedViewMode === 'unprinted' ? '' : 'ghost'}`}
+                onClick={() => setShippedViewMode('unprinted')}
+              >
+                🆕 Ready to Pack / Unprinted ({unprintedCount})
+              </button>
+              <button
+                type="button"
+                className={`sa-btn sa-mini ${shippedViewMode === 'printed' ? '' : 'ghost'}`}
+                onClick={() => setShippedViewMode('printed')}
+              >
+                ✅ Printed / In Courier ({printedCount})
+              </button>
+              <button
+                type="button"
+                className={`sa-btn sa-mini ${shippedViewMode === 'all' ? '' : 'ghost'}`}
+                onClick={() => setShippedViewMode('all')}
+              >
+                📦 All Shipped ({allShipped.length})
+              </button>
+              </>}
+            </div>
+            <div style={{ display: 'flex', width: '100%', flexWrap: 'wrap', alignItems: 'center', gap: 7, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+              {shippedLayout === 'list' ? <>
+              <span style={{ color: '#94a3b8', fontSize: 12, fontWeight: 700, marginRight: 2 }}>Courier status:</span>
+              {courierStatusOptions.map((option) => {
+                const count = option.key === 'all' ? allCourierShipments.length : allCourierShipments.filter((o) => getCourierStatusGroup(o) === option.key).length;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    className={`sa-btn sa-mini ${courierStatusFilter === option.key ? '' : 'ghost'}`}
+                    onClick={() => { setCourierStatusFilter(option.key); setShippedViewMode('all'); }}
+                  >
+                    {option.label} ({count})
+                  </button>
+                );
+              })}
+              </> : <span style={{ color: '#94a3b8', fontSize: 12 }}>প্রতিটি courier shipment এখন তার নিজস্ব status column-এ দেখানো হচ্ছে।</span>}
+            </div>
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>
+              পুরোনো active shipment থাকলে একই ফোন ও পণ্যের নতুন courier booking যাচাই না হওয়া পর্যন্ত আটকে থাকবে।
+            </div>
+          </div>
+        );
+      })()}
+      {filter === 'lost' && (() => {
+        const allArr = Array.isArray(orders) ? orders : [];
+        const unreturnedCount = allArr.filter((o) => isUnreturnedCourierOrder(o)).length;
+        const confirmedLostCount = allArr.filter((o) => isLostParcelOrder(o)).length;
+        const overdue7dCount = allArr.filter((o) => {
+          if (!isUnreturnedCourierOrder(o)) return false;
+          const t = getOrderEventTime(o, 'lost');
+          return t > 0 && (Date.now() - t) >= 7 * 86400000;
+        }).length;
+        const totalValue = shown.reduce((sum, o) => sum + Number(o.lossClaim?.amount || o.total || 0), 0);
+        return (
+          <div
             style={{
-              background: 'rgba(139, 92, 246, 0.15)',
-              border: '1px solid rgba(139, 92, 246, 0.4)',
-              color: '#c4b5fd',
-              fontWeight: 600,
-              borderRadius: 8,
-              padding: '6px 12px',
-              cursor: 'pointer',
-              display: 'inline-flex',
+              display: 'flex',
+              flexWrap: 'wrap',
               alignItems: 'center',
-              gap: 6,
+              justifyContent: 'space-between',
+              gap: 10,
+              padding: '10px 14px',
+              marginBottom: 12,
+              borderRadius: 10,
+              background: 'rgba(139, 92, 246, 0.08)',
+              border: '1px solid rgba(139, 92, 246, 0.25)',
+              color: '#e2e8f0',
+              fontSize: 13,
             }}
           >
-            🖨️ Print Slips
-          </button>
-          <button
-            onClick={() => printInvoices(pickedOrders)}
-            style={{
-              background: 'rgba(139, 92, 246, 0.15)',
-              border: '1px solid rgba(139, 92, 246, 0.4)',
-              color: '#c4b5fd',
-              fontWeight: 600,
-              borderRadius: 8,
-              padding: '6px 12px',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            🧾 Print Invoices
-          </button>
-          <button
-            onClick={() => setPicked({})}
-            style={{
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              color: '#94a3b8',
-              fontWeight: 500,
-              borderRadius: 8,
-              padding: '6px 12px',
-              cursor: 'pointer',
-            }}
-          >
-            Clear
-          </button>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+              <button
+                type="button"
+                className={`sa-btn sa-mini ${lostViewMode === 'unreturned' ? '' : 'ghost'}`}
+                onClick={() => setLostViewMode('unreturned')}
+              >
+                ⏳ Courier Return Pending ({unreturnedCount})
+              </button>
+              <button
+                type="button"
+                className={`sa-btn sa-mini ${lostViewMode === 'confirmed' ? '' : 'ghost'}`}
+                onClick={() => setLostViewMode('confirmed')}
+              >
+                🚨 Confirmed Lost ({confirmedLostCount})
+              </button>
+              {overdue7dCount > 0 && (
+                <span style={{ fontSize: 12, color: '#fbbf24', fontWeight: 600 }}>
+                  ⚠️ ৭+ দিন পেন্ডিং: {overdue7dCount} টি
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span>
+                <strong>Total Value:</strong>{' '}
+                <span style={{ color: '#a78bfa', fontWeight: 800 }}>৳ {totalValue.toLocaleString()}</span>
+              </span>
+              {lostViewMode === 'unreturned' && pickedIds.length > 0 && (
+                <button
+                  type="button"
+                  className="sa-btn ghost sa-mini"
+                  onClick={async () => {
+                    for (const id of pickedIds) await markReturnReceived(id);
+                    setPickedIds([]);
+                  }}
+                >
+                  ✓ Mark Selected Received
+                </button>
+              )}
+              {lostViewMode === 'unreturned' && shown.length > 0 && (
+                <button
+                  type="button"
+                  className="sa-btn ghost sa-mini"
+                  onClick={async () => {
+                    if (!confirm(`Mark all ${shown.length} pending returns as received in hand?`)) return;
+                    for (const o of shown) await markReturnReceived(o.id);
+                    setPickedIds([]);
+                  }}
+                >
+                  ✓ Clear Old (Mark All Received)
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+      {pickedIds.length > 0 && (
+        <div className="sa-bulk sa-orders-bulk" role="region" aria-label="Actions for selected orders">
+          <div className="sa-bulk-summary">
+            <span className="sa-bulk-selected-icon" aria-hidden="true">✓</span>
+            <div className="sa-bulk-selected-copy"><strong>{pickedOrders.length}</strong><span>orders selected</span></div>
+            <div className="sa-bulk-selected-value"><small>{adminTranslate("Selected total")}</small><strong>{taka(pickedOrderTotal)}</strong></div>
+          </div>
+          {courierReadySelected.length > 0 && (
+            <div className="sa-bulk-courier">
+              <div className="sa-bulk-courier-copy"><strong>{courierReadySelected.length} ready to ship</strong><span>Approved orders without an existing shipment</span></div>
+              <button type="button" className="sa-bulk-ship-btn" onClick={bulkBookCouriers} disabled={syncingAll} title="Book eligible selected orders with their assigned courier account">
+                {syncingAll ? 'Booking shipments…' : `🚚 Book courier · ${courierReadySelected.length}`}
+              </button>
+              <label className={`sa-bulk-closebox${bulkCloseBox ? ' enabled' : ''}`} title="Courier will not open the parcel until the customer pays">
+                <input type="checkbox" checked={bulkCloseBox} onChange={(e) => setBulkCloseBox(e.target.checked)} />
+                <span className="sa-bulk-closebox-icon" aria-hidden="true">🔒</span>
+                <span><strong>{adminTranslate("Close box")}</strong><small>Payment before opening</small></span>
+              </label>
+            </div>
+          )}
+          <div className="sa-bulk-controls">
+            <label className="sa-bulk-control"><span>{adminTranslate("Update status")}</span><select className="bulksel" value="" onChange={(e) => { if (e.target.value) bulk(e.target.value); }} aria-label="Update selected order status">
+              <option value="">Choose status…</option>
+              {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+            </select></label>
+            <label className="sa-bulk-control"><span>{adminTranslate("Assign courier")}</span><select className="bulksel" value={bulkCourierChoice} onChange={(e) => { if (e.target.value) bulkCourier(e.target.value); }} aria-label="Assign courier to selected orders">
+              <option value="">Choose courier…</option>
+              {courierOpts.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select></label>
+          </div>
+          <div className="sa-bulk-output-actions" aria-label="Export and print selected orders">
+            <button type="button" className="sa-bulk-action export" onClick={() => exportCSV(pickedOrders, prodMap, landingMap, `secrate-selected-${pickedOrders.length}-orders`)} title="Download selected orders as CSV">↓ <span>{adminTranslate("Export CSV")}</span><small>{pickedOrders.length}</small></button>
+            <button type="button" className="sa-bulk-action pdf" onClick={() => handleSafePrint(pickedOrders, 'pdf')} title="Download delivery slips as PDF">▤ <span>Download PDF</span></button>
+            <button type="button" className="sa-bulk-action" onClick={() => handleSafePrint(pickedOrders, 'slips')}>▤ <span>{adminTranslate("Print slips")}</span></button>
+            <button type="button" className="sa-bulk-action" onClick={() => handleSafePrint(pickedOrders, 'invoices')}>▤ <span>{adminTranslate("Print invoices")}</span></button>
+          </div>
+          <button type="button" className="sa-bulk-clear" onClick={() => setPicked({})} aria-label="Clear order selection">{adminTranslate("Clear selection")}</button>
         </div>
       )}
       <div className="sa-summary">
         <div className="sumtotal">
+          <span className="sumtotal-label">Order value in this view</span>
           <div className="sumtotal-main">
             <b>{taka(shownTotal)}</b>
             <span className="sumtotal-badge">{shown.length} order{shown.length !== 1 ? 's' : ''}</span>
@@ -4947,28 +7705,105 @@ function OrdersAdmin() {
           ))}
         </div>
       </div>
+      {filter === 'shipped' && shippedLayout === 'board' ? (
+        <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 12, alignItems: 'flex-start' }}>
+          {courierBoardColumns.map((column) => {
+            const columnOrders = shown.filter((o) => getCourierStatusGroup(o) === column.key);
+            return (
+              <section key={column.key} style={{ flex: '0 0 260px', width: 260, maxHeight: '70vh', overflowY: 'auto', borderRadius: 12, background: 'rgba(15, 18, 30, 0.84)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <header style={{ position: 'sticky', top: 0, zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '11px 12px', background: '#171522', borderBottom: '1px solid rgba(255,255,255,0.1)', borderTop: `3px solid ${column.color}`, borderRadius: '12px 12px 0 0' }}>
+                  <strong style={{ color: '#e2e8f0', fontSize: 12 }}>{column.label}</strong>
+                  <span style={{ color: column.color, fontWeight: 800, fontSize: 12 }}>{columnOrders.length}</span>
+                </header>
+                <div style={{ display: 'grid', gap: 8, padding: 8 }}>
+                  {columnOrders.map((o) => (
+                    <button key={o.id} type="button" onClick={() => setSel(o)} style={{ textAlign: 'left', display: 'grid', gap: 5, padding: 10, borderRadius: 9, background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.09)', color: '#cbd5e1', cursor: 'pointer' }}>
+                      <span style={{ display: 'flex', justifyContent: 'space-between', gap: 6, color: '#c4b5fd', fontWeight: 800, fontSize: 12 }}><span>#{String(o.id).replace(/^DOT-/, '')}</span><span>{taka(o.total)}</span></span>
+                      <span style={{ fontWeight: 700, color: '#f1f5f9', fontSize: 12 }}>{o.customer?.name || 'Customer'}</span>
+                      <span style={{ fontSize: 11 }}>{o.customer?.phone || 'No phone'} · {o.courier?.name || 'Courier unknown'}</span>
+                      <span style={{ fontSize: 11, color: '#94a3b8' }}>Consignment: {o.courier?.consignment || 'missing'}</span>
+                      <span style={{ fontSize: 11, color: column.color }}>Courier says: {o.courier?.liveStatus || 'No status received'}</span>
+                      <span style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(o.items || []).map((item: any) => `${item.name} x${item.qty || 1}`).join(', ')}</span>
+                    </button>
+                  ))}
+                  {columnOrders.length === 0 && <span style={{ padding: '12px 8px', color: '#64748b', fontSize: 11, textAlign: 'center' }}>No parcels</span>}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      ) : (
       <div className="sa-card ogwrap">
         <div className="ogrid-head">
           <span><input type="checkbox" checked={allChecked} onChange={toggleAll} /></span>
           <span>Order & Date</span>
-          <span>Customer</span>
+          <span>{adminTranslate("Customer")}</span>
           <span>Item & Option</span>
-          <span className="r">Total</span>
-          <span style={{ textAlign: 'center' }}>Status</span>
-          <span style={{ textAlign: 'center' }}>IP Call & Rec</span>
-          <span>Courier</span>
+          <span className="r">{adminTranslate("Total")}</span>
+          <span style={{ textAlign: 'center' }}>{adminTranslate("Status")}</span>
           <span style={{ textAlign: 'center' }}>Trust Score</span>
-          <span style={{ textAlign: 'right' }}>Actions</span>
+          <span style={{ textAlign: 'right' }}>{adminTranslate("Actions")}</span>
         </div>
         {paged.map((o) => {
           const first = o.items[0];
           const img = first?.image || prodMap[first?.id]?.image;
-          const ratio = ratioFor(o.customer?.phone || '');
           const cleanItem = cleanItemDisplay(first);
           const stStyle = getStatusBadgeStyle(o.status);
           const phone = o.customer?.phone ? String(o.customer.phone).trim() : '';
           const cleanPhone = phone.replace(/\D/g, '').replace(/^88/, '');
+          const normalizedPhone = normalizeBDMobile(phone);
+          const courierHistory = courierHistoryByPhone[normalizedPhone];
+          const apiCourierRows = (Array.isArray(courierHistory?.couriers) ? courierHistory.couriers : []).filter((c: any) => c?.source !== 'internal' && Number(c?.total || 0) > 0);
+          const courierRatings = (Array.isArray(courierHistory?.couriers) ? courierHistory.couriers : []).filter((c: any) => c?.source !== 'internal' && c?.status === 'rated' && c?.rating);
+          const courierApiIssues = (Array.isArray(courierHistory?.couriers) ? courierHistory.couriers : []).filter((c: any) => c?.source !== 'internal' && ['error', 'inactive'].includes(String(c?.status || '').toLowerCase()));
+          const courierApiIssueText = courierApiIssues.map((c: any) => `${c.courier}: ${c.notice || c.status}`).join(' · ');
+          const apiDelivered = apiCourierRows.reduce((sum: number, c: any) => sum + (Number(c?.delivered) || 0), 0);
+          const apiCancelled = apiCourierRows.reduce((sum: number, c: any) => sum + (Number(c?.cancelled) || 0), 0);
+          const apiFinished = apiDelivered + apiCancelled;
+          const localHistory = successByPhone[phone] || { d: 0, c: 0 };
+          const localRatio = ratioFor(phone);
+          const scoreData = apiFinished > 0
+            ? { ratio: Math.round((apiDelivered / apiFinished) * 100), delivered: apiDelivered, cancelled: apiCancelled, source: 'Courier API', courierNames: apiCourierRows.map((c: any) => c.courier).filter(Boolean) }
+            : localRatio != null
+              ? { ratio: localRatio, delivered: localHistory.d, cancelled: localHistory.c, source: 'Store history', courierNames: [] }
+              : null;
+          const ratio = scoreData?.ratio ?? null;
           const district = o.customer?.district || detectDistrict(o.customer?.address || '');
+          const orderHistoryCalls = (Array.isArray(o.history) ? o.history : [])
+            .filter((h: any) => h.status === 'call' || h.callId)
+            .map((h: any) => ({
+              ...h,
+              at: h.at || h.createdAt || h.endedAt || h.startedAt || '',
+              source: h.source === 'manual' || String(h.outcome || '').startsWith('manual_')
+                ? 'manual'
+                : String(h.staff?.role || '').toLowerCase() === 'ai' ? 'ai' : 'ip'
+            }));
+          const combinedOrderCalls = [...orderHistoryCalls, ...(savedCallSummaries[String(o.id)] || [])];
+          const orderCallEvents = Array.from(new Map(combinedOrderCalls.map((event: any, index) => [
+            String(event.id || event.callId || `${event.source}:${event.at}:${event.outcome}:${index}`), event
+          ])).values()).sort((a: any, b: any) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime());
+          const latestOrderCall = orderCallEvents[0];
+          const callOriginCounts = orderCallEvents.reduce((counts: Record<string, number>, event: any) => {
+            const source = ['ai', 'ip', 'manual'].includes(event.source) ? event.source : 'ip';
+            counts[source] = (counts[source] || 0) + 1;
+            return counts;
+          }, {});
+          const latestCallSourceLabel = latestOrderCall?.source === 'ai' ? 'AI'
+            : latestOrderCall?.source === 'manual' ? 'Manual' : latestOrderCall ? 'IP Call' : '';
+          const latestCallOutcome = String(latestOrderCall?.outcome || '');
+          const latestCallLabel = latestCallOutcome === 'manual_talked' ? 'Talked'
+            : latestCallOutcome === 'manual_attempted' ? 'Tried'
+            : latestCallOutcome === 'confirmed' ? 'Confirmed'
+            : latestCallOutcome === 'no_answer' || latestCallOutcome === 'missed' ? 'No answer'
+            : latestCallOutcome === 'call_later' ? 'Call later'
+            : latestCallOutcome === 'cancelled' ? 'Cancelled'
+            : latestOrderCall ? 'Called' : '';
+          const rawPayment = typeof o.payment === 'string' ? o.payment : '';
+          const paymentKey = String(o.paymentMethod || rawPayment || o.paymentGateway || 'cash_on_delivery').toLowerCase();
+          const isCodPayment = ['cash_on_delivery', 'cod', 'cash on delivery'].includes(paymentKey.replace(/[-\s]+/g, '_'));
+          const paymentLabel = isCodPayment ? 'COD' : String(o.paymentMethod || o.paymentGateway || rawPayment || 'Online').replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+          const isPaid = String(o.paymentStatus || '').toLowerCase() === 'paid';
+          const paymentStateLabel = isPaid ? 'Paid' : isCodPayment ? 'Collect on delivery' : 'Unpaid';
 
           return (
             <div className="ogrid-row" key={o.id} onClick={() => setSel(o)}>
@@ -4981,7 +7816,7 @@ function OrdersAdmin() {
               <div className="og-cell-order" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: '#c4b5fd' }}>
-                    #{o.id.replace('DOT-', '')}
+                    #{String(o.id || '').replace('DOT-', '')}
                   </span>
                   {Date.now() - new Date(o.createdAt).getTime() < 86400000 && (
                     <span style={{ background: '#8b5cf6', color: '#fff', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4 }}>
@@ -5051,14 +7886,45 @@ function OrdersAdmin() {
                     {o.customer?.name || 'Customer'}
                   </span>
                   {phoneCount[o.customer?.phone] > 1 && (
-                    <span style={{ background: 'rgba(52, 211, 153, 0.15)', color: '#34d399', border: '1px solid rgba(52, 211, 153, 0.3)', fontSize: 9.5, padding: '1px 5px', borderRadius: 4, fontWeight: 700 }}>
-                      Repeat
-                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRepeatCustomerTarget({ phone: o.customer?.phone, name: o.customer?.name || 'Customer' });
+                      }}
+                      style={{
+                        background: 'rgba(52, 211, 153, 0.16)',
+                        color: '#34d399',
+                        border: '1px solid rgba(52, 211, 153, 0.35)',
+                        fontSize: 10,
+                        padding: '2px 7px',
+                        borderRadius: 5,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3.5,
+                        transition: 'all 0.15s ease',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(52, 211, 153, 0.28)';
+                        e.currentTarget.style.borderColor = '#34d399';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(52, 211, 153, 0.16)';
+                        e.currentTarget.style.borderColor = 'rgba(52, 211, 153, 0.35)';
+                      }}
+                      title={`Click to view all ${phoneCount[o.customer?.phone]} orders for this customer`}
+                    >
+                      <span>Repeat</span>
+                      <span style={{ fontSize: 9.5, opacity: 0.9 }}>({phoneCount[o.customer?.phone]})</span>
+                    </button>
                   )}
                 </div>
 
                 {phone && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 1 }}>
+                  <div className="og-customer-contact-row" style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 1, flexWrap: 'wrap' }}>
                     <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#94a3b8' }}>
                       {phone}
                     </span>
@@ -5069,7 +7935,7 @@ function OrdersAdmin() {
                     )}
                     <button
                       type="button"
-                      className="sa-order-call-icon"
+                      className="og-customer-ip-call"
                       onClick={(e) => {
                         e.stopPropagation();
                         triggerAdminIPCall({
@@ -5080,11 +7946,33 @@ function OrdersAdmin() {
                           product: o.items?.[0]?.name
                         });
                       }}
-                      aria-label={`Call ${o.customer?.name || 'customer'} using IP phone`}
-                      title="Call customer"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'transparent',
+                        border: 'none',
+                        padding: 0,
+                        cursor: 'pointer',
+                        lineHeight: 1
+                      }}
+                      title="Call customer via In-Browser IP Softphone & Auto Record"
                     >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                      <svg
+                        viewBox="0 0 24 24"
+                        width={16}
+                        height={16}
+                        fill="none"
+                        stroke="#c084fc"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}
+                        aria-hidden="true"
+                      >
+                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                        <path d="M14.05 2a9 9 0 0 1 8 7.94" />
+                        <path d="M14.05 6A5 5 0 0 1 18 10" />
                       </svg>
                     </button>
                     <button
@@ -5097,10 +7985,10 @@ function OrdersAdmin() {
                           name: o.customer?.name,
                         });
                       }}
-                      style={{ display: 'inline-flex', alignItems: 'center', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
+                      style={{ display: 'inline-flex', alignItems: 'center', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 1 }}
                       title="Send WhatsApp via Store WhatsApp (No Tab)"
                     >
-                      <WhatsAppIcon size={14} variant="official" />
+                      <WhatsAppIcon size={16} variant="official" />
                     </button>
                   </div>
                 )}
@@ -5110,32 +7998,52 @@ function OrdersAdmin() {
                     {district}
                   </div>
                 )}
+                {phone && (
+                  <div className="og-customer-call-meta" onClick={(e) => e.stopPropagation()}>
+                    <div className="og-call-origin-list">
+                      {(['ai', 'ip', 'manual'] as const).map((source) => callOriginCounts[source] ? (
+                        <span key={source} className={`og-call-origin is-${source}`} title={`${source === 'ai' ? 'Auto AI' : source === 'ip' ? 'IP phone' : 'Manually logged'} · ${callOriginCounts[source]} call${callOriginCounts[source] === 1 ? '' : 's'}`}>
+                          {source === 'ai' ? 'AI' : source === 'ip' ? 'IP' : 'Manual'} {callOriginCounts[source]}
+                        </span>
+                      ) : null)}
+                      {!orderCallEvents.length && <span className="og-call-none">{adminTranslate("No calls logged")}</span>}
+                    </div>
+                    {latestOrderCall && <span className={`og-call-result ${latestCallOutcome === 'manual_talked' || latestCallOutcome === 'confirmed' ? 'is-talked' : latestCallOutcome === 'manual_attempted' || latestCallOutcome === 'no_answer' || latestCallOutcome === 'missed' ? 'is-attempted' : ''}`} title={`${latestOrderCall.staff?.name || latestOrderCall.staff?.username || latestCallSourceLabel} · ${new Date(latestOrderCall.at || Date.now()).toLocaleString()}`}>
+                      {latestCallSourceLabel} · {latestCallLabel}
+                    </span>}
+                    <details className="og-manual-call-menu">
+                      <summary title="Record a call made outside the system">{adminTranslate("Manual log")}</summary>
+                      <div className="og-manual-call-options">
+                        <button type="button" onClick={(e) => { e.stopPropagation(); e.currentTarget.closest('details')?.removeAttribute('open'); void saveManualCallLog(o, 'talked'); }}>Talked to customer</button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); e.currentTarget.closest('details')?.removeAttribute('open'); void saveManualCallLog(o, 'attempted'); }}>Tried · no answer</button>
+                      </div>
+                    </details>
+                  </div>
+                )}
               </div>
 
               {/* 4. Items & Variant */}
-              <div className="og-cell-items" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div className="og-cell-items">
                 {img ? (
-                  <img src={img} alt="" style={{ width: 40, height: 48, borderRadius: 8, objectFit: 'cover', border: '1px solid rgba(255,255,255,0.12)', flexShrink: 0 }} />
+                  <img className="og-item-thumb" src={img} alt="" />
                 ) : (
-                  <div style={{ width: 40, height: 48, borderRadius: 8, background: '#1c1830', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c4b5fd', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
+                  <div className="og-item-thumb og-item-thumb-fallback">
                     {(cleanItem.title || 'P')[0]}
                   </div>
                 )}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={cleanItem.title}>
+                <div className="og-item-meta">
+                  <div className="og-item-title" title={cleanItem.title}>
                     {cleanItem.title}
                   </div>
                   {cleanItem.variant && (
-                    <div>
-                      <span style={{ background: '#1c1830', border: '1px solid rgba(139, 92, 246, 0.25)', color: '#c4b5fd', fontSize: 10.5, padding: '1px 6px', borderRadius: 4, fontWeight: 500, display: 'inline-block', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {cleanItem.variant}
-                      </span>
+                    <div className="og-item-option" title={cleanItem.variant}>
+                      {cleanItem.variant}
                     </div>
                   )}
-                  <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                    Qty: <strong style={{ color: '#fff' }}>{cleanItem.qty || 1}</strong>
+                  <div className="og-item-qty">
+                    <span>{adminTranslate("Qty") + " "}<strong>{cleanItem.qty || 1}</strong></span>
                     {o.items.length > 1 && (
-                      <span style={{ marginLeft: 6, color: '#a78bfa', fontWeight: 600 }}>
+                      <span className="og-item-more">
                         +{o.items.length - 1} more
                       </span>
                     )}
@@ -5148,8 +8056,9 @@ function OrdersAdmin() {
                 <span style={{ fontSize: 14.5, fontWeight: 800, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
                   {taka(o.total)}
                 </span>
-                <span style={{ fontSize: 10, color: '#94a3b8', whiteSpace: 'nowrap' }} title="Cash on Delivery">
-                  COD
+                <span className="og-total-payment" title={`${paymentLabel} · ${paymentStateLabel}`}>
+                  <strong>{paymentLabel}</strong>
+                  <small className={isPaid ? 'is-paid' : isCodPayment ? 'is-cod' : 'is-unpaid'}>{paymentStateLabel}</small>
                 </span>
               </div>
 
@@ -5174,328 +8083,78 @@ function OrdersAdmin() {
                 </select>
               </div>
 
-              {/* 6.5. IP Call & Voice Recording Column */}
-              <div
-                className="og-cell-call"
-                onClick={(e) => e.stopPropagation()}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}
-              >
-                {(() => {
-                  const callEvents = (o.history || []).filter((h: any) => h.status === 'call' || h.callId);
-                  const lastCall = callEvents[0];
-                  if (!callEvents.length) {
-                    return (
-                      <button
-                        type="button"
-                        onClick={() => triggerAdminIPCall({
-                          order: o,
-                          phone: cleanPhone,
-                          name: o.customer?.name,
-                          orderId: o.id,
-                          product: o.items?.[0]?.name
-                        })}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 5,
-                          padding: '5px 10px',
-                          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(5, 150, 105, 0.25) 100%)',
-                          border: '1px solid rgba(16, 185, 129, 0.45)',
-                          borderRadius: 7,
-                          color: '#34d399',
-                          fontSize: 11.5,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          boxShadow: '0 2px 8px rgba(16, 185, 129, 0.15)',
-                          transition: 'all 0.15s ease'
-                        }}
-                        title="কাস্টমারকে সরাসরি আইপি কল করুন ও অডিও রেকর্ড করুন"
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 13, height: 13 }}>
-                          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-                        </svg>
-                        <span>IP Call</span>
-                      </button>
-                    );
-                  }
-
-                  const outcome = lastCall.outcome || 'completed';
-                  const isConfirmed = outcome === 'confirmed';
-                  const isNoAnswer = outcome === 'no_answer';
-                  const isCallLater = outcome === 'call_later';
-                  const isCancelled = outcome === 'cancelled';
-
-                  const badgeBg = isConfirmed
-                    ? 'rgba(16, 185, 129, 0.2)'
-                    : isNoAnswer
-                    ? 'rgba(239, 68, 68, 0.2)'
-                    : isCallLater
-                    ? 'rgba(245, 158, 11, 0.2)'
-                    : isCancelled
-                    ? 'rgba(239, 68, 68, 0.15)'
-                    : 'rgba(56, 189, 248, 0.15)';
-
-                  const badgeColor = isConfirmed
-                    ? '#34d399'
-                    : isNoAnswer
-                    ? '#f87171'
-                    : isCallLater
-                    ? '#fbbf24'
-                    : isCancelled
-                    ? '#fca5a5'
-                    : '#38bdf8';
-
-                  const badgeBorder = isConfirmed
-                    ? 'rgba(16, 185, 129, 0.4)'
-                    : isNoAnswer
-                    ? 'rgba(239, 68, 68, 0.4)'
-                    : isCallLater
-                    ? 'rgba(245, 158, 11, 0.4)'
-                    : 'rgba(56, 189, 248, 0.35)';
-
-                  const label = isConfirmed
-                    ? '✓ Confirmed'
-                    : isNoAnswer
-                    ? '📵 No Ans'
-                    : isCallLater
-                    ? '⏰ Call Later'
-                    : isCancelled
-                    ? '✖ Cancelled'
-                    : '📞 Called';
-
-                  return (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, width: '100%' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <button
-                          type="button"
-                          onClick={() => triggerAdminIPCall({
-                            order: o,
-                            phone: cleanPhone,
-                            name: o.customer?.name,
-                            orderId: o.id,
-                            product: o.items?.[0]?.name
-                          })}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 3,
-                            padding: '3px 8px',
-                            background: 'rgba(56, 189, 248, 0.15)',
-                            border: '1px solid rgba(56, 189, 248, 0.4)',
-                            borderRadius: 6,
-                            color: '#38bdf8',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            cursor: 'pointer'
-                          }}
-                          title="পুনরায় কল করুন (Re-dial)"
-                        >
-                          📞 Call
-                        </button>
-                        {lastCall.recordingUrl && (
-                          <button
-                            type="button"
-                            onClick={() => setSel(o)}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 2,
-                              padding: '3px 6px',
-                              background: 'rgba(168, 85, 247, 0.18)',
-                              border: '1px solid rgba(168, 85, 247, 0.45)',
-                              borderRadius: 6,
-                              color: '#c084fc',
-                              fontSize: 10.5,
-                              fontWeight: 700,
-                              cursor: 'pointer'
-                            }}
-                            title="🎙️ ভয়েস রেকর্ড রয়েছে! ক্লিক করে অর্ডারের ভিতরে শুনুন"
-                          >
-                            <span>🎙️</span>
-                            <span>Rec</span>
-                          </button>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10 }}>
-                        <span style={{ padding: '1px 5px', borderRadius: 4, fontWeight: 700, fontSize: 9.5, background: badgeBg, color: badgeColor, border: `1px solid ${badgeBorder}` }}>
-                          {label}
-                        </span>
-                        {callEvents.length > 1 && (
-                          <span style={{ color: '#94a3b8', fontSize: 9.5 }}>({callEvents.length}x)</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* 7. Courier */}
-              <div className="og-cell-courier" onClick={(e) => e.stopPropagation()} style={{ minWidth: 0 }}>
-                {o.courier && o.courier.name && o.courier.consignment ? (
-                  <div className="courier-booked-wrap">
-                    <div className="courier-booked-top">
-                      <span className="courier-name">{o.courier.name}</span>
-                      <span className="courier-cons mono" title="Consignment tracking code">
-                        #{o.courier.consignment}
-                      </span>
-                      <button
-                        className="courier-sync-btn"
-                        title="Sync live status from courier"
-                        disabled={syncingId === o.id}
-                        onClick={() => syncSingleOrder(o.id)}
-                      >
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" className={syncingId === o.id ? 'spin' : ''} style={{ width: 11, height: 11 }}>
-                          <path d="M13.5 7a5.5 5.5 0 0 0-9.4-3L2 6" />
-                          <path d="M2.5 9a5.5 5.5 0 0 0 9.4 3L14 10" />
-                          <path d="M2 2.5V6h3.5M14 13.5V10h-3.5" />
-                        </svg>
-                        <span>{syncingId === o.id ? '…' : 'Sync'}</span>
-                      </button>
-                    </div>
-                    {(o.courier.liveStatus || isCourierHoldOrder(o)) && (
-                      <div
-                        className="courier-live-tag"
-                        title={o.courier.liveStatus || 'Courier Hold'}
-                        style={
-                          isCourierHoldOrder(o)
-                            ? {
-                                background: 'rgba(245, 158, 11, 0.18)',
-                                border: '1px solid rgba(245, 158, 11, 0.5)',
-                                color: '#fbbf24',
-                                fontWeight: 700,
-                              }
-                            : undefined
-                        }
-                      >
-                        <span
-                          className="c-dot"
-                          style={isCourierHoldOrder(o) ? { background: '#f59e0b', boxShadow: '0 0 6px #f59e0b' } : undefined}
-                        />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 155 }}>
-                          {isCourierHoldOrder(o) ? '⚠️ ' : ''}
-                          {o.courier.liveStatus || 'On hold'}
-                          {o.courier.attempt ? ` (${o.courier.attempt}x)` : ''}
-                        </span>
-                      </div>
-                    )}
-                    {o.courier.riderNote && (
-                      <div
-                        style={{
-                          fontSize: 10.5,
-                          color: isCourierHoldOrder(o) ? '#fde68a' : '#cbd5e1',
-                          background: isCourierHoldOrder(o) ? 'rgba(245, 158, 11, 0.12)' : 'rgba(255, 255, 255, 0.05)',
-                          border: isCourierHoldOrder(o) ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
-                          borderRadius: 5,
-                          padding: '3px 6px',
-                          marginTop: 3,
-                          lineHeight: 1.3,
-                          maxWidth: 215,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                        }}
-                        title={`Rider Reason: ${o.courier.riderNote}`}
-                      >
-                        💬 {o.courier.riderNote}
-                      </div>
-                    )}
-                    {isCourierHoldOrder(o) && cleanPhone && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          triggerAdminWhatsApp({
-                            order: o,
-                            phone: cleanPhone,
-                            name: o.customer?.name,
-                            defaultMsg: `আসসালামু আলাইকুম ${o.customer?.name || 'স্যার/ম্যাম'}, TimeBoost থেকে আপনার অর্ডারটি (#${o.id.replace('DOT-', '')}, ৳${o.total}) ডেলিভারি করার জন্য কুরিয়ার (${o.courier?.name || 'কুরিয়ার'}${o.courier?.consignment ? ` - Consignment #${o.courier.consignment}` : ''}) যোগাযোগ করেছিল কিন্তু পার্সেলটি বর্তমানে হোল্ডে আছে${o.courier?.riderNote ? ` (কারণ: ${o.courier.riderNote})` : ''}। অনুগ্রহ করে আপনার ফোনটি খোলা রাখুন যাতে ডেলিভারি রাইডার পার্সেলটি পৌঁছে দিতে পারেন। ধন্যবাদ!`,
-                          });
-                        }}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          marginTop: 4,
-                          fontSize: 10,
-                          fontWeight: 700,
-                          color: '#10b981',
-                          background: 'rgba(16, 185, 129, 0.14)',
-                          border: '1px solid rgba(16, 185, 129, 0.35)',
-                          padding: '2px 7px',
-                          borderRadius: 4,
-                          cursor: 'pointer',
-                          width: 'fit-content',
-                        }}
-                        title="Send Courier Hold alert via Store WhatsApp (No Tab)"
-                      >
-                        <span>📲 Alert Customer</span>
-                      </button>
-                    )}
-                  </div>
-                ) : ['approved', 'confirmed'].includes(String(o.status || '').toLowerCase()) ? (
-                  <div className="courier-send-wrap">
-                    <select
-                      className="courier-pick-sel"
-                      value={selectedCourierMap[o.id] || o.courier?.name || defaultCourierFor(o)}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedCourierMap((prev) => ({ ...prev, [o.id]: val }));
-                        setOrders((prev) => (Array.isArray(prev) ? prev : []).map((x) => (x.id === o.id ? { ...x, courier: { ...(x.courier || {}), name: val } } : x)));
-                        const acc = accountsList.find((a: any) => a.label === val || a.provider === val);
-                        const courier = {
-                          ...(o.courier || {}),
-                          name: val,
-                          ...(acc?.id ? { accountId: acc.id } : {}),
-                        };
-                        aFetch('/orders/' + o.id, { method: 'PATCH', body: JSON.stringify({ courier }) });
-                      }}
-                    >
-                      {courierOpts.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                    <button
-                      className="courier-send-btn"
-                      disabled={bookingId === o.id}
-                      onClick={() => handleSendToCourier(o)}
-                      title="Send order to courier"
-                    >
-                      {bookingId === o.id ? (
-                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" className="spin" style={{ width: 12, height: 12 }}><path d="M13.5 7a5.5 5.5 0 0 0-9.4-3L2 6" /><path d="M2.5 9a5.5 5.5 0 0 0 9.4 3L14 10" /><path d="M2 2.5V6h3.5M14 13.5V10h-3.5" /></svg>
-                      ) : (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12 }}>
-                            <line x1="22" y1="2" x2="11" y2="13" />
-                            <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                          </svg>
-                          Send
-                        </span>
-                      )}
-                    </button>
-                  </div>
-                ) : o.status !== 'cancelled' && o.courier?.name ? (
-                  <span className="courier-name">{o.courier.name}</span>
+              {/* 7. Trust Score */}
+              <div className="og-cell-score" style={{ display: 'flex', justifyContent: 'center' }}>
+                {!scoreData ? (
+                  <span className={`ratio-chip ${courierRatings.length ? 'good' : courierApiIssues.length || courierHistory?.error ? 'mid' : 'neutral'}`} title={[...courierRatings.map((c: any) => `${c.courier}: ${c.rating} (rating only; no counts returned)`), courierApiIssueText].filter(Boolean).join(' · ') || undefined}>{courierHistory?.loading ? 'Checking…' : courierRatings.length ? `${courierRatings[0].courier}: ${courierRatings[0].rating}` : courierApiIssues.length ? 'Courier API issue' : courierHistory?.error ? 'API unavailable' : 'No history'}</span>
                 ) : (
-                  <span className="dim" style={{ fontSize: 12 }}>—</span>
+                  <div className="og-score-rating" title={`${scoreData.source}${scoreData.courierNames.length ? ': ' + scoreData.courierNames.join(', ') : ''} · ${ratio}% success · ${scoreData.delivered} delivered, ${scoreData.cancelled} cancelled${courierApiIssueText ? ' · API issue: ' + courierApiIssueText : ''}`}>
+                    <span className={'og-score-ring ' + (ratio >= 80 ? 'good' : ratio >= 50 ? 'mid' : 'bad')} style={{ '--score': `${ratio}%` } as React.CSSProperties}>
+                      <span>{ratio}%</span>
+                    </span>
+                    <span className="og-score-copy">
+                      <strong>{scoreData.source === 'Courier API' && scoreData.courierNames.length ? `${scoreData.courierNames.slice(0, 2).join(' · ')}${scoreData.courierNames.length > 2 ? ` +${scoreData.courierNames.length - 2}` : ''}` : scoreData.source}</strong>
+                      <small>{scoreData.delivered} delivered · {scoreData.cancelled} cancelled</small>
+                    </span>
+                  </div>
                 )}
               </div>
 
-              {/* 8. Trust Score */}
-              <div className="og-cell-score" style={{ display: 'flex', justifyContent: 'center' }}>
-                <span className={'ratio-chip ' + (ratio == null ? 'neutral' : ratio >= 80 ? 'good' : ratio >= 50 ? 'mid' : 'bad')} style={{ fontSize: 11, padding: '3px 8px' }}>
-                  {ratio == null ? 'New Buyer' : `${ratio}% (${ratio >= 80 ? 'Safe' : 'Risk'})`}
-                </span>
-              </div>
-
-              {/* 9. Actions */}
-              <div className="og-cell-acts rowacts" onClick={(e) => e.stopPropagation()}>
+              {/* 8. Actions */}
+              <div className="og-cell-acts" onClick={(e) => {
+                e.stopPropagation();
+                if ((e.target as HTMLElement).closest('.og-action-list button')) e.currentTarget.querySelector('details')?.removeAttribute('open');
+              }}>
+                <details className="og-action-menu">
+                  <summary className="og-action-trigger">
+                    Actions
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
+                  </summary>
+                  <div className="og-action-list">
+                {['approved', 'confirmed'].includes(String(o.status || '').toLowerCase()) && !o.courier?.consignment && (
+                  <div className="og-menu-courier-tools" onClick={(e) => e.stopPropagation()}>
+                    <label htmlFor={`courier-account-${o.id}`}>Send to courier</label>
+                    {accountsList.some((a: any) => a.enabled) ? (
+                      <>
+                        <select
+                          id={`courier-account-${o.id}`}
+                          className="og-menu-courier-select"
+                          aria-label={`Courier account for order ${o.id}`}
+                          value={selectedCourierMap[o.id] || defaultCourierFor(o)}
+                          onChange={(e) => setSelectedCourierMap((prev) => ({ ...prev, [o.id]: e.target.value }))}
+                        >
+                          {accountsList.filter((a: any) => a.enabled).map((a: any) => <option key={a.id} value={a.label || a.provider}>{a.label || a.provider}</option>)}
+                        </select>
+                        <button type="button" className="eye-btn courier-send" disabled={bookingId === o.id} onClick={() => handleSendToCourier(o)}>
+                          {bookingId === o.id ? 'Sending parcel…' : '↗ Book & send parcel'}
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" className="eye-btn" title="Connect courier API" onClick={() => onNavigateIntegrations()}>Connect courier API</button>
+                    )}
+                  </div>
+                )}
+                {o.courier?.name && (!['approved', 'confirmed'].includes(String(o.status || '').toLowerCase()) || o.courier?.consignment) && (
+                  <div className="og-menu-courier-details">
+                    <strong>{o.courier.name}{o.courier.consignment ? ` · #${o.courier.consignment}` : ''}</strong>
+                    {o.courier.liveStatus && <small>{o.courier.liveStatus}{o.courier.attempt ? ` · ${o.courier.attempt}x` : ''}</small>}
+                    {o.courier.riderNote && <small className="courier-note">{o.courier.riderNote}</small>}
+                    {o.courier.consignment && <button type="button" className="eye-btn" title="Sync courier status" disabled={syncingId === o.id} onClick={() => syncSingleOrder(o.id)}>{syncingId === o.id ? 'Syncing courier…' : '↻ Sync courier status'}</button>}
+                    {isCourierHoldOrder(o) && phone && <button type="button" className="eye-btn og-action-item whatsapp" onClick={() => triggerAdminWhatsApp({
+                      order: o,
+                      phone: cleanPhone,
+                      name: o.customer?.name,
+                      defaultMsg: `আসসালামু আলাইকুম ${o.customer?.name || 'স্যার/ম্যাম'}, ${getAdminSiteBrand()} থেকে আপনার অর্ডারটি (#${String(o.id || '').replace('DOT-', '')}, ৳${o.total}) ডেলিভারির জন্য কুরিয়ার যোগাযোগ করেছিল, কিন্তু পার্সেলটি হোল্ডে আছে${o.courier?.riderNote ? ` (কারণ: ${o.courier.riderNote})` : ''}। অনুগ্রহ করে ফোনটি খোলা রাখুন। ধন্যবাদ!`,
+                    })}>
+                      <WhatsAppIcon size={14} variant="official" />Alert customer
+                    </button>}
+                  </div>
+                )}
                 {o.status === 'incomplete' && (
                   <>
                     <button
                       className="eye-btn"
-                      title="1-Click Confirm (Convert to Confirmed Order)"
+                      title="Confirm order"
                       style={{ color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.12)' }}
                       onClick={() => quickStatus(o.id, 'confirmed')}
                     >
@@ -5505,7 +8164,7 @@ function OrdersAdmin() {
                     </button>
                     <button
                       className="eye-btn"
-                      title="Delete Incomplete Lead"
+                      title="Delete lead"
                       style={{ color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.4)', background: 'rgba(239, 68, 68, 0.12)' }}
                       onClick={async () => {
                         if (confirm(`Delete incomplete lead for "${o.customer?.name || o.customer?.phone || o.id}"?`)) {
@@ -5526,7 +8185,7 @@ function OrdersAdmin() {
                   <button
                     type="button"
                     className="eye-btn eye-btn-ex"
-                    title="🔄 Create Exchange Order"
+                    title="Create exchange"
                     onClick={(e) => {
                       e.stopPropagation();
                       setExchangeOrderTarget(o);
@@ -5539,7 +8198,7 @@ function OrdersAdmin() {
                     </svg>
                   </button>
                 )}
-                <button className="eye-btn" title="View order details" onClick={() => setSel(o)}>
+                <button className="eye-btn" title="View order" onClick={() => setSel(o)}>
                   <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M1 9s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z" /><circle cx="9" cy="9" r="2.4" /></svg>
                 </button>
                 <button className="eye-btn" title="Print invoice" onClick={() => printInvoice(o)}>
@@ -5549,7 +8208,8 @@ function OrdersAdmin() {
                   <button
                     type="button"
                     className="eye-btn eye-btn-wa"
-                    title={o.status === 'incomplete' ? "Send WhatsApp Recovery Message from Store WhatsApp" : "Send WhatsApp from Store WhatsApp (No Tab)"}
+                    title="WhatsApp customer"
+                    aria-label={o.status === 'incomplete' ? "Send WhatsApp recovery message" : "Send WhatsApp to customer"}
                     onClick={(e) => {
                       e.stopPropagation();
                       triggerAdminWhatsApp({
@@ -5563,6 +8223,8 @@ function OrdersAdmin() {
                     <WhatsAppIcon size={16} variant="official" />
                   </button>
                 )}
+                  </div>
+                </details>
               </div>
             </div>
           );
@@ -5610,7 +8272,7 @@ function OrdersAdmin() {
             )}
           </div>
         )}
-        {pageCount > 1 && (
+        {pageCount > 1 && !(filter === 'shipped' && shippedLayout === 'board') && (
           <div className="ogpager">
             <button disabled={curPage <= 1} onClick={() => setPage(curPage - 1)}>← prev</button>
             <span>{(curPage - 1) * PAGE + 1}–{Math.min(curPage * PAGE, shown.length)} of {shown.length}</span>
@@ -5618,14 +8280,28 @@ function OrdersAdmin() {
           </div>
         )}
       </div>
+      )}
       {showCreateModal && (
         <CreateOrderModal
+          orders={orders}
           onClose={() => setShowCreateModal(false)}
           onCreated={(newOrder) => {
             setShowCreateModal(false);
             window.dispatchEvent(new CustomEvent('admin-orders-updated', { detail: newOrder }));
             load(true);
             setSel(newOrder);
+          }}
+        />
+      )}
+      {showImportModal && (
+        <BulkOrderImportModal
+          allProducts={allProductsList}
+          onClose={() => setShowImportModal(false)}
+          onSuccess={(count) => {
+            setShowImportModal(false);
+            setToast(`✅ সফলভাবে ${count} টি নতুন অর্ডার ইমপোর্ট হয়েছে!`);
+            setTimeout(() => setToast(''), 4500);
+            load(true);
           }}
         />
       )}
@@ -5643,8 +8319,394 @@ function OrdersAdmin() {
           }}
         />
       )}
+      {repeatCustomerTarget && (
+        <RepeatCustomerOrdersModal
+          phone={repeatCustomerTarget.phone}
+          name={repeatCustomerTarget.name}
+          orders={orders}
+          onClose={() => setRepeatCustomerTarget(null)}
+          onSelectOrder={(order) => {
+            setRepeatCustomerTarget(null);
+            setSel(order);
+          }}
+          onFilterTable={(phone) => {
+            setRepeatCustomerTarget(null);
+            switchTab('all');
+            setQ(phone);
+          }}
+        />
+      )}
       {sel && <OrderDrawer o={sel} orders={orders} onClose={() => setSel(null)} onSaved={() => { setSel(null); load(true); }} />}
     </>
+  );
+}
+
+function RepeatCustomerOrdersModal({
+  phone,
+  name,
+  orders,
+  onClose,
+  onSelectOrder,
+  onFilterTable
+}: {
+  phone: string;
+  name: string;
+  orders: any[];
+  onClose: () => void;
+  onSelectOrder: (order: any) => void;
+  onFilterTable: (phone: string) => void;
+}) {
+  const normalizedTargetPhone = normalizeBDMobile(phone || '') || String(phone || '').replace(/\D/g, '');
+  const customerOrders = useMemo(() => {
+    return (Array.isArray(orders) ? orders : [])
+      .filter((o: any) => {
+        const p = o?.customer?.phone || '';
+        const normP = normalizeBDMobile(p) || p.replace(/\D/g, '');
+        return (normP && normP === normalizedTargetPhone) || (p && p === phone);
+      })
+      .sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  }, [orders, normalizedTargetPhone, phone]);
+
+  const totalSpent = useMemo(() => {
+    return customerOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  }, [customerOrders]);
+
+  const deliveredCount = useMemo(() => {
+    return customerOrders.filter((o) => o.status === 'delivered').length;
+  }, [customerOrders]);
+
+  const cancelledCount = useMemo(() => {
+    return customerOrders.filter((o) => o.status === 'cancelled' || o.status === 'returned').length;
+  }, [customerOrders]);
+
+  const pendingCount = customerOrders.length - deliveredCount - cancelledCount;
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 99999,
+        background: 'rgba(0, 0, 0, 0.78)',
+        backdropFilter: 'blur(8px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: '#13111c',
+          border: '1px solid rgba(139, 92, 246, 0.3)',
+          borderRadius: 16,
+          width: '100%',
+          maxWidth: 780,
+          maxHeight: '88vh',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 25px 60px rgba(0,0,0,0.65), 0 0 40px rgba(139, 92, 246, 0.15)',
+          overflow: 'hidden'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal Header */}
+        <div
+          style={{
+            padding: '16px 20px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'rgba(255, 255, 255, 0.02)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 10,
+                background: 'linear-gradient(135deg, rgba(52, 211, 153, 0.2), rgba(16, 185, 129, 0.08))',
+                border: '1px solid rgba(52, 211, 153, 0.35)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 20
+              }}
+            >
+              🛍️
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#f8fafc' }}>
+                  {name || 'Customer'}
+                </h3>
+                <span
+                  style={{
+                    background: 'rgba(52, 211, 153, 0.18)',
+                    color: '#34d399',
+                    border: '1px solid rgba(52, 211, 153, 0.35)',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 999
+                  }}
+                >
+                  Repeat Customer · {customerOrders.length} Order{customerOrders.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                <span style={{ fontSize: 13, color: '#94a3b8', fontFamily: 'monospace' }}>
+                  📞 {phone}
+                </span>
+                <a
+                  href={`https://wa.me/88${phone.replace(/\D/g, '')}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    fontSize: 11,
+                    color: '#22c55e',
+                    textDecoration: 'none',
+                    background: 'rgba(34, 197, 94, 0.12)',
+                    border: '1px solid rgba(34, 197, 94, 0.25)',
+                    padding: '2px 7px',
+                    borderRadius: 4,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 3
+                  }}
+                >
+                  WhatsApp ↗
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => onFilterTable(phone)}
+              style={{
+                background: 'rgba(139, 92, 246, 0.15)',
+                color: '#c4b5fd',
+                border: '1px solid rgba(139, 92, 246, 0.35)',
+                fontSize: 12,
+                fontWeight: 600,
+                padding: '6px 12px',
+                borderRadius: 8,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5
+              }}
+              title="Filter the background table to show all orders from this number"
+            >
+              🔍 Filter Table
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                background: 'rgba(255, 255, 255, 0.06)',
+                color: '#94a3b8',
+                border: 'none',
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                cursor: 'pointer',
+                fontSize: 16,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Stats Strip */}
+        <div
+          style={{
+            padding: '12px 20px',
+            background: 'rgba(0, 0, 0, 0.25)',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+            gap: 10
+          }}
+        >
+          <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '8px 12px', borderRadius: 8 }}>
+            <div style={{ fontSize: 11, color: '#94a3b8' }}>Total Orders</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#f8fafc', marginTop: 2 }}>{customerOrders.length}</div>
+          </div>
+          <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '8px 12px', borderRadius: 8 }}>
+            <div style={{ fontSize: 11, color: '#94a3b8' }}>Total Spent</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#38bdf8', marginTop: 2 }}>৳ {totalSpent.toLocaleString('en-BD')}</div>
+          </div>
+          <div style={{ background: 'rgba(52, 211, 153, 0.08)', padding: '8px 12px', borderRadius: 8 }}>
+            <div style={{ fontSize: 11, color: '#34d399' }}>Delivered</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#34d399', marginTop: 2 }}>{deliveredCount}</div>
+          </div>
+          <div style={{ background: 'rgba(234, 179, 8, 0.08)', padding: '8px 12px', borderRadius: 8 }}>
+            <div style={{ fontSize: 11, color: '#fbbf24' }}>Pending / In Transit</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#fbbf24', marginTop: 2 }}>{pendingCount}</div>
+          </div>
+          {cancelledCount > 0 && (
+            <div style={{ background: 'rgba(239, 68, 68, 0.08)', padding: '8px 12px', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, color: '#f87171' }}>Cancelled / Returned</div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: '#f87171', marginTop: 2 }}>{cancelledCount}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Orders List */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {customerOrders.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
+              No previous orders found for this phone number.
+            </div>
+          ) : (
+            customerOrders.map((ord: any) => {
+              const status = ord.status || 'pending';
+              const isDelivered = status === 'delivered';
+              const isCancelled = status === 'cancelled';
+              const isApproved = status === 'approved' || status === 'confirmed';
+              const isHold = status === 'hold';
+
+              const statusColor = isDelivered ? '#34d399' : isCancelled ? '#f87171' : isApproved ? '#a78bfa' : isHold ? '#f59e0b' : '#38bdf8';
+              const statusBg = isDelivered ? 'rgba(52, 211, 153, 0.15)' : isCancelled ? 'rgba(239, 68, 68, 0.15)' : isApproved ? 'rgba(167, 139, 250, 0.15)' : isHold ? 'rgba(245, 158, 11, 0.15)' : 'rgba(56, 189, 248, 0.15)';
+              const statusBorder = isDelivered ? 'rgba(52, 211, 153, 0.35)' : isCancelled ? 'rgba(239, 68, 68, 0.35)' : isApproved ? 'rgba(167, 139, 250, 0.35)' : isHold ? 'rgba(245, 158, 11, 0.35)' : 'rgba(56, 189, 248, 0.35)';
+
+              const items = Array.isArray(ord.items) ? ord.items : [];
+              const dateStr = ord.createdAt ? new Date(ord.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'Unknown date';
+
+              return (
+                <div
+                  key={ord.id}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.025)',
+                    border: '1px solid rgba(255, 255, 255, 0.07)',
+                    borderRadius: 12,
+                    padding: '14px 16px',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.4)';
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.07)';
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.025)';
+                  }}
+                >
+                  {/* Order Card Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 14, fontWeight: 800, color: '#f8fafc', fontFamily: 'monospace' }}>
+                        #{ord.id}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                          background: statusBg,
+                          color: statusColor,
+                          border: `1px solid ${statusBorder}`,
+                          textTransform: 'capitalize'
+                        }}
+                      >
+                        {status}
+                      </span>
+                      <span style={{ fontSize: 12, color: '#64748b' }}>
+                        📅 {dateStr}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => onSelectOrder(ord)}
+                      style={{
+                        background: 'rgba(139, 92, 246, 0.2)',
+                        border: '1px solid rgba(139, 92, 246, 0.4)',
+                        color: '#c4b5fd',
+                        borderRadius: 6,
+                        padding: '4px 10px',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                    >
+                      Open Order ↗
+                    </button>
+                  </div>
+
+                  {/* Order Items */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 10px', background: 'rgba(0, 0, 0, 0.2)', borderRadius: 8 }}>
+                    {items.map((it: any, idx: number) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                          {it.image ? (
+                            <img src={it.image} alt="" style={{ width: 34, height: 34, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+                          ) : (
+                            <div style={{ width: 34, height: 34, background: '#1e293b', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>📦</div>
+                          )}
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {it.name || it.title || 'Product'}
+                            </div>
+                            {(it.variantTitle || it.variant || it.color || it.size) && (
+                              <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                                {it.variantTitle || it.variant || [it.color, it.size].filter(Boolean).join(' / ')}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <span style={{ fontSize: 12, color: '#94a3b8' }}>Qty: {it.qty || 1} × </span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>৳ {Number(it.price || 0).toLocaleString('en-BD')}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Order Footer */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(255, 255, 255, 0.04)', fontSize: 12, color: '#94a3b8', flexWrap: 'wrap', gap: 6 }}>
+                    <div>
+                      {ord.customer?.address && (
+                        <span>📍 {ord.customer.address}</span>
+                      )}
+                      {ord.courier?.name && (
+                        <span style={{ marginLeft: 10, color: '#38bdf8' }}>🚚 {ord.courier.name} {ord.courier.trackingCode ? `(#${ord.courier.trackingCode})` : ''}</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#f8fafc' }}>
+                      Total: <span style={{ color: '#38bdf8' }}>৳ {Number(ord.total || 0).toLocaleString('en-BD')}</span>
+                      <span style={{ fontSize: 11, color: '#64748b', fontWeight: 500, marginLeft: 4 }}>({ord.paymentMethod || 'COD'})</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -5721,7 +8783,7 @@ function MultiCourierFraudReport({ fraud }: { fraud: any }) {
         <div style={{ textAlign: 'right' }}>
           <span className="dim" style={{ fontSize: 12 }}>Overall Courier History:</span>
           <div style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9' }}>
-            {totalOrders} Orders · <span style={{ color: '#34d399' }}>{totalDelivered} Delivered</span> · <span style={{ color: totalCancelled > 0 ? '#f43f5e' : '#94a3b8' }}>{totalCancelled} Returned</span>
+            {totalOrders} Orders · <span style={{ color: '#34d399' }}>{totalDelivered} {adminTranslate("Delivered")}</span> · <span style={{ color: totalCancelled > 0 ? '#f43f5e' : '#94a3b8' }}>{totalCancelled} Returned</span>
           </div>
         </div>
       </div>
@@ -6136,6 +9198,58 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
   const [isEditing, setIsEditing] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [historyExpanded, setHistoryExpanded] = useState(false);
+  const [lockState, setLockState] = useState<{ lockedBy?: string; lockedByName?: string; lockedUntil?: string }>({
+    lockedBy: o.lockedBy,
+    lockedByName: o.lockedByName,
+    lockedUntil: o.lockedUntil
+  });
+  const [internalNotes, setInternalNotes] = useState<any[]>(Array.isArray(o.internalNotes) ? o.internalNotes : []);
+  const [newInternalNote, setNewInternalNote] = useState('');
+  const [followUpAt, setFollowUpAt] = useState(o.followUpAt ? String(o.followUpAt).slice(0, 16) : '');
+  const [noteBusy, setNoteBusy] = useState(false);
+
+  const isLockedActive = !!(lockState.lockedBy && lockState.lockedUntil && new Date(lockState.lockedUntil).getTime() > Date.now());
+
+  const claimOrder = async () => {
+    try {
+      const r = await aFetch(`/admin/orders/${o.id}/claim`, { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) { alert(d.error || 'Could not claim order'); return; }
+      setLockState({ lockedBy: d.lockedBy, lockedByName: d.lockedByName, lockedUntil: d.lockedUntil });
+    } catch {}
+  };
+
+  const releaseOrder = async () => {
+    try {
+      const r = await aFetch(`/admin/orders/${o.id}/release`, { method: 'POST' });
+      const d = await r.json();
+      if (r.ok) setLockState({ lockedBy: undefined, lockedByName: undefined, lockedUntil: undefined });
+      else alert(d.error || 'Could not release');
+    } catch {}
+  };
+
+  const postInternalNote = async () => {
+    if (!newInternalNote.trim()) return;
+    setNoteBusy(true);
+    try {
+      const r = await aFetch(`/admin/orders/${o.id}/internal-note`, {
+        method: 'POST',
+        body: JSON.stringify({
+          text: newInternalNote.trim(),
+          followUpAt: followUpAt ? new Date(followUpAt).toISOString() : null
+        })
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setInternalNotes(Array.isArray(d.internalNotes) ? d.internalNotes : []);
+        setNewInternalNote('');
+      } else {
+        alert(d.error || 'Failed to add note');
+      }
+    } finally {
+      setNoteBusy(false);
+    }
+  };
 
   const sortedHistory = useMemo(() => {
     if (!Array.isArray(o.history) || o.history.length === 0) return [];
@@ -6360,7 +9474,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
             </div>
             <div>
               <div className="sa-om-title-row">
-                <h2>Order {o.id}</h2>
+                <h2>{adminTranslate("Order") + " "}{o.id}</h2>
                 <span className={'sa-badge b-' + status}>{status}</span>
                 {isEditing && (
                   <span style={{ fontSize: 11, background: '#7c3aed', color: '#fff', padding: '2px 8px', borderRadius: 10, fontWeight: 700, marginLeft: 6 }}>
@@ -6370,10 +9484,31 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
               </div>
               <div className="sa-om-subtitle">
                 {formattedDate} · Cash on Delivery (COD) · {originLabel(o.source)}
+                {o.assignedToName && <span style={{ marginLeft: 8, color: '#a78bfa', fontWeight: 600 }}>· 👤 Assigned: {o.assignedToName}</span>}
               </div>
             </div>
           </div>
           <div className="sa-om-head-acts">
+            {isLockedActive ? (
+              <button
+                type="button"
+                className="sa-btn sa-mini"
+                style={{ background: 'rgba(245, 158, 11, 0.18)', border: '1px solid rgba(245, 158, 11, 0.45)', color: '#fbbf24', fontWeight: 600 }}
+                onClick={releaseOrder}
+                title="Order is locked for 10 mins. Click to release."
+              >
+                🔒 {lockState.lockedByName || lockState.lockedBy} (Release)
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="sa-btn ghost sa-mini"
+                onClick={claimOrder}
+                title="Lock this order for 10 minutes while you call/process so others don't duplicate"
+              >
+                🔓 Claim (10m)
+              </button>
+            )}
             {status === 'delivered' && !o.isExchange && !o.exchangeOrderId && (
               <button
                 type="button"
@@ -6468,7 +9603,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                 📜 History ({sortedHistory.length})
               </button>
             )}
-            <button className="sa-om-close" onClick={onClose} title="Close">×</button>
+            <button className="sa-om-close" onClick={onClose} title={adminTranslate("Close")}>×</button>
           </div>
         </div>
 
@@ -6597,7 +9732,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                         order: o,
                         phone: custPhone,
                         name: custName,
-                        defaultMsg: `আসসালামু আলাইকুম ${custName ? `${custName} Sir/Mam` : 'Sir/Mam'}! timingboost.xyz থেকে লক্ষ্য করলাম আপনি "${items[0]?.name || 'আমাদের পণ্য'}" অর্ডার করার চেষ্টা করেছিলেন কিন্তু অর্ডারটি সম্পন্ন হয়নি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳${grandTotal}। তথ্য নিশ্চিত করতে হ্যাঁ লিখে জানান।`,
+                        defaultMsg: `আসসালামু আলাইকুম ${custName ? `${custName} Sir/Mam` : 'Sir/Mam'}! ${getAdminSiteDomain()} থেকে লক্ষ্য করলাম আপনি "${items[0]?.name || 'আমাদের পণ্য'}" অর্ডার করার চেষ্টা করেছিলেন কিন্তু অর্ডারটি সম্পন্ন হয়নি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳${grandTotal}। তথ্য নিশ্চিত করতে হ্যাঁ লিখে জানান।`,
                       });
                     }}
                     style={{
@@ -6664,7 +9799,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
               )}
               {totalOrders > 1 && (
                 <div className="sa-om-chip sa-om-chip-green">
-                  <span>Repeat Customer · {totalOrders} Orders</span>
+                  <span>Repeat Customer · {totalOrders} {adminTranslate("Orders")}</span>
                 </div>
               )}
             </div>
@@ -6712,7 +9847,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                 </div>
               </div>
               <div className="sa-om-kv">
-                <span className="sa-om-k">Customer</span>
+                <span className="sa-om-k">{adminTranslate("Customer")}</span>
                 <span className="sa-om-v">{custName}</span>
               </div>
               <div className="sa-om-kv">
@@ -6737,7 +9872,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
               {isEditing ? (
                 <div>
                   <div className="sa-om-field">
-                    <label>Customer Name</label>
+                    <label>{adminTranslate("Customer Name")}</label>
                     <input
                       type="text"
                       value={custName}
@@ -6764,7 +9899,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                     />
                   </div>
                   <div className="sa-om-field">
-                    <label>Delivery Address</label>
+                    <label>{adminTranslate("Delivery Address")}</label>
                     <textarea
                       rows={2}
                       value={custAddress}
@@ -6777,12 +9912,12 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     <div className="sa-om-field">
-                      <label>District</label>
+                      <label>{adminTranslate("District")}</label>
                       <input
                         type="text"
                         value={custDistrict}
                         onChange={(e) => setCustDistrict(e.target.value)}
-                        placeholder="District"
+                        placeholder={adminTranslate("District")}
                       />
                     </div>
                     <div className="sa-om-field">
@@ -6799,18 +9934,18 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
               ) : (
                 <div>
                   <div className="sa-om-kv">
-                    <span className="sa-om-k">Customer Name</span>
+                    <span className="sa-om-k">{adminTranslate("Customer Name")}</span>
                     <span className="sa-om-v"><b>{custName}</b></span>
                   </div>
                   <div className="sa-om-kv">
-                    <span className="sa-om-k">Mobile Number</span>
+                    <span className="sa-om-k">{adminTranslate("Mobile Number")}</span>
                     <span className="sa-om-v">
                       <a href={'tel:' + custPhone} className="sa-link-clean">📞 {custPhone}</a>
                       {custPhone2 ? ` / ${custPhone2}` : ''}
                     </span>
                   </div>
                   <div className="sa-om-kv">
-                    <span className="sa-om-k">Delivery Address</span>
+                    <span className="sa-om-k">{adminTranslate("Delivery Address")}</span>
                     <span className="sa-om-v">{custAddress}</span>
                   </div>
                   <div className="sa-om-kv">
@@ -6854,7 +9989,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                   </div>
                 ) : !cour.consignment ? (
                   <div className="dim small" style={{ margin: '6px 0', padding: '6px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                    ℹ️ কুরিয়ারে পাঠাতে অর্ডার স্ট্যাটাস <b>Approved</b> বা <b>Confirmed</b> করুন।
+                    ℹ️ কুরিয়ারে পাঠাতে অর্ডার স্ট্যাটাস <b>{adminTranslate("Approved")}</b> বা <b>{adminTranslate("Confirmed")}</b> করুন।
                   </div>
                 ) : null
               )}
@@ -6943,13 +10078,51 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                     style={{ width: '100%', resize: 'vertical' }}
                   />
                 ) : (
-                  <span className="sa-om-v">{custNote ? <span style={{ color: '#fbbf24' }}>{custNote}</span> : <span className="dim">None</span>}</span>
+                  <span className="sa-om-v">{custNote ? <span style={{ color: '#fbbf24' }}>{custNote}</span> : <span className="dim">{adminTranslate("None")}</span>}</span>
                 )}
               </div>
               <div className="sa-om-kv">
                 <span className="sa-om-k">Staff Private Note</span>
                 <div className="sa-om-v">
                   <textarea placeholder="Staff private note..." value={note} onChange={(e) => setNote(e.target.value)} rows={2} style={{ width: '100%', resize: 'vertical' }} />
+                </div>
+              </div>
+              <div className="sa-om-kv" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8, marginTop: 6, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="sa-om-k" style={{ fontSize: 12, color: '#c4b5fd' }}>💬 Internal Team Notes (@mention) &amp; Follow-up</span>
+                </div>
+                {internalNotes.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 140, overflowY: 'auto' }}>
+                    {internalNotes.map((n: any) => (
+                      <div key={n.id} style={{ padding: '7px 10px', borderRadius: 8, background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.2)', fontSize: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a78bfa', fontSize: 11, fontWeight: 700, marginBottom: 2 }}>
+                          <span>@{n.authorName || n.author}</span>
+                          <span style={{ color: '#64748b', fontWeight: 500 }}>{n.createdAt ? new Date(n.createdAt).toLocaleString('bn-BD', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }) : ''}</span>
+                        </div>
+                        <div style={{ color: '#e2e8f0' }}>{n.text}</div>
+                        {n.followUpAt && <div style={{ fontSize: 10.5, color: '#fbbf24', marginTop: 3 }}>⏰ Follow-up: {new Date(n.followUpAt).toLocaleString('bn-BD', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <input
+                    type="text"
+                    placeholder="Write internal note... (use @username to notify)"
+                    value={newInternalNote}
+                    onChange={(e) => setNewInternalNote(e.target.value)}
+                    style={{ flex: 1, minWidth: 180, fontSize: 12, padding: '6px 10px' }}
+                  />
+                  <input
+                    type="datetime-local"
+                    value={followUpAt}
+                    onChange={(e) => setFollowUpAt(e.target.value)}
+                    title="Optional Hold/Call Follow-up Reminder"
+                    style={{ fontSize: 11.5, padding: '5px 8px' }}
+                  />
+                  <button type="button" className="sa-btn sa-mini" disabled={noteBusy || !newInternalNote.trim()} onClick={postInternalNote}>
+                    {noteBusy ? '...' : 'Send'}
+                  </button>
                 </div>
               </div>
             </div>
@@ -7143,7 +10316,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
               </div>
 
               <div className="sa-om-calc-row" style={{ paddingTop: 6 }}>
-                <span className="dim">Payment Method</span>
+                <span className="dim">{adminTranslate("Payment Method")}</span>
                 <span className="sa-badge b-pending">Cash on Delivery · Unpaid</span>
               </div>
             </div>
@@ -7285,7 +10458,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
             </button>
           </div>
           <div className="sa-om-foot-right">
-            <button className="sa-btn ghost" onClick={onClose}>Close</button>
+            <button className="sa-btn ghost" onClick={onClose}>{adminTranslate("Close")}</button>
             <button className="sa-btn primary" disabled={busy} onClick={save}>
               {busy ? 'Saving…' : 'Save Changes'}
             </button>
@@ -7349,7 +10522,9 @@ function ProductsAdmin() {
 
   const dup = (p: any) => {
     const { id, slug, ...rest } = p;
-    setEdit({ ...rest, name: p.name + ' (Copy)', sku: p.sku ? p.sku + '-COPY' : '' });
+    const sourceSkus = Array.from(new Set([p.sku, ...(Array.isArray(p.skus) ? p.skus : [])].filter(Boolean)));
+    const copiedSkus = sourceSkus.map((sku: any) => `${sku}-COPY`);
+    setEdit({ ...rest, name: p.name + ' (Copy)', sku: copiedSkus[0] || '', skus: copiedSkus });
   };
 
   // Instant inline stock updater
@@ -7513,7 +10688,7 @@ function ProductsAdmin() {
     const rows = products.map((p) => [
       `"${p.id || ''}"`,
       `"${(p.name || '').replace(/"/g, '""')}"`,
-      `"${p.sku || ''}"`,
+      `"${Array.from(new Set([p.sku, ...(Array.isArray(p.skus) ? p.skus : [])].filter(Boolean))).join(' | ').replace(/"/g, '""')}"`,
       `"${p.category || ''}"`,
       p.price || 0,
       p.compareAt || 0,
@@ -7560,7 +10735,7 @@ function ProductsAdmin() {
     const matchesQuery =
       !query ||
       (p.name || '').toLowerCase().includes(query) ||
-      (p.sku || '').toLowerCase().includes(query) ||
+      [p.sku, ...(Array.isArray(p.skus) ? p.skus : [])].some((sku: any) => String(sku || '').toLowerCase().includes(query)) ||
       (p.slug || '').toLowerCase().includes(query) ||
       colNames.includes(query) ||
       colHexes.includes(query) ||
@@ -7624,7 +10799,7 @@ function ProductsAdmin() {
           title="Click to view all products"
         >
           <div className="inv-kpi-top">
-            <span className="inv-kpi-label">Total Catalog SKUs</span>
+            <span className="inv-kpi-label">{adminTranslate("Total Products")}</span>
             <span className="inv-kpi-icon">🏷️</span>
           </div>
           <div className="inv-kpi-val">{totalProducts}</div>
@@ -7639,7 +10814,7 @@ function ProductsAdmin() {
           title="Click to view in-stock products"
         >
           <div className="inv-kpi-top">
-            <span className="inv-kpi-label" style={{ color: '#34d399' }}>In Stock</span>
+            <span className="inv-kpi-label" style={{ color: '#34d399' }}>{adminTranslate("In Stock")}</span>
             <span className="inv-kpi-icon">🟢</span>
           </div>
           <div className="inv-kpi-val" style={{ color: '#34d399' }}>{inStockCount}</div>
@@ -7769,11 +10944,11 @@ function ProductsAdmin() {
                 />
               </th>
               <th>Product Details</th>
-              <th>Category</th>
+              <th>{adminTranslate("Category")}</th>
               <th>Availability</th>
               <th>Stock Inventory</th>
-              <th className="r">Price (৳)</th>
-              <th className="r">Actions</th>
+              <th className="r">{adminTranslate("Price (৳)")}</th>
+              <th className="r">{adminTranslate("Actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -7822,7 +10997,7 @@ function ProductsAdmin() {
                           </a>
                         </div>
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3, flexWrap: 'wrap' }}>
-                          {p.sku && <span style={{ fontSize: 11, background: '#1e1b2e', padding: '1px 6px', borderRadius: 4, color: '#a78bfa', fontFamily: 'monospace' }}>SKU: {p.sku}</span>}
+                          {(p.skus?.length || p.sku) && <span style={{ fontSize: 11, background: '#1e1b2e', padding: '1px 6px', borderRadius: 4, color: '#a78bfa', fontFamily: 'monospace' }}>SKUs: {Array.from(new Set([p.sku, ...(Array.isArray(p.skus) ? p.skus : [])].filter(Boolean))).join(', ')}</span>}
                           {hasVariants && (
                             <button
                               type="button"
@@ -8074,6 +11249,7 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
       name: '',
       slug: '',
       sku: '',
+      skus: [],
       price: '',
       compareAt: '',
       stock: '',
@@ -8102,6 +11278,7 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
     };
     if (!Array.isArray(base.images)) base.images = base.image ? [base.image] : [];
     if (!Array.isArray(base.variations)) base.variations = [];
+    base.skus = Array.from(new Set([base.sku, ...(Array.isArray(base.skus) ? base.skus : [])].map((sku: any) => String(sku || '').trim()).filter(Boolean)));
     if (!Array.isArray(base.colors)) base.colors = [];
     if (!Array.isArray(base.categories)) {
       base.categories = Array.from(new Set([base.category, base.subCategory, ...(product?.categories || [])].filter(Boolean)));
@@ -8339,8 +11516,23 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
     const catCode = (f.category || 'GEN').slice(0, 3).toUpperCase();
     const nameCode = (f.name || 'PRD').split(/\s+/).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase() || 'ITM';
     const rand = Math.floor(100 + Math.random() * 900);
-    setF((s: any) => ({ ...s, sku: `${catCode}-${nameCode}-${rand}` }));
+    const generated = `${catCode}-${nameCode}-${rand}`;
+    setF((s: any) => ({ ...s, sku: generated, skus: [generated, ...(s.skus || []).slice(1)] }));
   };
+
+  const updateProductSku = (index: number, value: string) => {
+    setF((s: any) => {
+      const skus = [...(Array.isArray(s.skus) ? s.skus : (s.sku ? [s.sku] : []))];
+      skus[index] = value;
+      return { ...s, sku: index === 0 ? value : (s.sku || skus[0] || ''), skus };
+    });
+  };
+  const addProductSku = () => setF((s: any) => ({ ...s, skus: [...(Array.isArray(s.skus) ? s.skus : (s.sku ? [s.sku] : [])), ''] }));
+  const removeProductSku = (index: number) => setF((s: any) => {
+    const skus = [...(Array.isArray(s.skus) ? s.skus : (s.sku ? [s.sku] : []))];
+    skus.splice(index, 1);
+    return { ...s, sku: skus[0] || '', skus };
+  });
 
   const slugify = (s: string) =>
     String(s || '')
@@ -8489,9 +11681,12 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
         f.subCategory,
         ...(Array.isArray(f.categories) ? f.categories : [])
       ].filter(Boolean)));
+      const productSkus = Array.from(new Map((Array.isArray(f.skus) ? f.skus : [f.sku]).map((value: any) => String(value || '').trim()).filter(Boolean).map((value: string) => [value.toLowerCase(), value])).values());
 
       const payload = {
         ...f,
+        sku: productSkus[0] || '',
+        skus: productSkus,
         categories: allSelectedCats,
         price: parseInt(f.price, 10) || 0,
         compareAt: f.compareAt ? parseInt(f.compareAt, 10) || 0 : 0,
@@ -8530,6 +11725,7 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
     f.price && f.compareAt && Number(f.compareAt) > Number(f.price)
       ? Number(f.compareAt) - Number(f.price)
       : 0;
+  const productSkuCodes: string[] = Array.isArray(f.skus) && f.skus.length ? f.skus : [f.sku || ''];
 
   return (
     <div className="sa-modal-wrap" onClick={onClose}>
@@ -8695,16 +11891,33 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
                 </div>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <label style={{ margin: 0 }}>SKU / Product Code</label>
-                    <button
-                      type="button"
-                      onClick={autoGenerateSKU}
-                      style={{ background: 'none', border: 'none', color: '#a78bfa', fontSize: 11, cursor: 'pointer', padding: 0, fontWeight: 600 }}
-                    >
-                      ⚡ Auto SKU
-                    </button>
+                    <label style={{ margin: 0 }}>SKU / Product Codes</label>
+                    <div style={{ display: 'flex', gap: 12 }}>
+                      <button type="button" onClick={autoGenerateSKU} style={{ background: 'none', border: 'none', color: '#a78bfa', fontSize: 11, cursor: 'pointer', padding: 0, fontWeight: 600 }}>
+                        ⚡ Auto SKU
+                      </button>
+                      <button type="button" onClick={addProductSku} style={{ background: 'none', border: 'none', color: '#34d399', fontSize: 11, cursor: 'pointer', padding: 0, fontWeight: 700 }}>
+                        + Add SKU
+                      </button>
+                    </div>
                   </div>
-                  <input value={f.sku || ''} onChange={set('sku')} placeholder="e.g. ABY-BLK-842" />
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    {productSkuCodes.map((sku: string, index: number) => (
+                      <div key={index} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input
+                          value={sku || ''}
+                          onChange={(e) => updateProductSku(index, e.target.value)}
+                          aria-label={index === 0 ? 'Primary product SKU' : `Additional product SKU ${index}`}
+                          style={{ fontFamily: 'monospace', fontSize: 12 }}
+                        />
+                        {index === 0 && <span style={{ fontSize: 10, color: '#94a3b8', whiteSpace: 'nowrap' }}>Primary</span>}
+                        {productSkuCodes.length > 1 && (
+                          <button type="button" onClick={() => removeProductSku(index)} aria-label="Remove SKU" title="Remove SKU" style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: 15, padding: '2px 6px' }}>×</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <small style={{ display: 'block', marginTop: 5, color: '#64748b', fontSize: 10.5 }}>Add alternate codes for this same product. Each code can be used to find it in order imports.</small>
                 </div>
               </div>
 
@@ -8817,6 +12030,41 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
                       Original / Compare-at Price (৳) (Crossed-out)
                     </label>
                     <input value={f.compareAt} onChange={set('compareAt')} placeholder="e.g. 3200" style={{ fontSize: 16 }} />
+                  </div>
+                </div>
+
+                {/* COGS & Per-Product Refill Cycle */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#fbbf24', fontWeight: 600 }}>
+                      🏷️ Buying Cost / COGS (৳)
+                    </label>
+                    <input type="number" min={0} value={f.costPrice ?? ''} onChange={set('costPrice')} placeholder="যেমন: 450" />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#94a3b8' }}>
+                      📦 Packaging Cost (৳)
+                    </label>
+                    <input type="number" min={0} value={f.packagingCost ?? ''} onChange={set('packagingCost')} placeholder="যেমন: 25" />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#a78bfa', fontWeight: 600 }}>
+                      🔁 Repeat / Refill Cycle (দিন)
+                    </label>
+                    <select value={f.repeatCycleDays ?? 0} onChange={set('repeatCycleDays')}>
+                      <option value={0}>Off (কোনো রিমাইন্ডার নেই)</option>
+                      <option value={15}>15 দিন পর</option>
+                      <option value={30}>30 দিন (১ মাস) পর</option>
+                      <option value={60}>60 দিন (২ মাস) পর</option>
+                      <option value={90}>90 দিন (৩ মাস) পর</option>
+                      <option value={180}>180 দিন (৬ মাস) পর</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: '#94a3b8' }}>
+                      🎁 Refill / Repeat Offer Note
+                    </label>
+                    <input value={f.repeatOfferText ?? ''} onChange={set('repeatOfferText')} placeholder="যেমন: রিপিট অর্ডারে ১০% ছাড়!" />
                   </div>
                 </div>
 
@@ -9684,11 +12932,11 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
                 {/* Manual Add Single Variation Row */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: 8, background: '#120f21', padding: 10, borderRadius: 8, alignItems: 'end' }}>
                   <div>
-                    <label style={{ fontSize: 11, color: '#94a3b8' }}>Size</label>
+                    <label style={{ fontSize: 11, color: '#94a3b8' }}>{adminTranslate("Size")}</label>
                     <input placeholder="e.g. 54 or M" value={newVarSize} onChange={(e) => setNewVarSize(e.target.value)} />
                   </div>
                   <div>
-                    <label style={{ fontSize: 11, color: '#94a3b8' }}>Color</label>
+                    <label style={{ fontSize: 11, color: '#94a3b8' }}>{adminTranslate("Color")}</label>
                     <input placeholder="e.g. Deep Maroon" value={newVarColor} onChange={(e) => setNewVarColor(e.target.value)} />
                   </div>
                   <div>
@@ -9717,12 +12965,12 @@ function ProductForm({ product, cats, onClose, onSaved }: { product: any; cats: 
                           <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: '#94a3b8', textAlign: 'left' }}>
                             <th style={{ padding: 8, width: 70 }}>Photo</th>
                             <th style={{ padding: 8 }}>Variation Title</th>
-                            <th style={{ padding: 8 }}>Size</th>
-                            <th style={{ padding: 8 }}>Color</th>
+                            <th style={{ padding: 8 }}>{adminTranslate("Size")}</th>
+                            <th style={{ padding: 8 }}>{adminTranslate("Color")}</th>
                             <th style={{ padding: 8 }}>SKU</th>
-                            <th style={{ padding: 8 }}>Price (৳)</th>
+                            <th style={{ padding: 8 }}>{adminTranslate("Price (৳)")}</th>
                             <th style={{ padding: 8 }}>Stock</th>
-                            <th style={{ padding: 8, textAlign: 'right' }}>Action</th>
+                            <th style={{ padding: 8, textAlign: 'right' }}>{adminTranslate("Action")}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -10069,6 +13317,10 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
     blockByIp: true,
     protectIncompleteOrders: true,
     applyOnLandingPages: true,
+    courierOtpEnabled: false,
+    courierOtpSuccessThreshold: 60,
+    courierOtpMinParcels: 3,
+    otpWhenCourierCheckUnavailable: false,
     sameProductNotice: 'You have already placed an order for this item recently. Please wait before ordering again, or contact our support team.',
     sameProductNoticeBn: 'আপনি ইতিমধ্যে এই পণ্যটির জন্য একটি অর্ডার করেছেন। নতুন অর্ডারের জন্য অপেক্ষা করুন অথবা আমাদের সাথে যোগাযোগ করুন।',
     maxOrdersNotice: 'You have reached the maximum daily order limit from this device. Please contact customer support for urgent orders.',
@@ -10117,6 +13369,10 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
         blockByIp: true,
         protectIncompleteOrders: true,
         applyOnLandingPages: true,
+        courierOtpEnabled: false,
+        courierOtpSuccessThreshold: 60,
+        courierOtpMinParcels: 3,
+        otpWhenCourierCheckUnavailable: false,
         sameProductNotice: 'You have already placed an order for this item recently. Please wait before ordering again, or contact our support team.',
         sameProductNoticeBn: 'আপনি ইতিমধ্যে এই পণ্যটির জন্য একটি অর্ডার করেছেন। নতুন অর্ডারের জন্য অপেক্ষা করুন অথবা আমাদের সাথে যোগাযোগ করুন।',
         maxOrdersNotice: 'You have reached the maximum daily order limit from this device. Please contact customer support for urgent orders.',
@@ -10270,6 +13526,19 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
               />
             </label>
           </div>
+        </div>
+
+        <div style={{ marginTop: 20, padding: 16, border: '1px solid rgba(168,85,247,.3)', borderRadius: 12, background: 'linear-gradient(135deg,rgba(139,92,246,.09),rgba(15,23,42,.28))' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+            <div><div style={{ fontSize: 14, fontWeight: 750 }}>Courier-risk phone verification</div><p className="dim" style={{ fontSize: 12, margin: '4px 0 0', lineHeight: 1.5 }}>If a courier API reports a low delivery success rate, send an OTP before the order is created. Configure an active SMS provider in Messages → Message Marketing.</p></div>
+            <label className="sa-chk" style={{ fontWeight: 700 }}><input type="checkbox" checked={fd.courierOtpEnabled === true} onChange={e => setFd('courierOtpEnabled', e.target.checked)} /> Require OTP for risky orders</label>
+          </div>
+          <div className="sa-sgrid">
+            <label>Ask for OTP at or below this courier success rate (%)<input type="number" min="0" max="100" value={fd.courierOtpSuccessThreshold ?? 60} onChange={e => setFd('courierOtpSuccessThreshold', Math.max(0, Math.min(100, Number(e.target.value) || 0)))} placeholder="60" /></label>
+            <label>Minimum past courier parcels before scoring<input type="number" min="1" max="100" value={fd.courierOtpMinParcels ?? 3} onChange={e => setFd('courierOtpMinParcels', Math.max(1, Math.min(100, Number(e.target.value) || 1)))} placeholder="3" /></label>
+          </div>
+          <label className="sa-chk" style={{ marginTop: 12, display: 'inline-flex' }}><input type="checkbox" checked={fd.otpWhenCourierCheckUnavailable === true} onChange={e => setFd('otpWhenCourierCheckUnavailable', e.target.checked)} /> Also require OTP when courier score is unavailable</label>
+          <p className="dim" style={{ fontSize: 11, margin: '8px 0 0', lineHeight: 1.5 }}>Only past delivery/cancel records are courier risk evidence; OTP confirms access to the phone. Scores are cached for 6 hours to reduce courier API calls. New customers without enough history are treated as unscored.</p>
         </div>
 
         {/* Section 2: Protection Switches */}
@@ -10604,6 +13873,8 @@ function SettingsAdmin() {
       const updated = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(updated.error || 'The server rejected these settings.');
       setF(updated);
+      try { localStorage.setItem('metromaa_cached_settings', JSON.stringify(updated)); } catch {}
+      window.dispatchEvent(new CustomEvent('store-settings-updated', { detail: updated }));
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e: any) {
@@ -10721,7 +13992,7 @@ function SettingsAdmin() {
 
   if (!f) return (
     <div className="sa-top">
-      <h1>Settings</h1>
+      <h1>{adminTranslate("Settings")}</h1>
       <span style={{ fontSize: 12, color: '#94a3b8' }}>
         {settingsLoading ? 'Loading settings…' : settingsLoadError || 'Settings are unavailable.'}
       </span>
@@ -10732,7 +14003,7 @@ function SettingsAdmin() {
     <>
       <div className="sa-top">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h1>Settings</h1>
+          <h1>{adminTranslate("Settings")}</h1>
           <span style={{ fontSize: 12, color: '#94a3b8' }}>Brand, Slider & Store Configuration</span>
         </div>
         <button className="sa-btn" disabled={busy} onClick={save}>
@@ -11715,7 +14986,7 @@ function SettingsAdmin() {
               return <section className="sa-card sa-home-language" key={lang}>
                 <div className="sa-home-language-title"><h3>{lang === 'en' ? 'English' : 'Bangla'}</h3><span>{lang.toUpperCase()}</span></div>
                 <div className="sa-home-copy-grid">
-                  <label className="wide">Page title<input maxLength={180} value={localized.title || ''} onChange={(e) => setInfoPageCopy(lang, 'title', e.target.value)} placeholder="Use current default" /></label>
+                  <label className="wide">{adminTranslate("Page title")}<input maxLength={180} value={localized.title || ''} onChange={(e) => setInfoPageCopy(lang, 'title', e.target.value)} placeholder="Use current default" /></label>
                   {[0, 1, 2].map((index) => <label className="wide" key={index}>Paragraph {index + 1}<textarea rows={3} maxLength={1500} value={localized.body?.[index] || ''} onChange={(e) => setInfoPageCopy(lang, 'body', e.target.value, index)} placeholder="Leave blank to keep the default paragraph" /></label>)}
                 </div>
               </section>;
@@ -12104,7 +15375,295 @@ function CourierWebhookBox({
   );
 }
 
-function IntegrationsAdmin() {
+const PAYMENT_GATEWAY_PROVIDERS = [
+  { id: 'easypay', name: 'Easy Pay', mark: 'EP', description: 'Brand-key checkout and server-side payment verification.', docs: 'https://easypay.easyearn.bd/developers/docs', fields: [{ key: 'brandKey', label: 'Brand Key', secret: true }] },
+  { id: 'sslcommerz', name: 'SSLCOMMERZ', mark: 'SSL', description: 'Hosted checkout, IPN notification, and transaction validation.', docs: 'https://developer.sslcommerz.com/doc/v4/', fields: [{ key: 'storeId', label: 'Store ID' }, { key: 'storePassword', label: 'Store Password', secret: true }] },
+  { id: 'shurjopay', name: 'shurjoPay', mark: 'SP', description: 'Token, payment initiation, and payment verification APIs.', docs: 'https://shurjopay.com.bd/frontend-developers/direct-integration-with-api', fields: [{ key: 'username', label: 'Store Username' }, { key: 'password', label: 'Store Password', secret: true }, { key: 'prefix', label: 'Payment Prefix' }] },
+  { id: 'portpos', name: 'PortPos', mark: 'PP', description: 'REST checkout with sandbox/live app credentials and transaction verification.', docs: 'https://developer.portpos.com/documentation-v2.php', fields: [{ key: 'appKey', label: 'App Key' }, { key: 'secretKey', label: 'Secret Key', secret: true }] },
+  { id: 'aamarpay', name: 'aamarPay', mark: 'AP', description: 'Hosted payment API using merchant store credentials.', docs: 'https://aamarpay.readme.io/reference/overview', fields: [{ key: 'storeId', label: 'Store ID' }, { key: 'signatureKey', label: 'Signature Key', secret: true }] },
+  { id: 'paystation', name: 'PayStation', mark: 'PS', description: 'Hosted checkout, transaction status APIs, and merchant IPN.', docs: 'https://www.paystation.com.bd/documentation', fields: [{ key: 'merchantId', label: 'Merchant ID' }, { key: 'password', label: 'Merchant Password', secret: true }] },
+  { id: 'moneybag', name: 'Moneybag', mark: 'MB', description: 'Sandbox-first checkout and server-side transaction verification.', docs: 'https://developers.moneybag.com.bd/docs', fields: [{ key: 'merchantApiKey', label: 'Merchant API Key', secret: true }] },
+  { id: 'paysuite', name: 'PaySuite', mark: 'PST', description: 'Merchant API setup with separate development and production environments.', docs: 'https://www.paysuiteltd.com/en/docs', fields: [{ key: 'merchantId', label: 'Merchant ID' }, { key: 'apiKey', label: 'API Key' }, { key: 'apiSecret', label: 'API Secret', secret: true }, { key: 'password', label: 'Merchant Password', secret: true }] },
+  { id: 'bkash', name: 'bKash PGW', mark: 'bK', description: 'Direct bKash online business payment gateway credentials.', docs: 'https://www.bkash.com/en/business', fields: [{ key: 'appKey', label: 'App Key', secret: true }, { key: 'appSecret', label: 'App Secret', secret: true }, { key: 'username', label: 'Username' }, { key: 'password', label: 'Password', secret: true }] },
+  { id: 'nagad', name: 'Nagad Merchant API', mark: 'NG', description: 'Merchant-issued Nagad API credentials; use the credential names supplied with your account.', docs: 'https://nagad.com.bd/bn/services/?service=merchant-pay', fields: [{ key: 'merchantId', label: 'Merchant ID' }, { key: 'merchantNumber', label: 'Merchant Number' }, { key: 'apiKey', label: 'API Key', secret: true }, { key: 'apiSecret', label: 'API Secret', secret: true }] },
+  { id: 'rocket', name: 'Rocket / DBBL', mark: 'RK', description: 'Rocket merchant onboarding and DBBL-issued integration details.', docs: 'https://www.dutchbanglabank.com/rocket/merchant-payment.html', fields: [{ key: 'merchantId', label: 'Merchant ID' }, { key: 'merchantNumber', label: 'Merchant Number' }, { key: 'apiKey', label: 'API Key', secret: true }, { key: 'apiSecret', label: 'API Secret', secret: true }] },
+  { id: 'upay', name: 'upay Merchant API', mark: 'UP', description: 'Merchant-issued upay credentials and integration details.', docs: 'https://www.upaybd.com/', fields: [{ key: 'merchantId', label: 'Merchant ID' }, { key: 'merchantNumber', label: 'Merchant Number' }, { key: 'apiKey', label: 'API Key', secret: true }, { key: 'apiSecret', label: 'API Secret', secret: true }] },
+  { id: 'banglaqr', name: 'Bangla QR (Acquirer)', mark: 'QR', description: 'Acquirer-issued merchant QR and payment verification integration.', docs: 'https://www.bb.org.bd/en/index.php/financialsystems/paysystems', fields: [{ key: 'acquirer', label: 'Acquiring Bank / PSP' }, { key: 'merchantId', label: 'Merchant ID' }, { key: 'apiKey', label: 'API Key', secret: true }, { key: 'apiSecret', label: 'API Secret', secret: true }] },
+];
+
+function PaymentGatewaysAdmin() {
+  const [gateways, setGateways] = useState<Record<string, any> | null>(null);
+  const [selectedProviderId, setSelectedProviderId] = useState('sslcommerz');
+  const [busyId, setBusyId] = useState('');
+  const [savedId, setSavedId] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    aFetch('/admin/payment-gateways').then(async (response) => {
+      if (!response.ok) throw new Error('Could not load gateway settings. Sign in as the owner and try again.');
+      setGateways(await response.json());
+    }).catch((reason) => setError(reason?.message || 'Could not load gateway settings.'));
+  }, []);
+
+  const updateGateway = (id: string, updater: (current: any) => any) => setGateways((current) => current ? { ...current, [id]: updater(current[id] || {}) } : current);
+  const updateEnvironment = (id: string, environment: 'sandbox' | 'live', field: string, value: string) => updateGateway(id, (current) => {
+    const isSecret = !!PAYMENT_GATEWAY_PROVIDERS.find((provider) => provider.id === id)?.fields.find((item) => item.key === field)?.secret;
+    return {
+      ...current,
+      [environment]: {
+        ...(current[environment] || {}),
+        credentials: { ...(current[environment]?.credentials || {}), [field]: value },
+        ...(isSecret ? { hasSecrets: { ...(current[environment]?.hasSecrets || {}), [field]: false } } : {}),
+      },
+    };
+  });
+
+  const saveGateway = async (id: string) => {
+    if (!gateways?.[id]) return;
+    setBusyId(id); setSavedId(''); setError('');
+    try {
+      const response = await aFetch('/admin/payment-gateways', { method: 'PUT', body: JSON.stringify({ [id]: gateways[id] }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error || 'Could not save gateway credentials.');
+      setGateways(result); setSavedId(id); window.setTimeout(() => setSavedId((current) => current === id ? '' : current), 2500);
+    } catch (reason: any) {
+      setError(reason?.message || 'Could not save gateway credentials.');
+    } finally { setBusyId(''); }
+  };
+
+  if (!gateways) return <div className="pg-page"><div className="pg-head"><div><span className="pg-eyebrow">PAYMENTS · PROVIDER SETUP</span><h1>{adminTranslate("Payment Gateways")}</h1><p>{error || 'Loading gateway settings…'}</p></div></div></div>;
+
+  const selectedProvider = PAYMENT_GATEWAY_PROVIDERS.find((provider) => provider.id === selectedProviderId) || PAYMENT_GATEWAY_PROVIDERS[0];
+  const configuredCount = PAYMENT_GATEWAY_PROVIDERS.filter((provider) => {
+    const config = gateways[provider.id] || {};
+    const environment = config[config.mode === 'live' ? 'live' : 'sandbox'] || {};
+    const credentials = environment.credentials || {};
+    return provider.fields.every((field) => field.secret
+      ? !!(environment.hasSecrets?.[field.key] || (credentials[field.key] && credentials[field.key] !== '••••••'))
+      : !!String(credentials[field.key] || '').trim());
+  }).length;
+
+  return (
+    <div className="pg-page">
+      <header className="pg-head">
+        <div><span className="pg-eyebrow">PAYMENTS · PROVIDER SETUP</span><h1>{adminTranslate("Payment Gateways")}</h1><p>Connect merchant accounts and keep test and live credentials separate.</p></div>
+        <span className="pg-owner-badge"><span /> Owner settings</span>
+      </header>
+
+      <section className="pg-security-note">
+        <span className="pg-note-icon">⌑</span>
+        <div><strong>Start in sandbox</strong><p>Credentials are AES-256-GCM encrypted in persistent server storage and masked here. Keep the server’s private payment key file with its persistent data; without it, saved credentials cannot be decrypted. Adding credentials does not activate checkout yet: each provider still needs its own server-side checkout, IPN/callback, and transaction verification flow.</p></div>
+      </section>
+
+      {error && <div className="pg-error" role="alert">{error}</div>}
+      <section className="pg-provider-workspace">
+        <div className="pg-provider-picker">
+          <label htmlFor="pg-provider-select">Payment provider</label>
+          <select id="pg-provider-select" value={selectedProviderId} onChange={(event) => setSelectedProviderId(event.target.value)}>
+            {PAYMENT_GATEWAY_PROVIDERS.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
+          </select>
+          <span>{configuredCount} of {PAYMENT_GATEWAY_PROVIDERS.length} providers configured</span>
+        </div>
+        {(() => {
+          const provider = selectedProvider;
+          const config = gateways[provider.id] || {};
+          const mode = config.mode === 'live' ? 'live' : 'sandbox';
+          const environment = config[mode] || {};
+          const credentials = environment.credentials || {};
+          const ready = provider.fields.every((field) => field.secret
+            ? !!(environment.hasSecrets?.[field.key] || (credentials[field.key] && credentials[field.key] !== '••••••'))
+            : !!String(credentials[field.key] || '').trim());
+          return (
+            <section className="pg-provider open" key={provider.id}>
+              <div className="pg-provider-head">
+                <span className="pg-provider-mark">{provider.mark}</span>
+                <span className="pg-provider-title"><strong>{provider.name}</strong><small>{provider.description}</small></span>
+                <span className={`pg-provider-status ${ready ? 'ready' : ''}`}><i />{ready ? 'Credentials saved' : 'Setup needed'}</span>
+              </div>
+              <div className="pg-provider-body">
+                <div className="pg-provider-tools">
+                  <div className="pg-env-switch" role="group" aria-label={`${provider.name} environment`}>
+                    <button type="button" className={mode === 'sandbox' ? 'active' : ''} onClick={() => updateGateway(provider.id, (current) => ({ ...current, mode: 'sandbox' }))}>Sandbox</button>
+                    <button type="button" className={mode === 'live' ? 'active live' : ''} onClick={() => updateGateway(provider.id, (current) => ({ ...current, mode: 'live' }))}>{adminTranslate("Live")}</button>
+                  </div>
+                  <a href={provider.docs} target="_blank" rel="noreferrer">Developer docs ↗</a>
+                </div>
+                <div className="pg-fields">
+                  {provider.fields.map((field) => <label className="pg-field" key={field.key}>
+                    <span>{field.label}{field.secret && <small> · Secret</small>}</span>
+                    <input
+                      type={field.secret ? 'password' : 'text'}
+                      autoComplete="new-password"
+                      value={field.secret && environment.hasSecrets?.[field.key] ? '' : (credentials[field.key] || '')}
+                      onChange={(event) => updateEnvironment(provider.id, mode, field.key, event.target.value)}
+                    />
+                    {field.secret && environment.hasSecrets?.[field.key] && <small className="pg-secret-hint">Saved already · enter a new value only to replace it</small>}
+                  </label>)}
+                </div>
+                <footer className="pg-provider-footer">
+                  <span>{mode === 'sandbox' ? 'Test environment selected' : 'Live credentials selected'} · Checkout is not active</span>
+                  <button type="button" className="pg-save-btn" disabled={busyId === provider.id} onClick={() => void saveGateway(provider.id)}>{busyId === provider.id ? 'Saving…' : savedId === provider.id ? '✓ Saved' : 'Save credentials'}</button>
+                </footer>
+              </div>
+            </section>
+          );
+        })()}
+        <div className="pg-checkout-note"><strong>Customer checkout</strong><span>Customers will be able to choose one payment method. Only providers with a completed and enabled checkout integration can appear there; saving credentials alone does not enable a provider.</span></div>
+      </section>
+    </div>
+  );
+}
+
+function MessageMarketingAdmin() {
+  const [providers, setProviders] = useState<any[]>([]);
+  const [riskSettings, setRiskSettings] = useState<any>({ courierOtpEnabled: false, courierOtpSuccessThreshold: 60, courierOtpMinParcels: 3, otpWhenCourierCheckUnavailable: false });
+  const [activeId, setActiveId] = useState('');
+  const [selectedId, setSelectedId] = useState('');
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [search, setSearch] = useState('');
+  const [segment, setSegment] = useState('all');
+  const [message, setMessage] = useState('');
+  const [consent, setConsent] = useState(false);
+  const [phone, setPhone] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [riskSaving, setRiskSaving] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const [balance, setBalance] = useState<Record<string, any>>({});
+  const [campaignId, setCampaignId] = useState('');
+  const [campaign, setCampaign] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const presets = [
+    { type: 'custom', name: 'Custom provider' }, { type: 'bulksmsbd', name: 'BulkSMSBD' },
+    { type: 'alphasms', name: 'Alpha SMS' }, { type: 'mimsms', name: 'MimSMS' },
+    { type: 'smsnetbd', name: 'SMS.net.bd' }, { type: 'other', name: 'Other provider' },
+  ];
+  const freshProvider = (type = 'custom') => ({ id: `sms_${Date.now().toString(36)}`, name: presets.find(p => p.type === type)?.name || 'SMS provider', type, enabled: true, sendUrl: '', sendMethod: 'GET', sendContentType: 'application/json', sendBodyTemplate: '', sendHeaders: '', sendSuccessPath: '', sendSuccessValue: '', senderId: '', apiKey: '', hasApiKey: false, delayMs: 1000, balanceUrl: '', balanceMethod: 'GET', balanceContentType: 'application/json', balanceBodyTemplate: '', balanceHeaders: '', balancePath: 'balance', balanceUnit: '৳', lowBalanceThreshold: 0, balanceApiKey: '', hasBalanceApiKey: false });
+  const loadProviders = async () => {
+    const response = await aFetch('/admin/sms/marketing/providers');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error || 'Could not load SMS providers.');
+    setProviders(data.providers || []); setActiveId(data.activeProviderId || '');
+    setSelectedId(current => current || data.activeProviderId || data.providers?.[0]?.id || '');
+  };
+  useEffect(() => {
+    Promise.all([loadProviders(), aFetch('/admin/sms/marketing/audiences').then(r => r.json()).then(d => { if (!d.contacts) throw new Error(d.error || 'Could not load customer audience.'); setContacts(d.contacts); }), aFetch('/settings').then(r => r.json()).then(d => setRiskSettings({ courierOtpEnabled: false, courierOtpSuccessThreshold: 60, courierOtpMinParcels: 3, otpWhenCourierCheckUnavailable: false, ...(d.fraudDetector || {}) }))])
+      .catch(reason => setError(reason?.message || 'Could not load SMS marketing.')).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => {
+    if (!campaignId) return;
+    let alive = true;
+    const poll = async () => { try { const response = await aFetch(`/admin/sms/marketing/campaigns/${campaignId}`); const data = await response.json(); if (alive && response.ok) { setCampaign(data); if (['completed', 'stopped', 'failed'].includes(data.status)) clearInterval(timer); } } catch {} };
+    const timer = setInterval(poll, 1800); void poll(); return () => { alive = false; clearInterval(timer); };
+  }, [campaignId]);
+  const updateProvider = (id: string, key: string, value: any) => setProviders(current => current.map(p => p.id === id ? { ...p, [key]: value } : p));
+  const saveProviders = async () => {
+    setSaving(true); setError(''); setNotice('');
+    try {
+      const response = await aFetch('/admin/sms/marketing/providers', { method: 'PUT', body: JSON.stringify({ providers, activeProviderId: activeId }) });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Could not save SMS provider settings.');
+      setProviders(data.providers || []); setActiveId(data.activeProviderId || ''); setNotice('SMS provider settings saved securely.');
+    } catch (reason: any) { setError(reason?.message || 'Could not save SMS provider settings.'); }
+    finally { setSaving(false); }
+  };
+  const checkBalance = async (id: string) => {
+    setBusy(true); setError(''); setNotice('');
+    try { const response = await aFetch(`/admin/sms/marketing/providers/${id}/balance`, { method: 'POST', body: '{}' }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Balance lookup failed.'); setBalance(current => ({ ...current, [id]: data })); setNotice(`Balance updated: ${data.unit}${data.balance}`); await loadProviders(); }
+    catch (reason: any) { setError(reason?.message || 'Balance lookup failed.'); } finally { setBusy(false); }
+  };
+  const saveRiskSettings = async () => {
+    setRiskSaving(true); setError(''); setNotice('');
+    try {
+      const latestResponse = await aFetch('/settings'); const latest = await latestResponse.json();
+      if (!latestResponse.ok) throw new Error(latest.error || 'Could not load store settings.');
+      const response = await aFetch('/settings', { method: 'PUT', body: JSON.stringify({ ...latest, fraudDetector: { ...(latest.fraudDetector || {}), ...riskSettings } }) });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Could not save phone verification settings.');
+      setRiskSettings({ ...riskSettings, ...(data.fraudDetector || {}) }); setNotice('Order verification rules saved.');
+    } catch (reason: any) { setError(reason?.message || 'Could not save phone verification settings.'); }
+    finally { setRiskSaving(false); }
+  };
+  const sendTest = async () => {
+    setBusy(true); setNotice(''); setError('');
+    try { const response = await aFetch('/admin/sms/test', { method: 'POST', body: JSON.stringify({ providerId: selectedId, phone }) }); const data = await response.json(); if (!response.ok || !data.ok) throw new Error(data?.error || data?.body || 'Test SMS failed.'); setNotice(`Test SMS sent${data.status ? ` (status ${data.status})` : ''}.`); }
+    catch (reason: any) { setError(reason?.message || 'Test SMS failed.'); } finally { setBusy(false); }
+  };
+  const visibleContacts = contacts.filter(c => (segment === 'all' || (segment === 'buyers' ? c.ordersCount > 0 : c.ordersCount === 0)) && (!search || `${c.name} ${c.phone}`.toLowerCase().includes(search.toLowerCase()))).slice(0, 10000);
+  const startCampaign = async () => {
+    setBusy(true); setError(''); setNotice('');
+    try { const response = await aFetch('/admin/sms/marketing/campaigns', { method: 'POST', body: JSON.stringify({ providerId: activeId, phones: selected, message, consent }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Could not start SMS campaign.'); setCampaignId(data.campaign.id); setCampaign(data.campaign); setNotice('Campaign started. Progress updates automatically.'); }
+    catch (reason: any) { setError(reason?.message || 'Could not start SMS campaign.'); } finally { setBusy(false); }
+  };
+  const selectedProvider = providers.find(p => p.id === selectedId);
+  const isRunning = campaign?.status === 'sending' || campaign?.status === 'queued';
+  if (loading) return <div className="sa-top"><h1>{adminTranslate("Message Marketing")}</h1><p className="dim">Loading provider settings…</p></div>;
+  return <div className="sa-page">
+    <div className="sa-top"><div><h1>{adminTranslate("Message Marketing")}</h1><p className="dim">Manage SMS providers, monitor balance, and send consent-based campaigns.</p></div><button className="sa-btn primary" onClick={() => void saveProviders()} disabled={saving}>{saving ? 'Saving…' : 'Save settings'}</button></div>
+    <div className="sa-card" style={{ padding: 18, marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}><div><h2 style={{ margin: 0, fontSize: 16 }}>SMS provider accounts</h2><p className="dim" style={{ margin: '5px 0 0', fontSize: 12 }}>Add more than one provider. Select the active account for bulk campaigns; order/status SMS keeps its existing connection.</p></div><button className="sa-btn" disabled={providers.length >= 12} onClick={() => { const next = freshProvider(); setProviders(current => [...current, next]); setSelectedId(next.id); setEditing(true); }}>+ Add provider</button></div>
+      {!providers.length && <div className="sa-empty" style={{ marginTop: 14 }}>No marketing provider added yet. Choose Add provider to configure an account.</div>}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(245px,1fr))', gap: 10, marginTop: 14 }}>
+        {providers.map(provider => <div key={provider.id} style={{ border: `1px solid ${activeId === provider.id ? 'rgba(168,85,247,.65)' : 'rgba(255,255,255,.1)'}`, borderRadius: 10, padding: 13, background: activeId === provider.id ? 'rgba(139,92,246,.09)' : 'rgba(255,255,255,.02)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'start' }}><label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700 }}><input type="radio" name="sms-active" checked={activeId === provider.id} onChange={() => { setActiveId(provider.id); setSelectedId(provider.id); }} />{provider.name}</label><label className="sa-chk"><input type="checkbox" checked={!!provider.enabled} onChange={e => updateProvider(provider.id, 'enabled', e.target.checked)} /> {adminTranslate("Enabled")}</label></div>
+          <div className="dim" style={{ fontSize: 11, marginTop: 8 }}>Balance: <b style={{ color: '#e2e8f0' }}>{balance[provider.id] ? `${balance[provider.id].unit}${balance[provider.id].balance}` : provider.lastBalance != null ? `${provider.balanceUnit || '৳'}${provider.lastBalance}` : provider.balanceUrl ? 'Not checked yet' : 'Unavailable'}</b>{provider.lastBalanceAt && <span> · Checked {new Date(provider.lastBalanceAt).toLocaleString()}</span>}</div>
+          <div style={{ display: 'flex', gap: 7, marginTop: 11 }}><button className="sa-btn ghost sa-mini" onClick={() => { setSelectedId(provider.id); setEditing(true); }}>Configure</button><button className="sa-btn ghost sa-mini" disabled={busy || !provider.balanceUrl} onClick={() => void checkBalance(provider.id)}>Check balance</button><button className="sa-btn ghost sa-mini" onClick={() => { if (confirm(`Remove ${provider.name}?`)) { setProviders(current => current.filter(p => p.id !== provider.id)); if (activeId === provider.id) setActiveId(''); } }}>{adminTranslate("Remove")}</button></div>
+        </div>)}
+      </div>
+      {editing && selectedProvider && <div style={{ borderTop: '1px solid rgba(255,255,255,.1)', marginTop: 16, paddingTop: 15 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}><h3 style={{ margin: 0, fontSize: 14 }}>Configure provider</h3><button className="sa-btn ghost sa-mini" onClick={() => setEditing(false)}>Done</button></div>
+        <div className="sa-sgrid" style={{ marginTop: 12 }}>
+          <label>Provider preset<select value={selectedProvider.type} onChange={e => { const preset = presets.find(p => p.type === e.target.value); updateProvider(selectedProvider.id, 'type', e.target.value); if (preset && (!selectedProvider.name || presets.some(p => p.name === selectedProvider.name))) updateProvider(selectedProvider.id, 'name', preset.name); }}>{presets.map(p => <option value={p.type} key={p.type}>{p.name}</option>)}</select></label>
+          <label>Account label<input value={selectedProvider.name} onChange={e => updateProvider(selectedProvider.id, 'name', e.target.value)} placeholder="SMS account name" /></label>
+          <label style={{ gridColumn: '1 / -1' }}>Send API URL<input value={selectedProvider.sendUrl || ''} onChange={e => updateProvider(selectedProvider.id, 'sendUrl', e.target.value)} placeholder="https://provider.example/api/send?to={phone}&text={msg}&key={apiKey}" /></label>
+          <label>Send method<select value={selectedProvider.sendMethod || 'GET'} onChange={e => updateProvider(selectedProvider.id, 'sendMethod', e.target.value)}><option>GET</option><option>POST</option></select></label>
+          <label>Request content type<select value={selectedProvider.sendContentType || 'application/json'} onChange={e => updateProvider(selectedProvider.id, 'sendContentType', e.target.value)}><option value="application/json">JSON</option><option value="application/x-www-form-urlencoded">Form URL encoded</option></select></label>
+          <label>{adminTranslate("Sender ID")}<input value={selectedProvider.senderId || ''} onChange={e => updateProvider(selectedProvider.id, 'senderId', e.target.value)} placeholder="Approved sender ID" /></label>
+          <label>{adminTranslate("API key")}<input type="password" autoComplete="new-password" value={selectedProvider.apiKey || ''} onChange={e => updateProvider(selectedProvider.id, 'apiKey', e.target.value)} placeholder={selectedProvider.hasApiKey ? 'Saved securely · blank keeps current key' : 'Provider API key'} /></label>
+          {selectedProvider.sendMethod === 'POST' && <label style={{ gridColumn: '1 / -1' }}>POST body template (optional)<textarea rows={2} value={selectedProvider.sendBodyTemplate || ''} onChange={e => updateProvider(selectedProvider.id, 'sendBodyTemplate', e.target.value)} placeholder='{"to":"{phone}","message":"{msg}","apiKey":"{apiKey}","senderId":"{senderId}"}' /></label>}
+          <label>Custom send headers (JSON, optional)<textarea rows={2} value={selectedProvider.sendHeaders || ''} onChange={e => updateProvider(selectedProvider.id, 'sendHeaders', e.target.value)} placeholder='{"Authorization":"Bearer {apiKey}"}' /></label>
+          <label>Success response field (optional)<input value={selectedProvider.sendSuccessPath || ''} onChange={e => updateProvider(selectedProvider.id, 'sendSuccessPath', e.target.value)} placeholder="status or data.success" /></label>
+          {selectedProvider.sendSuccessPath && <label>Expected success value<input value={selectedProvider.sendSuccessValue || ''} onChange={e => updateProvider(selectedProvider.id, 'sendSuccessValue', e.target.value)} placeholder="true, 1, success, or ok" /></label>}
+          <label>Delay between SMS (ms)<input type="number" min="250" max="10000" value={selectedProvider.delayMs || 1000} onChange={e => updateProvider(selectedProvider.id, 'delayMs', Number(e.target.value))} /></label>
+          <label style={{ gridColumn: '1 / -1', marginTop: 6 }}><b>Balance API and low-balance alert</b></label>
+          <label style={{ gridColumn: '1 / -1' }}>Balance API URL (optional)<input value={selectedProvider.balanceUrl || ''} onChange={e => updateProvider(selectedProvider.id, 'balanceUrl', e.target.value)} placeholder="https://provider.example/api/balance?key={apiKey}" /></label>
+          <label>Balance method<select value={selectedProvider.balanceMethod || 'GET'} onChange={e => updateProvider(selectedProvider.id, 'balanceMethod', e.target.value)}><option>GET</option><option>POST</option></select></label>
+          <label>Balance response field<input value={selectedProvider.balancePath || ''} onChange={e => updateProvider(selectedProvider.id, 'balancePath', e.target.value)} placeholder="balance or data.balance" /></label>
+          {selectedProvider.balanceMethod === 'POST' && <label style={{ gridColumn: '1 / -1' }}>Balance POST body template<textarea rows={2} value={selectedProvider.balanceBodyTemplate || ''} onChange={e => updateProvider(selectedProvider.id, 'balanceBodyTemplate', e.target.value)} placeholder='{"apiKey":"{apiKey}"}' /></label>}
+          <label>Balance API headers (JSON, optional)<textarea rows={2} value={selectedProvider.balanceHeaders || ''} onChange={e => updateProvider(selectedProvider.id, 'balanceHeaders', e.target.value)} placeholder='{"Authorization":"Bearer {apiKey}"}' /></label>
+          <label>Balance unit<input value={selectedProvider.balanceUnit || '৳'} onChange={e => updateProvider(selectedProvider.id, 'balanceUnit', e.target.value)} placeholder="৳ or SMS" /></label>
+          <label>Alert when balance is below<input type="number" min="0" value={selectedProvider.lowBalanceThreshold ?? 0} onChange={e => updateProvider(selectedProvider.id, 'lowBalanceThreshold', Number(e.target.value))} placeholder="Set a threshold" /></label>
+          <label>Separate balance API key (optional)<input type="password" autoComplete="new-password" value={selectedProvider.balanceApiKey || ''} onChange={e => updateProvider(selectedProvider.id, 'balanceApiKey', e.target.value)} placeholder={selectedProvider.hasBalanceApiKey ? 'Saved securely · blank keeps current key' : 'Leave blank to use send API key'} /></label>
+        </div>
+        <p className="dim" style={{ fontSize: 11, lineHeight: 1.6 }}>Placeholders: <code>{'{phone}'}</code>, <code>{'{msg}'}</code>, <code>{'{apiKey}'}</code>, <code>{'{senderId}'}</code>, <code>{'{name}'}</code>. Provider response formats differ; balance lookup requires a valid balance endpoint and numeric response field.</p>
+        <div style={{ display: 'flex', gap: 9, maxWidth: 560, marginTop: 12 }}><input className="sa-input" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))} placeholder="Test recipient phone" inputMode="tel" /><button className="sa-btn" onClick={() => void sendTest()} disabled={busy || phone.length !== 11 || !selectedProvider.enabled || !selectedProvider.sendUrl || (!selectedProvider.apiKey && !selectedProvider.hasApiKey)}>{busy ? 'Sending…' : 'Send test SMS'}</button></div>
+      </div>}
+      <p className="dim" style={{ fontSize: 11, lineHeight: 1.55, margin: '14px 0 0' }}>Balance is automatically checked every 15 minutes when a balance endpoint is configured. Provider credentials are encrypted at rest and are never displayed after saving.</p>
+    </div>
+    <div className="sa-card" style={{ padding: 18, marginBottom: 14, borderColor: 'rgba(168,85,247,.3)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}><div><h2 style={{ margin: 0, fontSize: 16 }}>Order phone verification</h2><p className="dim" style={{ margin: '5px 0 0', fontSize: 12 }}>Use courier delivery history to require an SMS code for risky checkout orders.</p></div><label className="sa-chk"><input type="checkbox" checked={riskSettings.courierOtpEnabled === true} onChange={e => setRiskSettings((s: any) => ({ ...s, courierOtpEnabled: e.target.checked }))} /> {adminTranslate("Enabled")}</label></div>
+      <div className="sa-sgrid" style={{ marginTop: 12 }}>
+        <label>Require code at or below success rate (%)<input type="number" min="0" max="100" value={riskSettings.courierOtpSuccessThreshold ?? 60} onChange={e => setRiskSettings((s: any) => ({ ...s, courierOtpSuccessThreshold: Math.max(0, Math.min(100, Number(e.target.value) || 0)) }))} placeholder="60" /></label>
+        <label>Minimum past parcels for score<input type="number" min="1" max="100" value={riskSettings.courierOtpMinParcels ?? 3} onChange={e => setRiskSettings((s: any) => ({ ...s, courierOtpMinParcels: Math.max(1, Math.min(100, Number(e.target.value) || 1)) }))} placeholder="3" /></label>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 12 }}><label className="sa-chk"><input type="checkbox" checked={riskSettings.otpWhenCourierCheckUnavailable === true} onChange={e => setRiskSettings((s: any) => ({ ...s, otpWhenCourierCheckUnavailable: e.target.checked }))} /> Also ask for OTP when courier score is unavailable</label><button className="sa-btn" onClick={() => void saveRiskSettings()} disabled={riskSaving}>{riskSaving ? 'Saving…' : 'Save verification rules'}</button></div>
+      <p className="dim" style={{ margin: '8px 0 0', fontSize: 11, lineHeight: 1.5 }}>The OTP proves access to the phone; it does not guarantee the customer will accept delivery. The order enters the usual pending workflow after verification. Courier score is cached for 6 hours to reduce API usage. Add and activate an SMS provider above first.</p>
+    </div>
+    <div className="sa-card" style={{ padding: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}><div><h2 style={{ margin: 0, fontSize: 16 }}>Bulk SMS campaign</h2><p className="dim" style={{ margin: '5px 0 0', fontSize: 12 }}>Choose customer recipients and send through the selected active provider.</p></div><div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><select value={segment} onChange={e => { setSegment(e.target.value); setSelected([]); }}><option value="all">All contacts</option><option value="buyers">Customers with orders</option><option value="leads">Contacts without completed orders</option></select><button className="sa-btn ghost" onClick={() => void aFetch('/admin/sms/marketing/audiences').then(r => r.json()).then(d => setContacts(d.contacts || []))}>Refresh audience</button></div></div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(190px,1fr) auto auto', gap: 9, marginTop: 14 }}><input className="sa-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search customer name or phone" /><button className="sa-btn ghost" onClick={() => setSelected(current => [...new Set([...current, ...visibleContacts.map(c => c.phone)])].slice(0, 10000))}>Select all matching</button><button className="sa-btn ghost" onClick={() => setSelected([])}>{adminTranslate("Clear selection")}</button></div>
+      <div style={{ margin: '8px 0', fontSize: 12 }}><b>{selected.length}</b> selected · {contacts.length} unique contacts · maximum 10,000 per campaign</div>
+      <div style={{ maxHeight: 220, overflow: 'auto', border: '1px solid rgba(255,255,255,.09)', borderRadius: 8 }}><table className="sa-table"><thead><tr><th>Select</th><th>{adminTranslate("Customer")}</th><th>{adminTranslate("Phone")}</th><th>{adminTranslate("Orders")}</th></tr></thead><tbody>{visibleContacts.slice(0, 1000).map(c => <tr key={c.phone}><td><input type="checkbox" checked={selected.includes(c.phone)} disabled={!selected.includes(c.phone) && selected.length >= 10000} onChange={e => setSelected(cur => e.target.checked ? [...cur, c.phone] : cur.filter(p => p !== c.phone))} /></td><td>{c.name}</td><td>{c.phone}</td><td>{c.ordersCount}</td></tr>)}</tbody></table>{visibleContacts.length > 1000 && <div className="dim" style={{ padding: 9 }}>Showing first 1,000 matching contacts. “Select all matching” includes up to 10,000.</div>}{!visibleContacts.length && <div className="sa-empty">No contacts match your search.</div>}</div>
+      <label style={{ display: 'block', marginTop: 14 }}>Message<textarea rows={4} maxLength={1000} value={message} onChange={e => setMessage(e.target.value)} placeholder="Write your SMS message. You can use {name} and {phone}." style={{ width: '100%', marginTop: 6 }} /></label><div className="dim" style={{ textAlign: 'right', fontSize: 11 }}>{message.length}/1000 characters</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}><label className="sa-chk"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} /> I have permission to message the selected recipients and will follow provider/local messaging rules.</label><div style={{ textAlign: 'right' }}><div className="dim" style={{ fontSize: 11 }}>Estimated duration: ~{Math.ceil(selected.length * (Number(selectedProvider?.delayMs) || 1000) / 60000)} min at this provider pace</div><button className="sa-btn primary" disabled={busy || isRunning || !activeId || !selected.length || selected.length > 10000 || !message.trim() || !consent} onClick={() => void startCampaign()}>{busy ? 'Starting…' : `Send SMS to ${selected.length}`}</button></div></div>
+      {campaign && <div role="status" className="sa-card" style={{ marginTop: 14, padding: 13 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}><b>Campaign · {campaign.status}</b>{isRunning && <button className="sa-btn ghost sa-mini" onClick={() => void aFetch(`/admin/sms/marketing/campaigns/${campaignId}/stop`, { method: 'POST', body: '{}' })}>Stop</button>}</div><div style={{ marginTop: 7, fontSize: 12 }}>{campaign.current || 0} / {campaign.total || selected.length} processed · {campaign.sentCount || 0} sent · {campaign.failedCount || 0} failed</div>{campaign.errors?.length > 0 && <details style={{ marginTop: 8 }}><summary>View delivery errors ({campaign.errors.length})</summary>{campaign.errors.map((e: any, i: number) => <div key={i} className="dim">{e.phone || ''} {e.error}</div>)}</details>}</div>}
+    </div>
+    {(notice || error) && <div role={error ? 'alert' : 'status'} style={{ marginTop: 12, color: error ? '#fca5a5' : '#4ade80', fontSize: 12 }}>{error || notice}</div>}
+  </div>;
+}
+
+function IntegrationsAdmin({ focusCourier = false }: { focusCourier?: boolean }) {
   const [ig, setIg] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -12127,6 +15686,11 @@ function IntegrationsAdmin() {
     sms: false,
   });
   const toggleSec = (k: string) => setOpenSec((p) => ({ ...p, [k]: !p[k] }));
+
+  const jumpToCourierSetup = (section: 'fraud' | 'couriers', targetId: string) => {
+    setOpenSec((prev) => ({ ...prev, [section]: true }));
+    window.setTimeout(() => document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 180);
+  };
 
   useEffect(() => { aFetch('/admin/integrations').then((r) => r.json()).then(setIg).catch(() => {}); }, []);
 
@@ -12306,7 +15870,6 @@ function IntegrationsAdmin() {
   };
   const testSms = async () => { const phone = prompt('Save first. Send a test SMS to which BD number?', '01'); if (!phone) return; setMsg('sending test sms…'); const r = await aFetch('/admin/sms/test', { method: 'POST', body: JSON.stringify({ phone }) }).then((x) => x.json()); setMsg(r.ok ? 'SMS sent ✓ (status ' + (r.status || 'ok') + ')' : 'SMS failed: ' + (r.error || r.body || r.status)); };
   const testEmail = async () => { const to = prompt('Save first. Send a test email to?', ''); if (!to) return; setMsg('sending test email…'); const r = await aFetch('/admin/email/test', { method: 'POST', body: JSON.stringify({ to }) }).then((x) => x.json()); setMsg(r.ok ? 'Email sent ✓' : 'Email failed: ' + (r.error || '')); };
-  const testTracking = async () => { setMsg('sending test conversion…'); const r = await aFetch('/admin/tracking/test', { method: 'POST', body: JSON.stringify({}) }).then((x) => x.json()); setMsg(r.error ? 'Tracking: ' + r.error : 'Sent ✓ — FB ' + (r.fb ? r.fb.status : 'off') + ' · TikTok ' + (r.ttk ? r.ttk.status : 'off') + '. Check Events Manager → Test Events.'); };
   const tr = ig.tracking || {};
   const fr = ig.fraud || {};
 
@@ -12373,7 +15936,15 @@ function IntegrationsAdmin() {
   };
   return (
     <>
-      <div className="sa-top"><h1>Integrations</h1><button className="sa-btn" disabled={busy} onClick={save}>{busy ? 'Saving…' : saved ? 'Saved ✓' : 'Save all'}</button></div>
+      <div className="sa-top"><h1>{focusCourier ? 'Courier API Setup' : 'Integrations'}</h1><button className="sa-btn" disabled={busy} onClick={save}>{busy ? 'Saving…' : saved ? 'Saved ✓' : 'Save all'}</button></div>
+      {focusCourier && <div className="sa-card courier-api-shortcuts" style={{ padding: 16, marginBottom: 16 }}>
+        <strong>Connect booking APIs and delivery-rating APIs here</strong>
+        <p className="dim" style={{ margin: '5px 0 12px', fontSize: 12 }}>Add courier merchant credentials below, test the connection, then save. Enabled booking accounts will appear in the Order List Courier column. Delivery history APIs power the customer success and return percentages.</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <button type="button" className="sa-btn ghost sa-mini" onClick={() => jumpToCourierSetup('couriers', 'courier-booking-api')}>📦 Courier booking &amp; accounts</button>
+          <button type="button" className="sa-btn ghost sa-mini" onClick={() => jumpToCourierSetup('fraud', 'courier-rating-api')}>📊 Courier rating API (% success)</button>
+        </div>
+      </div>}
       {msg && <div className="sa-card" style={{ padding: '10px 16px', marginBottom: 14 }}>{msg}</div>}
 
       <div className="sa-card" style={{ marginBottom: 16, overflow: 'hidden' }}>
@@ -12396,7 +15967,7 @@ function IntegrationsAdmin() {
         <div style={{ padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <b style={{ fontSize: 14 }}>Email Notification Status</b>
-          <label className="sa-chk"><input type="checkbox" checked={!!ig.email.enabled} onChange={(e) => setEmail('enabled', e.target.checked)} /> Enabled</label>
+          <label className="sa-chk"><input type="checkbox" checked={!!ig.email.enabled} onChange={(e) => setEmail('enabled', e.target.checked)} /> {adminTranslate("Enabled")}</label>
         </div>
         <p className="dim" style={{ fontSize: 13, marginBottom: 14 }}>Used for <b>2FA Login OTPs</b>, <b>Password Resets</b>, <b>Staff Onboarding Credentials</b>, and Customer Order Notifications.</p>
         <div className="sa-sgrid">
@@ -12412,8 +15983,8 @@ function IntegrationsAdmin() {
             <>
               <label>SMTP host<input value={ig.email.host || ''} onChange={(e) => setEmail('host', e.target.value)} placeholder="smtp.hostinger.com" /></label>
               <label>Port<input value={ig.email.port ?? ''} onChange={(e) => setEmail('port', e.target.value)} placeholder="587" /></label>
-              <label>Username<input value={ig.email.user || ''} onChange={(e) => setEmail('user', e.target.value)} placeholder="support@timingboost.xyz" /></label>
-              <label>Password<input type="password" value={ig.email.pass || ''} onChange={(e) => setEmail('pass', e.target.value)} placeholder={ig.email.hasPass ? 'saved — leave to keep' : ''} /></label>
+              <label>{adminTranslate("Username")}<input value={ig.email.user || ''} onChange={(e) => setEmail('user', e.target.value)} placeholder="support@timingboost.xyz" /></label>
+              <label>{adminTranslate("Password")}<input type="password" value={ig.email.pass || ''} onChange={(e) => setEmail('pass', e.target.value)} placeholder={ig.email.hasPass ? 'saved — leave to keep' : ''} /></label>
               <label>From name<input value={ig.email.fromName || ''} onChange={(e) => setEmail('fromName', e.target.value)} placeholder="TimeBoost" /></label>
               <label>From email<input value={ig.email.fromEmail || ''} onChange={(e) => setEmail('fromEmail', e.target.value)} placeholder="support@timingboost.xyz" /></label>
               <label className="sa-chk"><input type="checkbox" checked={!!ig.email.secure} onChange={(e) => setEmail('secure', e.target.checked)} /> Use SSL (port 465)</label>
@@ -12444,19 +16015,19 @@ function IntegrationsAdmin() {
         <div style={{ padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <b style={{ fontSize: 14 }}>SMS Gateway Status</b>
-          <label className="sa-chk"><input type="checkbox" checked={!!ig.sms.enabled} onChange={(e) => setSms('enabled', e.target.checked)} /> Enabled</label>
+          <label className="sa-chk"><input type="checkbox" checked={!!ig.sms.enabled} onChange={(e) => setSms('enabled', e.target.checked)} /> {adminTranslate("Enabled")}</label>
         </div>
         <p className="dim" style={{ fontSize: 13, marginBottom: 12 }}>Paste your provider's send URL. Use <b>{'{phone}'}</b>, <b>{'{msg}'}</b>, <b>{'{apiKey}'}</b>, <b>{'{senderId}'}</b> as placeholders — works with any BD provider (BulkSMSBD, Alpha, Mimsms…).</p>
         <div className="sa-sgrid">
-          <label style={{ gridColumn: '1 / -1' }}>Send URL template<input value={ig.sms.url || ''} onChange={(e) => setSms('url', e.target.value)} placeholder="https://api.sms.net.bd/sendsms?api_key={apiKey}&to={phone}&msg={msg}&sender_id={senderId}" /></label>
-          <label>Method<select value={ig.sms.method || 'GET'} onChange={(e) => setSms('method', e.target.value)}><option>GET</option><option>POST</option></select></label>
-          <label>Sender ID<input value={ig.sms.senderId || ''} onChange={(e) => setSms('senderId', e.target.value)} placeholder="optional" /></label>
-          <label>API key<input type="password" value={ig.sms.apiKey || ''} onChange={(e) => setSms('apiKey', e.target.value)} placeholder={ig.sms.hasApiKey ? 'saved — leave to keep' : ''} /></label>
+          <label style={{ gridColumn: '1 / -1' }}>{adminTranslate("Send URL template")}<input value={ig.sms.url || ''} onChange={(e) => setSms('url', e.target.value)} placeholder="https://api.sms.net.bd/sendsms?api_key={apiKey}&to={phone}&msg={msg}&sender_id={senderId}" /></label>
+          <label>{adminTranslate("Method")}<select value={ig.sms.method || 'GET'} onChange={(e) => setSms('method', e.target.value)}><option>GET</option><option>POST</option></select></label>
+          <label>{adminTranslate("Sender ID")}<input value={ig.sms.senderId || ''} onChange={(e) => setSms('senderId', e.target.value)} placeholder="optional" /></label>
+          <label>{adminTranslate("API key")}<input type="password" value={ig.sms.apiKey || ''} onChange={(e) => setSms('apiKey', e.target.value)} placeholder={ig.sms.hasApiKey ? 'saved — leave to keep' : ''} /></label>
           <label style={{ gridColumn: '1 / -1' }}>Order-placed SMS<input value={ig.sms.templatePlaced || ''} onChange={(e) => setSms('templatePlaced', e.target.value)} /></label>
           <label style={{ gridColumn: '1 / -1' }}>Status-update SMS<input value={ig.sms.templateStatus || ''} onChange={(e) => setSms('templateStatus', e.target.value)} /></label>
         </div>
         <p className="dim" style={{ fontSize: 12, margin: '8px 0 0' }}>Message placeholders: {'{id} {total} {status} {name} {courier} {track}'}</p>
-        <button className="sa-btn ghost sa-mini" style={{ marginTop: 12 }} onClick={testSms}>Send test SMS</button>
+        <button className="sa-btn ghost sa-mini" style={{ marginTop: 12 }} onClick={testSms}>{adminTranslate("Send test SMS")}</button>
         </div>
         )}
       </div>
@@ -12480,10 +16051,10 @@ function IntegrationsAdmin() {
         {openSec.tracking && (
         <div style={{ padding: 20 }}>
         <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Server-side tracking (Conversions API)</h2>
-        <p className="dim" style={{ fontSize: 13, marginBottom: 14 }}>Fires a server-side <b>Purchase</b> straight to Meta &amp; TikTok on every order (browser can't block it). Shares the order id as <b>event_id</b> so it de-duplicates with the browser pixel in GTM.</p>
+        <p className="dim" style={{ fontSize: 13, marginBottom: 14 }}>Only customer storefront checkouts send purchase events to Meta &amp; TikTok. Admin page views, admin activity, and admin-created orders are excluded.</p>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <b style={{ fontSize: 14 }}>Facebook (Meta) CAPI</b>
-          <label className="sa-chk"><input type="checkbox" checked={!!tr.fbEnabled} onChange={(e) => setTrack('fbEnabled', e.target.checked)} /> Enabled</label>
+          <label className="sa-chk"><input type="checkbox" checked={!!tr.fbEnabled} onChange={(e) => setTrack('fbEnabled', e.target.checked)} /> {adminTranslate("Enabled")}</label>
         </div>
         <div className="sa-sgrid">
           <label>Pixel ID<input value={tr.fbPixelId || ''} onChange={(e) => setTrack('fbPixelId', e.target.value)} placeholder="123456789012345" /></label>
@@ -12492,18 +16063,17 @@ function IntegrationsAdmin() {
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 0 10px' }}>
           <b style={{ fontSize: 14 }}>TikTok Events API</b>
-          <label className="sa-chk"><input type="checkbox" checked={!!tr.ttkEnabled} onChange={(e) => setTrack('ttkEnabled', e.target.checked)} /> Enabled</label>
+          <label className="sa-chk"><input type="checkbox" checked={!!tr.ttkEnabled} onChange={(e) => setTrack('ttkEnabled', e.target.checked)} /> {adminTranslate("Enabled")}</label>
         </div>
         <div className="sa-sgrid">
           <label>Pixel ID (code)<input value={tr.ttkPixelId || ''} onChange={(e) => setTrack('ttkPixelId', e.target.value)} placeholder="CXXXXXXXXXXXXXXXXX" /></label>
           <label>Access token<input type="password" value={tr.ttkToken || ''} onChange={(e) => setTrack('ttkToken', e.target.value)} placeholder={tr.hasTtkToken ? 'saved — leave to keep' : ''} /></label>
         </div>
-        <button className="sa-btn ghost sa-mini" style={{ marginTop: 14 }} onClick={testTracking}>Send test conversion</button>
         </div>
         )}
       </div>
 
-      <div className="sa-card" style={{ marginBottom: 16, overflow: 'hidden' }}>
+      <div id="courier-rating-api" className="sa-card" style={{ marginBottom: 16, overflow: 'hidden', scrollMarginTop: 20 }}>
         <div onClick={() => toggleSec('fraud')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', cursor: 'pointer', userSelect: 'none', background: openSec.fraud ? 'rgba(255,255,255,0.03)' : 'transparent', borderBottom: openSec.fraud ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 18 }}>🛡️</span>
@@ -12524,7 +16094,7 @@ function IntegrationsAdmin() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 10 }}>
           <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Multi-Courier Fraud &amp; Success Checker</h2>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <label className="sa-chk"><input type="checkbox" checked={!!fr.enabled} onChange={(e) => setFraud('enabled', e.target.checked)} /> Enabled</label>
+            <label className="sa-chk"><input type="checkbox" checked={!!fr.enabled} onChange={(e) => setFraud('enabled', e.target.checked)} /> {adminTranslate("Enabled")}</label>
             <button
               type="button"
               className="sa-btn primary sa-mini"
@@ -12601,7 +16171,7 @@ function IntegrationsAdmin() {
 
         <div className="sa-sgrid">
           <label style={{ gridColumn: '1 / -1' }}>API URL<input value={fr.url || ''} onChange={(e) => setFraud('url', e.target.value)} placeholder="https://…/fraud?phone={phone0}" /></label>
-          <label>Method<select value={fr.method || 'GET'} onChange={(e) => setFraud('method', e.target.value)}><option>GET</option><option>POST</option></select></label>
+          <label>{adminTranslate("Method")}<select value={fr.method || 'GET'} onChange={(e) => setFraud('method', e.target.value)}><option>GET</option><option>POST</option></select></label>
           <label style={{ gridColumn: '1 / -1' }}>Headers (JSON, optional)<input value={fr.headers || ''} onChange={(e) => setFraud('headers', e.target.value)} placeholder={'{"Authorization":"Bearer …"}'} /></label>
           <label>Total path<input value={fr.totalPath || ''} onChange={(e) => setFraud('totalPath', e.target.value)} placeholder="total_parcel" /></label>
           <label>Delivered path<input value={fr.successPath || ''} onChange={(e) => setFraud('successPath', e.target.value)} placeholder="success_parcel" /></label>
@@ -12642,12 +16212,12 @@ function IntegrationsAdmin() {
         )}
       </div>
 
-      <div className="sa-card" style={{ marginBottom: 16, overflow: 'hidden' }}>
+      <div id="courier-booking-api" className="sa-card" style={{ marginBottom: 16, overflow: 'hidden', scrollMarginTop: 20 }}>
         <div onClick={() => toggleSec('couriers')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', cursor: 'pointer', userSelect: 'none', background: openSec.couriers ? 'rgba(255,255,255,0.03)' : 'transparent', borderBottom: openSec.couriers ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 18 }}>📦</span>
             <div>
-              <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: '#f8fafc' }}>Courier Integrations (Steadfast, CarryBee, Pathao, eCourier)</h2>
+              <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: '#f8fafc' }}>Courier Booking APIs (Pathao, Steadfast, CarryBee, RedX &amp; Custom)</h2>
               <div style={{ fontSize: 12, color: '#94a3b8' }}>{(ig.couriers || []).length} connected courier accounts with 1-click booking</div>
             </div>
           </div>
@@ -12669,21 +16239,21 @@ function IntegrationsAdmin() {
             </button>
           </div>
         </div>
-        <p className="dim" style={{ fontSize: 13, marginBottom: 14 }}>Add your courier accounts (Pathao, Steadfast, CarryBee, RedX). Each is automatically mapped for 1-click booking, live status tracking, and webhooks.</p>
+        <p className="dim" style={{ fontSize: 13, marginBottom: 14 }}>Connect Pathao, Steadfast, CarryBee, or RedX with their merchant API credentials. For another provider, choose <b>+ Custom</b>, give the account a recognizable courier name, and configure its booking and status API URLs, headers, and body template. Only enabled accounts with a booking API are offered in the Order List.</p>
         {ig.couriers.length === 0 && <div className="sa-empty">No courier accounts yet. Add one above.</div>}
         {ig.couriers.map((c: any) => (
           <div key={c.id} className="sa-card" style={{ padding: 16, marginBottom: 12, background: 'rgba(255, 255, 255, 0.03)' }}>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
               <input style={{ fontWeight: 600, maxWidth: 220 }} value={c.label || ''} onChange={(e) => setCour(c.id, 'label', e.target.value)} placeholder="Account label (e.g. Steadfast · Shop A)" />
               <span className="sa-badge b-tag">{c.provider}</span>
-              <label className="sa-chk" style={{ marginLeft: 'auto' }}><input type="checkbox" checked={!!c.enabled} onChange={(e) => setCour(c.id, 'enabled', e.target.checked)} /> Enabled</label>
-              <button className="sa-link danger" onClick={() => removeCourier(c.id)}>Remove</button>
+              <label className="sa-chk" style={{ marginLeft: 'auto' }}><input type="checkbox" checked={!!c.enabled} onChange={(e) => setCour(c.id, 'enabled', e.target.checked)} /> {adminTranslate("Enabled")}</label>
+              <button className="sa-link danger" onClick={() => removeCourier(c.id)}>{adminTranslate("Remove")}</button>
             </div>
 
             {c.provider === 'Pathao' && (
               <div className="sa-sgrid">
                 <label>
-                  Client ID <span className="dim">(Pathao Developer API)</span>
+                  {adminTranslate("Client ID") + " "}<span className="dim">(Pathao Developer API)</span>
                   <input
                     value={c.clientId || c.apiKey || ''}
                     onChange={(e) => setCour(c.id, 'clientId', e.target.value)}
@@ -12691,7 +16261,7 @@ function IntegrationsAdmin() {
                   />
                 </label>
                 <label>
-                  Client Secret <span className="dim">(Pathao Developer API)</span>
+                  {adminTranslate("Client Secret") + " "}<span className="dim">(Pathao Developer API)</span>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <input
                       type={showSecret[c.id + '_sec'] ? 'text' : 'password'}
@@ -12741,13 +16311,13 @@ function IntegrationsAdmin() {
                   </div>
                 </label>
                 <label>
-                  Store ID <span className="dim">(From Pathao "Stores" menu)</span>
+                  {adminTranslate("Store ID") + " "}<span className="dim">(From Pathao "Stores" menu)</span>
                   {courierTest[c.id]?.stores && courierTest[c.id].stores!.length > 0 ? (
                     <select
                       value={c.storeId || ''}
                       onChange={(e) => setCour(c.id, 'storeId', e.target.value)}
                     >
-                      <option value="">Select store…</option>
+                      <option value="">{adminTranslate("Select store…")}</option>
                       {courierTest[c.id].stores!.map((st: any) => (
                         <option key={st.store_id} value={st.store_id}>
                           {st.store_name} (ID: {st.store_id})
@@ -12865,7 +16435,7 @@ function IntegrationsAdmin() {
             {c.provider === 'CarryBee' && (
               <div className="sa-sgrid">
                 <label>
-                  Client ID <span className="dim">(CarryBee API v2.0)</span>
+                  {adminTranslate("Client ID") + " "}<span className="dim">(CarryBee API v2.0)</span>
                   <input
                     value={c.clientId || c.apiKey || ''}
                     onChange={(e) => updateCour(c.id, { clientId: e.target.value, apiKey: e.target.value })}
@@ -12873,7 +16443,7 @@ function IntegrationsAdmin() {
                   />
                 </label>
                 <label>
-                  Client Secret <span className="dim">(CarryBee API v2.0)</span>
+                  {adminTranslate("Client Secret") + " "}<span className="dim">(CarryBee API v2.0)</span>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <input
                       type={showSecret[c.id] ? 'text' : 'password'}
@@ -12907,8 +16477,8 @@ function IntegrationsAdmin() {
                     value={c.environment || 'production'}
                     onChange={(e) => setCour(c.id, 'environment', e.target.value)}
                   >
-                    <option value="production">Production (Live)</option>
-                    <option value="sandbox">Sandbox (Testing)</option>
+                    <option value="production">{adminTranslate("Production (Live)")}</option>
+                    <option value="sandbox">{adminTranslate("Sandbox (Testing)")}</option>
                   </select>
                 </label>
                 <label>
@@ -12918,7 +16488,7 @@ function IntegrationsAdmin() {
                       value={c.storeId || ''}
                       onChange={(e) => setCour(c.id, 'storeId', e.target.value)}
                     >
-                      <option value="">Select store…</option>
+                      <option value="">{adminTranslate("Select store…")}</option>
                       {courierTest[c.id].stores!.map((st: any) => (
                         <option key={st.id || st.store_id} value={st.id || st.store_id}>
                           {st.name || st.store_name} (ID: {st.id || st.store_id})
@@ -13002,8 +16572,8 @@ function IntegrationsAdmin() {
                     value={c.environment || 'production'}
                     onChange={(e) => setCour(c.id, 'environment', e.target.value)}
                   >
-                    <option value="production">Production (Live)</option>
-                    <option value="sandbox">Sandbox (Testing)</option>
+                    <option value="production">{adminTranslate("Production (Live)")}</option>
+                    <option value="sandbox">{adminTranslate("Sandbox (Testing)")}</option>
                   </select>
                 </label>
                 <label>
@@ -13070,7 +16640,7 @@ function IntegrationsAdmin() {
                 <label>Hotline (optional)<input value={c.hotline || ''} onChange={(e) => setCour(c.id, 'hotline', e.target.value)} placeholder="shown to customer" /></label>
                 <label>Consignment path<input value={c.consignmentPath || ''} onChange={(e) => setCour(c.id, 'consignmentPath', e.target.value)} placeholder="consignment.consignment_id" /></label>
                 <label style={{ gridColumn: '1 / -1' }}>Booking URL<input value={c.bookUrl || ''} onChange={(e) => setCour(c.id, 'bookUrl', e.target.value)} placeholder="https://…/create_order" /></label>
-                <label>Method<select value={c.bookMethod || 'POST'} onChange={(e) => setCour(c.id, 'bookMethod', e.target.value)}><option>POST</option><option>GET</option></select></label>
+                <label>{adminTranslate("Method")}<select value={c.bookMethod || 'POST'} onChange={(e) => setCour(c.id, 'bookMethod', e.target.value)}><option>POST</option><option>GET</option></select></label>
                 <label>Track URL (optional)<input value={c.trackUrl || ''} onChange={(e) => setCour(c.id, 'trackUrl', e.target.value)} placeholder="https://…/track/{consignment}" /></label>
                 <label style={{ gridColumn: '1 / -1' }}>Headers (JSON)<input value={c.bookHeaders || ''} onChange={(e) => setCour(c.id, 'bookHeaders', e.target.value)} placeholder={'{"Api-Key":"{apiKey}"}'} /></label>
                 <label style={{ gridColumn: '1 / -1' }}>Body template (JSON)<input value={c.bookBody || ''} onChange={(e) => setCour(c.id, 'bookBody', e.target.value)} placeholder={'{"invoice":"{invoice}","recipient_phone":"{phone}","cod_amount":{amount}}'} /></label>
@@ -13098,26 +16668,130 @@ function IntegrationsAdmin() {
 // ==========================================
 // 1. FINANCE & COURIER RECONCILIATION LEDGER
 // ==========================================
-function FinanceAdmin() {
+function FinanceAdmin({ selectedTab, onTabChange }: { selectedTab: 'dashboard' | 'accounts' | 'income' | 'courier' | 'cashflow' | 'assets'; onTabChange: (tab: 'dashboard' | 'accounts' | 'income' | 'courier' | 'cashflow' | 'assets') => void }) {
   const [data, setData] = useState<any>(null);
+  const [workspace, setWorkspace] = useState<{ accounts: any[]; transactions: any[]; assets: any[]; expenses: any[] }>({ accounts: [], transactions: [], assets: [], expenses: [] });
+  const financeTab = selectedTab;
+  const setFinanceTab = onTabChange;
   const [loading, setLoading] = useState(true);
   const [courierFilter, setCourierFilter] = useState('all');
   const [payoutFilter, setPayoutFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [toast, setToast] = useState('');
+  const [showExpenses, setShowExpenses] = useState(false);
+  const [expTitle, setExpTitle] = useState('');
+  const [expCat, setExpCat] = useState('salary');
+  const [expAmt, setExpAmt] = useState('');
+  const [reconcileRes, setReconcileRes] = useState<any>(null);
+  const [reconcileFocus, setReconcileFocus] = useState(false);
+  const [accountForm, setAccountForm] = useState({ name: '', type: 'bank', openingBalance: '', note: '' });
+  const [movementForm, setMovementForm] = useState({ type: 'expense', accountId: '', toAccountId: '', title: '', category: 'general', amount: '', date: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Dhaka' }), reference: '', note: '' });
+  const [assetForm, setAssetForm] = useState({ name: '', category: 'equipment', location: '', purchaseDate: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Dhaka' }), purchaseValue: '', currentValue: '', usefulLifeMonths: '', note: '' });
+  const [assetValueDraft, setAssetValueDraft] = useState<Record<string, string>>({});
+  const [financeBusy, setFinanceBusy] = useState(false);
+
+  const addNewExpense = async () => {
+    if (!expTitle.trim() || !Number(expAmt)) return;
+    const r = await aFetch('/admin/finance/expenses', {
+      method: 'POST',
+      body: JSON.stringify({ title: expTitle.trim(), category: expCat, amount: Number(expAmt) })
+    });
+    if (r.ok) {
+      setExpTitle('');
+      setExpAmt('');
+      setToast('Expense added');
+      setTimeout(() => setToast(''), 2500);
+      load();
+    }
+  };
+
+  const removeExpense = async (id: string) => {
+    await aFetch('/admin/finance/expenses/' + id, { method: 'DELETE' });
+    load();
+  };
+
+  const handleCourierCsv = async (e: any) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter((l: string) => l.trim());
+      if (lines.length < 2) return;
+      const parseLine = (ln: string) => {
+        const out: string[] = [];
+        let cur = '', q = false;
+        for (let i = 0; i < ln.length; i++) {
+          const ch = ln[i];
+          if (ch === '"') q = !q;
+          else if (ch === ',' && !q) { out.push(cur.trim()); cur = ''; }
+          else cur += ch;
+        }
+        out.push(cur.trim());
+        return out;
+      };
+      const hdr = parseLine(lines[0]).map((h) => h.toLowerCase());
+      const consIdx = hdr.findIndex((h) => h.includes('consignment') || h.includes('tracking'));
+      const invIdx = hdr.findIndex((h) => h.includes('invoice') || h.includes('order'));
+      const netIdx = hdr.findIndex((h) => h.includes('net') || h.includes('payable') || h.includes('paid') || h.includes('amount'));
+      const rows = lines.slice(1).map((ln) => {
+        const c = parseLine(ln);
+        return {
+          consignment: consIdx >= 0 ? c[consIdx] : '',
+          invoice: invIdx >= 0 ? c[invIdx] : '',
+          netAmount: netIdx >= 0 ? Number(String(c[netIdx] || '0').replace(/[^0-9.-]/g, '')) || 0 : 0,
+        };
+      }).filter((r) => r.consignment || r.invoice);
+
+      const res = await aFetch('/admin/finance/reconcile-csv', {
+        method: 'POST',
+        body: JSON.stringify({ rows })
+      });
+      const d = await res.json();
+      if (res.ok) {
+        setReconcileRes(d);
+        load();
+      }
+    } finally {
+      e.target.value = '';
+    }
+  };
 
   const load = () => {
     setLoading(true);
-    aFetch('/admin/finance/summary')
-      .then((r) => r.json())
-      .then((d) => {
-        setData(d);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    Promise.all([
+      aFetch('/admin/finance/summary').then((r) => r.json()),
+      aFetch('/admin/finance/workspace').then((r) => r.json()),
+    ]).then(([summary, financeWorkspace]) => {
+      setData(summary);
+      setWorkspace({
+        accounts: Array.isArray(financeWorkspace.accounts) ? financeWorkspace.accounts : [],
+        transactions: Array.isArray(financeWorkspace.transactions) ? financeWorkspace.transactions : [],
+        assets: Array.isArray(financeWorkspace.assets) ? financeWorkspace.assets : [],
+        expenses: Array.isArray(financeWorkspace.expenses) ? financeWorkspace.expenses : [],
+      });
+      setLoading(false);
+    }).catch(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    const focusUpload = () => {
+      const target = document.getElementById('courier-reconcile-upload');
+      if (!target) return;
+      setReconcileFocus(true);
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      window.setTimeout(() => setReconcileFocus(false), 2200);
+    };
+    try {
+      if (sessionStorage.getItem('finance_focus_courier_reconcile') === '1') {
+        sessionStorage.removeItem('finance_focus_courier_reconcile');
+        window.setTimeout(focusUpload, 80);
+      }
+    } catch {}
+    window.addEventListener('finance-focus-courier-reconcile', focusUpload);
+    return () => window.removeEventListener('finance-focus-courier-reconcile', focusUpload);
+  }, []);
 
   const togglePayout = async (orderId: string, currentStatus: boolean) => {
     try {
@@ -13177,11 +16851,150 @@ function FinanceAdmin() {
     URL.revokeObjectURL(url);
   };
 
+  const showFinanceToast = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(''), 3500);
+  };
+
+  const submitFinanceForm = async (path: string, body: any, success: string, reset: () => void) => {
+    setFinanceBusy(true);
+    try {
+      const response = await aFetch(path, { method: 'POST', body: JSON.stringify(body) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Could not save the finance record');
+      reset();
+      showFinanceToast(success);
+      load();
+    } catch (error: any) {
+      showFinanceToast(error?.message || 'Could not save the finance record');
+    } finally {
+      setFinanceBusy(false);
+    }
+  };
+
+  const financeTabs = [
+    { id: 'dashboard', label: 'Finance Dashboard', icon: '◫' },
+    { id: 'accounts', label: 'Accounts & Bank', icon: '▣' },
+    { id: 'income', label: 'Income & Expense', icon: '↕' },
+    { id: 'courier', label: 'Courier Settlement', icon: '▱' },
+    { id: 'cashflow', label: 'Cash Flow', icon: '⌁' },
+    { id: 'assets', label: 'Asset Management', icon: '◇' },
+  ] as const;
+
+  const financeNav = (
+    <div className="fin-nav" role="tablist" aria-label="Finance sections">
+      {financeTabs.map((tab) => (
+        <button key={tab.id} type="button" role="tab" aria-selected={financeTab === tab.id} className={financeTab === tab.id ? 'active' : ''} onClick={() => setFinanceTab(tab.id)}>
+          <span>{tab.icon}</span>{tab.label}
+        </button>
+      ))}
+    </div>
+  );
+
   if (loading && !data) {
     return <div className="sa-card" style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Loading Finance &amp; Ledger Data…</div>;
   }
 
   const s = data || {};
+  const financeMoney = (value: number) => `৳${(Number(value) || 0).toLocaleString('en-BD', { maximumFractionDigits: 2 })}`;
+  const cashBalance = workspace.accounts.reduce((sum, account) => sum + (Number(account.balance) || 0), 0);
+  const manualIncome = workspace.transactions.filter((entry) => entry.type === 'income').reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+  const manualExpense = workspace.transactions.filter((entry) => entry.type === 'expense').reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+  const currentAssetValue = workspace.assets.filter((asset) => asset.status === 'active').reduce((sum, asset) => sum + Number(asset.currentValue || 0), 0);
+
+  if (financeTab !== 'courier') {
+    return (
+      <div className="finance-workspace">
+        <div className="sa-top fin-header">
+          <div><span className="fin-eyebrow">SECRATE · BUSINESS CONTROL</span><h1>{adminTranslate("Finance")}</h1><p>Track business performance, accounts, expenses, settlements and assets.</p></div>
+          <button type="button" className="sa-btn ghost" onClick={load}>↻ Refresh data</button>
+        </div>
+        {toast && <div className="fin-toast" role="status">{toast}</div>}
+        {financeNav}
+
+        {financeTab === 'dashboard' && <>
+          <div className="fin-section-head"><div><h2>{adminTranslate("Period Summary")}</h2><p>Totals from orders and records currently stored in your system.</p></div><span className="fin-period-chip">All recorded data</span></div>
+          <div className="fin-metric-grid">
+            {[
+              { label: 'Sales Revenue', value: financeMoney(s.totalDelivered), hint: 'Delivered order value', tone: 'violet' },
+              { label: 'Other Income', value: financeMoney(manualIncome), hint: 'Manually recorded income', tone: 'blue' },
+              { label: 'Total Expense', value: financeMoney(s.totalExpenses), hint: 'Expense ledger total', tone: 'rose' },
+              { label: 'Net Cash Flow', value: financeMoney(manualIncome - manualExpense), hint: 'From account transactions', tone: 'teal' },
+              { label: 'Estimated Net Profit', value: financeMoney(s.trueNetProfit), hint: 'Delivered sales − cost, ads and expenses', tone: Number(s.trueNetProfit) >= 0 ? 'green' : 'rose' },
+            ].map((item) => <div key={item.label} className={`fin-metric fin-${item.tone}`}><span>{item.label}</span><strong>{item.value}</strong><small>{item.hint}</small></div>)}
+          </div>
+          <div className="fin-section-head"><div><h2>{adminTranslate("Current Business Position")}</h2><p>Calculated from recorded balances and courier data.</p></div></div>
+          <div className="fin-position-grid">
+            <div className="fin-position-card"><span>{adminTranslate("Cash / Bank")}</span><strong>{financeMoney(cashBalance)}</strong><small>{workspace.accounts.length} account(s) recorded</small></div>
+            <div className="fin-position-card"><span>{adminTranslate("Pending Courier Payout")}</span><strong>{financeMoney(s.pendingCourierBalance)}</strong><small>Estimated amount still due from couriers</small></div>
+            <div className="fin-position-card"><span>Active Asset Value</span><strong>{financeMoney(currentAssetValue)}</strong><small>Current value entered for active assets</small></div>
+            <div className="fin-position-card"><span>Net COD Receivable</span><strong>{financeMoney(s.netDeliveredCash)}</strong><small>Delivered COD less estimated courier charges</small></div>
+          </div>
+          <div className="fin-note"><b>Accuracy note</b><span>Cash / bank balance includes only accounts and movements entered here. Courier payouts are tracked separately until you record them into an account.</span></div>
+        </>}
+
+        {financeTab === 'accounts' && <>
+          <div className="fin-section-head"><div><h2>Accounts &amp; Bank</h2><p>Add cash, bank and mobile wallet accounts; record deposits, withdrawals or transfers.</p></div><span className="fin-period-chip">Combined balance · {financeMoney(cashBalance)}</span></div>
+          <form className="fin-form-card" onSubmit={(event) => { event.preventDefault(); void submitFinanceForm('/admin/finance/accounts', { ...accountForm, openingBalance: Number(accountForm.openingBalance || 0) }, 'Account added', () => setAccountForm({ name: '', type: 'bank', openingBalance: '', note: '' })); }}>
+            <h3>{adminTranslate("Add account")}</h3><div className="fin-form-grid">
+              <label>Account name<input required maxLength={80} value={accountForm.name} onChange={(e) => setAccountForm({ ...accountForm, name: e.target.value })} placeholder="" /></label>
+              <label>Account type<select value={accountForm.type} onChange={(e) => setAccountForm({ ...accountForm, type: e.target.value })}><option value="bank">Bank</option><option value="cash">Cash</option><option value="mobile_wallet">Mobile wallet</option><option value="other">{adminTranslate("Other")}</option></select></label>
+              <label>{adminTranslate("Opening balance")}<input type="number" min="0" step="0.01" value={accountForm.openingBalance} onChange={(e) => setAccountForm({ ...accountForm, openingBalance: e.target.value })} placeholder="0" /></label>
+              <label>{adminTranslate("Note")}<input value={accountForm.note} onChange={(e) => setAccountForm({ ...accountForm, note: e.target.value })} placeholder="" /></label>
+            </div><button className="sa-btn" disabled={financeBusy}>{adminTranslate("Add account")}</button>
+          </form>
+          <div className="fin-table-card"><div className="fin-card-title"><h3>Accounts</h3><span>{workspace.accounts.length} total</span></div><div className="fin-table-scroll"><table className="fin-table"><thead><tr><th>{adminTranslate("Account")}</th><th>{adminTranslate("Type")}</th><th>{adminTranslate("Opening balance")}</th><th>Current balance</th><th>{adminTranslate("Status")}</th><th>{adminTranslate("Action")}</th></tr></thead><tbody>
+            {workspace.accounts.length ? workspace.accounts.map((account) => <tr key={account.id}><td><b>{account.name}</b>{account.note && <small>{account.note}</small>}</td><td>{String(account.type).replace('_', ' ')}</td><td>{financeMoney(account.openingBalance)}</td><td className="fin-amount">{financeMoney(account.balance)}</td><td><span className={`fin-status ${account.status}`}>{account.status}</span></td><td><button className="fin-text-btn" onClick={async () => { const response = await aFetch(`/admin/finance/accounts/${account.id}`, { method: 'PATCH', body: JSON.stringify({ status: account.status === 'active' ? 'archived' : 'active' }) }); if (response.ok) load(); }}> {account.status === 'active' ? 'Archive' : 'Restore'}</button></td></tr>) : <tr><td colSpan={6} className="fin-empty">No accounts yet. Add your first account above.</td></tr>}
+          </tbody></table></div></div>
+          <form className="fin-form-card" onSubmit={(event) => { event.preventDefault(); void submitFinanceForm('/admin/finance/transactions', { ...movementForm, amount: Number(movementForm.amount) }, 'Transaction recorded', () => setMovementForm({ ...movementForm, title: '', amount: '', reference: '', note: '' })); }}>
+            <h3>{adminTranslate("Record money movement")}</h3><div className="fin-form-grid">
+              <label>{adminTranslate("Movement type")}<select value={movementForm.type} onChange={(e) => setMovementForm({ ...movementForm, type: e.target.value })}><option value="income">Income / Deposit</option><option value="expense">Expense / Withdrawal</option><option value="transfer">Transfer between accounts</option></select></label>
+              <label>{adminTranslate("From account")}<select required value={movementForm.accountId} onChange={(e) => setMovementForm({ ...movementForm, accountId: e.target.value })}><option value="">{adminTranslate("Select account")}</option>{workspace.accounts.filter((a) => a.status === 'active').map((a) => <option key={a.id} value={a.id}>{a.name} · {financeMoney(a.balance)}</option>)}</select></label>
+              {movementForm.type === 'transfer' && <label>{adminTranslate("To account")}<select required value={movementForm.toAccountId} onChange={(e) => setMovementForm({ ...movementForm, toAccountId: e.target.value })}><option value="">{adminTranslate("Select account")}</option>{workspace.accounts.filter((a) => a.status === 'active' && a.id !== movementForm.accountId).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
+              <label>{adminTranslate("Title")}<input required value={movementForm.title} onChange={(e) => setMovementForm({ ...movementForm, title: e.target.value })} placeholder="" /></label>
+              <label>{adminTranslate("Category")}<input value={movementForm.category} onChange={(e) => setMovementForm({ ...movementForm, category: e.target.value })} placeholder="" /></label>
+              <label>{adminTranslate("Amount")}<input required type="number" min="0.01" step="0.01" value={movementForm.amount} onChange={(e) => setMovementForm({ ...movementForm, amount: e.target.value })} placeholder="0" /></label>
+              <label>{adminTranslate("Date")}<input required type="date" value={movementForm.date} onChange={(e) => setMovementForm({ ...movementForm, date: e.target.value })} /></label>
+              <label>{adminTranslate("Reference")}<input value={movementForm.reference} onChange={(e) => setMovementForm({ ...movementForm, reference: e.target.value })} placeholder="" /></label>
+              <label>{adminTranslate("Note")}<input value={movementForm.note} onChange={(e) => setMovementForm({ ...movementForm, note: e.target.value })} placeholder="" /></label>
+            </div><button className="sa-btn" disabled={financeBusy || !workspace.accounts.some((a) => a.status === 'active')}>{adminTranslate("Save movement")}</button>
+          </form>
+        </>}
+
+        {financeTab === 'income' && <>
+          <div className="fin-section-head"><div><h2>Income &amp; Expense</h2><p>Record transactions against an account so they also update cash flow and balance.</p></div><span className="fin-period-chip">{adminTranslate("Income") + " "}{financeMoney(manualIncome)} · Expense {financeMoney(manualExpense)}</span></div>
+          <form className="fin-form-card" onSubmit={(event) => { event.preventDefault(); void submitFinanceForm('/admin/finance/transactions', { ...movementForm, type: movementForm.type === 'transfer' ? 'expense' : movementForm.type, toAccountId: '', amount: Number(movementForm.amount) }, 'Transaction recorded', () => setMovementForm({ ...movementForm, title: '', amount: '', reference: '', note: '' })); }}>
+            <h3>New income or expense</h3><div className="fin-form-grid">
+              <label>{adminTranslate("Type")}<select value={movementForm.type === 'transfer' ? 'expense' : movementForm.type} onChange={(e) => setMovementForm({ ...movementForm, type: e.target.value })}><option value="income">{adminTranslate("Income")}</option><option value="expense">Expense</option></select></label>
+              <label>{adminTranslate("Account")}<select required value={movementForm.accountId} onChange={(e) => setMovementForm({ ...movementForm, accountId: e.target.value })}><option value="">{adminTranslate("Select account")}</option>{workspace.accounts.filter((a) => a.status === 'active').map((a) => <option key={a.id} value={a.id}>{a.name} · {financeMoney(a.balance)}</option>)}</select></label>
+              <label>{adminTranslate("Title")}<input required value={movementForm.title} onChange={(e) => setMovementForm({ ...movementForm, title: e.target.value })} placeholder="" /></label>
+              <label>{adminTranslate("Category")}<input value={movementForm.category} onChange={(e) => setMovementForm({ ...movementForm, category: e.target.value })} placeholder="" /></label>
+              <label>{adminTranslate("Amount")}<input required type="number" min="0.01" step="0.01" value={movementForm.amount} onChange={(e) => setMovementForm({ ...movementForm, amount: e.target.value })} placeholder="0" /></label>
+              <label>{adminTranslate("Date")}<input required type="date" value={movementForm.date} onChange={(e) => setMovementForm({ ...movementForm, date: e.target.value })} /></label>
+              <label>{adminTranslate("Reference")}<input value={movementForm.reference} onChange={(e) => setMovementForm({ ...movementForm, reference: e.target.value })} placeholder="" /></label>
+              <label>{adminTranslate("Note")}<input value={movementForm.note} onChange={(e) => setMovementForm({ ...movementForm, note: e.target.value })} placeholder="" /></label>
+            </div><button className="sa-btn" disabled={financeBusy || !workspace.accounts.some((a) => a.status === 'active')}>Save transaction</button>{!workspace.accounts.length && <p className="fin-help">Create an account in Accounts &amp; Bank before recording a transaction.</p>}
+          </form>
+          <FinanceTransactionsTable entries={workspace.transactions} accounts={workspace.accounts} money={financeMoney} />
+        </>}
+
+        {financeTab === 'cashflow' && <>
+          <div className="fin-section-head"><div><h2>{adminTranslate("Cash Flow")}</h2><p>Account-level cash movement history and current balances.</p></div><button className="sa-btn ghost" onClick={() => { const rows = [['Date','Type','Account','Details','Amount','Reference'], ...workspace.transactions.map((entry) => [entry.date, entry.type, workspace.accounts.find((a) => a.id === entry.accountId)?.name || '', entry.title, entry.amount, entry.reference || ''])]; const blob = new Blob([rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')], { type: 'text/csv;charset=utf-8' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'finance-cash-flow.csv'; link.click(); URL.revokeObjectURL(url); }}>{adminTranslate("Export CSV")}</button></div>
+          <div className="fin-metric-grid fin-metric-grid-4"><div className="fin-metric fin-blue"><span>Opening balances</span><strong>{financeMoney(workspace.accounts.reduce((sum, a) => sum + Number(a.openingBalance || 0), 0))}</strong></div><div className="fin-metric fin-green"><span>Money in</span><strong>{financeMoney(manualIncome)}</strong></div><div className="fin-metric fin-rose"><span>Money out</span><strong>{financeMoney(manualExpense)}</strong></div><div className="fin-metric fin-violet"><span>Current balance</span><strong>{financeMoney(cashBalance)}</strong></div></div>
+          <FinanceTransactionsTable entries={workspace.transactions} accounts={workspace.accounts} money={financeMoney} />
+          <div className="fin-note"><b>Transfer handling</b><span>Transfers reduce the source account and increase the destination account; they do not count as income or expense.</span></div>
+        </>}
+
+        {financeTab === 'assets' && <>
+          <div className="fin-section-head"><div><h2>{adminTranslate("Asset Management")}</h2><p>Track purchase value, current value, useful life and asset status.</p></div><span className="fin-period-chip">Active assets · {financeMoney(currentAssetValue)}</span></div>
+          <div className="fin-metric-grid fin-metric-grid-4"><div className="fin-metric fin-violet"><span>Total asset value</span><strong>{financeMoney(currentAssetValue)}</strong></div><div className="fin-metric fin-green"><span>Active assets</span><strong>{workspace.assets.filter((a) => a.status === 'active').length}</strong></div><div className="fin-metric fin-blue"><span>Sold assets</span><strong>{workspace.assets.filter((a) => a.status === 'sold').length}</strong></div><div className="fin-metric fin-rose"><span>Disposed assets</span><strong>{workspace.assets.filter((a) => a.status === 'disposed').length}</strong></div></div>
+          <form className="fin-form-card" onSubmit={(event) => { event.preventDefault(); void submitFinanceForm('/admin/finance/assets', { ...assetForm, purchaseValue: Number(assetForm.purchaseValue), currentValue: assetForm.currentValue === '' ? Number(assetForm.purchaseValue) : Number(assetForm.currentValue), usefulLifeMonths: Number(assetForm.usefulLifeMonths || 0) }, 'Asset added', () => setAssetForm({ ...assetForm, name: '', location: '', purchaseValue: '', currentValue: '', usefulLifeMonths: '', note: '' })); }}>
+            <h3>Add asset</h3><div className="fin-form-grid"><label>Asset name<input required value={assetForm.name} onChange={(e) => setAssetForm({ ...assetForm, name: e.target.value })} placeholder="" /></label><label>{adminTranslate("Category")}<input value={assetForm.category} onChange={(e) => setAssetForm({ ...assetForm, category: e.target.value })} placeholder="" /></label><label>Location<input value={assetForm.location} onChange={(e) => setAssetForm({ ...assetForm, location: e.target.value })} placeholder="" /></label><label>{adminTranslate("Purchase date")}<input type="date" value={assetForm.purchaseDate} onChange={(e) => setAssetForm({ ...assetForm, purchaseDate: e.target.value })} /></label><label>{adminTranslate("Purchase value")}<input required type="number" min="0.01" step="0.01" value={assetForm.purchaseValue} onChange={(e) => setAssetForm({ ...assetForm, purchaseValue: e.target.value })} placeholder="0" /></label><label>{adminTranslate("Current value")}<input type="number" min="0" step="0.01" value={assetForm.currentValue} onChange={(e) => setAssetForm({ ...assetForm, currentValue: e.target.value })} placeholder="Same as purchase value" /></label><label>Useful life (months)<input type="number" min="0" step="1" value={assetForm.usefulLifeMonths} onChange={(e) => setAssetForm({ ...assetForm, usefulLifeMonths: e.target.value })} placeholder="" /></label><label>{adminTranslate("Note")}<input value={assetForm.note} onChange={(e) => setAssetForm({ ...assetForm, note: e.target.value })} placeholder="" /></label></div><button className="sa-btn" disabled={financeBusy}>Save asset</button></form>
+          <div className="fin-table-card"><div className="fin-card-title"><h3>Assets</h3><span>{workspace.assets.length} recorded · current value can be updated manually</span></div><div className="fin-table-scroll"><table className="fin-table"><thead><tr><th>Name</th><th>Category / Location</th><th>{adminTranslate("Purchase date")}</th><th>{adminTranslate("Purchase value")}</th><th>{adminTranslate("Current value")}</th><th>Useful life</th><th>{adminTranslate("Status")}</th><th>{adminTranslate("Action")}</th></tr></thead><tbody>{workspace.assets.length ? workspace.assets.map((asset) => <tr key={asset.id}><td><b>{asset.name}</b>{asset.note && <small>{asset.note}</small>}</td><td>{asset.category}<small>{asset.location || '—'}</small></td><td>{asset.purchaseDate}</td><td>{financeMoney(asset.purchaseValue)}</td><td><input className="fin-value-edit" type="number" min="0" step="0.01" aria-label={`Current value for ${asset.name}`} value={assetValueDraft[asset.id] ?? String(asset.currentValue)} onChange={(e) => setAssetValueDraft({ ...assetValueDraft, [asset.id]: e.target.value })} /><button className="fin-text-btn" onClick={async () => { const value = Number(assetValueDraft[asset.id] ?? asset.currentValue); if (!Number.isFinite(value) || value < 0) { showFinanceToast('Enter a valid current asset value'); return; } const response = await aFetch(`/admin/finance/assets/${asset.id}`, { method: 'PATCH', body: JSON.stringify({ currentValue: value }) }); if (response.ok) { const next = { ...assetValueDraft }; delete next[asset.id]; setAssetValueDraft(next); showFinanceToast('Asset value updated'); load(); } }}>{adminTranslate("Save")}</button></td><td>{asset.usefulLifeMonths ? `${asset.usefulLifeMonths} months` : '—'}</td><td><span className={`fin-status ${asset.status}`}>{asset.status}</span></td><td>{asset.status === 'active' && <><button className="fin-text-btn" onClick={async () => { const response = await aFetch(`/admin/finance/assets/${asset.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'sold' }) }); if (response.ok) load(); }}>Mark sold</button><button className="fin-text-btn" onClick={async () => { const response = await aFetch(`/admin/finance/assets/${asset.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'disposed' }) }); if (response.ok) load(); }}>Dispose</button></>}</td></tr>) : <tr><td colSpan={8} className="fin-empty">No assets recorded yet.</td></tr>}</tbody></table></div></div>
+        </>}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -13194,14 +17007,90 @@ function FinanceAdmin() {
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button className="sa-btn ghost" onClick={() => setShowExpenses((v) => !v)}>💸 Daily Expenses ({(s.expenses || []).length})</button>
+          <button
+            className="sa-btn ghost"
+            onClick={async () => {
+              setToast('Syncing courier payouts...');
+              const r = await aFetch('/admin/finance/sync-courier-payouts', { method: 'POST' });
+              const d = await r.json();
+              setToast(r.ok ? `Checked ${d.checked}, Auto-Paid ${d.newlyPaid}` : (d.error || 'Sync failed'));
+              setTimeout(() => setToast(''), 4000);
+              load();
+            }}
+          >
+            🔄 Sync Courier Payouts
+          </button>
+          <label id="courier-reconcile-upload" className={`sa-btn ghost${reconcileFocus ? ' sa-nav-focus-pulse' : ''}`} style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span>🧾 Reconcile Courier CSV</span>
+            <input type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={handleCourierCsv} />
+          </label>
           <button className="sa-btn ghost" onClick={load}>🔄 Refresh Ledger</button>
           <button className="sa-btn" onClick={exportFinanceCSV}>📥 Export Statement (CSV)</button>
         </div>
       </div>
+      {financeNav}
+
+      {reconcileRes && (
+        <div className="sa-card" style={{ padding: 14, marginBottom: 16, border: '1px solid rgba(16,185,129,0.4)', background: 'rgba(16,185,129,0.08)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <strong style={{ color: '#34d399', fontSize: 13 }}>
+              ✅ Courier Reconciliation Complete: {reconcileRes.matchedCount} নতুন অর্ডার Paid মার্ক হয়েছে · {reconcileRes.alreadyPaidCount} আগে থেকেই Paid ছিল · {reconcileRes.missingCount} সিস্টেমে মেলেনি
+            </strong>
+            <button type="button" onClick={() => setReconcileRes(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>✕</button>
+          </div>
+          {reconcileRes.discrepancies?.length > 0 && (
+            <div style={{ marginTop: 8, fontSize: 12, color: '#fca5a5' }}>
+              ⚠️ {reconcileRes.discrepancies.length} টি অর্ডারে কুরিয়ার অ্যামাউন্টে পার্থক্য পাওয়া গেছে:{' '}
+              {reconcileRes.discrepancies.slice(0, 5).map((d: any) => `#${d.orderId} (Expected ৳${d.expectedNet}, CSV ৳${d.csvNet})`).join(' · ')}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showExpenses && (
+        <div className="sa-card" style={{ padding: 18, marginBottom: 18, border: '1px solid rgba(245, 158, 11, 0.35)' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#fbbf24', marginBottom: 10 }}>💸 Daily Expense &amp; Overhead Tracker (Salary, Rent, Packaging, Loss)</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px 140px auto', gap: 8, marginBottom: 12 }}>
+            <input placeholder="খরচের বিবরণ (যেমন: স্টাফ বেতন, প্যাকেজিং, অফিস ভাড়া)" value={expTitle} onChange={(e) => setExpTitle(e.target.value)} />
+            <select value={expCat} onChange={(e) => setExpCat(e.target.value)}>
+              <option value="salary">Staff Salary</option>
+              <option value="packaging">Packaging / Box</option>
+              <option value="office">Office / Rent / Net</option>
+              <option value="damage">Damage / Loss</option>
+              <option value="general">{adminTranslate("Other")}</option>
+            </select>
+            <input type="number" min={1} placeholder="টাকা (৳)" value={expAmt} onChange={(e) => setExpAmt(e.target.value)} />
+            <button type="button" className="sa-btn" onClick={addNewExpense}>+ Add Expense</button>
+          </div>
+          {(s.expenses || []).length > 0 && (
+            <div style={{ maxHeight: 180, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {(s.expenses || []).map((ex: any) => (
+                <div key={ex.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', fontSize: 12.5 }}>
+                  <span><strong>{ex.title}</strong> <span className="dim">({ex.category} · {ex.date})</span></span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <strong style={{ color: '#f87171' }}>-৳{Number(ex.amount).toLocaleString()}</strong>
+                    <button type="button" onClick={() => removeExpense(ex.id)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>🗑️</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* KPI Cards Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, marginBottom: 20 }}>
+        <div className="sa-card" style={{ padding: '16px 20px', borderLeft: `4px solid ${(s.trueNetProfit || 0) >= 0 ? '#10b981' : '#ef4444'}`, background: 'linear-gradient(145deg, rgba(16,185,129,0.12) 0%, rgba(15,23,42,0.8) 100%)' }}>
+          <div style={{ fontSize: 12, color: '#6ee7b7', fontWeight: 700, textTransform: 'uppercase' }}>🏆 True Net Profit</div>
+          <div style={{ fontSize: 25, fontWeight: 900, color: (s.trueNetProfit || 0) >= 0 ? '#34d399' : '#f87171', marginTop: 4 }}>
+            {(s.trueNetProfit || 0) >= 0 ? '+' : ''}৳{(s.trueNetProfit || 0).toLocaleString()}
+          </div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>
+            COGS: ৳{(s.totalCogs || 0).toLocaleString()} · Ads: ৳{(s.totalAdSpend || 0).toLocaleString()} · Exp: ৳{(s.totalExpenses || 0).toLocaleString()}
+          </div>
+        </div>
         <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #38bdf8' }}>
           <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Total COD Collected</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc', marginTop: 4 }}>৳{(s.totalDelivered || 0).toLocaleString()}</div>
@@ -13215,13 +17104,13 @@ function FinanceAdmin() {
         </div>
 
         <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #10b981' }}>
-          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Net Receivable</div>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>{adminTranslate("Net Receivable")}</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#10b981', marginTop: 4 }}>৳{(s.netDeliveredCash || 0).toLocaleString()}</div>
           <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Amount due after charges</div>
         </div>
 
         <div className="sa-card" style={{ padding: '16px 20px', borderLeft: '4px solid #eab308' }}>
-          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Pending Courier Payout</div>
+          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>{adminTranslate("Pending Courier Payout")}</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#eab308', marginTop: 4 }}>৳{(s.pendingCourierBalance || 0).toLocaleString()}</div>
           <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Still due from the courier</div>
         </div>
@@ -13255,7 +17144,7 @@ function FinanceAdmin() {
           <option value="received">✓ Paid Out / Received Only</option>
         </select>
         <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 'auto' }}>
-          Showing <b>{filteredOrders.length}</b> parcel(s)
+          {adminTranslate("Showing") + " "}<b>{filteredOrders.length}</b> parcel(s)
         </span>
       </div>
 
@@ -13266,11 +17155,11 @@ function FinanceAdmin() {
             <thead>
               <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.08)', color: '#94a3b8', fontSize: 12 }}>
                 <th style={{ padding: '12px 16px' }}>Order &amp; Date</th>
-                <th style={{ padding: '12px 16px' }}>Customer</th>
+                <th style={{ padding: '12px 16px' }}>{adminTranslate("Customer")}</th>
                 <th style={{ padding: '12px 16px' }}>Courier &amp; Tracking</th>
                 <th style={{ padding: '12px 16px', textAlign: 'right' }}>COD Bill</th>
                 <th style={{ padding: '12px 16px', textAlign: 'right' }}>Est. Fee</th>
-                <th style={{ padding: '12px 16px', textAlign: 'right' }}>Net Receivable</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right' }}>{adminTranslate("Net Receivable")}</th>
                 <th style={{ padding: '12px 16px', textAlign: 'center' }}>Payout Action</th>
               </tr>
             </thead>
@@ -13340,9 +17229,847 @@ function FinanceAdmin() {
   );
 }
 
+function ReportsAdmin({ reportType }: { reportType: string }) {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [calls, setCalls] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [range, setRange] = useState<'today' | '7d' | '30d' | 'all'>('30d');
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const reportLabels: Record<string, string> = {
+    profit_loss: 'Profit & Loss', orders: 'Order Report', courier: 'Courier Report', products: 'Product Report',
+    employees: 'Employee Report', calls: 'Call Center Report', customers: 'Customer Report', business: 'Business Reports',
+  };
+  const title = reportLabels[reportType] || 'Business Reports';
+  const load = async () => {
+    setLoading(true); setError('');
+    const [ordersResult, callsResult, financeResult] = await Promise.allSettled([
+      aFetch('/orders').then((r) => { if (!r.ok) throw new Error('Orders unavailable'); return r.json(); }),
+      aFetch('/calls').then((r) => { if (!r.ok) throw new Error('Calls unavailable'); return r.json(); }),
+      aFetch('/admin/finance/workspace').then((r) => { if (!r.ok) throw new Error('Finance records unavailable'); return r.json(); }),
+    ]);
+    if (ordersResult.status === 'fulfilled' && Array.isArray(ordersResult.value)) setOrders(ordersResult.value);
+    else setError('Some report data could not be loaded. Check your access and refresh.');
+    setCalls(callsResult.status === 'fulfilled' && Array.isArray(callsResult.value) ? callsResult.value : []);
+    setExpenses(financeResult.status === 'fulfilled' && Array.isArray(financeResult.value?.expenses) ? financeResult.value.expenses : []);
+    setUpdatedAt(new Date()); setLoading(false);
+  };
+  useEffect(() => { void load(); }, []);
+
+  const periodStart = useMemo(() => {
+    if (range === 'all') return null;
+    const d = new Date(); d.setHours(0, 0, 0, 0);
+    if (range === '7d') d.setDate(d.getDate() - 6);
+    if (range === '30d') d.setDate(d.getDate() - 29);
+    return d;
+  }, [range]);
+  const orderDate = (o: any) => new Date(o.createdAt || o.date || o.created_at || 0);
+  const inPeriod = (v: any) => { const d = new Date(v || 0); return Number.isFinite(d.getTime()) && (!periodStart || d >= periodStart); };
+  const scopedOrders = useMemo(() => orders.filter((o) => inPeriod(orderDate(o))), [orders, periodStart]);
+  const scopedCalls = useMemo(() => calls.filter((c) => inPeriod(c.createdAt || c.date || c.startedAt)), [calls, periodStart]);
+  const money = (v: number) => `৳${(Number(v) || 0).toLocaleString('en-BD', { maximumFractionDigits: 0 })}`;
+  const statusOf = (o: any) => String(o.status || 'unknown').toLowerCase();
+  const totalOf = (o: any) => Number(o.total || o.totalAmount || o.amount || 0);
+  const itemList = (o: any) => Array.isArray(o.items) ? o.items : Array.isArray(o.cart) ? o.cart : [];
+  const delivered = scopedOrders.filter((o) => statusOf(o) === 'delivered');
+  const revenue = delivered.reduce((n, o) => n + totalOf(o), 0);
+  const estimatedCogs = delivered.reduce((n, o) => n + itemList(o).reduce((m: number, it: any) => m + (Number(it.costPrice || it.cost || it.purchasePrice || 0) * Number(it.quantity || it.qty || 1)), 0), 0);
+  const periodExpenses = expenses.filter((e) => inPeriod(e.date || e.createdAt)).reduce((n, e) => n + Number(e.amount || 0), 0);
+  const missingCostItems = delivered.reduce((n, o) => n + itemList(o).filter((it: any) => !Number(it.costPrice || it.cost || it.purchasePrice)).length, 0);
+  const filtered = (rows: any[]) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => Object.values(row).join(' ').toLowerCase().includes(q));
+  };
+
+  let columns: string[] = [];
+  let rows: any[] = [];
+  let metrics: Array<{ label: string; value: string; note?: string }> = [];
+  if (reportType === 'profit_loss') {
+    const courierFees = delivered.reduce((n, o) => n + Number(o.courierFee || o.deliveryCharge || 0), 0);
+    const profit = revenue - estimatedCogs - periodExpenses - courierFees;
+    metrics = [
+      { label: 'Delivered revenue', value: money(revenue), note: `${delivered.length} delivered orders` },
+      { label: 'Recorded product cost', value: money(estimatedCogs), note: missingCostItems ? `${missingCostItems} item(s) have no cost recorded` : 'Cost recorded for all delivered items' },
+      { label: 'Recorded expenses', value: money(periodExpenses) },
+      { label: 'Estimated net profit', value: money(profit), note: 'Revenue − product cost − expenses − saved courier fees' },
+    ];
+    columns = ['Order ID', 'Date', 'Delivered amount', 'Recorded item cost', 'Status'];
+    rows = delivered.map((o) => ({ 'Order ID': o.id || o.orderId || '—', Date: orderDate(o).toLocaleDateString(), 'Delivered amount': money(totalOf(o)), 'Recorded item cost': money(itemList(o).reduce((n: number, it: any) => n + Number(it.costPrice || it.cost || it.purchasePrice || 0) * Number(it.quantity || it.qty || 1), 0)), Status: statusOf(o) }));
+  } else if (reportType === 'orders') {
+    const gross = scopedOrders.reduce((n, o) => n + totalOf(o), 0);
+    metrics = [{ label: 'Orders', value: String(scopedOrders.length) }, { label: 'Order value', value: money(gross) }, { label: 'Delivered', value: String(delivered.length) }, { label: 'Cancelled / returned', value: String(scopedOrders.filter((o) => ['cancelled', 'returned', 'return'].includes(statusOf(o))).length) }];
+    columns = ['Order ID', 'Date', 'Customer', 'Phone', 'Status', 'Total'];
+    rows = scopedOrders.map((o) => ({ 'Order ID': o.id || o.orderId || '—', Date: orderDate(o).toLocaleString(), Customer: o.customer?.name || o.customerName || o.name || '—', Phone: o.customer?.phone || o.phone || '—', Status: statusOf(o), Total: money(totalOf(o)) }));
+  } else if (reportType === 'courier') {
+    const groups = new Map<string, any>();
+    scopedOrders.forEach((o) => { const name = o.courierName || o.courier || o.shippingCourier || 'Unassigned'; const g = groups.get(name) || { Courier: name, Orders: 0, Delivered: 0, Cancelled: 0, 'Order value': 0 }; g.Orders++; if (statusOf(o) === 'delivered') g.Delivered++; if (['cancelled', 'returned', 'return'].includes(statusOf(o))) g.Cancelled++; g['Order value'] += totalOf(o); groups.set(name, g); });
+    rows = [...groups.values()].map((g) => ({ ...g, 'Order value': money(g['Order value']), 'Delivery rate': g.Orders ? `${Math.round(g.Delivered / g.Orders * 100)}%` : '0%' }));
+    metrics = [{ label: 'Couriers in report', value: String(groups.size) }, { label: 'Orders', value: String(scopedOrders.length) }, { label: 'Delivered', value: String(delivered.length) }];
+    columns = ['Courier', 'Orders', 'Delivered', 'Cancelled', 'Delivery rate', 'Order value'];
+  } else if (reportType === 'products') {
+    const groups = new Map<string, any>();
+    scopedOrders.forEach((o) => itemList(o).forEach((it: any) => { const name = it.name || it.productName || it.title || 'Unknown product'; const g = groups.get(name) || { Product: name, Units: 0, Orders: 0, 'Sales value': 0 }; const qty = Number(it.quantity || it.qty || 1); g.Units += qty; g.Orders++; g['Sales value'] += Number(it.total || it.subtotal || (Number(it.price || 0) * qty)); groups.set(name, g); }));
+    rows = [...groups.values()].sort((a, b) => b.Units - a.Units).map((g) => ({ ...g, 'Sales value': money(g['Sales value']) }));
+    metrics = [{ label: 'Products sold', value: String(groups.size) }, { label: 'Units', value: String([...groups.values()].reduce((n, g) => n + g.Units, 0)) }, { label: 'Orders', value: String(scopedOrders.length) }];
+    columns = ['Product', 'Units', 'Orders', 'Sales value'];
+  } else if (reportType === 'customers') {
+    const groups = new Map<string, any>();
+    scopedOrders.forEach((o) => { const phone = String(o.customer?.phone || o.phone || ''); const key = phone || String(o.customer?.name || o.customerName || 'Unknown'); const g = groups.get(key) || { Customer: o.customer?.name || o.customerName || 'Customer', Phone: phone || '—', Orders: 0, 'Total spent': 0, 'Delivered orders': 0 }; g.Orders++; g['Total spent'] += totalOf(o); if (statusOf(o) === 'delivered') g['Delivered orders']++; groups.set(key, g); });
+    rows = [...groups.values()].sort((a, b) => b.Orders - a.Orders).map((g) => ({ ...g, 'Total spent': money(g['Total spent']) }));
+    metrics = [{ label: 'Customers', value: String(groups.size) }, { label: 'Orders', value: String(scopedOrders.length) }, { label: 'Repeat buyers', value: String([...groups.values()].filter((g) => g.Orders > 1).length) }];
+    columns = ['Customer', 'Phone', 'Orders', 'Delivered orders', 'Total spent'];
+  } else if (reportType === 'calls') {
+    const groups = new Map<string, any>();
+    scopedCalls.forEach((c) => { const staff = c.staffName || c.agentName || c.userName || c.staff || 'Unassigned'; const g = groups.get(staff) || { Employee: staff, Calls: 0, Answered: 0, 'No answer': 0, 'Talk time': 0 }; g.Calls++; const outcome = String(c.outcome || c.status || '').toLowerCase(); if (['answered', 'completed', 'success'].some((x) => outcome.includes(x))) g.Answered++; else g['No answer']++; g['Talk time'] += Number(c.duration || c.durationSeconds || 0); groups.set(staff, g); });
+    rows = [...groups.values()].map((g) => ({ ...g, 'Talk time': `${Math.floor(g['Talk time'] / 60)}m ${g['Talk time'] % 60}s` }));
+    metrics = [{ label: 'Calls', value: String(scopedCalls.length) }, { label: 'Agents', value: String(groups.size) }, { label: 'Answered', value: String([...groups.values()].reduce((n, g) => n + g.Answered, 0)) }];
+    columns = ['Employee', 'Calls', 'Answered', 'No answer', 'Talk time'];
+  } else if (reportType === 'employees') {
+    const groups = new Map<string, any>();
+    scopedOrders.forEach((o) => { const name = o.confirmedBy || o.assignedTo || o.lastUpdatedBy || o.createdBy || 'Unassigned'; const g = groups.get(String(name)) || { Employee: String(name), 'Handled orders': 0, Approved: 0, Delivered: 0, Cancelled: 0 }; g['Handled orders']++; if (['approved', 'confirmed', 'shipped', 'delivered'].includes(statusOf(o))) g.Approved++; if (statusOf(o) === 'delivered') g.Delivered++; if (['cancelled', 'returned', 'return'].includes(statusOf(o))) g.Cancelled++; groups.set(String(name), g); });
+    rows = [...groups.values()].sort((a, b) => b['Handled orders'] - a['Handled orders']);
+    metrics = [{ label: 'Team members', value: String(groups.size) }, { label: 'Orders handled', value: String(scopedOrders.length) }, { label: 'Delivered', value: String(delivered.length) }];
+    columns = ['Employee', 'Handled orders', 'Approved', 'Delivered', 'Cancelled'];
+  } else {
+    const groups = new Map<string, number>(); scopedOrders.forEach((o) => groups.set(statusOf(o), (groups.get(statusOf(o)) || 0) + 1));
+    rows = [...groups.entries()].map(([Status, Orders]) => ({ Status, Orders, 'Order value': money(scopedOrders.filter((o) => statusOf(o) === Status).reduce((n, o) => n + totalOf(o), 0)) }));
+    metrics = [{ label: 'Orders', value: String(scopedOrders.length) }, { label: 'Sales value', value: money(scopedOrders.reduce((n, o) => n + totalOf(o), 0)) }, { label: 'Delivered revenue', value: money(revenue) }, { label: 'Delivery rate', value: scopedOrders.length ? `${Math.round(delivered.length / scopedOrders.length * 100)}%` : '0%' }];
+    columns = ['Status', 'Orders', 'Order value'];
+  }
+  const visibleRows = filtered(rows);
+  const exportCsv = () => {
+    const quote = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = [columns.map(quote).join(','), ...visibleRows.map((row) => columns.map((col) => quote(row[col])).join(','))].join('\r\n');
+    const url = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = `${reportType}_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(url);
+  };
+  return <div className="sa-report-page">
+    <div className="sa-top sa-report-header"><div><span className="fin-eyebrow">SECRATE · REPORTS</span><h1>{adminTranslate(title)}</h1><p>{adminTranslate('Live reports from your saved orders, calls and finance records.')}</p></div><div className="sa-report-actions"><span className="sa-report-updated">{updatedAt ? `${adminTranslate('Updated')} ${updatedAt.toLocaleTimeString()}` : ''}</span><button className="sa-btn ghost" type="button" onClick={exportCsv} disabled={!visibleRows.length}>↓ {adminTranslate('Export CSV')}</button><button className="sa-btn" type="button" onClick={() => void load()}>↻ {adminTranslate('Refresh data')}</button></div></div>
+    <div className="sa-report-toolbar"><label>{adminTranslate('Period')}<select value={range} onChange={(e) => setRange(e.target.value as any)}><option value="today">{adminTranslate('Today')}</option><option value="7d">{adminTranslate('Last 7 days')}</option><option value="30d">{adminTranslate('Last 30 days')}</option><option value="all">{adminTranslate('All time')}</option></select></label><label className="sa-report-search">{adminTranslate('Search')}<input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={adminTranslate('Search this report...')} /></label></div>
+    {error && <div className="sa-report-notice">{adminTranslate(error)}</div>}
+    {reportType === 'profit_loss' && missingCostItems > 0 && <div className="sa-report-notice">{adminTranslate('Profit is estimated: some delivered items do not have a recorded cost price.')}</div>}
+    <div className="sa-report-metrics">{metrics.map((m) => <article key={m.label} className="sa-report-metric"><span>{adminTranslate(m.label)}</span><strong>{m.value}</strong>{m.note && <small>{adminTranslate(m.note)}</small>}</article>)}</div>
+    <section className="sa-card sa-report-table-card"><header className="sa-card-h sa-report-table-head"><div><h2>{adminTranslate(title)}</h2><small>{visibleRows.length.toLocaleString()} {adminTranslate('rows')}</small></div><span>{loading ? adminTranslate('Updating…') : `${adminTranslate('Showing')} ${visibleRows.length.toLocaleString()}`}</span></header><div className="sa-report-table-scroll"><table className="sa-table"><thead><tr>{columns.map((col) => <th key={col}>{adminTranslate(col)}</th>)}</tr></thead><tbody>{visibleRows.length ? visibleRows.map((row, idx) => <tr key={`${row['Order ID'] || row.Customer || row.Product || row.Courier || row.Employee || row.Status || 'row'}-${idx}`}>{columns.map((col) => <td key={col}>{String(row[col] ?? '—')}</td>)}</tr>) : <tr><td colSpan={columns.length} className="sa-report-empty">{loading ? adminTranslate('Loading report data…') : adminTranslate('No records found for this period.')}</td></tr>}</tbody></table></div></section>
+    {reportType === 'profit_loss' && <p className="sa-report-footnote">{adminTranslate('Profit uses delivered order revenue and recorded product costs, expenses and courier fees. Missing cost or fee values make this an estimate.')}</p>}
+  </div>;
+}
+
+function FinanceTransactionsTable({ entries, accounts, money }: { entries: any[]; accounts: any[]; money: (value: number) => string }) {
+  const accountName = (id: string) => accounts.find((account) => account.id === id)?.name || 'Unknown account';
+  return (
+    <div className="fin-table-card">
+      <div className="fin-card-title"><h3>Transaction history</h3><span>{entries.length} recorded</span></div>
+      <div className="fin-table-scroll"><table className="fin-table">
+        <thead><tr><th>{adminTranslate("Date")}</th><th>{adminTranslate("Type")}</th><th>{adminTranslate("Account")}</th><th>Details</th><th>{adminTranslate("Reference")}</th><th className="right">{adminTranslate("Amount")}</th></tr></thead>
+        <tbody>{entries.length ? entries.map((entry) => <tr key={entry.id}>
+          <td>{entry.date}</td>
+          <td><span className={`fin-status ${entry.type}`}>{entry.type}</span></td>
+          <td>{entry.type === 'transfer' ? <>{accountName(entry.accountId)}<small>to {accountName(entry.toAccountId)}</small></> : accountName(entry.accountId)}</td>
+          <td><b>{entry.title}</b><small>{entry.category}{entry.note ? ` · ${entry.note}` : ''}</small></td>
+          <td>{entry.reference || '—'}</td>
+          <td className={`right fin-amount ${entry.type === 'expense' ? 'negative' : entry.type === 'income' ? 'positive' : ''}`}>{entry.type === 'expense' ? '−' : entry.type === 'income' ? '+' : ''}{money(entry.amount)}</td>
+        </tr>) : <tr><td colSpan={6} className="fin-empty">No transactions recorded yet.</td></tr>}</tbody>
+      </table></div>
+    </div>
+  );
+}
+
 // ==========================================
 // 2. WHATSAPP AUTOMATION & MARKETING HUB
 // ==========================================
+function WhatsAppInboxMedia({ message }: { message: any }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    let active = true;
+    let objectUrl = '';
+    if (!message?.mediaUrl) return;
+    void (async () => {
+      try {
+        const response = await aFetch(message.mediaUrl);
+        if (!response.ok) return;
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (active) setUrl(objectUrl);
+      } catch (_) {}
+    })();
+    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [message?.mediaUrl]);
+  if (!message?.mediaUrl) return null;
+  if (!url) return <div className="wa-inbox-media-loading">Loading attachment…</div>;
+  if (message.mediaType === 'image') return <a className="wa-inbox-media-link" href={url} target="_blank" rel="noreferrer"><img className="wa-inbox-media-image" src={url} alt={message.fileName || 'WhatsApp photo'} /></a>;
+  if (message.mediaType === 'video') return <video className="wa-inbox-media-video" src={url} controls preload="metadata" />;
+  if (message.mediaType === 'audio') return <audio className="wa-inbox-media-audio" src={url} controls preload="metadata" />;
+  return <a className="wa-inbox-media-document" href={url} download={message.fileName || 'whatsapp-attachment'}>▤ {message.fileName || 'Download attachment'}</a>;
+}
+
+function WhatsAppInboxAvatar({ phone, remoteJid = '', name = '', large = false }: { phone: string; remoteJid?: string; name?: string; large?: boolean }) {
+  const [photo, setPhoto] = useState('');
+  const [nearView, setNearView] = useState(large);
+  const avatarRef = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    if (large) { setNearView(true); return; }
+    const element = avatarRef.current;
+    if (!element || !('IntersectionObserver' in window)) { setNearView(true); return; }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) { setNearView(true); observer.disconnect(); }
+    }, { root: element.closest('.wa-inbox-thread-list'), rootMargin: '120px' });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [phone, remoteJid, large]);
+  useEffect(() => {
+    if (!nearView) return;
+    let active = true;
+    const target = remoteJid || phone;
+    void aFetch('/admin/whatsapp/inbox/profile/' + encodeURIComponent(target))
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => { if (active && typeof data?.url === 'string' && /^https:\/\//i.test(data.url)) setPhoto(data.url); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [phone, remoteJid, nearView]);
+  const fallback = /^\d+$/.test(String(name || '')) ? 'W' : String(name || 'W').trim().slice(0, 1).toUpperCase();
+  return <span ref={avatarRef} className={`wa-inbox-avatar ${large ? 'large' : ''}`}>{photo ? <img src={photo} alt="" referrerPolicy="no-referrer" onError={() => setPhoto('')} /> : fallback}</span>;
+}
+
+function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
+  const [threads, setThreads] = useState<any[]>([]);
+  const [browserCallMode, setBrowserCallMode] = useState<'audio' | 'video' | null>(null);
+  const [selectedPhone, setSelectedPhone] = useState('');
+  const [chatData, setChatData] = useState<{ messages: any[]; orders: any[] }>({ messages: [], orders: [] });
+  const [reply, setReply] = useState('');
+  const [search, setSearch] = useState('');
+  const [loadingThreads, setLoadingThreads] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [profilePhone, setProfilePhone] = useState('');
+  const [contextOpen, setContextOpen] = useState(false);
+  const [attachment, setAttachment] = useState<File | null>(null);
+  const [voiceNoteAttachment, setVoiceNoteAttachment] = useState(false);
+  const [recordingVoiceNote, setRecordingVoiceNote] = useState(false);
+  const [attachmentPreview, setAttachmentPreview] = useState('');
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceStreamRef = useRef<MediaStream | null>(null);
+  const voiceChunksRef = useRef<BlobPart[]>([]);
+  const messagesAreaRef = useRef<HTMLDivElement | null>(null);
+  const keepMessagesAtBottomRef = useRef(true);
+  const activeThread = threads.find((t) => t.phone === selectedPhone);
+  const inferLidJid = (phone: string) => {
+    const digits = String(phone || '').replace(/\D/g, '');
+    return /^\d{14,15}$/.test(digits) && !digits.startsWith('880') ? `${digits}@lid` : '';
+  };
+  const contactRemoteJid = activeThread?.remoteJid || inferLidJid(selectedPhone);
+  const messagesUrl = (phone: string, remoteJid: string) => `/admin/whatsapp/inbox/messages/${encodeURIComponent(phone)}${remoteJid ? `?remoteJid=${encodeURIComponent(remoteJid)}` : ''}`;
+
+  const loadThreads = async () => {
+    try {
+      const r = await aFetch('/admin/whatsapp/inbox/threads');
+      if (!r.ok) throw new Error('Could not load conversations');
+      const d = await r.json();
+      const nextThreads = Array.isArray(d?.threads) ? d.threads : [];
+      setThreads(nextThreads);
+      setSelectedPhone((current) => current && nextThreads.some((t: any) => t.phone === current) ? current : (nextThreads[0]?.phone || ''));
+      setNotice('');
+    } catch (e: any) {
+      setNotice(e?.message || 'Inbox could not be refreshed');
+    } finally {
+      setLoadingThreads(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadThreads();
+    const t = setInterval(() => void loadThreads(), 12000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedPhone) {
+      setChatData({ messages: [], orders: [] });
+      setLoadingMessages(false);
+      return;
+    }
+    let active = true;
+    let inFlight = false;
+    let controller: AbortController | null = null;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    setChatData({ messages: [], orders: [] });
+    setLoadingMessages(true);
+    setNotice('');
+    const loadMessages = async (showLoading = false) => {
+      if (inFlight) return;
+      inFlight = true;
+      controller = new AbortController();
+      if (showLoading) setLoadingMessages(true);
+      timeout = setTimeout(() => controller?.abort(), 15000);
+      try {
+        const r = await aFetch(messagesUrl(selectedPhone, contactRemoteJid), { signal: controller.signal });
+        if (!r.ok) throw new Error('Could not load this conversation');
+        const d = await r.json();
+        if (active && d) setChatData({ messages: Array.isArray(d.messages) ? d.messages : [], orders: Array.isArray(d.orders) ? d.orders : [] });
+      } catch (e: any) {
+        if (active) setNotice(e?.name === 'AbortError' ? 'Conversation request timed out. Please refresh the inbox and try again.' : (e?.message || 'Conversation could not be loaded'));
+      } finally {
+        if (timeout) clearTimeout(timeout);
+        timeout = null;
+        inFlight = false;
+        if (active && showLoading) setLoadingMessages(false);
+      }
+    };
+    void loadMessages(true);
+    const t = setInterval(() => void loadMessages(false), 8000);
+    return () => {
+      active = false;
+      if (timeout) clearTimeout(timeout);
+      controller?.abort();
+      clearInterval(t);
+    };
+  }, [selectedPhone, contactRemoteJid]);
+
+  useEffect(() => {
+    let active = true;
+    setProfilePhone('');
+    if (!selectedPhone || !connected) return;
+    const profileTarget = contactRemoteJid || selectedPhone;
+    const resolveNumber = /@(?:lid|hosted\.lid)$/.test(profileTarget) ? '?resolve=1' : '';
+    void aFetch('/admin/whatsapp/inbox/profile/' + encodeURIComponent(profileTarget) + resolveNumber)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (active && d?.phone) setProfilePhone(String(d.phone)); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [selectedPhone, contactRemoteJid, connected]);
+
+  useEffect(() => {
+    if (!attachment) { setAttachmentPreview(''); return; }
+    const objectUrl = URL.createObjectURL(attachment);
+    setAttachmentPreview(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [attachment]);
+
+  useEffect(() => {
+    keepMessagesAtBottomRef.current = true;
+    const area = messagesAreaRef.current;
+    if (area) area.scrollTop = area.scrollHeight;
+  }, [selectedPhone]);
+
+  useEffect(() => {
+    const area = messagesAreaRef.current;
+    if (area && keepMessagesAtBottomRef.current) area.scrollTo({ top: area.scrollHeight, behavior: 'smooth' });
+  }, [chatData.messages.length, selectedPhone]);
+
+  const refresh = async () => {
+    setLoadingThreads(true);
+    await loadThreads();
+    if (selectedPhone) {
+      try {
+        const r = await aFetch(messagesUrl(selectedPhone, contactRemoteJid));
+        const d = r.ok ? await r.json() : null;
+        if (d) setChatData({ messages: Array.isArray(d.messages) ? d.messages : [], orders: Array.isArray(d.orders) ? d.orders : [] });
+      } catch (_) {}
+    }
+  };
+
+  const sendReply = async () => {
+    const text = reply.trim();
+    if (!selectedPhone || (!text && !attachment) || sending || !connected) return;
+    setSending(true);
+    keepMessagesAtBottomRef.current = true;
+    setNotice('');
+    try {
+      let encodedAttachment: any = null;
+      if (attachment) {
+        encodedAttachment = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(new Error('Could not read this file'));
+          reader.onload = () => resolve({ name: attachment.name, mimeType: attachment.type || 'application/octet-stream', data: String(reader.result || '') });
+          reader.readAsDataURL(attachment);
+        });
+      }
+      if (encodedAttachment) encodedAttachment.isVoiceNote = voiceNoteAttachment;
+      const r = await aFetch('/admin/whatsapp/inbox/send', { method: 'POST', body: JSON.stringify({ phone: selectedPhone, remoteJid: contactRemoteJid, text, attachment: encodedAttachment }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d?.sent && !d?.ok) throw new Error(d?.error || 'Message was not sent');
+      setReply('');
+      setAttachment(null);
+      setVoiceNoteAttachment(false);
+      const refreshed = await aFetch(messagesUrl(selectedPhone, contactRemoteJid));
+      const next = refreshed.ok ? await refreshed.json() : null;
+      if (next) setChatData({ messages: Array.isArray(next.messages) ? next.messages : [], orders: Array.isArray(next.orders) ? next.orders : [] });
+      void loadThreads();
+    } catch (e: any) {
+      setNotice(e?.message || 'Could not send the message');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const visibleThreads = threads.filter((t) => `${t.name || ''} ${t.phone || ''} ${t.lastMessage || ''}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const displayPhone = (value: string) => {
+    const digits = String(value || '').replace(/\D/g, '');
+    if (digits.startsWith('8801') && digits.length === 13) return `+880 ${digits.slice(3, 7)}-${digits.slice(7)}`;
+    if (digits.startsWith('01') && digits.length === 11) return `+880 ${digits.slice(1, 5)}-${digits.slice(5)}`;
+    return digits ? `+${digits}` : value;
+  };
+  const rawContactName = String(activeThread?.name || '').trim();
+  const contactIsPhone = rawContactName.replace(/\D/g, '') === String(selectedPhone || '').replace(/\D/g, '');
+  const isLidContact = /@(?:lid|hosted\.lid)$/.test(String(contactRemoteJid || ''));
+  const callPhone = profilePhone || (!isLidContact ? selectedPhone : '');
+  const callDigits = String(callPhone || '').replace(/\D/g, '').replace(/^0/, '880');
+  const contactName = rawContactName && !contactIsPhone ? rawContactName : 'WhatsApp contact';
+  const initials = contactIsPhone ? 'W' : String(rawContactName || 'W').trim().slice(0, 1).toUpperCase();
+  const chooseAttachment = (file?: File) => {
+    if (!file) return;
+    const isApk = /\.apk$/i.test(file.name) || file.type.toLowerCase() === 'application/vnd.android.package-archive';
+    if (file.size > (isApk ? 35 : 16) * 1024 * 1024) { setNotice(isApk ? 'Choose an APK smaller than 35 MB.' : 'Choose a file smaller than 16 MB.'); return; }
+    if (!isApk && (!file.type || !/^(image\/(jpeg|png|webp|gif)|video\/(mp4|3gpp|quicktime)|audio\/(mpeg|ogg|webm|wav|amr|mp4)|application\/pdf|text\/plain|application\/vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet))$/i.test(file.type))) {
+      setNotice('Supported: photos, MP4 videos, audio, PDF, TXT, DOCX, XLSX and APK.'); return;
+    }
+    setNotice('');
+    setVoiceNoteAttachment(false);
+    setAttachment(file);
+  };
+
+  const stopVoiceStream = () => {
+    voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+    voiceStreamRef.current = null;
+    voiceRecorderRef.current = null;
+    setRecordingVoiceNote(false);
+  };
+  const toggleVoiceNoteRecording = async () => {
+    if (voiceRecorderRef.current?.state === 'recording') {
+      voiceRecorderRef.current.stop();
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setNotice('Voice recording is not supported in this browser. Try a recent Chrome browser.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      voiceStreamRef.current = stream;
+      voiceChunksRef.current = [];
+      const preferred = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm'].find((mime) => MediaRecorder.isTypeSupported(mime));
+      const recorder = new MediaRecorder(stream, preferred ? { mimeType: preferred } : undefined);
+      recorder.ondataavailable = (event) => { if (event.data?.size) voiceChunksRef.current.push(event.data); };
+      recorder.onerror = () => { stopVoiceStream(); setNotice('Voice note recording stopped unexpectedly. Please try again.'); };
+      recorder.onstop = () => {
+        const blob = new Blob(voiceChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        if (blob.size > 0) {
+          const extension = blob.type.includes('ogg') ? 'ogg' : 'webm';
+          setAttachment(new File([blob], `voice-note-${Date.now()}.${extension}`, { type: blob.type }));
+          setVoiceNoteAttachment(true);
+          setNotice('Voice note ready. Press send when you are ready.');
+        }
+        stopVoiceStream();
+      };
+      recorder.start(250);
+      voiceRecorderRef.current = recorder;
+      setRecordingVoiceNote(true);
+      setAttachment(null);
+      setVoiceNoteAttachment(false);
+      setNotice('Recording voice note… press the microphone again to finish.');
+    } catch (error: any) {
+      stopVoiceStream();
+      setNotice(error?.name === 'NotAllowedError' ? 'Allow microphone access in your browser to record a voice note.' : 'Could not start voice recording. Check that a microphone is connected.');
+    }
+  };
+
+  useEffect(() => () => {
+    if (voiceRecorderRef.current?.state === 'recording') voiceRecorderRef.current.stop();
+    voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  return (
+    <section className="wa-inbox-page">
+      <header className="wa-inbox-heading">
+        <div>
+          <span className="wa-inbox-eyebrow"><WhatsAppIcon /> WHATSAPP BUSINESS</span>
+          <h2>Inbox</h2>
+          <p>Customer conversations, attachments and replies in one place.</p>
+        </div>
+        <div className="wa-inbox-head-actions">
+          <span className={`wa-inbox-connection ${connected ? 'is-connected' : 'is-offline'}`}><i />{connected ? 'WhatsApp connected' : 'WhatsApp disconnected'}</span>
+          <button type="button" className="sa-btn ghost" onClick={() => void refresh()} disabled={loadingThreads}>↻ Refresh</button>
+        </div>
+      </header>
+
+      {notice && <div className="wa-inbox-notice" role="status">{notice}<button type="button" onClick={() => setNotice('')} aria-label="Dismiss">×</button></div>}
+
+      <div className={`wa-inbox-workspace ${contextOpen ? 'with-context' : ''} ${selectedPhone ? 'is-chat-open' : ''}`}>
+        <aside className="wa-inbox-threads">
+          <div className="wa-inbox-list-head">
+            <div><strong>Chats</strong><span>{threads.length.toLocaleString()}</span></div>
+            <span className="wa-inbox-list-live"><i /> Live</span>
+          </div>
+          <label className="wa-inbox-search"><span>⌕</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, number, message" /></label>
+          <div className="wa-inbox-thread-list">
+            {loadingThreads && threads.length === 0 ? <div className="wa-inbox-empty">Loading conversations…</div>
+              : visibleThreads.length === 0 ? <div className="wa-inbox-empty">{search ? 'No matching conversations' : 'No WhatsApp conversations yet'}</div>
+              : visibleThreads.map((t) => {
+                const threadLidJid = t.remoteJid || inferLidJid(t.phone);
+                const isLid = /@(?:lid|hosted\.lid)$/.test(String(threadLidJid || ''));
+                const nameIsPhone = String(t.name || '').replace(/\D/g, '') === String(t.phone || '').replace(/\D/g, '');
+                const title = nameIsPhone ? (isLid ? 'WhatsApp contact' : displayPhone(t.phone)) : (t.name || displayPhone(t.phone));
+                return <button type="button" key={t.phone} className={`wa-inbox-thread ${selectedPhone === t.phone ? 'is-active' : ''}`} onClick={() => setSelectedPhone(t.phone)}>
+                  <WhatsAppInboxAvatar phone={t.phone} remoteJid={threadLidJid} name={nameIsPhone ? 'W' : t.name} />
+                  <span className="wa-inbox-thread-copy"><span className="wa-inbox-thread-top"><strong>{title}</strong><time>{t.lastAt ? new Date(t.lastAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</time></span><span className="wa-inbox-thread-phone">{isLid ? '' : nameIsPhone ? '' : displayPhone(t.phone)}</span><span className="wa-inbox-preview">{t.lastMessage || 'No message preview'}</span></span>
+                  {t.cancelCount > 0 && <span className="wa-inbox-risk" title={`${t.cancelCount} cancelled orders`}>!</span>}
+                </button>;
+              })}
+          </div>
+          <div className="wa-inbox-list-foot">Recent synced conversations</div>
+        </aside>
+
+        <main className="wa-inbox-chat">
+          {selectedPhone ? <>
+            <header className="wa-inbox-chat-head">
+              <button type="button" className="wa-inbox-mobile-back" onClick={() => setSelectedPhone('')} aria-label="Back to conversations">‹</button>
+              <WhatsAppInboxAvatar phone={selectedPhone} remoteJid={contactRemoteJid} name={initials} large />
+              <div className="wa-inbox-contact"><strong>{contactName}</strong><span>{profilePhone ? displayPhone(profilePhone) : isLidContact ? 'WhatsApp number unavailable' : displayPhone(selectedPhone)} · WhatsApp</span></div>
+              <button type="button" className={`wa-inbox-detail-toggle ${contextOpen ? 'is-active' : ''}`} onClick={() => setContextOpen((v) => !v)} title="Show order details">ⓘ <span>Details</span></button>
+              <button type="button" className="wa-inbox-call-action" disabled={!callDigits} onClick={() => setBrowserCallMode('audio')} title="Start a secure voice call here"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.34 1.78.65 2.62a2 2 0 0 1-.45 2.11L8.04 9.72a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.84.31 1.72.53 2.62.65A2 2 0 0 1 22 16.92z" /></svg><span>Voice</span></button>
+              <button type="button" className="wa-inbox-call-action" disabled={!callDigits} onClick={() => setBrowserCallMode('video')} title="Start a secure video call here"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2" /><path d="m16 10 5-3v10l-5-3z" /></svg><span>Video</span></button>
+            </header>
+
+            <div ref={messagesAreaRef} className="wa-inbox-message-area" onScroll={(e) => {
+              const node = e.currentTarget;
+              keepMessagesAtBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100;
+            }}>
+              {chatData.messages.length === 0 && !loadingMessages ? <div className="wa-inbox-empty">No messages are available for this chat yet.</div> : null}
+              {loadingMessages && chatData.messages.length === 0 ? <div className="wa-inbox-empty">Loading conversation…</div> : null}
+              {chatData.messages.map((m) => <article key={m.id} className={`wa-inbox-message ${m.direction === 'out' ? 'outgoing' : 'incoming'} ${m.mediaType === 'call' ? 'call-event' : ''}`}>
+                <div className="wa-inbox-media-slot"><WhatsAppInboxMedia message={m} /></div>
+                {m.mediaExpired && <div className="wa-inbox-media-expired">Attachment removed after storage retention.</div>}
+                <div className="wa-inbox-message-text">{String(m.text || (m.mediaType === 'image' ? '📷 Photo' : m.mediaType === 'audio' ? '🎤 Voice note' : 'Attachment')).replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, '\n\n').trim()}</div>
+                <footer><span>{m.timestamp ? new Date(m.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}{m.direction === 'out' && m.byStaff ? ` · ${m.byStaff.replace(/_/g, ' ')}` : ''}</span>{m.direction === 'out' && <span className={`wa-inbox-ticks ${m.deliveryStatus === 'read' ? 'is-read' : ''} ${m.deliveryStatus === 'failed' ? 'is-failed' : ''}`} title={m.deliveryStatus === 'read' ? 'Seen' : m.deliveryStatus === 'delivered' ? 'Delivered' : m.deliveryStatus === 'failed' ? 'Not sent' : 'Sent'}>{m.deliveryStatus === 'failed' ? '!' : m.deliveryStatus === 'delivered' || m.deliveryStatus === 'read' ? '✓✓' : '✓'}</span>}</footer>
+              </article>)}
+            </div>
+
+            <div className="wa-inbox-composer">
+              {!connected && <div className="wa-inbox-composer-hint">Reconnect WhatsApp to send replies.</div>}
+              <input ref={attachmentInputRef} className="wa-inbox-file-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/3gpp,video/quicktime,audio/mpeg,audio/ogg,audio/webm,audio/wav,audio/amr,audio/mp4,application/pdf,application/vnd.android.package-archive,text/plain,.docx,.xlsx,.apk" onChange={(e) => { chooseAttachment(e.target.files?.[0]); e.currentTarget.value = ''; }} />
+              {attachment && <div className="wa-inbox-attachment-preview">
+                {attachment.type.startsWith('image/') ? <img src={attachmentPreview} alt="Attachment preview" /> : attachment.type.startsWith('video/') ? <video src={attachmentPreview} controls /> : attachment.type.startsWith('audio/') ? <><span>{voiceNoteAttachment ? '🎤 Voice note' : `♫ ${attachment.name}`}</span><audio src={attachmentPreview} controls /></> : <span>▤ {attachment.name.toLowerCase().endsWith('.apk') ? 'Android app · ' : ''}{attachment.name}</span>}
+                <button type="button" onClick={() => setAttachment(null)} aria-label="Remove attachment">×</button>
+              </div>}
+              <div className="wa-inbox-composer-row">
+                <button type="button" className="wa-inbox-attach" onClick={() => attachmentInputRef.current?.click()} disabled={!connected || sending} title="Attach photo, video, audio or document" aria-label="Attach media">＋</button>
+                <button type="button" className={`wa-inbox-mic ${recordingVoiceNote ? 'is-recording' : ''}`} onClick={() => void toggleVoiceNoteRecording()} disabled={!connected || sending} title={recordingVoiceNote ? 'Finish voice note' : 'Record voice note'} aria-label={recordingVoiceNote ? 'Finish voice note' : 'Record voice note'}>{recordingVoiceNote ? '■' : '🎙'}</button>
+                <textarea value={reply} onChange={(e) => setReply(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendReply(); } }} placeholder={connected ? 'Type a message' : 'WhatsApp is disconnected'} disabled={!connected || sending} rows={1} />
+                <button type="button" className="wa-inbox-send" onClick={() => void sendReply()} disabled={!connected || sending || recordingVoiceNote || (!reply.trim() && !attachment)} title="Send message" aria-label="Send message">{sending ? '…' : '➤'}</button>
+              </div>
+            </div>
+          </> : <div className="wa-inbox-no-chat"><span>◌</span><strong>Select a conversation</strong><p>Customer messages and order context will appear here.</p></div>}
+        </main>
+
+        {contextOpen && <aside className="wa-inbox-context">
+          <div className="wa-inbox-context-head"><span>ORDER CONTEXT</span><strong>{chatData.orders.length} orders</strong></div>
+          {!selectedPhone ? <div className="wa-inbox-context-empty">Select a chat to view customer orders.</div>
+            : chatData.orders.length === 0 ? <div className="wa-inbox-context-empty">No matching store orders for this number.</div>
+            : chatData.orders.map((o) => <article className="wa-inbox-order" key={o.id}><span className="wa-inbox-order-id">#{String(o.id).replace(/^DOT-/, '')}</span><span className={`wa-inbox-order-status status-${String(o.status || '').toLowerCase()}`}>{o.status || 'Unknown'}</span><strong>৳{Number(o.total || 0).toLocaleString()}</strong><small>{o.createdAt ? new Date(o.createdAt).toLocaleDateString() : ''}</small>{o.items && <p>{o.items}</p>}</article>)}
+        </aside>}
+      </div>
+      {browserCallMode && selectedPhone && <AdminBrowserCall phone={callDigits} name={contactName} mode={browserCallMode} onClose={() => setBrowserCallMode(null)} onInvite={(url) => setReply((current) => current.includes(url) ? current : `${current}${current ? '\n' : ''}Join our ${browserCallMode === 'video' ? 'video' : 'voice'} call: ${url}`)} />}
+    </section>
+  );
+}
+
+function LifecycleAutomationCard() {
+  const [cfg, setCfg] = useState<any>({
+    abandonedRecoveryEnabled: false,
+    abandonedDelayMins: 25,
+    abandonedOfferText: 'অর্ডারটি সম্পূর্ণ করলে স্পেশাল ফ্রি ডেলিভারি / ডিসকাউন্ট সুবিধা পাবেন!',
+    abandonedDailyCap: 15,
+    refillAutoSendEnabled: false,
+    refillDailyCap: 15,
+    ceoReportEnabled: false,
+    ceoReportPhone: '',
+    ceoReportHour: 23,
+  });
+  const [msg, setMsg] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    aFetch('/admin/automation/lifecycle')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.config) setCfg(d.config); })
+      .catch(() => {});
+  }, []);
+
+  const saveCfg = async () => {
+    setSaving(true);
+    setMsg('');
+    try {
+      const r = await aFetch('/admin/automation/lifecycle', { method: 'PUT', body: JSON.stringify(cfg) });
+      const d = await r.json();
+      if (d?.config) setCfg(d.config);
+      setMsg('✅ Anti-Ban Recovery, Refill Cycle & CEO Report সেটিংস সেভ হয়েছে!');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendCeoNow = async () => {
+    setSaving(true);
+    setMsg('');
+    try {
+      const r = await aFetch('/admin/reports/send-ceo-whatsapp', { method: 'POST', body: JSON.stringify({ phone: cfg.ceoReportPhone }) });
+      const d = await r.json();
+      setMsg(r.ok ? '✅ আজকের CEO Closing Report আপনার WhatsApp-এ পাঠানো হয়েছে!' : '❌ ' + (d.error || 'Failed'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="sa-card" style={{ padding: 20, marginBottom: 20, border: '1px solid rgba(59, 130, 246, 0.35)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#60a5fa' }}>🛡️ Anti-Ban Cart Recovery, Product Refill Cycle &amp; Daily CEO Report</h2>
+          <div className="dim" style={{ fontSize: 12, marginTop: 3 }}>সকাল ৯টা – রাত ১০টার মধ্যে দৈনিক নিরাপদ লিমিট মেনে অটো মেসেজ পাঠায় যাতে WhatsApp ব্যান না হয়।</div>
+        </div>
+        <button type="button" className="sa-btn" disabled={saving} onClick={saveCfg}>{saving ? 'Saving...' : '💾 Save Automation'}</button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+        <div style={{ padding: 12, borderRadius: 10, background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 13, color: '#f8fafc', cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!cfg.abandonedRecoveryEnabled} onChange={(e) => setCfg((p: any) => ({ ...p, abandonedRecoveryEnabled: e.target.checked }))} />
+            <span>🛒 Abandoned Cart Auto-Recovery (Anti-Ban)</span>
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+            <label style={{ fontSize: 11, color: '#94a3b8' }}>Delay (মিনিট)
+              <input type="number" min={15} value={cfg.abandonedDelayMins} onChange={(e) => setCfg((p: any) => ({ ...p, abandonedDelayMins: Number(e.target.value) || 25 }))} />
+            </label>
+            <label style={{ fontSize: 11, color: '#94a3b8' }}>Daily Safe Cap (Max)
+              <input type="number" min={1} max={30} value={cfg.abandonedDailyCap} onChange={(e) => setCfg((p: any) => ({ ...p, abandonedDailyCap: Number(e.target.value) || 15 }))} />
+            </label>
+          </div>
+          <input style={{ marginTop: 8 }} value={cfg.abandonedOfferText || ''} onChange={(e) => setCfg((p: any) => ({ ...p, abandonedOfferText: e.target.value }))} placeholder="অফার টেক্সট..." />
+        </div>
+
+        <div style={{ padding: 12, borderRadius: 10, background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 13, color: '#f8fafc', cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!cfg.refillAutoSendEnabled} onChange={(e) => setCfg((p: any) => ({ ...p, refillAutoSendEnabled: e.target.checked }))} />
+            <span>🔁 Product Refill Cycle Auto-WhatsApp</span>
+          </label>
+          <div className="dim" style={{ fontSize: 11.5, marginTop: 6, lineHeight: 1.5 }}>
+            প্রতিটি প্রোডাক্টে সেট করা দিন (যেমন: ৩০, ৯০ বা ১৮০ দিন) পূর্ণ হলে অটো রিফিল রিমাইন্ডার পাঠাবে। বন্ধ রাখলে ড্যাশবোর্ড নোটিফিকেশনে অ্যালার্ট দেবে।
+          </div>
+          <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginTop: 8 }}>Daily Refill Cap (Max)
+            <input type="number" min={1} max={30} value={cfg.refillDailyCap} onChange={(e) => setCfg((p: any) => ({ ...p, refillDailyCap: Number(e.target.value) || 15 }))} />
+          </label>
+        </div>
+
+        <div style={{ padding: 12, borderRadius: 10, background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 13, color: '#f8fafc', cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!cfg.ceoReportEnabled} onChange={(e) => setCfg((p: any) => ({ ...p, ceoReportEnabled: e.target.checked }))} />
+            <span>📊 Daily CEO Closing Report (WhatsApp)</span>
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 8, marginTop: 10 }}>
+            <input placeholder="Owner WhatsApp (01XXXXXXXXX)" value={cfg.ceoReportPhone || ''} onChange={(e) => setCfg((p: any) => ({ ...p, ceoReportPhone: e.target.value }))} />
+            <input type="number" min={0} max={23} title="Hour (24h)" value={cfg.ceoReportHour ?? 23} onChange={(e) => setCfg((p: any) => ({ ...p, ceoReportHour: Number(e.target.value) }))} />
+          </div>
+          <button type="button" className="sa-btn ghost sa-mini" style={{ marginTop: 8 }} disabled={saving || !cfg.ceoReportPhone} onClick={sendCeoNow}>
+            📲 Send CEO Report Now
+          </button>
+        </div>
+      </div>
+      {msg && <div style={{ marginTop: 10, fontSize: 12.5, color: msg.startsWith('✅') ? '#4ade80' : '#f87171', fontWeight: 600 }}>{msg}</div>}
+    </div>
+  );
+}
+
+function WhatsAppSmartAiCard() {
+  const [config, setConfig] = useState<any>({
+    enabled: true,
+    voiceNoteEnabled: true,
+    chatToOrderEnabled: true,
+    orderTrackEnabled: true,
+    antiRepeatEnabled: true,
+    escalationEnabled: true,
+    pauseMinutes: 45,
+    tone: 'friendly_bengali',
+    storeInfo: '',
+  });
+  const [faqs, setFaqs] = useState<any[]>([]);
+  const [newQ, setNewQ] = useState('');
+  const [newA, setNewA] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    aFetch('/admin/whatsapp/ai-config')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.config) setConfig(d.config);
+        if (Array.isArray(d?.faqs)) setFaqs(d.faqs);
+      })
+      .catch(() => {});
+  }, []);
+
+  const saveConfig = async (nextConfig = config) => {
+    setSaving(true);
+    setMsg('');
+    try {
+      const r = await aFetch('/admin/whatsapp/ai-config', {
+        method: 'PUT',
+        body: JSON.stringify(nextConfig),
+      });
+      const d = await r.json();
+      if (d?.config) setConfig(d.config);
+      setMsg('✅ Smart AI সেটিংস সেভ হয়েছে!');
+    } catch (_) {
+      setMsg('❌ সেভ করতে সমস্যা হয়েছে');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addFaq = async () => {
+    if (!newQ.trim() || !newA.trim()) return;
+    setSaving(true);
+    try {
+      const r = await aFetch('/admin/whatsapp/ai-faq', {
+        method: 'POST',
+        body: JSON.stringify({ question: newQ.trim(), answer: newA.trim() }),
+      });
+      const d = await r.json();
+      if (Array.isArray(d?.faqs)) setFaqs(d.faqs);
+      setNewQ('');
+      setNewA('');
+      setMsg('✅ নতুন FAQ AI-কে শেখানো হয়েছে!');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeFaq = async (id: string) => {
+    const r = await aFetch(`/admin/whatsapp/ai-faq/${id}`, { method: 'DELETE' });
+    const d = await r.json();
+    if (Array.isArray(d?.faqs)) setFaqs(d.faqs);
+  };
+
+  return (
+    <div className="sa-card" style={{ padding: 22, marginBottom: 20, border: '1px solid rgba(139, 92, 246, 0.45)', background: 'linear-gradient(180deg, rgba(139, 92, 246, 0.1) 0%, rgba(15, 23, 42, 0.7) 100%)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 20 }}>🧠</span>
+            <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#c4b5fd' }}>
+              Smart Gemini AI Auto-Reply &amp; Knowledge Base
+            </h2>
+            <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 999, background: config.enabled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(148,163,184,0.2)', color: config.enabled ? '#4ade80' : '#94a3b8', fontWeight: 700 }}>
+              {config.enabled ? 'AI Active' : 'Paused'}
+            </span>
+          </div>
+          <p className="dim" style={{ fontSize: 12.5, margin: '6px 0 0', lineHeight: 1.5 }}>
+            লাইভ প্রোডাক্ট, অর্ডার ট্র্যাকিং, ভয়েস নোট বোঝা, চ্যাট থেকে অর্ডার তৈরি, অ্যান্টি-রিপিট (একই মেসেজ বারবার না দেওয়া) এবং AI উত্তর না জানলে ড্যাশবোর্ডে নোটিফিকেশন + সরাসরি রিপ্লাই।
+          </p>
+        </div>
+        <button className="sa-btn" disabled={saving} onClick={() => saveConfig(config)} style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', color: '#fff', fontWeight: 700 }}>
+          {saving ? 'Saving...' : '💾 Save AI Config'}
+        </button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10, marginBottom: 14 }}>
+        {[
+          ['enabled', '🤖 Smart AI Auto-Reply'],
+          ['voiceNoteEnabled', '🎙️ Voice Note (Audio) AI'],
+          ['orderTrackEnabled', '📦 Live Order & Courier Tracking'],
+          ['chatToOrderEnabled', '🛒 Chat-to-Order Creation'],
+          ['antiRepeatEnabled', '✨ Anti-Repeat (Varied Replies)'],
+          ['escalationEnabled', '🔔 Unknown -> Dashboard Alert'],
+        ].map(([key, label]) => (
+          <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 8, background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', fontSize: 12.5 }}>
+            <input
+              type="checkbox"
+              checked={!!config[key]}
+              onChange={(e) => setConfig((prev: any) => ({ ...prev, [key]: e.target.checked }))}
+            />
+            <span style={{ color: '#f1f5f9', fontWeight: 600 }}>{label}</span>
+          </label>
+        ))}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 14 }}>
+        <div>
+          <label style={{ display: 'block', fontSize: 11.5, color: '#94a3b8', marginBottom: 4 }}>AI Tone / কথা বলার ধরন</label>
+          <select
+            value={config.tone || 'friendly_bengali'}
+            onChange={(e) => setConfig((prev: any) => ({ ...prev, tone: e.target.value }))}
+            style={{ width: '100%', padding: '8px 10px', borderRadius: 8, background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 12.5 }}
+          >
+            <option value="friendly_bengali">Friendly Bengali (আন্তরিক ও সহজ বাংলা)</option>
+            <option value="casual_banglish">Casual Banglish (বাংলা + Banglish)</option>
+            <option value="professional">Formal / Professional Bengali</option>
+          </select>
+        </div>
+        <div>
+          <label style={{ display: 'block', fontSize: 11.5, color: '#94a3b8', marginBottom: 4 }}>Human Takeover AI Pause (মিনিট)</label>
+          <input
+            type="number"
+            min={5}
+            max={240}
+            value={config.pauseMinutes ?? 45}
+            onChange={(e) => setConfig((prev: any) => ({ ...prev, pauseMinutes: Number(e.target.value) || 45 }))}
+            style={{ width: '100%', padding: '8px 10px', borderRadius: 8, background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 12.5 }}
+          />
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ display: 'block', fontSize: 11.5, color: '#94a3b8', marginBottom: 4 }}>Extra Store Policy / Offer Instructions (AI সবসময় মনে রাখবে)</label>
+        <textarea
+          rows={2}
+          placeholder="যেমন: ২টা নিলে ফ্রি ডেলিভারি, রিটার্ন পলিসি ৭ দিন, আমাদের শোরুম মিরপুর-১০..."
+          value={config.storeInfo || ''}
+          onChange={(e) => setConfig((prev: any) => ({ ...prev, storeInfo: e.target.value }))}
+          style={{ width: '100%', padding: '8px 10px', borderRadius: 8, background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 12.5, boxSizing: 'border-box' }}
+        />
+      </div>
+
+      <div style={{ paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0', marginBottom: 8 }}>📚 AI Knowledge Base / FAQ ({faqs.length})</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 10 }}>
+          <input
+            placeholder="কাস্টমারের প্রশ্ন (যেমন: ঢাকার বাইরে ডেলিভারি কয়দিনে?)"
+            value={newQ}
+            onChange={(e) => setNewQ(e.target.value)}
+            style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 12 }}
+          />
+          <input
+            placeholder="AI যে উত্তর দিবে..."
+            value={newA}
+            onChange={(e) => setNewA(e.target.value)}
+            style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 12 }}
+          />
+          <button type="button" className="sa-btn" onClick={addFaq} disabled={saving || !newQ.trim() || !newA.trim()} style={{ background: '#10b981', color: '#fff', fontWeight: 700 }}>
+            + Add FAQ
+          </button>
+        </div>
+        {faqs.length > 0 && (
+          <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {faqs.map((f) => (
+              <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 8, background: 'rgba(0,0,0,0.25)', fontSize: 12 }}>
+                <div>
+                  <div style={{ color: '#c4b5fd', fontWeight: 700 }}>Q: {f.question}</div>
+                  <div style={{ color: '#cbd5e1' }}>A: {f.answer}</div>
+                </div>
+                <button type="button" onClick={() => removeFaq(f.id)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: 13 }}>🗑️</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {msg && <div style={{ marginTop: 10, fontSize: 12.5, color: msg.startsWith('✅') ? '#4ade80' : '#f87171', fontWeight: 600 }}>{msg}</div>}
+    </div>
+  );
+}
+
 function WhatsAppAdmin() {
   const [status, setStatus] = useState<any>({
     enabled: true,
@@ -13356,8 +18083,17 @@ function WhatsAppAdmin() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
   
-  // Navigation Tabs: 'marketing' (default), 'bot', 'vision', 'logs'
-  const [activeTab, setActiveTab] = useState<'marketing' | 'bot' | 'vision' | 'logs'>('marketing');
+  // Navigation Tabs: marketing campaigns, live inbox, automation, vision AI, logs
+  const [activeTab, setActiveTab] = useState<'marketing' | 'inbox' | 'bot' | 'vision' | 'logs'>(() => {
+    try {
+      const saved = sessionStorage.getItem('sa_wa_tab');
+      if (saved === 'marketing' || saved === 'inbox' || saved === 'bot' || saved === 'vision' || saved === 'logs') return saved;
+    } catch {}
+    return 'marketing';
+  });
+  useEffect(() => {
+    try { sessionStorage.setItem('sa_wa_tab', activeTab); } catch {}
+  }, [activeTab]);
 
   // Single Quick Messenger
   const [manualPhone, setManualPhone] = useState('');
@@ -13376,18 +18112,20 @@ function WhatsAppAdmin() {
     counts: { all: 0, buyers: 0, incomplete: 0, wa_chats: 0 },
   });
   const [audienceLoading, setAudienceLoading] = useState(false);
+  const [audienceError, setAudienceError] = useState('');
   const [syncingChats, setSyncingChats] = useState(false);
   const [selectedSegment, setSelectedSegment] = useState<'all' | 'buyers' | 'incomplete' | 'wa_chats' | 'custom'>('all');
   const [selectedPhones, setSelectedPhones] = useState<string[]>([]);
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [customerSearch, setCustomerSearch] = useState('');
   const [customPhonesInput, setCustomPhonesInput] = useState('');
+  const [catalogProducts, setCatalogProducts] = useState<any[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
 
   // Offer Creative States
-  const [offerImage, setOfferImage] = useState('/uploads/img_mv7u70cc5edq0.jpg');
-  const [offerCaption, setOfferCaption] = useState(
-    'সম্মানিত {name}!\n\nআমাদের স্টোর TimeBoost-এ আপনার জন্য স্পেশাল অফার! 🔥\nসব প্রিমিয়াম প্রোডাক্টে আজ পাচ্ছেন ২০% ডিসকাউন্ট এবং ফ্রি হোম ডেলিভারি।\n\nঅর্ডার করতে এখনি ভিজিট করুন: https://timingboost.xyz\n\nঅথবা এই মেসেজের রিপ্লাইয়ে আপনার নাম, ফোন ও ঠিকানা লিখে পাঠালেই সরাসরি ক্যাশ অন ডেলিভারিতে অর্ডার কনফার্ম হয়ে যাবে! 🚀'
-  );
-  const [antiBanDelay, setAntiBanDelay] = useState(5);
+  const [offerImage, setOfferImage] = useState('');
+  const [offerCaption, setOfferCaption] = useState('');
+  const [antiBanDelay, setAntiBanDelay] = useState(30);
   const [uploadingImage, setUploadingImage] = useState(false);
 
   // Live Broadcast Runner States
@@ -13435,7 +18173,10 @@ function WhatsAppAdmin() {
             setToast('🎉 WhatsApp Business connected successfully! (+' + (d.phone || '') + ')');
             setTimeout(() => setToast(''), 4500);
           }
-          return d;
+          return {
+            ...d,
+            geminiApiKey: prev?.geminiApiKey && !d?.geminiApiKey ? prev.geminiApiKey : (d?.geminiApiKey || prev?.geminiApiKey || '')
+          };
         });
         if (showLoader) setLoading(false);
       })
@@ -13445,9 +18186,11 @@ function WhatsAppAdmin() {
   };
 
   const loadAudiences = () => {
+    setMarketingConsent(false);
+    setAudienceError('');
     setAudienceLoading(true);
     aFetch('/admin/whatsapp/audiences')
-      .then(r => r.json())
+      .then(async r => { const data = await r.json(); if (!r.ok) throw new Error(data?.error || 'Could not load recipients.'); return data; })
       .then(d => {
         if (d && d.customers) {
           setAudienceData({
@@ -13455,10 +18198,9 @@ function WhatsAppAdmin() {
             customers: d.customers,
             counts: d.counts || { all: d.customers.length, buyers: 0, incomplete: 0, wa_chats: 0 },
           });
-          setSelectedPhones(d.customers.map((c: any) => c.phone));
         }
       })
-      .catch(() => {})
+      .catch((error: any) => setAudienceError(error?.message || 'Could not load recipients.'))
       .finally(() => setAudienceLoading(false));
   };
 
@@ -13467,12 +18209,12 @@ function WhatsAppAdmin() {
     try {
       const res = await aFetch('/admin/whatsapp/sync-chats', { method: 'POST' }).then(r => r.json());
       if (res?.ok) {
-        setToast(`🎉 ${res.totalContacts || 0} টি হোয়াটসঅ্যাপ চ্যাট কন্ট্যাক্ট সফলভাবে সিঙ্ক হয়েছে!`);
+        setToast(`${res.totalContacts || 0} WhatsApp chat contacts synced.`);
         setTimeout(() => setToast(''), 4500);
         loadAudiences();
       }
     } catch (e: any) {
-      alert('সিঙ্ক ব্যর্থ: ' + (e?.message || 'Error'));
+      alert('Contact sync failed: ' + (e?.message || 'Error'));
     } finally {
       setSyncingChats(false);
     }
@@ -13481,6 +18223,8 @@ function WhatsAppAdmin() {
   useEffect(() => { 
     load(true); 
     loadAudiences();
+    setProductsLoading(true);
+    fetch('/api/products').then(r => r.ok ? r.json() : []).then((data: any[]) => setCatalogProducts(Array.isArray(data) ? data.filter(p => p && (p.name || p.title)) : [])).catch(() => setCatalogProducts([])).finally(() => setProductsLoading(false));
   }, []);
 
   // Poll real Baileys status while modal is open or waiting for connection
@@ -13499,18 +18243,18 @@ function WhatsAppAdmin() {
     }
   }, [showPairModal, pairTab, status.connected, status.qrDataUrl]);
 
-  // Sync segment selection with selected phones
-  useEffect(() => {
-    if (selectedSegment === 'all') {
-      setSelectedPhones(audienceData.customers.map((c: any) => c.phone));
-    } else if (selectedSegment === 'buyers') {
-      setSelectedPhones(audienceData.customers.filter((c: any) => c.ordersCount > 0).map((c: any) => c.phone));
-    } else if (selectedSegment === 'incomplete') {
-      setSelectedPhones(audienceData.customers.filter((c: any) => c.segment === 'incomplete' && c.ordersCount === 0).map((c: any) => c.phone));
-    } else if (selectedSegment === 'wa_chats') {
-      setSelectedPhones(audienceData.customers.filter((c: any) => c.isWaChat || c.segment === 'wa_chat').map((c: any) => c.phone));
-    }
-  }, [selectedSegment, audienceData]);
+  const selectAudience = (segment: 'all' | 'buyers' | 'incomplete' | 'wa_chats' | 'custom') => {
+    setSelectedSegment(segment);
+    setMarketingConsent(false);
+    if (segment === 'custom') { setSelectedPhones([]); return; }
+    const matches = audienceData.customers.filter((c: any) =>
+      segment === 'all' ||
+      (segment === 'buyers' && Number(c.ordersCount) > 0) ||
+      (segment === 'incomplete' && c.segment === 'incomplete' && Number(c.ordersCount) === 0) ||
+      (segment === 'wa_chats' && (c.isWaChat || c.segment === 'wa_chat'))
+    );
+    setSelectedPhones(matches.map((c: any) => c.phone));
+  };
 
   const saveWhatsAppPatch = async (patch: any) => {
     setSaving(true);
@@ -13614,7 +18358,7 @@ function WhatsAppAdmin() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `TimeBoost_Contacts_Backup_${targetType}_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `${getAdminSiteBrand().replace(/\s+/g, '_')}_Contacts_${targetType}_${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -13637,55 +18381,44 @@ function WhatsAppAdmin() {
       const up = await uploadOptimizedImage(file);
       if (up?.url) {
         setOfferImage(up.url);
-        setToast('✅ অফার ব্যানার সফলভাবে আপলোড হয়েছে!');
+      setToast('Image uploaded.');
         setTimeout(() => setToast(''), 3000);
       }
     } catch (err: any) {
-      alert('ইমেজ আপলোড ব্যর্থ হয়েছে: ' + (err?.message || 'Error'));
+      alert('Image upload failed: ' + (err?.message || 'Error'));
     } finally {
       setUploadingImage(false);
       e.target.value = '';
     }
   };
 
-  // Preset Template Setter
-  const applyPresetTemplate = (type: 'discount' | 'free_shipping' | 'vip' | 'cart_recovery') => {
-    if (type === 'discount') {
-      setOfferCaption(
-        'সম্মানিত {name}!\n\nআমাদের স্টোর TimeBoost-এ আপনার জন্য মেগা ধামাকা অফার! 🔥\nসব প্রিমিয়াম প্রোডাক্টে আজ পাচ্ছেন ২০% ফ্ল্যাট ডিসকাউন্ট!\n\nকুপন কোড: TimeBoost20\nশপ লিংক: https://timingboost.xyz\n\nঅথবা এই মেসেজের রিপ্লাইয়ে পছন্দের পণ্যের নাম বা ছবি পাঠালেই আমরা ক্যাশ অন ডেলিভারিতে পাঠিয়ে দেব! 🛍️'
-      );
-    } else if (type === 'free_shipping') {
-      setOfferCaption(
-        'প্রিয় {name},\n\nআজকের জন্য সারা বাংলাদেশে সম্পূর্ণ ফ্রি হোম ডেলিভারি! 🚚💨\nকোনো অগ্রিম পেমেন্ট ছাড়া পণ্য হাতে পেয়ে মূল্য পরিশোধ করুন।\n\nভিজিট করুন: https://timingboost.xyz\nঅর্ডার করতে এখানে সরাসরি রিপ্লাই করুন। ধন্যবাদ! ✨'
-      );
-    } else if (type === 'vip') {
-      setOfferCaption(
-        'সম্মানিত {name} Sir/Mam!\n\nআমাদের প্রিমিয়াম ও সিক্রেট কালেকশনে নতুন আইটেম যুক্ত হয়েছে! 👑\n১০০% প্রাইভেসি ও গোপন প্যাকেজিংয়ে নিরাপদ ডেলিভারি পেতে এখনি চেক করুন: https://timingboost.xyz\n\nআপনার যেকোনো প্রয়োজনে আমরা হোয়াটসঅ্যাপে সাথেই আছি।'
-      );
-    } else if (type === 'cart_recovery') {
-      setOfferCaption(
-        'সম্মানিত {name},\n\nআপনি TimeBoost স্টোরে পছন্দের আইটেমটি অর্ডার করতে গিয়েছিলেন কিন্তু সম্পন্ন করেননি। 🛒\n\nআপনার অর্ডারটি সহজে কনফার্ম করতে আমরা দিচ্ছি স্পেশাল ফ্রি ডেলিভারি!\nঅর্ডার কনফার্ম করতে শুধু আপনার ঠিকানা লিখে এখানে রিপ্লাই করুন, অথবা ভিজিট করুন: https://timingboost.xyz'
-      );
-    }
-    setToast('✅ অফার টেমপ্লেট লোড হয়েছে!');
-    setTimeout(() => setToast(''), 2500);
+  const useMessageStarter = (type: 'announcement' | 'service' | 'followup') => {
+    const brand = getAdminSiteBrand();
+    const url = typeof window !== 'undefined' ? window.location.origin : '';
+    const starters = {
+      announcement: `Hello {name},\n\nWe have an update from ${brand}.\n\nReply to this message if you need help.\n${url}`,
+      service: `Hello {name},\n\nThank you for contacting ${brand}. Our team is here to help with your order or product questions.\n\nReply here and we will get back to you.`,
+      followup: `Hello {name},\n\nWe are following up from ${brand}. If you still need assistance, reply to this message and our team will help.\n\n${url}`,
+    };
+    setOfferCaption(starters[type]);
   };
 
   // Test on Admin\'s own WhatsApp
   const testOnMyPhone = async () => {
     if (!status.connected) {
-      alert('⚠️ WhatsApp আগে কানেক্ট করুন (Scan QR Code)!');
+      alert('Connect WhatsApp before sending a test message.');
       return;
     }
-    const myPhone = prompt('আপনার ব্যক্তিগত WhatsApp নম্বর লিখুন (উদা: 01878374762):', status.phone || '018');
+    if (!offerCaption.trim() && !offerImage) { alert('Write a message or add an image before sending a test.'); return; }
+    const myPhone = prompt('Enter a WhatsApp number for the test message:', status.phone || '');
     if (!myPhone) return;
 
-    setToast('⏳ টেস্ট অফার মেসেজ পাঠানো হচ্ছে...');
+    setToast('Sending test message…');
     try {
       const testMsg = offerCaption
         .replace(/\\n/g, '\n')
-        .replace(/\{name\}/g, 'সম্মানিত টেস্ট গ্রাহক')
-        .replace(/\{store\}/g, 'TimeBoost')
+        .replace(/\{name\}/g, 'Test recipient')
+        .replace(/\{store\}/g, getAdminSiteBrand())
         .replace(/\{phone\}/g, myPhone);
 
       const res = await aFetch('/admin/whatsapp/send', {
@@ -13699,14 +18432,14 @@ function WhatsAppAdmin() {
         })
       }).then(r => r.json());
 
-      if (res?.sent !== false) {
-        setToast('✅ টেস্ট অফার আপনার হোয়াটসঅ্যাপে পাঠানো হয়েছে!');
+      if (res?.sent === true) {
+        setToast('Test message sent.');
         setTimeout(() => setToast(''), 4000);
       } else {
-        alert('⚠️ টেস্ট পাঠানো ব্যর্থ: ' + (res?.reason || res?.error || 'Failed'));
+        alert('Test message failed: ' + (res?.reason || res?.error || 'WhatsApp did not send the message.'));
       }
     } catch (err: any) {
-      alert('ত্রুটি: ' + err.message);
+      alert('Error: ' + err.message);
     }
   };
 
@@ -13752,34 +18485,44 @@ function WhatsAppAdmin() {
   // Run Bulk WhatsApp Broadcast via 24/7 Server Background Worker
   const runBroadcast = async () => {
     if (!status.connected) {
-      alert('⚠️ WhatsApp আগে কানেক্ট করুন (Scan QR Code)!');
+      alert('Connect WhatsApp before starting a campaign.');
       return;
     }
-    if (!offerCaption.trim() && !offerImage) {
-      alert('⚠️ অফার মেসেজ বা ছবি আবশ্যক!');
+    if (!marketingConsent) {
+      alert('Confirm that you have permission to message these recipients before starting.');
       return;
     }
 
     let targets: { phone: string; name: string }[] = [];
     if (selectedSegment === 'custom') {
-      const lines = customPhonesInput.split(/[\n,;]+/).map(s => s.trim().replace(/\D/g, '')).filter(p => p.length >= 10);
-      targets = lines.map(p => ({ phone: p, name: 'সম্মানিত গ্রাহক' }));
+      const lines = customPhonesInput.split(/[\n,;]+/).map(normalizeCampaignPhone).filter(Boolean);
+      targets = lines.map(p => ({ phone: p, name: 'Customer' }));
     } else {
       targets = audienceData.customers
         .filter(c => selectedPhones.includes(c.phone))
-        .map(c => ({ phone: c.phone, name: c.name || 'সম্মানিত গ্রাহক' }));
+        .map(c => ({ phone: c.phone, name: c.name || 'Customer' }));
     }
+
+    const uniqueTargets = new Map<string, { phone: string; name: string }>();
+    for (const target of targets) {
+      let digits = String(target.phone || '').replace(/\D/g, '');
+      if (digits.startsWith('880') && digits.length === 13) digits = `0${digits.slice(3)}`;
+      if (digits.length === 10 && digits.startsWith('1')) digits = `0${digits}`;
+      if (digits.length === 11 && digits.startsWith('01')) uniqueTargets.set(digits, { phone: digits, name: target.name || 'Customer' });
+    }
+    targets = Array.from(uniqueTargets.values());
 
     if (targets.length === 0) {
-      alert('⚠️ কোনো কাস্টমার সিলেক্ট করা নেই!');
+      alert('Select at least one valid Bangladesh mobile number.');
+      return;
+    }
+    if (targets.length > 10000) { alert('A campaign can include up to 10,000 unique numbers.'); return; }
+
+    if (!confirm(`Start a WhatsApp campaign for ${targets.length} unique recipients?\n\nMessages will be sent from the connected WhatsApp account at about ${antiBanDelay} seconds apart. Make sure each recipient has agreed to receive messages.`)) {
       return;
     }
 
-    if (!confirm('আপনি কি নিশ্চিত যে ' + targets.length + ' জন কাস্টমারকে এই অফার মেসেজ ও ছবি পাঠাতে চান?\n\n🛡️ এটি সরাসরি ক্লাউড সার্ভার ব্যাকগ্রাউন্ডে চলবে—আপনি স্ক্রিন বা কম্পিউটার বন্ধ করলেও মেসেজ পাঠানো থামবে না!')) {
-      return;
-    }
-
-    setToast('🚀 ক্লাউড সার্ভার ব্যাকগ্রাউন্ড ব্রডকাস্ট চালু হচ্ছে...');
+    setToast('Starting server-side campaign…');
     try {
       const res = await aFetch('/admin/whatsapp/campaign/start', {
         method: 'POST',
@@ -13788,24 +18531,26 @@ function WhatsAppAdmin() {
           caption: offerCaption,
           imageUrl: offerImage || null,
           delaySeconds: antiBanDelay,
+          consent: true,
         })
       }).then(r => r.json());
 
       if (res?.ok) {
         setIsBroadcasting(true);
         setBroadcastPaused(false);
-        setToast('✅ ক্লাউড সার্ভার ব্যাকগ্রাউন্ড ব্রডকাস্ট সফলভাবে চালু হয়েছে! এখন স্ক্রিন বা পিসি বন্ধ করলেও মেসেজ চলতে থাকবে।');
+        setMarketingConsent(false);
+        setToast('Campaign started. Delivery continues on the server if you close this page.');
         fetchCampaignStatus();
       } else {
-        alert('ক্যাম্পেইন শুরু ব্যর্থ: ' + (res?.error || 'Error'));
+        alert('Campaign could not start: ' + (res?.error || 'Error'));
       }
     } catch (e: any) {
-      alert('ত্রুটি: ' + e.message);
+      alert('Error: ' + e.message);
     }
   };
 
   const sendDirectMessage = async () => {
-    if (!manualPhone || (!broadcastMsg && !singleImgUrl)) {
+    if (!manualPhone || (!broadcastMsg.trim() && !singleImgUrl)) {
       alert('Phone number and message or image are required');
       return;
     }
@@ -13815,7 +18560,7 @@ function WhatsAppAdmin() {
         method: 'POST',
         body: JSON.stringify({ phone: manualPhone, message: broadcastMsg, imageUrl: singleImgUrl || null })
       }).then(r => r.json());
-      if (res.ok || res.sent !== false) {
+      if (res.ok || res.sent === true) {
         setToast('Message dispatched!');
         setBroadcastMsg('');
         setSingleImgUrl('');
@@ -13831,22 +18576,20 @@ function WhatsAppAdmin() {
   };
 
   const triggers = status.triggers || {};
-  const waPreview = (key: string) => {
-    const sample: Record<string, string> = {
-      name: 'সাকিব', store: 'TimeBoost', items: 'Love Lock Condom (Pack of 2)', total: '৳899',
-      order_id: 'DOT-2048', courier: 'Pathao', consignment: 'DM021126AP25',
-      tracking_url: 'https://merchant.pathao.com/tracking?consignment_id=DM021126AP25&phone=018XXXXXXXX',
-      store_tracking_url: 'https://timingboost.xyz/track?id=DOT-2048',
-    };
-    return String(triggers[key]?.template || '').replace(/\\{([^}]+)\\}/g, (token: string, name: string) => sample[name] ?? token);
+  const waPreview = (key: string) => String(triggers[key]?.template || '')
+    .replace(/\\n/g, '\n')
+    .replace(/\{store\}/g, brandName)
+    .replace(/\{name\}/g, previewCustomer?.name || '{name}')
+    .replace(/\{phone\}/g, previewCustomer?.phone || '{phone}');
+  const previewCustomer = audienceData.customers.find(c => selectedPhones.includes(c.phone));
+  const brandName = getAdminSiteBrand();
+  const normalizeCampaignPhone = (value: string) => {
+    let digits = String(value || '').replace(/\D/g, '');
+    if (digits.startsWith('880') && digits.length === 13) digits = `0${digits.slice(3)}`;
+    if (digits.length === 10 && digits.startsWith('1')) digits = `0${digits}`;
+    return digits.length === 11 && digits.startsWith('01') ? digits : '';
   };
-
-  const quickHotProducts = [
-    { name: 'Magic Love Lock 6.7', img: '/uploads/img_mv7u70cc5edq0.jpg' },
-    { name: 'Magic Love Lock 5.7', img: '/uploads/img_mv9njraqylyt3.webp' },
-    { name: 'Magic Love Lock 8', img: '/uploads/img_mv7n9xfvjcfif.jpg' },
-    { name: 'Belt Condom Free Size', img: '/uploads/img_mvjrc118tfffg.webp' },
-  ];
+  const customRecipientCount = new Set(customPhonesInput.split(/[\n,;]+/).map(normalizeCampaignPhone).filter(Boolean)).size;
 
   const filteredCustomers = audienceData.customers.filter((c: any) => {
     if (selectedSegment === 'buyers' && c.ordersCount <= 0) return false;
@@ -13858,7 +18601,7 @@ function WhatsAppAdmin() {
   });
 
   return (
-    <>
+    <div className="wa-admin-root">
       <style>{`
         @keyframes waLaserBeam {
           0% { top: 8px; opacity: 0.85; }
@@ -13871,13 +18614,25 @@ function WhatsAppAdmin() {
         }
         .wa-broadcast-grid {
           display: grid;
-          grid-template-columns: minmax(330px, 1fr) minmax(350px, 1.15fr) minmax(310px, 0.85fr);
-          gap: 16px;
+          grid-template-columns: minmax(290px, 0.92fr) minmax(390px, 1.18fr) minmax(280px, 0.82fr);
+          gap: 14px;
           align-items: stretch;
         }
+        .wa-admin-root { --wa-purple:#8b5cf6; --wa-mint:#25d366; color:#f4f0fa; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+        .wa-admin-root .sa-card { background:linear-gradient(180deg,#181421 0%,#13101a 100%) !important; border:1px solid rgba(167,139,250,.2) !important; border-radius:15px !important; box-shadow:0 12px 30px rgba(0,0,0,.18) !important; }
+        .wa-admin-root .sa-search, .wa-admin-root input:not([type=checkbox]):not([type=file]), .wa-admin-root textarea, .wa-admin-root select { color:#f3eef9 !important; background:#0f0c15 !important; border-color:rgba(167,139,250,.24) !important; border-radius:9px !important; }
+        .wa-admin-root .sa-btn { border-radius:9px !important; transition:transform .15s ease,border-color .15s ease,background .15s ease !important; }
+        .wa-admin-root .sa-btn:hover:not(:disabled) { transform:translateY(-1px); border-color:rgba(192,132,252,.55) !important; }
+        .wa-admin-root .wa-broadcast-grid > .sa-card { min-width:0; }
+        .wa-admin-root .wa-stage-label { color:#a78bfa !important; background:rgba(139,92,246,.14) !important; border:1px solid rgba(167,139,250,.25) !important; }
+        .wa-admin-root .wa-primary-action { background:linear-gradient(135deg,#8b5cf6,#6d28d9) !important; color:#fff !important; box-shadow:0 6px 20px rgba(124,58,237,.24) !important; }
+        .wa-admin-root .wa-primary-action:disabled { opacity:.5; cursor:not-allowed; transform:none !important; box-shadow:none !important; }
+        .wa-admin-root .wa-panel-accent { background:linear-gradient(180deg,rgba(139,92,246,.07),rgba(19,16,26,.96)) !important; border-color:rgba(167,139,250,.26) !important; }
+        .wa-admin-root .wa-recipient-row { justify-content:flex-start !important; gap:10px !important; }
+        .wa-admin-root .wa-recipient-select { appearance:auto !important; display:block !important; width:16px !important; min-width:16px !important; max-width:16px !important; height:16px !important; min-height:16px !important; flex:0 0 16px !important; margin:0 2px 0 0 !important; padding:0 !important; border:0 !important; border-radius:4px !important; background:transparent !important; box-shadow:none !important; accent-color:#a78bfa; }
         @media (max-width: 1240px) {
           .wa-broadcast-grid {
-            grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr) !important;
+            grid-template-columns: minmax(300px, .9fr) minmax(360px, 1.1fr) !important;
           }
           .wa-preview-col {
             grid-column: 1 / -1;
@@ -13889,6 +18644,8 @@ function WhatsAppAdmin() {
           .wa-broadcast-grid {
             grid-template-columns: 1fr !important;
           }
+          .wa-admin-root .sa-top { align-items:flex-start !important; }
+          .wa-admin-root .sa-top > div { flex-wrap:wrap; }
         }
         .wa-custom-scrollbar::-webkit-scrollbar {
           width: 5px;
@@ -13915,7 +18672,7 @@ function WhatsAppAdmin() {
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', animation: 'waPulseDot 1.6s infinite' }} /> Connected &amp; Active
             </span>
           ) : (
-            <span className="sa-badge danger">Disconnected</span>
+            <span className="sa-badge danger">Not connected</span>
           )}
           <label className="sa-chk" title="Turn all automatic WhatsApp messages on or off">
             <input type="checkbox" checked={status.enabled !== false} disabled={saving} onChange={() => saveWhatsAppPatch({ enabled: status.enabled === false })} />
@@ -13926,22 +18683,22 @@ function WhatsAppAdmin() {
           <button
             type="button"
             className="sa-btn ghost"
-            style={{ borderColor: 'rgba(56,189,248,0.4)', color: '#38bdf8', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            style={{ borderColor: 'rgba(167,139,250,0.35)', color: '#c4b5fd', display: 'inline-flex', alignItems: 'center', gap: 6 }}
             onClick={() => exportContacts('all')}
             disabled={exportingCsv}
-            title="হোয়াটসঅ্যাপ ও স্টোরের সব কাস্টমার নম্বর এক্সেলে ডাউনলোড করে স্থায়ী ব্যাকআপ রাখুন (হোয়াটসঅ্যাপ ব্যান হলেও নম্বর সুরক্ষিত থাকবে)"
+            title="Export your store and WhatsApp contact records for backup"
           >
             <span>📥</span>
-            <span>{exportingCsv ? 'এক্সপোর্ট হচ্ছে...' : 'কন্টাক্ট ব্যাকআপ (CSV)'}</span>
+            <span>{exportingCsv ? 'Exporting…' : 'Export contacts (CSV)'}</span>
           </button>
           <button
             className="sa-btn"
-            style={{ background: 'linear-gradient(135deg, #25D366 0%, #15803D 100%)', color: '#fff', fontWeight: 700, boxShadow: '0 2px 10px rgba(37,211,102,0.3)' }}
+            style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #9333ea 100%)', color: '#fff', fontWeight: 700, boxShadow: '0 2px 10px rgba(124,58,237,0.25)' }}
             disabled={saving}
             onClick={() => {
               saveWhatsAppPatch({
                 triggers: status.triggers,
-                geminiApiKey: status.geminiApiKey || '',
+                ...(status.geminiApiKey?.trim() ? { geminiApiKey: status.geminiApiKey.trim() } : {}),
                 visionMatcherEnabled: status.visionMatcherEnabled !== false,
               });
             }}
@@ -13980,17 +18737,17 @@ function WhatsAppAdmin() {
           </div>
           <p className="dim" style={{ fontSize: 13, margin: '6px 0 0', lineHeight: 1.6 }}>
             {status.connected
-              ? 'আপনার বিজনেস হোয়াটসঅ্যাপ সংযুক্ত রয়েছে। আপনি ওয়েবসাইট থেকে সরাসরি গ্রাহকদের কাছে ছবিসহ অফার মেসেজ ও বাল্ক ব্রডকাস্ট পাঠাতে পারবেন।'
-              : 'হোয়াটসঅ্যাপ সংযুক্ত নেই! ছবিসহ অফার বা অটোমেটিক মেসেজ পাঠাতে উপরে থাকা "Link WhatsApp Device (QR)" বাটনে ক্লিক করে মোবাইল দিয়ে QR স্ক্যান করুন।'}
+              ? 'Your linked WhatsApp account is ready. Automated order messages and campaigns use this connection.'
+              : 'Connect your WhatsApp account with the QR code to enable automated messages and campaigns.'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="sa-btn ghost sa-mini" onClick={testOnMyPhone} title="Send a test offer to your own WhatsApp number">
-            🧪 নিজের হোয়াটসঅ্যাপে টেস্ট করুন
+          <button className="sa-btn ghost sa-mini" onClick={testOnMyPhone} title="Send a test message to a number you control">
+            Send test message
           </button>
           {!status.connected && (
             <button className="sa-btn sa-mini" style={{ background: '#25D366', color: '#000', fontWeight: 700 }} onClick={() => { setShowPairModal(true); if (!status.connected) startSession(true); }}>
-              📷 স্ক্যান করে লিংক করুন
+              Scan to connect
             </button>
           )}
         </div>
@@ -14002,19 +18759,35 @@ function WhatsAppAdmin() {
           type="button"
           className="sa-btn"
           style={{
-            background: activeTab === 'marketing' ? 'linear-gradient(135deg, #25D366 0%, #15803D 100%)' : 'rgba(255,255,255,0.05)',
+            background: activeTab === 'inbox' ? 'rgba(37, 211, 102, 0.16)' : 'rgba(255,255,255,0.05)',
+            color: activeTab === 'inbox' ? '#4ade80' : '#cbd5e1',
+            border: activeTab === 'inbox' ? '1px solid rgba(37, 211, 102, 0.38)' : '1px solid transparent',
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+          onClick={() => setActiveTab('inbox')}
+        >
+          <span style={{ fontSize: 16 }}>💬</span>
+          <span>Inbox</span>
+        </button>
+        <button
+          type="button"
+          className="sa-btn"
+          style={{
+          background: activeTab === 'marketing' ? 'linear-gradient(135deg, #7c3aed 0%, #9333ea 100%)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'marketing' ? '#fff' : '#cbd5e1',
             fontWeight: 700,
             display: 'inline-flex',
             alignItems: 'center',
             gap: 8,
-            boxShadow: activeTab === 'marketing' ? '0 2px 10px rgba(37,211,102,0.3)' : 'none',
+          boxShadow: activeTab === 'marketing' ? '0 2px 10px rgba(124,58,237,0.3)' : 'none',
           }}
           onClick={() => setActiveTab('marketing')}
         >
           <span style={{ fontSize: 16 }}>📢</span>
-          <span>ছবিসহ অফার ব্রডকাস্ট (Offer &amp; Marketing)</span>
-          <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, background: activeTab === 'marketing' ? 'rgba(0,0,0,0.35)' : '#25D366', color: '#fff', fontWeight: 800 }}>New</span>
+          <span>{adminTranslate("Campaigns")}</span>
         </button>
         <button
           type="button"
@@ -14031,15 +18804,15 @@ function WhatsAppAdmin() {
           onClick={() => setActiveTab('bot')}
         >
           <span>🤖</span>
-          <span>24/7 অটো-কনফার্মেশন ও বট</span>
+          <span>Order automation</span>
         </button>
         <button
           type="button"
           className="sa-btn"
           style={{
-            background: activeTab === 'vision' ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255,255,255,0.05)',
-            color: activeTab === 'vision' ? '#38bdf8' : '#cbd5e1',
-            border: activeTab === 'vision' ? '1px solid rgba(56, 189, 248, 0.45)' : '1px solid transparent',
+            background: activeTab === 'vision' ? 'rgba(139, 92, 246, 0.25)' : 'rgba(255,255,255,0.05)',
+            color: activeTab === 'vision' ? '#c084fc' : '#cbd5e1',
+            border: activeTab === 'vision' ? '1px solid rgba(139, 92, 246, 0.45)' : '1px solid transparent',
             fontWeight: 600,
             display: 'inline-flex',
             alignItems: 'center',
@@ -14048,13 +18821,13 @@ function WhatsAppAdmin() {
           onClick={() => setActiveTab('vision')}
         >
           <span>📸</span>
-          <span>Vision AI ছবি স্ক্যানার</span>
+          <span>Vision AI</span>
         </button>
         <button
           type="button"
           className="sa-btn"
           style={{
-            background: activeTab === 'logs' ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)',
+            background: activeTab === 'logs' ? 'rgba(139, 92, 246, 0.25)' : 'rgba(255,255,255,0.05)',
             color: activeTab === 'logs' ? '#fff' : '#cbd5e1',
             fontWeight: 600,
             display: 'inline-flex',
@@ -14064,9 +18837,11 @@ function WhatsAppAdmin() {
           onClick={() => setActiveTab('logs')}
         >
           <span>📜</span>
-          <span>মেসেজ হিস্ট্রি ও কুইক সেন্ডার ({status.logs?.length || 0})</span>
+          <span>Messages &amp; history ({status.logs?.length || 0})</span>
         </button>
       </div>
+
+      {activeTab === 'inbox' && <WhatsAppLiveInboxCard connected={!!status.connected} />}
 
       {/* ============================================================== */}
       {/* TAB 1: WHATSAPP OFFER & MARKETING BROADCAST SUITE */}
@@ -14080,12 +18855,12 @@ function WhatsAppAdmin() {
                 <div>
                   <b style={{ color: '#4ade80', fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', animation: 'waPulseDot 1.4s infinite' }} />
-                    {broadcastPaused ? '⏸️ ক্যাম্পেইন সাময়িক বিরতিতে আছে' : '🚀 ক্লাউড সার্ভার ব্যাকগ্রাউন্ড ব্রডকাস্ট চলছে (২৪/৭ অটো)'}
+                    {broadcastPaused ? 'Campaign paused' : 'Campaign is running on the server'}
                   </b>
                   <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span>বর্তমান টার্গেট: <b style={{ color: '#fff' }}>{broadcastProgress.currentTarget || 'বিরতি চলছে (Anti-ban protection)...'}</b></span>
+                    <span>Current recipient: <b style={{ color: '#fff' }}>{broadcastProgress.currentTarget || 'Waiting for the next recipient…'}</b></span>
                     <span style={{ color: '#38bdf8', fontSize: 11, background: 'rgba(56,189,248,0.15)', padding: '1px 6px', borderRadius: 4 }}>
-                      ☁️ স্ক্রিন বা কম্পিউটার বন্ধ রাখলেও মেসেজ পাঠানো থামবে না
+                      Server-side campaign · your browser can be closed
                     </span>
                   </div>
                 </div>
@@ -14105,7 +18880,7 @@ function WhatsAppAdmin() {
                       fetchCampaignStatus();
                     }}
                   >
-                    {broadcastPaused ? '▶️ চালু করুন (Resume)' : '⏸️ সাময়িক বিরতি (Pause)'}
+                    {broadcastPaused ? 'Resume' : 'Pause'}
                   </button>
                   <button
                     type="button"
@@ -14118,7 +18893,7 @@ function WhatsAppAdmin() {
                       }
                     }}
                   >
-                    🛑 বন্ধ করুন (Stop)
+                    Stop campaign
                   </button>
                 </div>
               </div>
@@ -14135,9 +18910,9 @@ function WhatsAppAdmin() {
                 />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#94a3b8' }}>
-                <span>সফল: <b style={{ color: '#4ade80' }}>{broadcastProgress.sent}</b> / {broadcastProgress.total}</span>
-                <span>ব্যর্থ: <b style={{ color: '#f87171' }}>{broadcastProgress.failed}</b></span>
-                <span>অগ্রগতি: <b>{broadcastProgress.total > 0 ? Math.round((broadcastProgress.sent / broadcastProgress.total) * 100) : 0}%</b></span>
+                <span>Sent: <b style={{ color: '#4ade80' }}>{broadcastProgress.sent}</b> / {broadcastProgress.total}</span>
+                <span>Failed: <b style={{ color: '#f87171' }}>{broadcastProgress.failed}</b></span>
+                <span>Progress: <b>{broadcastProgress.total > 0 ? Math.round((broadcastProgress.sent / broadcastProgress.total) * 100) : 0}%</b></span>
               </div>
             </div>
           )}
@@ -14167,12 +18942,12 @@ function WhatsAppAdmin() {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 7px', borderRadius: 6, background: 'rgba(56,189,248,0.2)', color: '#38bdf8', border: '1px solid rgba(56,189,248,0.3)' }}>
-                      ধাপ ১
+                      STEP 1
                     </span>
-                    <b style={{ fontSize: 14, color: '#f8fafc' }}>কাস্টমার অডিয়েন্স</b>
+                    <b style={{ fontSize: 14, color: '#f8fafc' }}>Recipients</b>
                   </div>
                   <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
-                    যাদের মেসেজ পাঠাবেন তাদের নির্বাচন করুন
+                    Choose store customers or add numbers manually
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
@@ -14184,7 +18959,7 @@ function WhatsAppAdmin() {
                       exportContacts(targetType);
                     }}
                     disabled={exportingCsv}
-                    title="সিলেক্টেড অডিয়েন্স বা সকল কাস্টমার নম্বর এক্সেলে ডাউনলোড করে কম্পিউটার ও সাইটে সুরক্ষিত রাখুন"
+                    title="Export contacts from this audience"
                     style={{ color: '#38bdf8', borderColor: 'rgba(56,189,248,0.3)', background: 'rgba(56,189,248,0.08)', fontSize: 11, padding: '4px 8px' }}
                   >
                     {exportingCsv ? '⏳...' : '📥 CSV'}
@@ -14194,10 +18969,10 @@ function WhatsAppAdmin() {
                     className="sa-btn ghost sa-mini"
                     onClick={handleSyncChats}
                     disabled={syncingChats}
-                    title="সব সেশন ও চ্যাট থেকে হোয়াটসঅ্যাপ কন্ট্যাক্ট সিঙ্ক করুন"
+                    title="Sync contacts from the linked WhatsApp session"
                     style={{ color: '#34d399', borderColor: 'rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.08)', fontSize: 11, padding: '4px 8px' }}
                   >
-                    {syncingChats ? '⏳...' : '⚡ সিঙ্ক'}
+                    {syncingChats ? 'Syncing…' : 'Sync chats'}
                   </button>
                   <button
                     type="button"
@@ -14214,11 +18989,11 @@ function WhatsAppAdmin() {
               {/* Audience Segment Pills */}
               <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
                 {[
-                  { key: 'wa_chats', label: '💬 চ্যাট', count: audienceData.counts?.wa_chats || 0, color: '#34d399', bg: 'rgba(16,185,129,0.18)', border: '#10b981' },
-                  { key: 'buyers', label: '🛍️ ক্রেতা', count: audienceData.counts.buyers, color: '#38bdf8', bg: 'rgba(56,189,248,0.18)', border: '#38bdf8' },
-                  { key: 'all', label: '🎯 সকল', count: audienceData.counts.all, color: '#4ade80', bg: 'rgba(37,211,102,0.18)', border: '#25D366' },
-                  { key: 'incomplete', label: '⏳ লিড', count: audienceData.counts.incomplete, color: '#fbbf24', bg: 'rgba(251,191,36,0.18)', border: '#fbbf24' },
-                  { key: 'custom', label: '✍️ কাস্টম', count: null, color: '#d8b4fe', bg: 'rgba(168,85,247,0.18)', border: '#a855f7' },
+                  { key: 'wa_chats', label: 'WhatsApp chats', count: audienceData.counts?.wa_chats || 0, color: '#34d399', bg: 'rgba(16,185,129,0.18)', border: '#10b981' },
+                  { key: 'buyers', label: 'Customers', count: audienceData.counts.buyers, color: '#38bdf8', bg: 'rgba(56,189,248,0.18)', border: '#38bdf8' },
+                  { key: 'all', label: 'All contacts', count: audienceData.counts.all, color: '#4ade80', bg: 'rgba(37,211,102,0.18)', border: '#25D366' },
+                  { key: 'incomplete', label: 'Incomplete orders', count: audienceData.counts.incomplete, color: '#fbbf24', bg: 'rgba(251,191,36,0.18)', border: '#fbbf24' },
+                  { key: 'custom', label: 'Manual list', count: null, color: '#d8b4fe', bg: 'rgba(168,85,247,0.18)', border: '#a855f7' },
                 ].map((tab) => {
                   const active = selectedSegment === tab.key;
                   return (
@@ -14239,7 +19014,7 @@ function WhatsAppAdmin() {
                         gap: 3,
                         transition: 'all 0.15s ease',
                       }}
-                      onClick={() => setSelectedSegment(tab.key)}
+                      onClick={() => selectAudience(tab.key as 'all' | 'buyers' | 'incomplete' | 'wa_chats' | 'custom')}
                     >
                       <span>{tab.label}</span>
                       {tab.count !== null && (
@@ -14256,17 +19031,17 @@ function WhatsAppAdmin() {
               {selectedSegment === 'custom' ? (
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   <label style={{ fontSize: 11, color: '#94a3b8', display: 'block', marginBottom: 6 }}>
-                    কাস্টমারদের ফোন নম্বর পেস্ট করুন (প্রতি লাইনে একটি অথবা কমা দিয়ে):
+                    Paste Bangladesh mobile numbers (one per line, comma or semicolon separated).
                   </label>
                   <textarea
                     rows={12}
                     style={{ flex: 1, width: '100%', minHeight: 380, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', padding: 10, fontSize: 12.5, fontFamily: 'monospace' }}
-                    placeholder={'01878374762\n01712345678\n019XXXXXXXX'}
+                    placeholder={'Paste recipient numbers here'}
                     value={customPhonesInput}
-                    onChange={(e) => setCustomPhonesInput(e.target.value)}
+                    onChange={(e) => { setMarketingConsent(false); setCustomPhonesInput(e.target.value); }}
                   />
                   <div style={{ fontSize: 11.5, color: '#38bdf8', marginTop: 8, fontWeight: 600 }}>
-                    মোট নম্বর পাওয়া গেছে: {customPhonesInput.split(/[\n,;]+/).map(s => s.trim().replace(/\D/g, '')).filter(p => p.length >= 10).length} টি
+                    {customRecipientCount} unique valid numbers
                   </div>
                 </div>
               ) : (
@@ -14276,7 +19051,7 @@ function WhatsAppAdmin() {
                     <input
                       className="sa-search"
                       style={{ flex: 1, padding: '5px 8px', fontSize: 11.5, background: 'rgba(0,0,0,0.35)', borderRadius: 6 }}
-                      placeholder="নাম বা ফোন নম্বর দিয়ে খুঁজুন..."
+                      placeholder="Search by name or phone…"
                       value={customerSearch}
                       onChange={(e) => setCustomerSearch(e.target.value)}
                     />
@@ -14285,35 +19060,41 @@ function WhatsAppAdmin() {
                       className="sa-btn ghost sa-mini"
                       style={{ fontSize: 10.5, padding: '4px 7px', whiteSpace: 'nowrap' }}
                       onClick={() => {
+                        setMarketingConsent(false);
                         const allFilteredPhones = filteredCustomers.map((c: any) => c.phone);
                         setSelectedPhones(Array.from(new Set([...selectedPhones, ...allFilteredPhones])));
                       }}
                     >
-                      সবাইকে সিলেক্ট
+                      Select visible
                     </button>
                     <button
                       type="button"
                       className="sa-btn ghost sa-mini"
                       style={{ fontSize: 10.5, padding: '4px 7px', whiteSpace: 'nowrap' }}
-                      onClick={() => setSelectedPhones([])}
+                      onClick={() => { setMarketingConsent(false); setSelectedPhones([]); }}
                     >
-                      বাদ দিন
+                      Clear selection
                     </button>
                   </div>
 
                   {/* Customer Checklist */}
                   <div className="wa-custom-scrollbar" style={{ flex: 1, minHeight: 400, maxHeight: 460, overflowY: 'auto', background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, padding: 6 }}>
-                    {filteredCustomers.length === 0 ? (
+                    {audienceLoading ? (
+                      <div style={{ padding: 24, textAlign: 'center', color: '#a9a1b7', fontSize: 12 }}>Loading recipients…</div>
+                    ) : audienceError ? (
+                      <div role="alert" style={{ padding: 24, textAlign: 'center', color: '#fca5a5', fontSize: 12 }}>{audienceError}</div>
+                    ) : filteredCustomers.length === 0 ? (
                       <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 12 }}>
-                        কোনো কাস্টমার পাওয়া যায়নি।
+                        No recipients found for this segment.
                       </div>
                     ) : (
                       filteredCustomers.map((c: any) => {
                         const isChecked = selectedPhones.includes(c.phone);
-                        const initial = (c.name || 'ক')[0] || 'গ';
+                    const initial = (c.name || 'C')[0] || 'C';
                         return (
                           <label
                             key={c.phone}
+                            className="wa-recipient-row"
                             style={{
                               display: 'flex',
                               alignItems: 'center',
@@ -14330,9 +19111,11 @@ function WhatsAppAdmin() {
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, flex: 1 }}>
                               <input
+                                className="wa-recipient-select"
                                 type="checkbox"
                                 checked={isChecked}
                                 onChange={(e) => {
+                                  setMarketingConsent(false);
                                   if (e.target.checked) {
                                     setSelectedPhones([...selectedPhones, c.phone]);
                                   } else {
@@ -14346,7 +19129,7 @@ function WhatsAppAdmin() {
                               </div>
                               <div style={{ minWidth: 0, overflow: 'hidden' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                  <span style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }}>{c.name || 'সম্মানিত গ্রাহক'}</span>
+                                  <span style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }}>{c.name || 'Customer'}</span>
                                   <span style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 10.5 }}>{c.phone}</span>
                                 </div>
                                 {c.lastMessage ? (
@@ -14359,16 +19142,16 @@ function WhatsAppAdmin() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                               {(c.isWaChat || c.segment === 'wa_chat') ? (
                                 <span style={{ fontSize: 9.5, padding: '1px 5px', borderRadius: 999, background: 'rgba(16,185,129,0.2)', color: '#34d399', fontWeight: 700 }}>
-                                  💬 চ্যাট
+                                  WhatsApp
                                 </span>
                               ) : null}
                               {c.ordersCount > 0 ? (
                                 <span style={{ fontSize: 9.5, padding: '1px 5px', borderRadius: 999, background: 'rgba(56,189,248,0.2)', color: '#38bdf8' }}>
-                                  {c.ordersCount} অর্ডার (৳{c.totalSpent})
+                                  {c.ordersCount} orders · {taka(c.totalSpent)} spent
                                 </span>
                               ) : (
                                 <span style={{ fontSize: 9.5, padding: '1px 5px', borderRadius: 999, background: 'rgba(234,179,8,0.15)', color: '#fbbf24' }}>
-                                  লিড
+                                  Lead
                                 </span>
                               )}
                             </div>
@@ -14380,9 +19163,9 @@ function WhatsAppAdmin() {
 
                   {/* Summary Footer */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#94a3b8', marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                    <span>মোট দৃশ্যমান: <b>{filteredCustomers.length} জন</b></span>
+                    <span>Visible: <b>{filteredCustomers.length}</b></span>
                     <span style={{ background: 'rgba(37,211,102,0.15)', color: '#4ade80', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>
-                      সিলেক্ট: {selectedPhones.length} জন
+                      Selected: {selectedPhones.length}
                     </span>
                   </div>
                 </div>
@@ -14413,12 +19196,12 @@ function WhatsAppAdmin() {
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 7px', borderRadius: 6, background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#fff' }}>
-                        ধাপ ২
+                      STEP 2
                       </span>
-                      <b style={{ fontSize: 14, color: '#f8fafc' }}>অফার ব্যানার ও বার্তা স্টুডিও</b>
+                    <b style={{ fontSize: 14, color: '#f8fafc' }}>Compose message</b>
                     </div>
                     <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
-                      ছবি, অফার বার্তা ও অ্যান্টি-ব্যান বিরতি সেট করুন
+                      Write a message, add an optional image, and choose campaign pacing
                     </div>
                   </div>
                 </div>
@@ -14426,14 +19209,14 @@ function WhatsAppAdmin() {
                 {/* Section 1: Offer Banner Image */}
                 <div style={{ marginBottom: 12 }}>
                   <label style={{ fontSize: 11.5, fontWeight: 700, color: '#cbd5e1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <span>🖼️ অফার ব্যানার / প্রোডাক্ট ছবি:</span>
+                    <span>Optional campaign image</span>
                     {offerImage ? (
                       <button
                         type="button"
                         style={{ background: 'transparent', border: 'none', color: '#f87171', fontSize: 11, cursor: 'pointer', padding: 0 }}
                         onClick={() => setOfferImage('')}
                       >
-                        ❌ ছবি সরান
+                        Remove image
                       </button>
                     ) : null}
                   </label>
@@ -14448,7 +19231,7 @@ function WhatsAppAdmin() {
                       />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 11.5, color: '#4ade80', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <span>✅ অফার ব্যানার যুক্ত হয়েছে</span>
+                          <span>Image attached</span>
                         </div>
                         <div style={{ fontSize: 10.5, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
                           {offerImage}
@@ -14475,7 +19258,7 @@ function WhatsAppAdmin() {
                         borderRadius: 7,
                       }}
                     >
-                      <span>📁 {uploadingImage ? 'আপলোড হচ্ছে...' : 'কম্পিউটার/মোবাইল ছবি'}</span>
+                      <span>📁 {uploadingImage ? 'Uploading…' : 'Upload image'}</span>
                       <input
                         type="file"
                         accept="image/*"
@@ -14486,60 +19269,42 @@ function WhatsAppAdmin() {
                     </label>
                     <input
                       style={{ flex: 1, minWidth: 0, padding: '6px 10px', borderRadius: 7, background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 11 }}
-                      placeholder="বা ছবির URL পেস্ট করুন..."
+                      placeholder="Paste image URL (optional)"
                       value={offerImage}
                       onChange={(e) => setOfferImage(e.target.value)}
                     />
                   </div>
 
-                  {/* Quick Hot Products Pill Carousel */}
                   <div style={{ marginTop: 8 }}>
-                    <div style={{ fontSize: 10.5, color: '#94a3b8', marginBottom: 4 }}>🔥 দ্রুত টপ সেলিং প্রোডাক্ট ব্যানার:</div>
-                    <div style={{ display: 'flex', gap: 5, overflowX: 'auto', paddingBottom: 2 }}>
-                      {quickHotProducts.map((p) => (
-                        <button
-                          key={p.img}
-                          type="button"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            padding: '3px 7px',
-                            borderRadius: 6,
-                            border: offerImage === p.img ? '1px solid #25D366' : '1px solid rgba(255,255,255,0.08)',
-                            background: offerImage === p.img ? 'rgba(37,211,102,0.2)' : 'rgba(0,0,0,0.3)',
-                            color: '#cbd5e1',
-                            fontSize: 10.5,
-                            cursor: 'pointer',
-                            whiteSpace: 'nowrap',
-                          }}
-                          onClick={() => setOfferImage(p.img)}
-                        >
-                          <img src={p.img} alt="" style={{ width: 16, height: 16, borderRadius: 3, objectFit: 'cover' }} />
-                          <span>{p.name}</span>
-                        </button>
-                      ))}
-                    </div>
+                    <label style={{ display: 'block', fontSize: 11, color: '#a9a1b7', marginBottom: 5 }}>Add an image from your product catalog</label>
+                    <select className="sa-search" value="" disabled={productsLoading || catalogProducts.length === 0} onChange={(e) => {
+                      const product = catalogProducts.find(p => String(p.id) === e.target.value);
+                      if (!product) return;
+                      const image = product.image || product.mainImage || product.imageUrl || product.images?.[0] || '';
+                      if (image) setOfferImage(String(image));
+                      const productName = String(product.name || product.title || '').trim();
+                      if (productName && !offerCaption.includes(productName)) setOfferCaption(prev => `${prev}${prev ? '\n\n' : ''}${productName}${product.price != null ? ` · ${taka(Number(product.price))}` : ''}`);
+                    }} style={{ width: '100%', padding: '8px 10px', borderRadius: 9, background: '#110e18', border: '1px solid rgba(167,139,250,.22)', color: '#e9e4f2', fontSize: 12 }}>
+                      <option value="">{productsLoading ? 'Loading store products…' : catalogProducts.length ? 'Choose a real store product…' : 'No products available'}</option>
+                      {catalogProducts.map((p: any) => <option key={p.id} value={String(p.id)}>{p.name || p.title}{p.price != null ? ` · ${taka(Number(p.price))}` : ''}</option>)}
+                    </select>
                   </div>
                 </div>
 
-                {/* Section 2: Preset Templates */}
+                {/* Section 2: Message starters */}
                 <div style={{ marginBottom: 10 }}>
                   <label style={{ fontSize: 11, fontWeight: 700, color: '#cbd5e1', display: 'block', marginBottom: 5 }}>
-                    ✨ রেডিমেড অফার টেমপ্লেট:
+                    Message starters
                   </label>
                   <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                    <button type="button" className="sa-btn ghost sa-mini" style={{ fontSize: 10.5, padding: '3px 7px' }} onClick={() => applyPresetTemplate('discount')}>
-                      🔥 ২০% ডিসকাউন্ট
+                    <button type="button" className="sa-btn ghost sa-mini" style={{ fontSize: 10.5, padding: '3px 7px' }} onClick={() => useMessageStarter('announcement')}>
+                      Product update
                     </button>
-                    <button type="button" className="sa-btn ghost sa-mini" style={{ fontSize: 10.5, padding: '3px 7px' }} onClick={() => applyPresetTemplate('free_shipping')}>
-                      🚚 ফ্রি ডেলিভারি
+                    <button type="button" className="sa-btn ghost sa-mini" style={{ fontSize: 10.5, padding: '3px 7px' }} onClick={() => useMessageStarter('service')}>
+                      Customer support
                     </button>
-                    <button type="button" className="sa-btn ghost sa-mini" style={{ fontSize: 10.5, padding: '3px 7px' }} onClick={() => applyPresetTemplate('vip')}>
-                      👑 ভিআইপি
-                    </button>
-                    <button type="button" className="sa-btn ghost sa-mini" style={{ fontSize: 10.5, padding: '3px 7px' }} onClick={() => applyPresetTemplate('cart_recovery')}>
-                      🛒 অসমাপ্ত অর্ডার
+                    <button type="button" className="sa-btn ghost sa-mini" style={{ fontSize: 10.5, padding: '3px 7px' }} onClick={() => useMessageStarter('followup')}>
+                      Follow-up
                     </button>
                   </div>
                 </div>
@@ -14551,39 +19316,39 @@ function WhatsAppAdmin() {
                     style={{ width: '100%', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 8, color: '#fff', padding: '9px 11px', fontSize: 12, lineHeight: 1.5, resize: 'vertical', minHeight: 110 }}
                     value={offerCaption}
                     onChange={(e) => setOfferCaption(e.target.value)}
-                    placeholder="অফার মেসেজ লিখুন..."
+                    placeholder="Write your campaign message…"
                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', gap: 4 }}>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 10.5, color: '#94a3b8' }}>
-                      <span>ট্যাগ:</span>
+                      <span>Insert:</span>
                       <button type="button" style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'pointer' }} onClick={() => setOfferCaption(prev => prev + ' {name}')}>
                         {'{name}'}
                       </button>
                       <button type="button" style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'pointer' }} onClick={() => setOfferCaption(prev => prev + ' {store}')}>
                         {'{store}'}
                       </button>
-                      <button type="button" style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'pointer' }} onClick={() => setOfferCaption(prev => prev + ' https://timingboost.xyz')}>
-                        🌐 লিঙ্ক
+                      <button type="button" style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8', borderRadius: 4, padding: '1px 5px', fontSize: 10, cursor: 'pointer' }} onClick={() => setOfferCaption(prev => prev + (prev && !prev.endsWith(' ') ? ' ' : '') + (typeof window !== 'undefined' ? window.location.origin : ''))}>
+                        Store link
                       </button>
                     </div>
-                    <span style={{ fontSize: 10, color: '#64748b' }}>{offerCaption.length} অক্ষর</span>
+                    <span style={{ fontSize: 10, color: '#64748b' }}>{offerCaption.length} characters</span>
                   </div>
                 </div>
 
-                {/* Section 4: Anti-Ban Human Speed Selector */}
+                {/* Campaign pacing */}
                 <div style={{ background: 'rgba(34, 197, 94, 0.06)', border: '1px solid rgba(34, 197, 94, 0.2)', padding: '8px 10px', borderRadius: 8, marginBottom: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                    <b style={{ fontSize: 11, color: '#4ade80', display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span>🛡️ Anti-Ban স্মার্ট বিরতি (Human Delay):</span>
+                  <b style={{ fontSize: 11, color: '#c4b5fd', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span>Campaign interval</span>
                     </b>
-                    <span style={{ fontSize: 10, color: '#86efac' }}>স্বয়ংক্রিয় সেফটি গার্ড</span>
+                    <span style={{ fontSize: 10, color: '#a9a1b7' }}>Minimum interval: 30 seconds</span>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5 }}>
                     {[
-                      { sec: 4, label: '⚡ ৪ সে.' },
-                      { sec: 8, label: '⚖️ ৮ সে.' },
-                      { sec: 15, label: '🛡️ ১৫ সে.' },
-                      { sec: 25, label: '🐢 ২৫ সে.' },
+                      { sec: 30, label: '30 sec' },
+                      { sec: 45, label: '45 sec' },
+                      { sec: 60, label: '60 sec' },
+                      { sec: 90, label: '90 sec' },
                     ].map((opt) => (
                       <button
                         key={opt.sec}
@@ -14591,9 +19356,9 @@ function WhatsAppAdmin() {
                         style={{
                           padding: '4px 3px',
                           borderRadius: 6,
-                          border: antiBanDelay === opt.sec ? '1px solid #25D366' : '1px solid rgba(255,255,255,0.08)',
-                          background: antiBanDelay === opt.sec ? '#25D366' : 'rgba(0,0,0,0.3)',
-                          color: antiBanDelay === opt.sec ? '#000' : '#cbd5e1',
+                          border: antiBanDelay === opt.sec ? '1px solid #a78bfa' : '1px solid rgba(255,255,255,0.08)',
+                          background: antiBanDelay === opt.sec ? 'rgba(139,92,246,.28)' : 'rgba(0,0,0,0.3)',
+                          color: antiBanDelay === opt.sec ? '#ede9fe' : '#cbd5e1',
                           fontSize: 10.5,
                           fontWeight: 700,
                           cursor: 'pointer',
@@ -14609,40 +19374,48 @@ function WhatsAppAdmin() {
               </div>
 
               {/* Section 5: Dispatch Buttons (Pinned to bottom of Box 2) */}
-              <div style={{ display: 'flex', gap: 8, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                  <label className="sa-chk" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 10, fontSize: 11.5, color: '#a9a1b7', lineHeight: 1.45 }}>
+                    <input type="checkbox" checked={marketingConsent} onChange={e => setMarketingConsent(e.target.checked)} />
+                    <span>I have permission from these recipients to receive WhatsApp marketing messages. I understand opted-out numbers are skipped.</span>
+                  </label>
+                  <div style={{ display: 'flex', gap: 8 }}>
                 <button
                   type="button"
-                  className="sa-btn"
+                  className="sa-btn wa-primary-action"
                   style={{
                     flex: 2,
-                    background: 'linear-gradient(135deg, #25D366 0%, #15803D 100%)',
+                    background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
                     color: '#fff',
                     fontWeight: 700,
                     padding: '10px 14px',
                     fontSize: 13,
-                    boxShadow: '0 4px 15px rgba(37,211,102,0.35)',
+                    boxShadow: '0 4px 15px rgba(124,58,237,0.28)',
                     borderRadius: 8,
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: 6,
                   }}
-                  disabled={isBroadcasting}
+                  disabled={isBroadcasting || !status.connected || !marketingConsent || (selectedSegment === 'custom' ? customRecipientCount === 0 : selectedPhones.length === 0) || (!offerCaption.trim() && !offerImage)}
                   onClick={runBroadcast}
                 >
-                  <span>🚀 ব্রডকাস্ট শুরু করুন ({(selectedSegment === 'custom' ? customPhonesInput.split(/[\n,;]+/).filter(p => p.trim().length >= 10).length : selectedPhones.length)} জন)</span>
+                  <span>Start campaign ({selectedSegment === 'custom' ? customRecipientCount : selectedPhones.length})</span>
                 </button>
                 <button
                   type="button"
                   className="sa-btn ghost"
                   style={{ flex: 1, padding: '10px 10px', fontSize: 11.5, borderRadius: 8, whiteSpace: 'nowrap' }}
                   onClick={testOnMyPhone}
-                  title="Send a test message with image to your own WhatsApp"
+                  title="Send a test message to a WhatsApp number you control"
+                  disabled={!status.connected || (!offerCaption.trim() && !offerImage)}
                 >
-                  🧪 টেস্ট পাঠান
+                  Send test
                 </button>
+                  </div>
+                  {!marketingConsent && <div style={{ color: '#988eaa', fontSize: 10.5, marginTop: 6 }}>Confirm recipient permission to enable campaign sending.</div>}
+                </div>
               </div>
-            </div>
 
             {/* ============================================================== */}
             {/* Panel 3: Smartphone Live Preview */}
@@ -14653,14 +19426,14 @@ function WhatsAppAdmin() {
                 {/* Phone Notch & Header */}
                 <div style={{ background: '#111b21', padding: '12px 14px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#25D366', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', fontWeight: 800, fontSize: 15 }}>
-                    S
+                    {brandName.slice(0, 1).toUpperCase()}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: '#e9edef', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span>TimeBoost Store</span>
+                      <span>{brandName} · Preview</span>
                       <span style={{ color: '#25D366', fontSize: 11 }}>✓</span>
                     </div>
-                    <div style={{ fontSize: 10.5, color: '#25D366' }}>● Online</div>
+                    <div style={{ fontSize: 10.5, color: status.connected ? '#25D366' : '#fbbf24' }}>● {status.connected ? `Connected${status.phone ? ` · ${status.phone}` : ''}` : 'Preview only'}</div>
                   </div>
                   <WhatsAppIcon size={18} variant="official" />
                 </div>
@@ -14670,7 +19443,7 @@ function WhatsAppAdmin() {
                   
                   {/* Security notice bubble */}
                   <div style={{ alignSelf: 'center', background: '#182229', color: '#ffd279', fontSize: 10, padding: '4px 10px', borderRadius: 8, marginBottom: 12, textAlign: 'center', maxWidth: '90%' }}>
-                    🔒 Messages are end-to-end encrypted.
+                    Preview only · no message will be sent
                   </div>
 
                   {/* Outgoing Message Bubble */}
@@ -14698,31 +19471,26 @@ function WhatsAppAdmin() {
                     {/* Caption */}
                     <div style={{ padding: '8px 10px 4px' }}>
                       <p style={{ margin: 0, fontSize: 12, color: '#e9edef', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                        {offerCaption.replace(/\\n/g, '\n').replace(/\{name\}/g, 'সাকিব').replace(/\{store\}/g, 'TimeBoost').replace(/\{phone\}/g, '018XXXXXXXX')}
+                        {offerCaption.trim()
+                          ? offerCaption.replace(/\\n/g, '\n').replace(/\{name\}/g, previewCustomer?.name || '{name}').replace(/\{store\}/g, brandName).replace(/\{phone\}/g, previewCustomer?.phone || '{phone}')
+                          : 'Your message preview will appear here after you write one.'}
                       </p>
-                      
-                      {/* Timestamp & Ticks */}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                        <span style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.6)' }}>11:45 PM</span>
-                        <span style={{ fontSize: 11, color: '#53bdeb' }}>✓✓</span>
+                        <span style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.6)' }}>Campaign preview</span>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Fake Input footer */}
                 <div style={{ background: '#111b21', padding: '8px 10px', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ flex: 1, background: '#2a3942', borderRadius: 20, padding: '5px 10px', fontSize: 11.5, color: '#8696a0' }}>
-                    Type a message
-                  </div>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#00a884', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ color: '#fff', fontSize: 12 }}>🎤</span>
+                  <div style={{ flex: 1, background: '#211b2b', border: '1px solid rgba(167,139,250,.18)', borderRadius: 20, padding: '6px 10px', fontSize: 10.5, color: '#a9a1b7' }}>
+                    {previewCustomer ? `Recipient: ${previewCustomer.name || previewCustomer.phone}` : 'Select a recipient to preview personalization'}
                   </div>
                 </div>
               </div>
 
               <div style={{ textAlign: 'center', marginTop: 10, fontSize: 11, color: '#64748b' }}>
-                📱 গ্রাহকের মোবাইলে হোয়াটসঅ্যাপে ঠিক এমন প্রিভিউ দেখাবে।
+                Preview updates with your message and selected recipient.
               </div>
             </div>
           </div>
@@ -14732,9 +19500,9 @@ function WhatsAppAdmin() {
             <div className="sa-card" style={{ marginTop: 20, padding: 18, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <b style={{ fontSize: 13, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span>📜 লাইভ সেন্ডিং হিস্ট্রি ({broadcastLogs.length})</span>
+                  <span>Recent campaign activity ({broadcastLogs.length})</span>
                 </b>
-                <button type="button" className="sa-btn ghost sa-mini" onClick={() => setBroadcastLogs([])}>ক্লিয়ার</button>
+                <button type="button" className="sa-btn ghost sa-mini" onClick={() => setBroadcastLogs([])}>Clear view</button>
               </div>
               <div style={{ maxHeight: 180, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {broadcastLogs.map((log, i) => (
@@ -14764,13 +19532,13 @@ function WhatsAppAdmin() {
             </h2>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8', padding: '4px 10px', borderRadius: 999, border: '1px solid rgba(56, 189, 248, 0.25)', fontWeight: 600 }}>
               <span>🛡️</span>
-              <span>Anti-Ban 30s Safe Throttle Active</span>
+              <span>Campaign pacing: 30 seconds minimum</span>
             </span>
           </div>
 
           <div style={{ background: 'rgba(37, 211, 102, 0.08)', border: '1px solid rgba(37, 211, 102, 0.2)', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 12.5, color: '#4ade80', display: 'flex', alignItems: 'center', gap: 8 }}>
             <span>⏱️</span>
-            <span>হোয়াটসঅ্যাপ একাউন্ট নিরাপদ রাখতে প্রতিটি মেসেজ পাঠানোর মাঝে স্বয়ংক্রিয়ভাবে ন্যূনতম <strong>৩০ সেকেন্ড</strong> ব্যবধান বজায় রাখা হয়।</span>
+            <span>WhatsApp can apply its own delivery limits; use this pacing only for recipients who agreed to receive your messages.</span>
           </div>
 
           <div className="wa-trigger-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16, marginBottom: 24 }}>
@@ -14788,7 +19556,7 @@ function WhatsAppAdmin() {
                     </span>
                   </div>
                   <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 4 }}>
-                    যেকোনো সময় কোনো কাস্টমার অর্ডার করলে স্বয়ংক্রিয়ভাবে এই মেসেজ যাবে। কাস্টমার রিপ্লাইয়ে <b>1</b> লিখলে অর্ডার স্বয়ংক্রিয়ভাবে <b>Approved</b> হবে, আর <b>2</b> লিখলে স্বয়ংক্রিয়ভাবে <b>Cancelled</b> হবে।
+                    যেকোনো সময় কোনো কাস্টমার অর্ডার করলে স্বয়ংক্রিয়ভাবে এই মেসেজ যাবে। কাস্টমার রিপ্লাইয়ে <b>1</b> লিখলে অর্ডার স্বয়ংক্রিয়ভাবে <b>{adminTranslate("Approved")}</b> হবে, আর <b>2</b> লিখলে স্বয়ংক্রিয়ভাবে <b>{adminTranslate("Cancelled")}</b> হবে।
                   </div>
                 </div>
                 <label className="sa-chk">
@@ -14873,7 +19641,7 @@ function WhatsAppAdmin() {
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                 <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {items} {total} {store}'}</span>
-                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
+                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>{adminTranslate("Save")}</button>
               </div>
               <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p style={{ whiteSpace: 'pre-wrap' }}>{waPreview('approved') || 'Write a template to preview the customer message.'}</p></div>
             </div>
@@ -14897,7 +19665,7 @@ function WhatsAppAdmin() {
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                 <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {courier} {consignment} {tracking_url}'}</span>
-                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
+                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>{adminTranslate("Save")}</button>
               </div>
               <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p style={{ whiteSpace: 'pre-wrap' }}>{waPreview('shipped') || 'Write a template to preview the customer message.'}</p></div>
             </div>
@@ -14921,7 +19689,7 @@ function WhatsAppAdmin() {
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                 <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {store}'}</span>
-                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
+                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>{adminTranslate("Save")}</button>
               </div>
               <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p style={{ whiteSpace: 'pre-wrap' }}>{waPreview('delivered') || 'Write a template to preview the customer message.'}</p></div>
             </div>
@@ -14945,7 +19713,7 @@ function WhatsAppAdmin() {
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                 <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {store}'}</span>
-                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
+                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>{adminTranslate("Save")}</button>
               </div>
               <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p style={{ whiteSpace: 'pre-wrap' }}>{waPreview('incomplete') || 'Write a template to preview the customer message.'}</p></div>
             </div>
@@ -14969,11 +19737,125 @@ function WhatsAppAdmin() {
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                 <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {store}'}</span>
-                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>Save</button>
+                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>{adminTranslate("Save")}</button>
               </div>
               <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p style={{ whiteSpace: 'pre-wrap' }}>{waPreview('cancelled') || 'Write a template to preview the customer message.'}</p></div>
             </div>
+
+            {/* 6. Out for Delivery Alert */}
+            <div className="sa-card" style={{ padding: 18, border: '1px solid rgba(168, 85, 247, 0.3)', background: 'linear-gradient(180deg, rgba(168, 85, 247, 0.05) 0%, rgba(15, 23, 42, 0.4) 100%)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 16 }}>🚚</span>
+                    <b style={{ fontSize: 14, color: '#c084fc' }}>6. Out for Delivery Alert (কুরিয়ার রাইডার বের হলে অ্যালার্ট)</b>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>কুরিয়ার রাইডার ডেলিভারি দিতে বের হলে কাস্টমারকে তাৎক্ষণিক অটো মেসেজ পাঠানো।</div>
+                </div>
+                <label className="sa-chk">
+                  <input type="checkbox" checked={triggers.out_for_delivery?.enabled !== false} onChange={() => toggleTrigger('out_for_delivery')} />
+                  <span>{triggers.out_for_delivery?.enabled !== false ? 'Active' : 'Off'}</span>
+                </label>
+              </div>
+              <textarea
+                style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
+                value={triggers.out_for_delivery?.template || ''}
+                onChange={(e) => updateTemplate('out_for_delivery', e.target.value)}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {total} {address} {store}'}</span>
+                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>{adminTranslate("Save")}</button>
+              </div>
+              <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p style={{ whiteSpace: 'pre-wrap' }}>{waPreview('out_for_delivery') || 'Write a template to preview the customer message.'}</p></div>
+            </div>
+
+            {/* 7. Delivery Attempt Failed (Return Prevention) */}
+            <div className="sa-card" style={{ padding: 18, border: '1px solid rgba(239, 68, 68, 0.35)', background: 'linear-gradient(180deg, rgba(239, 68, 68, 0.05) 0%, rgba(15, 23, 42, 0.4) 100%)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 16 }}>⚠️</span>
+                    <b style={{ fontSize: 14, color: '#f87171' }}>7. Failed Delivery Attempt (রিটার্ন প্রতিরোধ অটো অ্যালার্ট)</b>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>রাইডার ফোন না পেলে বা কাস্টমার না ধরলে রিটার্ন কমাতে তাৎক্ষণিক বিকল্প সময়/ঠিকানা চেয়ে মেসেজ।</div>
+                </div>
+                <label className="sa-chk">
+                  <input type="checkbox" checked={triggers.delivery_failed?.enabled !== false} onChange={() => toggleTrigger('delivery_failed')} />
+                  <span>{triggers.delivery_failed?.enabled !== false ? 'Active' : 'Off'}</span>
+                </label>
+              </div>
+              <textarea
+                style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
+                value={triggers.delivery_failed?.template || ''}
+                onChange={(e) => updateTemplate('delivery_failed', e.target.value)}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {store}'}</span>
+                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>{adminTranslate("Save")}</button>
+              </div>
+              <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p style={{ whiteSpace: 'pre-wrap' }}>{waPreview('delivery_failed') || 'Write a template to preview the customer message.'}</p></div>
+            </div>
+
+            {/* 8. Post-Delivery Review & Photo Request */}
+            <div className="sa-card" style={{ padding: 18, border: '1px solid rgba(234, 179, 8, 0.35)', background: 'linear-gradient(180deg, rgba(234, 179, 8, 0.05) 0%, rgba(15, 23, 42, 0.4) 100%)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 16 }}>⭐</span>
+                    <b style={{ fontSize: 14, color: '#facc15' }}>8. Post-Delivery Review & Unboxing Photo (রিভিউ ও আনবক্সিং কুপন)</b>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>ডেলিভারির ২৪ ঘণ্টা পর কাস্টমারকে ৫-স্টার রিভিউ ও আনবক্সিং ছবির বিনিময়ে ১০০৳ কুপন অফার।</div>
+                </div>
+                <label className="sa-chk">
+                  <input type="checkbox" checked={triggers.post_delivery_review?.enabled !== false} onChange={() => toggleTrigger('post_delivery_review')} />
+                  <span>{triggers.post_delivery_review?.enabled !== false ? 'Active' : 'Off'}</span>
+                </label>
+              </div>
+              <textarea
+                style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
+                value={triggers.post_delivery_review?.template || ''}
+                onChange={(e) => updateTemplate('post_delivery_review', e.target.value)}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {coupon_code} {store}'}</span>
+                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>{adminTranslate("Save")}</button>
+              </div>
+              <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p style={{ whiteSpace: 'pre-wrap' }}>{waPreview('post_delivery_review') || 'Write a template to preview the customer message.'}</p></div>
+            </div>
+
+            {/* 9. Cancelled Order Win-Back Flow */}
+            <div className="sa-card" style={{ padding: 18, border: '1px solid rgba(59, 130, 246, 0.35)', background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.05) 0%, rgba(15, 23, 42, 0.4) 100%)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 16 }}>🎁</span>
+                    <b style={{ fontSize: 14, color: '#60a5fa' }}>9. Cancelled Order Win-Back (ফ্রি ডেলিভারিতে অর্ডার ফিরিয়ে আনা)</b>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>অর্ডার ক্যানসেলের ৪৮ ঘণ্টা পর ফ্রি ডেলিভারি অফার পাঠানো। কাস্টমার "1" চাপলে অটো-রিঅ্যাক্টিভেট হবে।</div>
+                </div>
+                <label className="sa-chk">
+                  <input type="checkbox" checked={triggers.cancelled_winback?.enabled !== false} onChange={() => toggleTrigger('cancelled_winback')} />
+                  <span>{triggers.cancelled_winback?.enabled !== false ? 'Active' : 'Off'}</span>
+                </label>
+              </div>
+              <textarea
+                style={{ width: '100%', minHeight: 90, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f8fafc', padding: 10, fontSize: 12.5 }}
+                value={triggers.cancelled_winback?.template || ''}
+                onChange={(e) => updateTemplate('cancelled_winback', e.target.value)}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <span style={{ fontSize: 11, color: '#64748b' }}>Tags: {'{name} {order_id} {store}'}</span>
+                <button className="sa-btn ghost sa-mini" disabled={saving} onClick={() => saveTriggers(triggers)}>{adminTranslate("Save")}</button>
+              </div>
+              <div className="wa-template-preview"><span>MESSAGE PREVIEW</span><p style={{ whiteSpace: 'pre-wrap' }}>{waPreview('cancelled_winback') || 'Write a template to preview the customer message.'}</p></div>
+            </div>
           </div>
+
+          {/* Anti-Ban Recovery, Refill Cycle & CEO Report */}
+          <LifecycleAutomationCard />
+
+          {/* Smart Gemini AI Auto-Reply & Knowledge Base */}
+          <WhatsAppSmartAiCard />
 
           {/* WhatsApp Conversational Auto-Order Creator Card */}
           <div className="sa-card" style={{ padding: 22, marginBottom: 20, border: '1px solid rgba(34, 197, 94, 0.35)', background: 'linear-gradient(180deg, rgba(34, 197, 94, 0.08) 0%, rgba(15, 23, 42, 0.6) 100%)' }}>
@@ -15010,23 +19892,23 @@ function WhatsAppAdmin() {
       {/* ============================================================== */}
       {activeTab === 'vision' && (
         <div>
-          <div className="sa-card" style={{ padding: 22, marginBottom: 20, border: '1px solid rgba(56, 189, 248, 0.35)', background: 'linear-gradient(180deg, rgba(56, 189, 248, 0.08) 0%, rgba(15, 23, 42, 0.6) 100%)' }}>
+          <div className="sa-card wa-panel-accent" style={{ padding: 22, marginBottom: 20, border: '1px solid rgba(167, 139, 250, 0.35)', background: 'linear-gradient(180deg, rgba(139, 92, 246, 0.08) 0%, rgba(15, 23, 42, 0.6) 100%)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 22 }}>📸</span>
                   <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#38bdf8' }}>
-                    100% Accurate Product Image &amp; Inquiry Bot (Vision AI)
+                    Product Image Matching &amp; Inquiry Bot
                   </h2>
                   <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 999, background: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.4)', fontWeight: 700 }}>
-                    Zero-Guesswork Strict Verification
+                    AI-assisted catalog matching
                   </span>
                   <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 999, background: 'rgba(217, 119, 6, 0.2)', color: '#fbbf24', border: '1px solid rgba(217, 119, 6, 0.4)', fontWeight: 700 }}>
                     👑 Sir/Mam Protocol Active
                   </span>
                 </div>
                 <p className="dim" style={{ fontSize: 13, margin: '6px 0 0', lineHeight: 1.6 }}>
-                  গ্রাহক হোয়াটসঅ্যাপে কোনো পণ্যের ছবি বা স্ক্রিনশট পাঠিয়ে <i>&quot;এই প্রোডাক্ট আছে নাকি?&quot;</i> জানতে চাইলে <b>Google Gemini Vision AI</b> ছবির মোড়ক ও ব্র্যান্ড নাম হুবহু স্ক্যান করে স্টকের সাথে মিলিয়ে উত্তর দেয়। স্টকে থাকলে রয়াল কার্ড ও অর্ডার করার অপশন যায়।
+                  Gemini Vision compares customer-submitted product images with your catalog and suggests possible matches. Review the match and stock data before relying on an automated reply.
                 </p>
               </div>
               <button
@@ -15035,7 +19917,7 @@ function WhatsAppAdmin() {
                 disabled={saving}
                 onClick={() => {
                   saveWhatsAppPatch({
-                    geminiApiKey: status.geminiApiKey || '',
+                    ...(status.geminiApiKey?.trim() ? { geminiApiKey: status.geminiApiKey.trim() } : {}),
                     visionMatcherEnabled: status.visionMatcherEnabled !== false,
                   });
                 }}
@@ -15046,8 +19928,17 @@ function WhatsAppAdmin() {
 
             <div style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: 10, padding: 14, marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
-                <label style={{ fontSize: 12.5, fontWeight: 700, color: '#38bdf8' }}>
-                  🔑 Google Gemini Vision API Key:
+                <label style={{ fontSize: 12.5, fontWeight: 700, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>🔑 Google Gemini Vision API Key:</span>
+                  {status.geminiApiKey ? (
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(16,185,129,0.18)', color: '#34d399', border: '1px solid rgba(16,185,129,0.4)' }}>
+                      ✅ Saved ({String(status.geminiApiKey).slice(0, 6)}...{String(status.geminiApiKey).slice(-4)})
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(239,68,68,0.18)', color: '#f87171', border: '1px solid rgba(239,68,68,0.4)' }}>
+                      ⚠️ Not Set
+                    </span>
+                  )}
                 </label>
                 <a
                   href="https://aistudio.google.com/app/apikey"
@@ -15061,11 +19952,36 @@ function WhatsAppAdmin() {
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 <input
                   type="password"
+                  autoComplete="new-password"
+                  name="gemini_vision_key_no_autofill"
                   placeholder="Paste your Google AI Studio API Key (AIzaSy...)"
                   style={{ flex: 1, minWidth: 260, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(56, 189, 248, 0.35)', borderRadius: 8, color: '#fff', padding: '8px 12px', fontSize: 13 }}
                   value={status.geminiApiKey || ''}
                   onChange={(e) => setStatus((prev: any) => ({ ...prev, geminiApiKey: e.target.value }))}
                 />
+                <button
+                  type="button"
+                  className="sa-btn ghost"
+                  style={{ borderColor: 'rgba(56, 189, 248, 0.5)', color: '#38bdf8', fontWeight: 700, fontSize: 12 }}
+                  onClick={async () => {
+                    try {
+                      const r = await aFetch('/ai-call/test-key', {
+                        method: 'POST',
+                        body: JSON.stringify({ geminiApiKey: status.geminiApiKey || '' })
+                      }).then((x) => x.json());
+                      if (r.ok) {
+                        setStatus((prev: any) => ({ ...prev, geminiApiKey: String(prev?.geminiApiKey || '').trim() }));
+                        alert(r.message || '✅ Gemini API Key সংযুক্ত ও সক্রিয় আছে! (AI Calling ও Vision AI দুটোই কাজ করবে)');
+                      } else {
+                        alert('❌ Google Key Error: ' + (r.error || 'Invalid or blocked key'));
+                      }
+                    } catch (e: any) {
+                      alert('❌ Test failed: ' + e.message);
+                    }
+                  }}
+                >
+                  🔍 Test &amp; Save Key
+                </button>
                 <label className="sa-chk" style={{ marginLeft: 8 }}>
                   <input
                     type="checkbox"
@@ -15088,7 +20004,7 @@ function WhatsAppAdmin() {
       {activeTab === 'logs' && (
         <div>
           {/* Quick Single Messenger with Image support */}
-          <div className="sa-card" style={{ padding: 20, marginBottom: 20 }}>
+              <div className="sa-card" style={{ padding: 20, marginBottom: 20 }}>
             <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#f8fafc' }}>
               📤 Quick WhatsApp Direct Messenger
             </h2>
@@ -15114,7 +20030,7 @@ function WhatsAppAdmin() {
                 value={singleImgUrl}
                 onChange={(e) => setSingleImgUrl(e.target.value)}
               />
-              <button className="sa-btn" disabled={sendingMsg} onClick={sendDirectMessage} style={{ background: '#25D366', color: '#000', fontWeight: 700 }}>
+              <button className="sa-btn wa-primary-action" disabled={sendingMsg || !status.connected || !manualPhone.trim() || (!broadcastMsg.trim() && !singleImgUrl)} onClick={sendDirectMessage} style={{ background: '#8b5cf6', color: '#fff', fontWeight: 700 }}>
                 {sendingMsg ? 'Sending…' : '🚀 Send'}
               </button>
             </div>
@@ -15123,22 +20039,22 @@ function WhatsAppAdmin() {
           {/* Logs Table */}
           <div className="sa-card" style={{ padding: 20 }}>
             <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 14px', color: '#f8fafc' }}>
-              📜 Recent WhatsApp Dispatch Logs
+                  Recent WhatsApp message history
             </h2>
             <div style={{ maxHeight: 400, overflowY: 'auto' }}>
               {(status.logs || []).length === 0 ? (
                 <div style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
-                  এখনও কোনো মেসেজ লগ রেকর্ড হয়নি।
+                  No message history is available yet.
                 </div>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', textAlign: 'left' }}>
                       <th style={{ padding: '8px 10px' }}>Time</th>
-                      <th style={{ padding: '8px 10px' }}>Phone</th>
+                      <th style={{ padding: '8px 10px' }}>{adminTranslate("Phone")}</th>
                       <th style={{ padding: '8px 10px' }}>Event</th>
                       <th style={{ padding: '8px 10px' }}>Message Preview</th>
-                      <th style={{ padding: '8px 10px' }}>Status</th>
+                      <th style={{ padding: '8px 10px' }}>{adminTranslate("Status")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -15350,8 +20266,8 @@ function WhatsAppAdmin() {
                     </h4>
                     <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: '#cbd5e1', lineHeight: 1.8 }}>
                       <li>Open <b>WhatsApp</b> on your phone</li>
-                      <li>Tap <b>Menu (⋮)</b> on Android, or <b>Settings</b> on iPhone</li>
-                      <li>Tap <b>Linked Devices</b> and then <b>Link a Device</b></li>
+                      <li>{adminTranslate("Tap") + " "}<b>Menu (⋮)</b> on Android, or <b>{adminTranslate("Settings")}</b> on iPhone</li>
+                      <li>{adminTranslate("Tap") + " "}<b>Linked Devices</b> and then <b>Link a Device</b></li>
                       <li>Point your phone camera to this screen to scan the QR code</li>
                     </ol>
 
@@ -15446,11 +20362,12 @@ function WhatsAppAdmin() {
                     className="sa-btn"
                     style={{ flex: 1, background: '#25D366', color: '#000', fontWeight: 600 }}
                     onClick={() => {
-                      setShowPairModal(false);
-                      setToast('WhatsApp Connected!');
+                      load(true);
+                      if (status.connected) setShowPairModal(false);
+                      else setToast('Finish linking on your phone. Connection status will update here automatically.');
                     }}
                   >
-                    Done
+                    Check connection
                   </button>
                 </div>
               </div>
@@ -15458,7 +20375,7 @@ function WhatsAppAdmin() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -15650,13 +20567,13 @@ function BackupAdmin() {
           </button>
           {fileError && <div className="sa-backup-file-error" role="alert">{fileError}</div>}
           {preview && <div className="sa-backup-preview">
-            <div className="sa-backup-preview-head"><span className="sa-backup-valid-dot" /><strong>{preview.integrity.valid ? 'Backup integrity verified' : 'Backup structure checked'}</strong><button type="button" onClick={() => { setPreview(null); setRestorePhrase(''); }}>Remove</button></div>
+            <div className="sa-backup-preview-head"><span className="sa-backup-valid-dot" /><strong>{preview.integrity.valid ? 'Backup integrity verified' : 'Backup structure checked'}</strong><button type="button" onClick={() => { setPreview(null); setRestorePhrase(''); }}>{adminTranslate("Remove")}</button></div>
             <div className="sa-backup-file-meta"><span title={preview.fileName}>{preview.fileName}</span><small>{formatBytes(preview.size)} · Version {preview.payload.version || 'Legacy'} · {preview.integrity.valid ? 'SHA-256 verified' : 'Legacy backup'}</small></div>
             <div className="sa-backup-counts">
               {Object.entries(preview.counts).map(([label, value]) => <div key={label}><strong>{value as number}</strong><span>{label}</span></div>)}
             </div>
             {preview.counts.frontendFiles > 0 && <div className="sa-backup-includes">This backup includes frontend files. Restore replaces saved source, public assets, and build output. A pre-restore snapshot will be saved first.</div>}
-            <label className="sa-backup-confirm-label">Type <b>{preview.counts.frontendFiles > 0 ? 'RESTORE FRONTEND' : 'RESTORE'}</b> to enable the restore action<input value={restorePhrase} onChange={(e) => setRestorePhrase(e.target.value)} placeholder={preview.counts.frontendFiles > 0 ? 'Type RESTORE FRONTEND' : 'Type RESTORE'} autoComplete="off" /></label>
+            <label className="sa-backup-confirm-label">{adminTranslate("Type") + " "}<b>{preview.counts.frontendFiles > 0 ? 'RESTORE FRONTEND' : 'RESTORE'}</b> to enable the restore action<input value={restorePhrase} onChange={(e) => setRestorePhrase(e.target.value)} placeholder={preview.counts.frontendFiles > 0 ? 'Type RESTORE FRONTEND' : 'Type RESTORE'} autoComplete="off" /></label>
             <button type="button" className="sa-btn danger sa-backup-restore" disabled={restoring || restorePhrase !== (preview.counts.frontendFiles > 0 ? 'RESTORE FRONTEND' : 'RESTORE')} onClick={executeRestore}>
               {restoring ? 'Restoring store data and frontend…' : 'Restore this backup'}
             </button>
@@ -15758,13 +20675,13 @@ function CouponsAdmin() {
           <select value={f.type} onChange={(e) => setF((s: any) => ({ ...s, type: e.target.value }))}><option value="percent">% off</option><option value="flat">৳ off</option></select>
           <input placeholder={f.type === 'percent' ? '% value' : '৳ value'} value={f.value} onChange={(e) => setF((s: any) => ({ ...s, value: e.target.value }))} />
           <input placeholder="min ৳ (opt)" value={f.minSubtotal} onChange={(e) => setF((s: any) => ({ ...s, minSubtotal: e.target.value }))} />
-          <button className="sa-btn" onClick={add}>Add</button>
+          <button className="sa-btn" onClick={add}>{adminTranslate("Add")}</button>
         </div>
         {err && <div className="err2" style={{ marginTop: 8 }}>{err}</div>}
       </div>
       <div className="sa-card">
         <table className="sa-table"><thead><tr><th>Code</th><th>Discount</th><th>Min spend</th><th></th></tr></thead>
-          <tbody>{list.map((c) => <tr key={c.code}><td className="mono">{c.code}</td><td>{c.type === 'percent' ? c.value + '%' : '৳' + c.value}</td><td className="dim">{c.minSubtotal ? '৳' + c.minSubtotal : '—'}</td><td className="r"><button className="sa-link danger" onClick={() => del(c.code)}>Delete</button></td></tr>)}</tbody></table>
+          <tbody>{list.map((c) => <tr key={c.code}><td className="mono">{c.code}</td><td>{c.type === 'percent' ? c.value + '%' : '৳' + c.value}</td><td className="dim">{c.minSubtotal ? '৳' + c.minSubtotal : '—'}</td><td className="r"><button className="sa-link danger" onClick={() => del(c.code)}>{adminTranslate("Delete")}</button></td></tr>)}</tbody></table>
         {list.length === 0 && <div className="sa-empty">No coupons yet.</div>}
       </div>
     </>
@@ -16196,7 +21113,7 @@ function CategoriesAdmin() {
                     📦 Assign Products
                   </button>
                   <button className="sa-link" onClick={() => edit(mc)}>Edit Main</button>
-                  <button className="sa-link danger" onClick={() => del(mc.slug, mc.name)}>Delete</button>
+                  <button className="sa-link danger" onClick={() => del(mc.slug, mc.name)}>{adminTranslate("Delete")}</button>
                 </div>
               </div>
 
@@ -16231,7 +21148,7 @@ function CategoriesAdmin() {
                                 {sc.name}
                               </div>
                               <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                                <span style={{ color: '#34d399', fontWeight: 700 }}>{subCount} items</span> · /{sc.slug}
+                                <span style={{ color: '#34d399', fontWeight: 700 }}>{subCount} {adminTranslate("items")}</span> · /{sc.slug}
                               </div>
                             </div>
                           </div>
@@ -16253,7 +21170,7 @@ function CategoriesAdmin() {
                             >
                               📦 Assign ({subCount})
                             </button>
-                            <button className="sa-link" style={{ fontSize: 12 }} onClick={() => edit(sc)}>Edit</button>
+                            <button className="sa-link" style={{ fontSize: 12 }} onClick={() => edit(sc)}>{adminTranslate("Edit")}</button>
                             <button className="sa-link danger" style={{ fontSize: 12 }} onClick={() => del(sc.slug, sc.name)}>×</button>
                           </div>
                         </div>
@@ -16519,48 +21436,36 @@ function LandingsAdmin() {
       colors: [],
       badgeTop: '১০০% অরিজিনাল প্রিমিয়াম কোয়ালিটি নিশ্চিত',
       badgeGuarantee: 'একমাত্র আমরাই দিচ্ছি ৩ দিনের রিপ্লেসমেন্ট গ্যারান্টি',
-      headline: 'ম্যাজিক লাভ লক কনডম',
-      subtitle: 'এই কনডমটি ব্যবহারে পুরুষাঙ্গ ১ থেকে ১.৫ ইঞ্চি পর্যন্ত সুগঠিত দেখায় এবং মিলনের স্থায়িত্ব ৩০ থেকে ৪০ মিনিট পর্যন্ত বৃদ্ধি করতে সহায়তা করে। কম দামি নকল পণ্য এড়িয়ে অরিজিনাল পণ্য কিনুন।',
-      videoUrl: '/landing/lovelock-video.mp4',
-      videoBadge: 'ভিডিওতে পণ্যের আসল গঠন, লক সিস্টেম এবং নিখুঁত ব্যবহার প্রণালী দেখুন',
-      productTitle: 'লাভ লক ম্যাজিক কনডম',
-      productTagline: 'বিশেষ সিলিকন লক প্রযুক্তিসম্পন্ন — যা ব্যবহারে আনে দীর্ঘস্থায়ী পরিতৃপ্তি এবং পরম আত্মবিশ্বাস।',
-      heroImage: '/landing/banner-product.png',
-      packageTitle: 'লাভ লক ম্যাজিকাল কনডম (একক প্যাক)',
-      offerPriceText: 'অফার মূল্য মাত্র ৯৯৯ টাকা',
-      freeDeliveryText: '(সারা বাংলাদেশে হোম ডেলিভারি সম্পূর্ণ ফ্রি!)',
-      benefitsHeading: 'কেন নিবেন এই ম্যাজিক কনডম?',
-      benefits: [
-        'এটির পুরুত্ব ৬ মিলিমিটার এবং সম্পূর্ণ দৈর্ঘ্য ৬.৭ ইঞ্চি, যা দেয় আরামদায়ক ও প্রাকৃতিক অনুভূতি।',
-        'এই প্রিমিয়াম কনডমটি ৭০০ থেকে ৮০০ বার অথবা ১-২ বছর অনায়াসে ওয়াশ করে ব্যবহার করা যায়।',
-        'এটি ব্যবহারে মিলনের স্থায়িত্ব স্বাভাবিকের চেয়ে ৩০ থেকে ৪০ মিনিট পর্যন্ত বৃদ্ধি পেতে সাহায্য করে।'
-      ],
+      headline: '',
+      subtitle: '',
+      videoUrl: '',
+      videoBadge: '',
+      productTitle: '',
+      productTagline: '',
+      heroImage: '',
+      packageTitle: 'Standard Pack',
+      offerPriceText: '',
+      freeDeliveryText: '',
+      benefitsHeading: 'কেন নিবেন এই পণ্য?',
+      benefits: [],
       usageHeading: 'ব্যবহারের নিয়মাবলী :',
-      usageSteps: [
-        'ব্যবহারের পূর্বে সামান্য পরিমাণ ওয়াটার-বেসড লুব্রিকেন্ট বা খাঁটি তেল লাগিয়ে নিন।',
-        'কনডমের ছিদ্র দিয়ে প্রবেশ করিয়ে নিচের লক সিস্টেমটি সঠিকভাবে সেট করুন যাতে ব্যবহারের সময় পিছলে না যায়।',
-        'মিলন শেষে সাধারণ কুসুম গরম পানি ও সাবান দিয়ে পরিষ্কার করে ছায়াযুক্ত স্থানে শুকিয়ে রাখুন।'
-      ],
-      usageImage: '/landing/usage-guide.jpg',
-      usageCaption: 'সহজ লক সিস্টেম — শতভাগ নিরাপদ ফিটিং',
-      reviewsBadge: '১,৪০০+ ভেরিফায়েড ক্রেতার সন্তুষ্টি',
+      usageSteps: [],
+      usageImage: '',
+      usageCaption: '',
+      reviewsBadge: 'ভেরিফায়েড ক্রেতার সন্তুষ্টি',
       reviewsTitle: 'বাস্তব কাস্টমার অভিজ্ঞতা ও রিভিউ',
-      reviews: [
-        '/landing/review-1.png',
-        '/landing/review-2.png',
-        '/landing/review-3.png'
-      ],
+      reviews: [],
       guaranteeBadge: 'শতভাগ সন্তুষ্টি ও নিশ্চিন্ত ক্রয়ের অঙ্গীকার',
-      guaranteeText: 'আমাদের প্রদর্শিত পণ্যের সাথে প্রাপ্ত পণ্যের মিল না থাকলে এক টাকাও দিতে হবে না, সরাসরি পার্সেল রিটার্ন করতে পারবেন।',
-      phone: '09638752122',
-      whatsapp: '8801351107157',
+      guaranteeText: 'আমাদের প্রদর্শিত পণ্যের সাথে প্রাপ্ত পণ্যের মিল না থাকলে সরাসরি পার্সেল রিটার্ন করতে পারবেন।',
+      phone: '',
+      whatsapp: '',
       packages: [
         {
           id: 'pkg_1',
-          title: 'সাইজ ৬.৭ ইঞ্চি প্রিমিয়াম প্যাক',
-          price: 999,
-          originalPrice: 1500,
-          image: '/landing/package-6-7.jpg',
+          title: 'Standard Pack',
+          price: 0,
+          originalPrice: 0,
+          image: '',
           popular: true
         }
       ]
@@ -16591,6 +21496,7 @@ function LandingsAdmin() {
       if (!res.ok) throw new Error(data.error || 'Failed to save landing page');
       setMsg('✅ Landing page saved successfully!');
       await load();
+      window.dispatchEvent(new Event('admin-landings-updated'));
       setTimeout(() => setMsg(''), 4000);
     } catch (e: any) {
       setErr(e.message || 'Save error');
@@ -16611,6 +21517,7 @@ function LandingsAdmin() {
         setEditItem(null);
       }
       load();
+      window.dispatchEvent(new Event('admin-landings-updated'));
     } catch (e: any) {
       alert(e.message || 'Delete error');
     }
@@ -16814,7 +21721,7 @@ function LandingsAdmin() {
               onChange={(e) => setF((s: any) => ({ ...s, status: e.target.value }))}
               style={{ padding: '7px 12px', background: '#1c192e', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
             >
-              <option value="live">Live</option>
+              <option value="live">{adminTranslate("Live")}</option>
               <option value="draft">Draft</option>
             </select>
             <button
@@ -18171,7 +23078,7 @@ function LandingsAdmin() {
               </div>
             </div>
 
-            {/* Quick Contact Settings for HTML Mode */}
+            {/* Quick Title, Slug & Contact Settings for HTML Mode */}
             <div style={{
               marginBottom: 16,
               padding: '14px 16px',
@@ -18182,6 +23089,28 @@ function LandingsAdmin() {
               gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
               gap: 14
             }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: '#cbd5e1', marginBottom: 5 }}>
+                  ল্যান্ডিং পেজ টাইটেল (Page Title)
+                </label>
+                <input
+                  value={f.title || ''}
+                  onChange={(e) => setF((s: any) => ({ ...s, title: e.target.value }))}
+                  placeholder="পেজের টাইটেল লিখুন..."
+                  style={{ width: '100%', padding: '8px 12px', background: '#090710', color: '#fff', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 6, fontSize: 13 }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: '#cbd5e1', marginBottom: 5 }}>
+                  URL Slug (/page/...)
+                </label>
+                <input
+                  value={f.slug || ''}
+                  onChange={(e) => setF((s: any) => ({ ...s, slug: slugify(e.target.value) }))}
+                  placeholder="offer-slug"
+                  style={{ width: '100%', padding: '8px 12px', background: '#090710', color: '#fff', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 6, fontSize: 13 }}
+                />
+              </div>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#e2e8f0' }}>
@@ -18326,6 +23255,139 @@ function LandingsAdmin() {
                   >
                     + Insert [ORDER_FORM]
                   </button>
+                  <button
+                    type="button"
+                    className="sa-btn-subtle"
+                    style={{ fontSize: 11, background: 'rgba(139,92,246,0.16)', borderColor: 'rgba(139,92,246,0.4)', color: '#d8b4fe' }}
+                    onClick={async () => {
+                      const html = String(f.customHtml || '').trim();
+                      if (!html) { alert('প্রথমে HTML কোড পেস্ট করুন।'); return; }
+                      try {
+                        const doc = new DOMParser().parseFromString(html, 'text/html');
+                        const toEn = (s: string) => s.replace(/[০-৯]/g, (d) => '০১২৩৪৫৬৭৮৯'.indexOf(d).toString());
+                        const rawTitle = (
+                          doc.querySelector('[data-product-name]')?.getAttribute('data-product-name') ||
+                          doc.querySelector('h1')?.textContent ||
+                          doc.querySelector('title')?.textContent ||
+                          f.title ||
+                          f.slug ||
+                          'Landing Product'
+                        ).trim().slice(0, 120);
+                        const bodyTxt = toEn(doc.body?.textContent || html);
+                        const attrPrice = doc.querySelector('[data-price]')?.getAttribute('data-price') || '';
+                        const mPrice = attrPrice.match(/\d+/) || bodyTxt.match(/(?:৳|tk|bdt|টাকা)\s*([1-9]\d{1,5})|([1-9]\d{1,5})\s*(?:৳|tk|bdt|টাকা)/i);
+                        const parsedPrice = Number((mPrice && (mPrice[1] || mPrice[2] || mPrice[0])) || f.price || 990);
+                        const colorMap = new Map<string, string>();
+                        const addColor = (c: string, img?: string) => {
+                          const clean = String(c || '').trim();
+                          if (!clean || /select|choose|পছন্দ|বাছাই/i.test(clean)) return;
+                          if (!colorMap.has(clean) || (img && !colorMap.get(clean))) {
+                            colorMap.set(clean, String(img || '').trim());
+                          }
+                        };
+                        doc.querySelectorAll('select').forEach((sel) => {
+                          const hint = `${sel.name} ${sel.id} ${sel.className}`.toLowerCase();
+                          if (/color|colour|রং|কালার|variant/.test(hint)) {
+                            sel.querySelectorAll('option').forEach((opt) => {
+                              addColor(opt.textContent || opt.value || '', opt.getAttribute('data-image') || opt.getAttribute('data-img') || '');
+                            });
+                          }
+                        });
+                        doc.querySelectorAll('input[type="radio"], input[type="checkbox"]').forEach((inp: any) => {
+                          const hint = `${inp.name} ${inp.id}`.toLowerCase();
+                          if (/color|colour|রং|কালার/.test(hint)) {
+                            const lblEl = inp.closest('label');
+                            const lbl = lblEl?.textContent?.trim() || inp.value?.trim();
+                            const img = inp.getAttribute('data-image') || inp.getAttribute('data-img') || lblEl?.querySelector('img')?.getAttribute('src') || '';
+                            if (lbl) addColor(lbl, img);
+                          }
+                        });
+                        doc.querySelectorAll('[data-color]').forEach((el) => {
+                          const v = (el.getAttribute('data-color') || el.textContent || '').trim();
+                          const img = el.getAttribute('data-image') || el.getAttribute('data-img') || el.querySelector('img')?.getAttribute('src') || '';
+                          if (v) addColor(v, img);
+                        });
+                        const colorsArr = Array.from(colorMap.keys()).slice(0, 20);
+                        const imgs = Array.from(doc.querySelectorAll('img')).map((im) => im.getAttribute('src') || '').filter((s) => /^https?:|^\/|^data:image\//.test(s)).slice(0, 12);
+                        const varList = colorsArr.map((c, idx) => ({
+                          id: `var_${idx + 1}`,
+                          title: c,
+                          name: c,
+                          color: c,
+                          price: parsedPrice,
+                          image: colorMap.get(c) || imgs[idx] || imgs[0] || ''
+                        }));
+                        setF((s: any) => ({
+                          ...s,
+                          title: s.title || rawTitle,
+                          price: parsedPrice,
+                          ...(colorsArr.length ? { colors: colorsArr.join(', '), variants: varList } : {}),
+                          ...(imgs[0] && !s.heroImage ? { heroImage: imgs[0] } : {})
+                        }));
+                        const [prodsRes, catsRes] = await Promise.all([
+                          aFetch('/products').then((r) => r.json()).catch(() => []),
+                          aFetch('/categories').then((r) => r.json()).catch(() => [])
+                        ]);
+                        const prods = Array.isArray(prodsRes) ? prodsRes : (prodsRes?.products || []);
+                        const cats = Array.isArray(catsRes) ? catsRes : (catsRes?.categories || []);
+                        const defaultCat = cats[0]?.slug || cats[0]?.name || 'general';
+                        const existing = prods.find((p: any) => String(p.name || '').toLowerCase() === rawTitle.toLowerCase() || (f.slug && String(p.slug || '').toLowerCase() === String(f.slug).toLowerCase()));
+                        const payload: any = {
+                          name: rawTitle,
+                          slug: f.slug || rawTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+                          price: parsedPrice,
+                          category: existing?.category || defaultCat,
+                          image: imgs[0] || existing?.image || '',
+                          images: imgs.length ? imgs : (existing?.images || []),
+                          colors: colorsArr,
+                          variants: varList,
+                          variations: varList,
+                          description: f.subtitle || `${rawTitle} (Auto-synced from HTML Landing Page)`
+                        };
+                        const saveRes = existing
+                          ? await aFetch(`/products/${existing.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+                          : await aFetch('/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                        if (saveRes.ok) {
+                          const savedProd = await saveRes.json().catch(() => null);
+                          if (savedProd?.id) {
+                            setF((s: any) => ({ ...s, productIds: Array.from(new Set([...(s.productIds || []), savedProd.id])) }));
+                          }
+                          alert(`✅ "${rawTitle}" (৳${parsedPrice}${colorsArr.length ? `, কালার: ${colorsArr.join(', ')}` : ''}) সফলভাবে স্টোর প্রোডাক্ট ক্যাটালগে অটো-আপলোড হয়েছে!`);
+                        } else {
+                          const err = await saveRes.json().catch(() => ({}));
+                          alert(`⚠️ প্রোডাক্ট সেভ করতে সমস্যা: ${err.error || saveRes.status}`);
+                        }
+                      } catch (e: any) {
+                        alert('HTML পার্স করতে সমস্যা: ' + (e?.message || e));
+                      }
+                    }}
+                  >
+                    🔄 HTML থেকে Product ও Color অটো-আপলোড করুন
+                  </button>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: f.hideDefaultCheckout ? '#34d399' : '#cbd5e1', background: f.hideDefaultCheckout ? 'rgba(16,185,129,0.14)' : 'rgba(255,255,255,0.05)', border: `1px solid ${f.hideDefaultCheckout ? 'rgba(16,185,129,0.4)' : 'rgba(255,255,255,0.12)'}`, padding: '4px 10px', borderRadius: 7, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(f.hideDefaultCheckout)}
+                      onChange={(e) => setF((s: any) => ({ ...s, hideDefaultCheckout: e.target.checked }))}
+                    />
+                    <span>নিজের HTML চেকআউট ফরম ব্যবহার করুন (ডিফল্ট ফরম লুকান)</span>
+                  </label>
+                  {!f.hideDefaultCheckout && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '4px 10px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', fontSize: 11.5, color: '#e2e8f0' }}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                        <span>🎨 থিম:</span>
+                        <input type="color" value={f.themeColor || '#CB202D'} onChange={(e) => setF((s: any) => ({ ...s, themeColor: e.target.value }))} style={{ width: 22, height: 22, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }} />
+                      </label>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                        <span>🔘 বাটন:</span>
+                        <input type="color" value={f.buttonColor || f.themeColor || '#E02836'} onChange={(e) => setF((s: any) => ({ ...s, buttonColor: e.target.value }))} style={{ width: 22, height: 22, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }} />
+                      </label>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                        <span>📄 ব্যাকগ্রাউন্ড:</span>
+                        <input type="color" value={f.pageBgColor || '#FAF7F8'} onChange={(e) => setF((s: any) => ({ ...s, pageBgColor: e.target.value }))} style={{ width: 22, height: 22, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }} />
+                      </label>
+                    </div>
+                  )}
                   {f.customHtml && (
                     <button
                       type="button"
@@ -18551,7 +23613,7 @@ function LandingsAdmin() {
                     <>
                       <img src={selectedModalImg} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6, border: '1px solid #a855f7' }} />
                       <div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>Selected Image:</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{adminTranslate("Selected Image:")}</div>
                         <div style={{ fontSize: 11, color: '#94a3b8', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedModalImg}</div>
                       </div>
                     </>
@@ -18594,7 +23656,7 @@ function LandingsAdmin() {
         <div>
           <h1 style={{ margin: 0, fontSize: 22, display: 'flex', alignItems: 'center', gap: 10 }}>
             <span>🎯</span>
-            <span>Landing Pages</span>
+            <span>{adminTranslate("Landing Pages")}</span>
           </h1>
           <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
             Create and manage high-converting, single-product landing pages.
@@ -18609,7 +23671,7 @@ function LandingsAdmin() {
         </button>
       </div>
 
-      {loading && <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Loading...</div>}
+      {loading && <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>{adminTranslate("Loading...")}</div>}
 
       {!loading && (
         <div className="sa-card" style={{ marginTop: 16 }}>
@@ -18620,8 +23682,8 @@ function LandingsAdmin() {
                 <th>Title & Slug</th>
                 <th>Live Links</th>
                 <th>Packages</th>
-                <th>Status</th>
-                <th className="r">Actions</th>
+                <th>{adminTranslate("Status")}</th>
+                <th className="r">{adminTranslate("Actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -18631,7 +23693,14 @@ function LandingsAdmin() {
                     <img
                       src={item.heroImage || '/landing/banner-product.png'}
                       alt=""
+                      referrerPolicy="no-referrer"
                       style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, background: '#151224', border: '1px solid rgba(255,255,255,0.08)' }}
+                      onError={(e) => {
+                        const target = e.currentTarget as HTMLImageElement;
+                        if (!target.src.includes('banner-product.png')) {
+                          target.src = '/landing/banner-product.png';
+                        }
+                      }}
                     />
                   </td>
                   <td>
@@ -18775,8 +23844,45 @@ function WebCallDialer() {
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [syncOrderStatus, setSyncOrderStatus] = useState(true);
+  const [followUpAt, setFollowUpAt] = useState('');
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [agentDnd, setAgentDnd] = useState(() => {
+    try { return localStorage.getItem('cc_agent_dnd') === '1'; } catch (_) { return false; }
+  });
+  const [audioBlocked, setAudioBlocked] = useState(false);
+
+  useEffect(() => {
+    const unlockAudio = () => {
+      try {
+        const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
+        if (AC) {
+          const ctx = new AC();
+          if (ctx.state === 'suspended') {
+            ctx.resume().then(() => setAudioBlocked(false)).catch(() => {});
+          } else {
+            setAudioBlocked(false);
+          }
+          setTimeout(() => { try { ctx.close(); } catch (_) {} }, 250);
+        }
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.muted = false;
+        }
+      } catch (_) {}
+    };
+    window.addEventListener('pointerdown', unlockAudio, { passive: true });
+    window.addEventListener('keydown', unlockAudio, { passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+  }, []);
 
   const uaRef = useRef<any>(null);
+  const sipStatusRef = useRef<'simulation' | 'connecting' | 'registered' | 'error'>('simulation');
+  const statusRef = useRef(status);
+  useEffect(() => { statusRef.current = status; }, [status]);
+  const stopRecorderPromiseRef = useRef<Promise<void> | null>(null);
   const sipSettingsRef = useRef<any>(null);
   const rtcSessionRef = useRef<any>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -18788,8 +23894,39 @@ function WebCallDialer() {
   const ringIntervalRef = useRef<any>(null);
   const timerRef = useRef<any>(null);
   const audioBlobRef = useRef<Blob | null>(null);
+  const wasAnsweredRef = useRef<boolean>(false);
+  const savedCallIdRef = useRef<string | null>(null);
+  const targetRef = useRef<AdminIPCallTarget | null>(null);
+  const directionRef = useRef<'outbound' | 'inbound'>('outbound');
+  const secondsRef = useRef<number>(0);
+
+  useEffect(() => { targetRef.current = target; }, [target]);
+  useEffect(() => { directionRef.current = direction; }, [direction]);
+  useEffect(() => { secondsRef.current = seconds; }, [seconds]);
+  useEffect(() => {
+    if (status === 'ringing' || status === 'calling') {
+      savedCallIdRef.current = null;
+    }
+  }, [status]);
+
+  const notifyIncomingCall = (callerInfo: AdminIPCallTarget) => {
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        const n = new Notification(`📞 Incoming Call: ${callerInfo.name || 'Visitor'}`, {
+          body: `${callerInfo.phone || 'Unknown'}${callerInfo.orderId ? ` · Order #${String(callerInfo.orderId).replace('DOT-', '')}` : ''}`,
+          tag: 'incoming-webrtc-call',
+          requireInteraction: true
+        });
+        n.onclick = () => {
+          try { window.focus(); } catch (_) {}
+          n.close();
+        };
+      }
+    } catch (_) {}
+  };
 
   const broadcastSipStatus = (st: 'simulation' | 'connecting' | 'registered' | 'error', ext?: string) => {
+    sipStatusRef.current = st;
     setSipStatus(st);
     (window as any).__sipStatus = { status: st, ext: ext || '' };
     window.dispatchEvent(new CustomEvent('sip-status-changed', { detail: { status: st, ext: ext || '' } }));
@@ -18831,27 +23968,22 @@ function WebCallDialer() {
     ringIntervalRef.current = setInterval(playBurst, 2200);
   };
 
-  // Lookup customer & latest order by incoming phone number
+  // Lookup customer & latest order by incoming phone number (fast server lookup)
   const lookupCallerOrder = async (rawPhone: string): Promise<AdminIPCallTarget> => {
     const clean = String(rawPhone || '').replace(/\D/g, '').replace(/^88/, '');
     const fallback: AdminIPCallTarget = { phone: rawPhone || 'Unknown', name: 'Incoming Caller' };
     if (!clean || clean.length < 6) return fallback;
     try {
-      const orders = await aFetch('/orders').then((r) => r.json());
-      if (Array.isArray(orders)) {
-        const matched = orders.find((o: any) => {
-          const op = String(o.customer?.phone || '').replace(/\D/g, '').replace(/^88/, '');
-          return op && (op.endsWith(clean.slice(-8)) || clean.endsWith(op.slice(-8)));
-        });
-        if (matched) {
-          return {
-            order: matched,
-            phone: matched.customer?.phone || rawPhone,
-            name: matched.customer?.name || 'Customer',
-            orderId: matched.id,
-            product: matched.items?.[0]?.name || matched.items?.[0]?.title || ''
-          };
-        }
+      const data = await aFetch('/calls/lookup?phone=' + encodeURIComponent(rawPhone)).then((r) => r.json());
+      if (data && data.found && data.order) {
+        const matched = data.order;
+        return {
+          order: matched,
+          phone: matched.customer?.phone || rawPhone,
+          name: matched.customer?.name || 'Customer',
+          orderId: matched.id,
+          product: matched.items?.[0]?.name || matched.items?.[0]?.title || ''
+        };
       }
     } catch (_) {}
     return fallback;
@@ -18904,17 +24036,40 @@ function WebCallDialer() {
   };
 
   const attachPeerConnectionAudio = (session: any) => {
-    const pc = session?.connection;
-    if (!pc) return;
-    pc.addEventListener('track', (ev: any) => {
-      const rStream = ev.streams?.[0] || new MediaStream([ev.track]);
+    if (!session) return;
+    let startedRec = false;
+    const bindStream = (rStream: MediaStream) => {
+      if (!rStream || rStream.getAudioTracks().length === 0) return;
       remoteStreamRef.current = rStream;
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = rStream;
+        remoteAudioRef.current.muted = false;
+        remoteAudioRef.current.volume = 1.0;
         remoteAudioRef.current.play().catch(() => {});
       }
-      startCallRecording(rStream);
-    });
+      if (!startedRec) {
+        startedRec = true;
+        startCallRecording(rStream);
+      }
+    };
+    const hookPc = (pc: any) => {
+      if (!pc || (pc as any).__audioHooked) return;
+      (pc as any).__audioHooked = true;
+      const checkReceivers = () => {
+        const existingTracks = pc.getReceivers?.().map((r: any) => r.track).filter((t: any) => t && t.kind === 'audio') || [];
+        if (existingTracks.length > 0) bindStream(new MediaStream(existingTracks));
+      };
+      checkReceivers();
+      pc.addEventListener('track', (ev: any) => {
+        const rStream = ev.streams?.[0] || new MediaStream([ev.track]);
+        bindStream(rStream);
+      });
+      setTimeout(checkReceivers, 350);
+    };
+    if (session.connection) hookPc(session.connection);
+    session.on?.('peerconnection', (e: any) => { if (e?.peerconnection) hookPc(e.peerconnection); });
+    session.on?.('accepted', () => { if (session.connection) hookPc(session.connection); });
+    session.on?.('confirmed', () => { if (session.connection) hookPc(session.connection); });
   };
 
   // Initialize JsSIP WebRTC User Agent from telephony settings
@@ -18939,8 +24094,14 @@ function WebCallDialer() {
         password: cfg.sipPassword,
         display_name: cfg.callerId || cfg.sipUsername,
         register: true,
+        register_expires: 90,
+        connection_recovery_min_interval: 2,
         session_timers: false
       });
+
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
 
       ua.on('registered', () => broadcastSipStatus('registered', cfg.sipUsername));
       ua.on('registrationFailed', () => broadcastSipStatus('error', cfg.sipUsername));
@@ -18948,11 +24109,47 @@ function WebCallDialer() {
 
       ua.on('newRTCSession', async (data: any) => {
         const session = data.session;
+        let iceReadyDone = false;
+        let iceTimer: any = null;
+        session.on?.('icecandidate', (ev: any) => {
+          if (iceReadyDone) return;
+          const cand = ev?.candidate?.candidate || '';
+          if (cand.includes('srflx') || cand.includes('relay')) {
+            iceReadyDone = true;
+            if (iceTimer) clearTimeout(iceTimer);
+            try { ev.ready(); } catch (_) {}
+          } else if (!iceTimer) {
+            iceTimer = setTimeout(() => {
+              if (iceReadyDone) return;
+              iceReadyDone = true;
+              try { ev.ready(); } catch (_) {}
+            }, 300);
+          }
+        });
         if (data.originator === 'remote') {
           rtcSessionRef.current = session;
-          const callerRaw = session.remote_identity?.uri?.user || session.remote_identity?.display_name || 'Unknown';
-          const callerInfo = await lookupCallerOrder(callerRaw);
-          setTarget(callerInfo);
+          attachPeerConnectionAudio(session);
+          wasAnsweredRef.current = false;
+          const uriUser = session.remote_identity?.uri?.user || '';
+          const dispName = session.remote_identity?.display_name || '';
+          let callerRaw = uriUser && uriUser !== 'guest' ? uriUser : (dispName || uriUser || 'Unknown');
+          const phoneMatch = dispName.match(/\(([^)]+)\)/);
+          if (phoneMatch && phoneMatch[1]) callerRaw = phoneMatch[1].trim();
+          const meta = pendingCallerMetaRef.current;
+          pendingCallerMetaRef.current = null;
+          const immediateInfo: AdminIPCallTarget = {
+            phone: callerRaw || meta?.phone || 'Visitor',
+            name: (dispName ? dispName.replace(/\s*\([^)]+\)\s*/, '').trim() || dispName : '') || meta?.name || 'Incoming Caller',
+            ...(meta?.orderId ? { orderId: meta.orderId } : {}),
+            ...(meta?.product ? { product: meta.product } : {}),
+            ...(meta?.address ? { address: meta.address } : {}),
+            ...(meta?.tier ? { tier: meta.tier } : {}),
+            ...(meta?.isAiTransfer ? { isAiTransfer: true } : {}),
+          ...(meta?.transferId ? { transferId: meta.transferId } : {}),
+            ...(meta?.serialNumber ? { serialNumber: meta.serialNumber } : {}),
+            ...(meta?.note ? { note: meta.note } : {})
+          };
+          setTarget(immediateInfo);
           setDirection('inbound');
           setStatus('ringing');
           setSeconds(0);
@@ -18964,13 +24161,54 @@ function WebCallDialer() {
           setSaving(false);
           setSaveSuccess(false);
           startRingtone();
+          notifyIncomingCall(immediateInfo);
+
+          let callerInfo = immediateInfo;
+          try {
+            const lookedUp = await lookupCallerOrder(callerRaw);
+            callerInfo = {
+              ...immediateInfo,
+              ...lookedUp,
+              name: (lookedUp.name && lookedUp.name !== 'Incoming Caller') ? lookedUp.name : immediateInfo.name,
+              phone: (lookedUp.phone && lookedUp.phone !== 'Unknown') ? lookedUp.phone : immediateInfo.phone,
+              serialNumber: immediateInfo.serialNumber || lookedUp.serialNumber,
+              note: immediateInfo.note || lookedUp.note,
+              address: immediateInfo.address || lookedUp.address,
+              tier: immediateInfo.tier || lookedUp.tier,
+              isAiTransfer: immediateInfo.isAiTransfer || lookedUp.isAiTransfer
+            };
+            if (dispName && (callerInfo.name === 'Incoming Caller' || !callerInfo.name)) {
+              callerInfo.name = dispName.replace(/\s*\([^)]+\)\s*/, '').trim() || dispName;
+            }
+            setTarget(callerInfo);
+          } catch (_) {}
+
+          const logMissedIfUnanswered = () => {
+            if (!wasAnsweredRef.current) {
+              aFetch('/calls', {
+                method: 'POST',
+                body: JSON.stringify({
+                  direction: 'inbound',
+                  orderId: callerInfo.orderId || null,
+                  customerName: callerInfo.name || 'Visitor',
+                  customerPhone: callerInfo.phone || callerRaw || 'Guest',
+                  productName: callerInfo.product || '',
+                  duration: 0,
+                  outcome: 'missed',
+                  notes: 'Missed incoming live call'
+                })
+              }).catch(() => {});
+            }
+          };
 
           session.on('ended', () => {
             stopRingtone();
+            logMissedIfUnanswered();
             endCallCleanupOnly();
           });
           session.on('failed', () => {
             stopRingtone();
+            logMissedIfUnanswered();
             rtcSessionRef.current = null;
             setTarget(null);
             setStatus('idle');
@@ -18988,9 +24226,16 @@ function WebCallDialer() {
   useEffect(() => {
     initSipAgent();
     const onSettingsUpdated = () => initSipAgent();
+    const onDndToggle = (e: any) => {
+      const next = Boolean(e?.detail?.dnd);
+      setAgentDnd(next);
+      try { localStorage.setItem('cc_agent_dnd', next ? '1' : '0'); } catch (_) {}
+    };
     window.addEventListener('telephony-settings-updated', onSettingsUpdated);
+    window.addEventListener('call-center-toggle-dnd', onDndToggle);
     return () => {
       window.removeEventListener('telephony-settings-updated', onSettingsUpdated);
+      window.removeEventListener('call-center-toggle-dnd', onDndToggle);
       stopRingtone();
       if (uaRef.current) {
         try { uaRef.current.stop(); } catch (_) {}
@@ -18998,11 +24243,43 @@ function WebCallDialer() {
     };
   }, []);
 
+  // Live Call Center presence heartbeat
+  useEffect(() => {
+    const pushPresence = () => {
+      const cfg = sipSettingsRef.current;
+      const ccStatus = status === 'connected' || status === 'calling' || status === 'ringing'
+        ? 'on_call'
+        : agentDnd
+        ? 'dnd'
+        : sipStatus === 'registered'
+        ? 'available'
+        : 'offline';
+      aFetch('/call-center/presence', {
+        method: 'POST',
+        body: JSON.stringify({
+          ext: cfg?.sipUsername || '1001',
+          status: ccStatus,
+          sipStatus,
+          currentCaller: status !== 'idle' && target ? `${target.name || ''} (${target.phone || ''})`.trim() : null,
+          callStartedAt: status === 'connected' ? new Date(Date.now() - secondsRef.current * 1000).toISOString() : null
+        })
+      }).catch(() => {});
+    };
+    pushPresence();
+    const iv = setInterval(pushPresence, 15000);
+    return () => clearInterval(iv);
+  }, [status, sipStatus, agentDnd, target]);
+
   // Handle Outgoing Call & Simulated Incoming Call events
   useEffect(() => {
     const handleOpen = async (e: any) => {
       const d: AdminIPCallTarget = e.detail;
       if (!d || !d.phone) return;
+      const cfg = sipSettingsRef.current;
+      if (!uaRef.current || sipStatusRef.current !== 'registered' || !cfg?.sipServer) {
+        alert('বাস্তব কল দিতে আগে Call Center → Connect IPTSP / SIP API থেকে SIP account যুক্ত ও connected করুন। কলটি ডায়াল করা হয়নি।');
+        return;
+      }
       stopRingtone();
       setTarget(d);
       setDirection('outbound');
@@ -19015,9 +24292,10 @@ function WebCallDialer() {
       setNotes('');
       setSaving(false);
       setSaveSuccess(false);
+      setSyncOrderStatus(true);
+      setFollowUpAt('');
 
-      const cfg = sipSettingsRef.current;
-      if (uaRef.current && sipStatus === 'registered' && cfg?.sipServer) {
+      try {
         const cleanDial = String(d.phone).replace(/[^0-9+]/g, '');
         const eventHandlers = {
           accepted: () => setStatus('connected'),
@@ -19031,11 +24309,11 @@ function WebCallDialer() {
         });
         rtcSessionRef.current = session;
         attachPeerConnectionAudio(session);
-      } else {
-        await startCallRecording(null);
-        setTimeout(() => {
-          setStatus((prev) => (prev === 'calling' ? 'connected' : prev));
-        }, 1800);
+      } catch (error) {
+        console.error('Unable to start SIP call:', error);
+        setTarget(null);
+        setStatus('idle');
+        alert('SIP কল শুরু করা যায়নি। SIP connection ও নম্বরটি যাচাই করে আবার চেষ্টা করুন।');
       }
     };
 
@@ -19058,6 +24336,7 @@ function WebCallDialer() {
       setSaving(false);
       setSaveSuccess(false);
       startRingtone();
+      notifyIncomingCall(callerInfo);
     };
 
     window.addEventListener('open-admin-ip-call', handleOpen);
@@ -19067,6 +24346,18 @@ function WebCallDialer() {
       window.removeEventListener('simulate-incoming-ip-call', handleSimIncoming);
     };
   }, [sipStatus]);
+
+  // Re-bind remote audio stream whenever UI branch remounts <audio>
+  useEffect(() => {
+    if (remoteAudioRef.current && remoteStreamRef.current) {
+      if (remoteAudioRef.current.srcObject !== remoteStreamRef.current) {
+        remoteAudioRef.current.srcObject = remoteStreamRef.current;
+      }
+      remoteAudioRef.current.muted = false;
+      remoteAudioRef.current.volume = 1.0;
+      remoteAudioRef.current.play().catch(() => {});
+    }
+  }, [status, minimized]);
 
   // Duration timer
   useEffect(() => {
@@ -19080,13 +24371,32 @@ function WebCallDialer() {
     };
   }, [status]);
 
+  const broadcastClearRing = () => {
+    aFetch('/calls/visitor-clear', { method: 'POST' }).catch(() => {});
+    try {
+      const ch = new BroadcastChannel('secrate_call_sync');
+      ch.postMessage({ type: 'clear_ring' });
+      ch.close();
+    } catch (_) {}
+  };
+
   const acceptIncomingCall = async () => {
+    wasAnsweredRef.current = true;
     stopRingtone();
+    broadcastClearRing();
     setStatus('connected');
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.muted = false;
+      remoteAudioRef.current.volume = 1.0;
+      remoteAudioRef.current.play().catch(() => {});
+    }
     if (rtcSessionRef.current) {
       try {
-        rtcSessionRef.current.answer({ mediaConstraints: { audio: true, video: false } });
         attachPeerConnectionAudio(rtcSessionRef.current);
+        rtcSessionRef.current.answer({
+          mediaConstraints: { audio: true, video: false },
+          pcConfig: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+        });
       } catch (err) {
         console.error('Failed to answer SIP session:', err);
       }
@@ -19097,8 +24407,18 @@ function WebCallDialer() {
 
   const rejectIncomingCall = () => {
     stopRingtone();
+    broadcastClearRing();
+    const ext = sipSettingsRef.current?.sipUsername || '';
+    if (/^\d{3,5}$/.test(ext)) {
+      aFetch('/calls/agent-reject', {
+        method: 'POST',
+        body: JSON.stringify({ ext })
+      }).catch(() => {});
+    }
     if (rtcSessionRef.current) {
-      try { rtcSessionRef.current.terminate(); } catch (_) {}
+      try { rtcSessionRef.current.terminate({ status_code: 486, reason_phrase: 'Busy Here' }); } catch (_) {
+        try { rtcSessionRef.current.terminate(); } catch (__) {}
+      }
       rtcSessionRef.current = null;
     }
     setTarget(null);
@@ -19129,11 +24449,52 @@ function WebCallDialer() {
     setHeld(!held);
   };
 
+  const uploadCurrentRecording = async () => {
+    let recordingUrl: string | null = null;
+    let fileSize = 0;
+    if (audioBlobRef.current && audioBlobRef.current.size > 0) {
+      fileSize = audioBlobRef.current.size;
+      try {
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve) => {
+          reader.onloadend = () => resolve(reader.result as string);
+        });
+        reader.readAsDataURL(audioBlobRef.current);
+        const dataUrl = await base64Promise;
+        const upRes = await aFetch('/calls/upload-recording', {
+          method: 'POST',
+          body: JSON.stringify({ dataUrl })
+        }).then((r) => r.json());
+        if (upRes && upRes.url) recordingUrl = upRes.url;
+      } catch (err) {
+        console.error('Error uploading recording:', err);
+      }
+    }
+    return { recordingUrl, fileSize };
+  };
+
   const endCallCleanupOnly = () => {
     stopRingtone();
     if (timerRef.current) clearInterval(timerRef.current);
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try { mediaRecorderRef.current.stop(); } catch (_) {}
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== 'inactive') {
+      stopRecorderPromiseRef.current = new Promise<void>((resolve) => {
+        let settled = false;
+        const done = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+        try {
+          mr.addEventListener('stop', done, { once: true });
+          mr.stop();
+        } catch (_) {
+          done();
+        }
+        setTimeout(done, 800);
+      });
+    } else {
+      stopRecorderPromiseRef.current = Promise.resolve();
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
@@ -19145,6 +24506,34 @@ function WebCallDialer() {
     }
     rtcSessionRef.current = null;
     setStatus((prev) => (prev === 'idle' ? 'idle' : 'wrapup'));
+
+    // Auto-save call & audio recording after MediaRecorder finalizes blob
+    setTimeout(async () => {
+      const t = targetRef.current;
+      if (!t || savedCallIdRef.current) return;
+      if (directionRef.current === 'inbound' && !wasAnsweredRef.current) return;
+      try {
+        await (stopRecorderPromiseRef.current || Promise.resolve());
+        const { recordingUrl, fileSize } = await uploadCurrentRecording();
+        const saved = await aFetch('/calls', {
+          method: 'POST',
+          body: JSON.stringify({
+            direction: directionRef.current,
+            orderId: t.orderId || null,
+            customerName: t.name || t.order?.customer?.name || '',
+            customerPhone: t.phone,
+            productName: t.product || t.order?.items?.[0]?.name || '',
+            duration: secondsRef.current,
+            outcome: 'confirmed',
+            notes: '',
+            recordingUrl,
+            fileSize
+          })
+        }).then((r) => r.json());
+        if (saved && saved.id) savedCallIdRef.current = saved.id;
+        window.dispatchEvent(new CustomEvent('admin-calls-updated'));
+      } catch (_) {}
+    }, 450);
   };
 
   const endCall = () => {
@@ -19157,52 +24546,62 @@ function WebCallDialer() {
   const handleSaveCall = async () => {
     if (!target) return;
     setSaving(true);
-    let recordingUrl: string | null = null;
-    let fileSize = 0;
-
-    if (audioBlobRef.current && audioBlobRef.current.size > 0) {
-      fileSize = audioBlobRef.current.size;
-      try {
-        const reader = new FileReader();
-        const base64Promise = new Promise<string>((resolve) => {
-          reader.onloadend = () => resolve(reader.result as string);
-        });
-        reader.readAsDataURL(audioBlobRef.current);
-        const dataUrl = await base64Promise;
-
-        const upRes = await aFetch('/calls/upload-recording', {
-          method: 'POST',
-          body: JSON.stringify({ dataUrl })
-        }).then((r) => r.json());
-
-        if (upRes && upRes.url) recordingUrl = upRes.url;
-      } catch (err) {
-        console.error('Error uploading recording:', err);
-      }
-    }
-
     try {
-      await aFetch('/calls', {
-        method: 'POST',
-        body: JSON.stringify({
-          direction,
-          orderId: target.orderId || null,
-          customerName: target.name || target.order?.customer?.name || '',
-          customerPhone: target.phone,
-          productName: target.product || target.order?.items?.[0]?.name || '',
-          duration: seconds,
-          outcome,
-          notes,
-          recordingUrl,
-          fileSize
-        })
-      });
+      await (stopRecorderPromiseRef.current || Promise.resolve());
+      if (savedCallIdRef.current) {
+        await aFetch('/calls/' + encodeURIComponent(savedCallIdRef.current), {
+          method: 'PUT',
+          body: JSON.stringify({
+            outcome,
+            notes,
+            duration: secondsRef.current
+          })
+        });
+      } else {
+        const { recordingUrl, fileSize } = await uploadCurrentRecording();
+        const saved = await aFetch('/calls', {
+          method: 'POST',
+          body: JSON.stringify({
+            direction,
+            orderId: target.orderId || null,
+            customerName: target.name || target.order?.customer?.name || '',
+            customerPhone: target.phone,
+            productName: target.product || target.order?.items?.[0]?.name || '',
+            duration: secondsRef.current,
+            outcome,
+            notes,
+            recordingUrl,
+            fileSize
+          })
+        }).then((r) => r.json());
+        if (saved && saved.id) savedCallIdRef.current = saved.id;
+      }
+
+      if (target.transferId) {
+        await aFetch('/call-center/transfers/' + encodeURIComponent(target.transferId), {
+          method: 'PATCH', body: JSON.stringify({ status: 'completed', callId: savedCallIdRef.current || undefined, outcome }),
+        });
+      }
+
+      if (syncOrderStatus && target.orderId) {
+        try {
+          const mappedStatus = outcome === 'confirmed' ? 'confirmed' : outcome === 'cancelled' ? 'cancelled' : 'hold';
+          const orderPayload: any = { status: mappedStatus };
+          if (followUpAt) orderPayload.followUpAt = followUpAt;
+          await aFetch('/orders/' + encodeURIComponent(target.orderId), {
+            method: 'PUT',
+            body: JSON.stringify(orderPayload)
+          });
+        } catch (_) {}
+      }
 
       setSaveSuccess(true);
       window.dispatchEvent(new CustomEvent('admin-orders-updated'));
+      window.dispatchEvent(new CustomEvent('admin-calls-updated'));
       setTimeout(() => {
         setTarget(null);
         setStatus('idle');
+        window.dispatchEvent(new CustomEvent('power-dialer-next'));
       }, 1200);
     } catch (err) {
       alert('Failed to save call log');
@@ -19211,8 +24610,114 @@ function WebCallDialer() {
     }
   };
 
+  const lastVisitorRingIdRef = useRef<string>('');
+  const pendingCallerMetaRef = useRef<any>(null);
+  useEffect(() => {
+    let ch: BroadcastChannel | null = null;
+    try {
+      ch = new BroadcastChannel('secrate_call_sync');
+      ch.onmessage = (ev) => {
+        if (ev?.data?.type === 'clear_ring' && statusRef.current === 'ringing' && !rtcSessionRef.current) {
+          stopRingtone();
+          setTarget(null);
+          setStatus('idle');
+        }
+      };
+    } catch (_) {}
+
+    const t = setInterval(async () => {
+      if (agentDnd) return;
+      if (statusRef.current !== 'idle' && !(statusRef.current === 'ringing' && !rtcSessionRef.current)) return;
+      try {
+        const r = await aFetch('/calls/incoming-ping').then((x) => x.json());
+        if (!r?.ring && statusRef.current === 'ringing' && !rtcSessionRef.current) {
+          stopRingtone();
+          setTarget(null);
+          setStatus('idle');
+          return;
+        }
+        if (r?.ring?.id && r.ring.id !== lastVisitorRingIdRef.current && statusRef.current === 'idle') {
+          lastVisitorRingIdRef.current = r.ring.id;
+          // When SIP WebRTC is registered, let the real SIP INVITE trigger the ringing UI so audio never disconnects!
+          if (sipStatusRef.current === 'registered') {
+            pendingCallerMetaRef.current = r.ring;
+            return;
+          }
+          const callerInfo = await lookupCallerOrder(r.ring.phone || '');
+          if (r.ring.name && (callerInfo.name === 'Incoming Caller' || !callerInfo.name)) {
+            callerInfo.name = r.ring.name;
+          }
+          if (r.ring.note) callerInfo.note = r.ring.note;
+          if (statusRef.current === 'idle') {
+            setTarget(callerInfo);
+            setDirection('inbound');
+            setStatus('ringing');
+            setSeconds(0);
+            setMuted(false);
+            setHeld(false);
+            setMinimized(false);
+            setOutcome('confirmed');
+            setNotes('');
+            setSaving(false);
+            setSaveSuccess(false);
+            startRingtone();
+            notifyIncomingCall(callerInfo);
+          }
+        }
+      } catch (_) {}
+    }, 2000);
+    return () => {
+      clearInterval(t);
+      if (ch) { try { ch.close(); } catch (_) {} }
+    };
+  }, [agentDnd]);
+
   if (!target || status === 'idle') {
-    return <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />;
+    const isLive = sipStatus === 'registered';
+    const isConn = sipStatus === 'connecting';
+    return (
+      <>
+        <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
+        <div
+          className={`sa-phone-status ${isLive ? 'is-live' : isConn ? 'is-connecting' : 'is-offline'}`}
+          role={isLive ? 'status' : 'button'}
+          tabIndex={isLive ? undefined : 0}
+          title={isLive ? 'WebPhone অনলাইন — ইনকামিং কল রিসিভ করার জন্য প্রস্তুত' : 'WebPhone স্ট্যাটাস (ক্লিক করে রিকানেক্ট করুন)'}
+          onClick={() => { if (!isLive && !isConn) window.dispatchEvent(new CustomEvent('reload-sip-ua')); }}
+          onKeyDown={(event) => {
+            if (!isLive && !isConn && (event.key === 'Enter' || event.key === ' ')) {
+              event.preventDefault();
+              window.dispatchEvent(new CustomEvent('reload-sip-ua'));
+            }
+          }}
+          style={{
+            position: 'fixed',
+            bottom: 18,
+            right: 194,
+            zIndex: 9990,
+            height: 40,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '0 15px',
+            borderRadius: 999,
+            background: 'rgba(19, 17, 31, 0.9)',
+            backdropFilter: 'blur(12px)',
+            border: `1px solid ${isLive ? 'rgba(16,185,129,0.45)' : isConn ? 'rgba(245,158,11,0.45)' : 'rgba(239,68,68,0.45)'}`,
+            color: isLive ? '#34d399' : isConn ? '#fbbf24' : '#f87171',
+            fontSize: 12.5,
+            fontWeight: 700,
+            cursor: isLive ? 'default' : 'pointer',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: isLive ? '#10b981' : isConn ? '#f59e0b' : '#ef4444' }} />
+          <span>{isLive ? 'Phone Live' : isConn ? 'Phone Connecting...' : 'Phone Offline'}</span>
+          {audioBlocked && <span className="sa-phone-status-audio" style={{ fontSize: 10.5, color: '#fbbf24' }}>🔇 Audio</span>}
+        </div>
+      </>
+    );
   }
 
   const mins = Math.floor(seconds / 60);
@@ -19296,7 +24801,7 @@ function WebCallDialer() {
                 }
               }}
               style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 16 }}
-              title="Close"
+              title={adminTranslate("Close")}
             >
               ✕
             </button>
@@ -19310,8 +24815,13 @@ function WebCallDialer() {
               <div style={{ width: 64, height: 64, borderRadius: '50%', background: status === 'connected' || status === 'ringing' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(139, 92, 246, 0.15)', border: status === 'connected' || status === 'ringing' ? '2px solid #10b981' : '2px solid #8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, margin: '0 auto 12px', animation: status === 'ringing' ? 'pulse 1s infinite' : 'none' }}>
                 {direction === 'inbound' ? '📲' : '👤'}
               </div>
-              <h3 style={{ margin: '0 0 4px', fontSize: 17, fontWeight: 700, color: '#fff' }}>
-                {target.name || 'Customer'}
+              <h3 style={{ margin: '0 0 4px', fontSize: 17, fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span>{target.name || 'Customer'}</span>
+                {target.serialNumber && (
+                  <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 999, background: 'rgba(16, 185, 129, 0.2)', border: '1px solid rgba(16, 185, 129, 0.45)', color: '#6ee7b7' }}>
+                    🎫 Serial #{String(target.serialNumber).padStart(2, '0')}
+                  </span>
+                )}
               </h3>
               <div style={{ fontSize: 14, color: '#38bdf8', fontWeight: 600, marginBottom: 4 }}>
                 {target.phone}
@@ -19323,6 +24833,82 @@ function WebCallDialer() {
               ) : (
                 <div style={{ fontSize: 11, color: '#64748b', marginBottom: 12 }}>
                   {direction === 'inbound' ? 'নতুন কলার (কোনো পূর্ববর্তী অর্ডার পাওয়া যায়নি)' : 'Direct Call'}
+                </div>
+              )}
+
+              {target.note && (
+                <div style={{ fontSize: 11.5, color: '#fde68a', background: 'rgba(245, 158, 11, 0.14)', border: '1px solid rgba(245, 158, 11, 0.35)', padding: '8px 10px', borderRadius: 10, marginBottom: 10, textAlign: 'left', lineHeight: 1.45 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 3 }}>
+                    <span style={{ fontWeight: 800, color: '#fbbf24' }}>📝 সাইকা নোট (Smart Call Center)</span>
+                    {(target as any).tier && (
+                      <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 999, background: 'rgba(56,189,248,0.18)', color: '#38bdf8', fontWeight: 700 }}>
+                        {(target as any).tier}
+                      </span>
+                    )}
+                  </div>
+                  <div>{target.note}</div>
+                  {(target as any).address && (
+                    <div style={{ marginTop: 4, fontSize: 11, color: '#cbd5e1' }}>📍 {(target as any).address}</div>
+                  )}
+                </div>
+              )}
+
+              {/* Smart Call Center Quick Actions */}
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                {target.phone && target.phone !== 'Website Visitor' && target.phone !== 'Guest' && (
+                  <a
+                    href={`https://wa.me/${(() => { const d = String(target.phone).replace(/\D/g, ''); return d.startsWith('0') ? '88' + d : d; })()}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ height: 26, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0 10px', borderRadius: 7, background: 'rgba(37,211,102,0.15)', border: '1px solid rgba(37,211,102,0.35)', color: '#4ade80', fontSize: 11, fontWeight: 700, textDecoration: 'none' }}
+                  >
+                    💬 WhatsApp
+                  </a>
+                )}
+                {target.orderId && (
+                  <button
+                    type="button"
+                    onClick={() => { window.location.href = `/wp-admin?orders&q=${encodeURIComponent(String(target.orderId).replace('DOT-', ''))}`; }}
+                    style={{ height: 26, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0 10px', borderRadius: 7, background: 'rgba(139,92,246,0.18)', border: '1px solid rgba(139,92,246,0.4)', color: '#c4b5fd', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    📦 View Order
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { window.location.href = '/wp-admin?customers'; }}
+                  style={{ height: 26, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0 10px', borderRadius: 7, background: 'rgba(56,189,248,0.14)', border: '1px solid rgba(56,189,248,0.35)', color: '#38bdf8', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  👤 Customers CRM
+                </button>
+              </div>
+
+              {status === 'connected' && (
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {[
+                    { val: 'confirmed', label: '✅ Confirm', bg: 'rgba(16,185,129,0.2)', border: 'rgba(16,185,129,0.5)', color: '#6ee7b7' },
+                    { val: 'call_later', label: '⏰ Call Later', bg: 'rgba(245,158,11,0.2)', border: 'rgba(245,158,11,0.5)', color: '#fcd34d' },
+                    { val: 'cancelled', label: '❌ Cancel', bg: 'rgba(244,63,94,0.2)', border: 'rgba(244,63,94,0.5)', color: '#fda4af' }
+                  ].map((btn) => (
+                    <button
+                      key={btn.val}
+                      type="button"
+                      onClick={() => setOutcome(btn.val as any)}
+                      style={{
+                        height: 24,
+                        padding: '0 9px',
+                        borderRadius: 6,
+                        background: outcome === btn.val ? btn.bg : 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${outcome === btn.val ? btn.border : 'rgba(255,255,255,0.12)'}`,
+                        color: outcome === btn.val ? btn.color : '#cbd5e1',
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {btn.label}
+                    </button>
+                  ))}
                 </div>
               )}
 
@@ -19416,6 +25002,14 @@ function WebCallDialer() {
                       >
                         ⏸️
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setTransferOpen((v) => !v)}
+                        style={{ width: 44, height: 44, borderRadius: '50%', background: transferOpen ? '#6366f1' : 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        title="Transfer call to another agent"
+                      >
+                        🔄
+                      </button>
                     </>
                   )}
                   <button
@@ -19425,6 +25019,31 @@ function WebCallDialer() {
                   >
                     <span>📞 End Call</span>
                   </button>
+                </div>
+              )}
+              {status === 'connected' && transferOpen && (
+                <div style={{ marginTop: 12, padding: 10, borderRadius: 10, background: 'rgba(99, 102, 241, 0.14)', border: '1px solid rgba(99, 102, 241, 0.35)' }}>
+                  <div style={{ fontSize: 11, color: '#c4b5fd', fontWeight: 700, marginBottom: 6 }}>🔄 Transfer Call to Extension:</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+                    {['1001', '1002', '1003', '1004', '1005'].map((ext) => (
+                      <button
+                        key={ext}
+                        type="button"
+                        onClick={() => {
+                          const srv = sipSettingsRef.current?.sipServer || 'timingboost.xyz';
+                          if (rtcSessionRef.current) {
+                            try {
+                              rtcSessionRef.current.refer(`sip:${ext}@${srv}`);
+                              setTransferOpen(false);
+                            } catch (_) {}
+                          }
+                        }}
+                        style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(167, 139, 250, 0.4)', background: 'rgba(139, 92, 246, 0.2)', color: '#ede9fe', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Ext {ext}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -19472,8 +25091,32 @@ function WebCallDialer() {
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="অডিট নোট লিখুন (যেমন: কাস্টমার সাইজ কনফার্ম করেছেন)..."
-                style={{ width: '100%', padding: '8px 10px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 12, boxSizing: 'border-box', marginBottom: 14 }}
+                style={{ width: '100%', padding: '8px 10px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 12, boxSizing: 'border-box', marginBottom: 10 }}
               />
+
+              {target.orderId && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12, padding: '8px 10px', borderRadius: 8, background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.22)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: '#e2e8f0', cursor: 'pointer', fontWeight: 600 }}>
+                    <input
+                      type="checkbox"
+                      checked={syncOrderStatus}
+                      onChange={(e) => setSyncOrderStatus(e.target.checked)}
+                    />
+                    <span>অর্ডার #{String(target.orderId).replace('DOT-', '')} স্ট্যাটাস অটো-আপডেট করুন</span>
+                  </label>
+                  {(outcome === 'call_later' || outcome === 'no_answer') && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap' }}>⏰ Follow-up:</span>
+                      <input
+                        type="datetime-local"
+                        value={followUpAt}
+                        onChange={(e) => setFollowUpAt(e.target.value)}
+                        style={{ flex: 1, padding: '4px 8px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 11 }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               <button
                 type="button"
@@ -19494,6 +25137,14 @@ function WebCallDialer() {
 // ==========================================
 // VOICE AUDIT & CALLS ADMIN VIEW
 // ==========================================
+const getDhakaDateKey = (value: Date | string | number = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(new Date(value));
+  const fields = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${fields.year}-${fields.month}-${fields.day}`;
+};
+
 function CallsAdmin() {
   const [calls, setCalls] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19521,13 +25172,329 @@ function CallsAdmin() {
   const [manualPhone, setManualPhone] = useState('');
   const [manualName, setManualName] = useState('');
   const [sipConn, setSipConn] = useState<{ status: string; ext?: string }>(() => (window as any).__sipStatus || { status: 'simulation', ext: '' });
+  const [wallboard, setWallboard] = useState<{ agents: any[]; summary: any; queue?: any[]; pendingTransfers?: any[] }>({ agents: [], summary: { online: 0, available: 0, onCall: 0, todayTotal: 0, todayMissed: 0 }, queue: [], pendingTransfers: [] });
+  const [transferBusyId, setTransferBusyId] = useState('');
+  const [dnd, setDnd] = useState(() => {
+    try { return localStorage.getItem('cc_agent_dnd') === '1'; } catch (_) { return false; }
+  });
+  const [notifPerm, setNotifPerm] = useState(() => (typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'granted'));
+  const [powerActive, setPowerActive] = useState(false);
+  const [powerQueue, setPowerQueue] = useState<any[]>([]);
+  const [powerIdx, setPowerIdx] = useState(0);
+  const [auditingCallId, setAuditingCallId] = useState<string | null>(null);
+  const [aiSaving, setAiSaving] = useState(false);
+  const [aiDispatchMsg, setAiDispatchMsg] = useState('');
+  const [aiTestOpen, setAiTestOpen] = useState(false);
+  const [aiTestMode, setAiTestMode] = useState<'outbound_confirm' | 'marketing' | 'website_inbound'>('outbound_confirm');
+  const [aiTestPhone, setAiTestPhone] = useState('');
+  const [aiTestCallStatus, setAiTestCallStatus] = useState<'idle' | 'connecting' | 'ringing' | 'connected' | 'ended' | 'error'>('idle');
+  const [aiTestMessages, setAiTestMessages] = useState<{ role: 'ai' | 'user' | 'sys'; text: string }[]>([]);
+  const [aiTestInput, setAiTestInput] = useState('');
+  const [aiTestMuted, setAiTestMuted] = useState(false);
+  const [aiTestSeconds, setAiTestSeconds] = useState(0);
+  const [aiTestVol, setAiTestVol] = useState(0);
+  const aiLiveClientRef = useRef<LiveAiCallClient | null>(null);
+
+  useEffect(() => {
+    if (aiTestCallStatus !== 'connected') return;
+    const t = setInterval(() => setAiTestSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [aiTestCallStatus]);
+
+  useEffect(() => {
+    let timer: number | undefined;
+    const focusSection = (section: string) => {
+      if (section === 'phone_setup') {
+        setSettingsOpen(true);
+        return;
+      }
+      const target = document.getElementById(section === 'records' ? 'calls-records' : 'calls-wallboard');
+      if (!target) return;
+      target.classList.add('sa-nav-focus-pulse');
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => target.classList.remove('sa-nav-focus-pulse'), 2200);
+    };
+    const onNavigate = (event: Event) => focusSection((event as CustomEvent<string>).detail);
+    try {
+      const saved = sessionStorage.getItem('calls_focus_section');
+      if (saved) {
+        sessionStorage.removeItem('calls_focus_section');
+        window.setTimeout(() => focusSection(saved), 80);
+      }
+    } catch {}
+    window.addEventListener('calls-navigate-section', onNavigate);
+    return () => {
+      window.removeEventListener('calls-navigate-section', onNavigate);
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      try { aiLiveClientRef.current?.hangup(); } catch (_) {}
+    };
+  }, []);
+
+  const toggleAiOption = async (key: string, val: any) => {
+    setAiSaving(true);
+    try {
+      const nextAi = { ...(settings.aiCalling || {}), [key]: val };
+      const nextSettings = { ...settings, aiCalling: nextAi };
+      setSettings(nextSettings);
+      await aFetch('/telephony/settings', { method: 'PUT', body: JSON.stringify({ aiCalling: nextAi }) });
+    } catch (_) {
+    } finally {
+      setAiSaving(false);
+    }
+  };
+
+  const runAiAutoDispatch = async () => {
+    setAiDispatchMsg('Pending অর্ডার গোনা হচ্ছে...');
+    try {
+      const r = await aFetch('/ai-call/auto-dispatch', {
+        method: 'POST',
+      }).then((x) => x.json());
+      if (r.skipped) {
+        setAiDispatchMsg('🌙 ' + r.reason);
+      } else {
+        setAiDispatchMsg(`📋 ${r.pendingFound || 0}টি Pending অর্ডার পাওয়া গেছে। স্বয়ংক্রিয় ফোন কল এখনো সংযুক্ত নয়; কল করতে Power Dialer ব্যবহার করুন।`);
+      }
+    } catch (_) {
+      setAiDispatchMsg('❌ Auto-Dispatch ব্যর্থ হয়েছে');
+    }
+  };
+
+  const takeOverAiCall = async (sessionId: string) => {
+    try {
+      const r = await aFetch('/ai-call/' + encodeURIComponent(sessionId) + '/takeover', { method: 'POST' }).then((x) => x.json());
+      if (r.ok) loadWallboard();
+    } catch (_) {}
+  };
+
+  const startAiTestCall = async () => {
+    if (aiLiveClientRef.current) {
+      try { aiLiveClientRef.current.hangup(); } catch (_) {}
+    }
+    setAiTestMessages([]);
+    setAiTestSeconds(0);
+    setAiTestMuted(false);
+    setAiTestVol(0);
+    setAiTestCallStatus('connecting');
+
+    const client = new LiveAiCallClient({
+      onStatus: (st, info) => {
+        setAiTestCallStatus(st);
+        if (st === 'ringing') {
+          setAiTestMessages([{ role: 'sys', text: '📞 রিং হচ্ছে... মাইক্রোফোন অ্যাক্সেস অনুমোদন করুন' }]);
+        } else if (st === 'connected') {
+          const tier = info?.customerTier ? `Tier: ${info.customerTier}` : 'Live AI';
+          const ord = info?.orderId ? ` · Order #${String(info.orderId).replace('DOT-', '')}` : '';
+          setAiTestMessages((prev) => [...prev, { role: 'sys', text: `🟢 লাইভ কল সংযুক্ত (${tier}${ord}) — এখনই কথা বলুন` }]);
+        } else if (st === 'error') {
+          setAiTestMessages((prev) => [...prev, { role: 'sys', text: `⚠️ ${info?.error || 'Live AI কল সংযোগ ব্যর্থ হয়েছে'}` }]);
+        } else if (st === 'ended') {
+          setAiTestMessages((prev) => [...prev, { role: 'sys', text: '📵 কল শেষ হয়েছে ও লগ সেভ হয়েছে' }]);
+          loadData();
+        }
+      },
+      onTranscript: (role, text) => {
+        if (!text) return;
+        setAiTestMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last && last.role === role) {
+            return [...prev.slice(0, -1), { role, text: last.text + text }];
+          }
+          return [...prev, { role, text }];
+        });
+      },
+      onTool: (actions) => {
+        if (actions?.length) {
+          setAiTestMessages((prev) => [...prev, { role: 'sys', text: '⚡ Tool: ' + actions.map((a: any) => a.tool).join(', ') }]);
+          window.dispatchEvent(new CustomEvent('admin-orders-updated'));
+        }
+      },
+      onTransfer: () => {
+        setAiTestMessages((prev) => [...prev, { role: 'sys', text: '🔔 প্রতিনিধির ফলো-আপ অনুরোধ পাঠানো হয়েছে। এই মুহূর্তে লাইভ ফোন ব্রিজ সংযুক্ত নেই।' }]);
+      },
+      onVolume: (lvl) => setAiTestVol(lvl)
+    });
+
+    aiLiveClientRef.current = client;
+    let ticket = '';
+    if (aiTestMode !== 'website_inbound') {
+      const ticketRes = await aFetch('/ai-call/ws-ticket', { method: 'POST', body: '{}' });
+      const ticketData = await ticketRes.json();
+      if (!ticketRes.ok || !ticketData.ticket) {
+        setAiTestCallStatus('error');
+        setAiTestMessages((prev) => [...prev, { role: 'sys', text: 'এই কল মোড চালুর অনুমতি পাওয়া যায়নি। আবার লগইন করে চেষ্টা করুন।' }]);
+        return;
+      }
+      ticket = ticketData.ticket;
+    }
+    await client.start({ mode: aiTestMode, phone: aiTestPhone.trim(), ticket });
+  };
+
+  const sendAiTestTurn = () => {
+    const txt = aiTestInput.trim();
+    if (!txt || !aiLiveClientRef.current) return;
+    setAiTestInput('');
+    setAiTestMessages((prev) => [...prev, { role: 'user', text: txt }]);
+    aiLiveClientRef.current.sendText(txt);
+  };
+
+  const toggleAiTestMute = () => {
+    const next = !aiTestMuted;
+    setAiTestMuted(next);
+    aiLiveClientRef.current?.setMuted(next);
+  };
+
+  const endAiTestCall = async () => {
+    if (aiLiveClientRef.current) {
+      try { aiLiveClientRef.current.hangup(); } catch (_) {}
+      aiLiveClientRef.current = null;
+    }
+    setAiTestCallStatus('idle');
+    setAiTestVol(0);
+    loadData();
+  };
+  const powerStateRef = useRef({ active: false, queue: [] as any[], idx: 0 });
+  useEffect(() => {
+    powerStateRef.current = { active: powerActive, queue: powerQueue, idx: powerIdx };
+  }, [powerActive, powerQueue, powerIdx]);
+
+  const dialPowerOrder = (o: any) => {
+    if (!o || !o.customer?.phone) return;
+    window.dispatchEvent(new CustomEvent('open-admin-ip-call', {
+      detail: {
+        order: o,
+        phone: o.customer.phone,
+        name: o.customer.name || 'Customer',
+        orderId: o.id,
+        product: o.items?.[0]?.name || o.items?.[0]?.title || ''
+      }
+    }));
+  };
+
+  const startPowerDialer = async () => {
+    try {
+      const orders = await aFetch('/orders').then(r => r.json());
+      const pending = Array.isArray(orders) ? orders.filter((o: any) => o.status === 'pending' && o.customer?.phone) : [];
+      if (pending.length === 0) {
+        alert('কোনো Pending অর্ডার পাওয়া যায়নি।');
+        return;
+      }
+      setPowerQueue(pending);
+      setPowerIdx(0);
+      setPowerActive(true);
+      dialPowerOrder(pending[0]);
+    } catch (_) {
+      alert('Power Dialer শুরু করতে সমস্যা হয়েছে');
+    }
+  };
+
+  const stopPowerDialer = () => {
+    setPowerActive(false);
+    setPowerQueue([]);
+    setPowerIdx(0);
+  };
+
+  useEffect(() => {
+    const onNext = () => {
+      const st = powerStateRef.current;
+      if (!st.active) return;
+      const nextIdx = st.idx + 1;
+      if (nextIdx >= st.queue.length) {
+        setPowerActive(false);
+        setPowerQueue([]);
+        setPowerIdx(0);
+        alert('✅ Power Dialer সব Pending অর্ডার সম্পন্ন করেছে!');
+        return;
+      }
+      setPowerIdx(nextIdx);
+      setTimeout(() => dialPowerOrder(st.queue[nextIdx]), 600);
+    };
+    window.addEventListener('power-dialer-next', onNext);
+    return () => window.removeEventListener('power-dialer-next', onNext);
+  }, []);
+
+  const handleRunAiAudit = async (callId: string) => {
+    setAuditingCallId(callId);
+    try {
+      const res = await aFetch('/calls/' + encodeURIComponent(callId) + '/ai-audit', { method: 'POST' });
+      const data = await res.json();
+      if (data && data.aiAudit) {
+        setCalls((prev: any[]) => prev.map((c: any) => (c.id === callId ? { ...c, aiAudit: data.aiAudit } : c)));
+      } else {
+        alert(data?.error || 'AI Audit ব্যর্থ হয়েছে');
+      }
+    } catch (_) {
+      alert('AI Audit চালাতে সমস্যা হয়েছে');
+    } finally {
+      setAuditingCallId(null);
+    }
+  };
+
+  const loadWallboard = () => {
+    aFetch('/call-center/wallboard').then(r => r.json()).then((d) => {
+      if (d && Array.isArray(d.agents)) setWallboard({ ...d, pendingTransfers: Array.isArray(d.pendingTransfers) ? d.pendingTransfers : [] });
+    }).catch(() => {});
+  };
+
+  const updateTransferStatus = async (transfer: any, nextStatus: string) => {
+    if (!transfer?.id) return false;
+    setTransferBusyId(transfer.id);
+    try {
+      const response = await aFetch('/call-center/transfers/' + encodeURIComponent(transfer.id), {
+        method: 'PATCH', body: JSON.stringify({ status: nextStatus }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.error || 'কল অনুরোধ আপডেট করা যায়নি');
+      await loadWallboard();
+      return true;
+    } catch (error: any) {
+      alert(error?.message || 'কল অনুরোধ আপডেট করা যায়নি');
+      return false;
+    } finally {
+      setTransferBusyId('');
+    }
+  };
+
+  const callApprovedTransfer = async (transfer: any) => {
+    if (sipConn.status !== 'registered') {
+      alert('AI callback-টি approve করা আছে, কিন্তু কল দিতে SIP/IPTSP এখনো connected নয়। SIP সেটআপ করে connected হওয়ার পর Call customer চাপুন।');
+      return;
+    }
+    if (!String(transfer.customerPhone || '').replace(/\D/g, '')) {
+      alert('এই কল অনুরোধে গ্রাহকের ফোন নম্বর নেই। আগে নম্বর যাচাই করুন।');
+      return;
+    }
+    const ok = await updateTransferStatus(transfer, 'calling');
+    if (!ok) return;
+    triggerAdminIPCall({
+      phone: transfer.customerPhone,
+      name: transfer.customerName || 'AI Call Follow-up',
+      orderId: transfer.orderId || undefined,
+      product: transfer.productName || undefined,
+      address: transfer.customerAddress || undefined,
+      tier: transfer.customerTier || undefined,
+      note: transfer.note || transfer.reason || undefined,
+      isAiTransfer: true,
+      transferId: transfer.id,
+    });
+  };
 
   useEffect(() => {
     const onSip = (e: any) => {
       if (e.detail) setSipConn(e.detail);
     };
     window.addEventListener('sip-status-changed', onSip);
-    return () => window.removeEventListener('sip-status-changed', onSip);
+    loadWallboard();
+    const wbIv = setInterval(loadWallboard, 8000);
+    return () => {
+      window.removeEventListener('sip-status-changed', onSip);
+      clearInterval(wbIv);
+    };
   }, []);
 
   const loadData = async () => {
@@ -19557,6 +25524,12 @@ function CallsAdmin() {
   useEffect(() => {
     loadData();
   }, [outcomeFilter, staffFilter]);
+
+  useEffect(() => {
+    const onCallsUpdated = () => loadData();
+    window.addEventListener('admin-calls-updated', onCallsUpdated);
+    return () => window.removeEventListener('admin-calls-updated', onCallsUpdated);
+  }, []);
 
   const handleSaveSettings = async () => {
     setSavingSettings(true);
@@ -19598,8 +25571,7 @@ function CallsAdmin() {
       if (!match) return false;
     }
     if (dateFilter === 'today') {
-      const todayStr = new Date().toISOString().slice(0, 10);
-      return (c.createdAt || '').startsWith(todayStr);
+      return c.createdAt && getDhakaDateKey(c.createdAt) === getDhakaDateKey();
     }
     if (dateFilter === '7d') {
       const d7 = Date.now() - 7 * 86400 * 1000;
@@ -19614,25 +25586,51 @@ function CallsAdmin() {
 
   const allStaffNames = Array.from(new Set(calls.map(c => c.staff?.name || c.staff?.username).filter(Boolean)));
 
-  const totalSecs = stats.totalDuration || 0;
-  const hours = Math.floor(totalSecs / 3600);
-  const remainingSecs = totalSecs % 3600;
-  const totalMins = Math.floor(remainingSecs / 60);
-  const talkTimeStr = `${hours > 0 ? hours + 'h ' : ''}${totalMins}m`;
-
-  const confRate = stats.totalCalls > 0 ? Math.round((stats.confirmedCallsCount / stats.totalCalls) * 100) : 0;
+  const missedCount = filteredCalls.filter((c) => ['missed', 'no_answer'].includes(String(c.outcome || '').toLowerCase())).length;
+  const failedCount = filteredCalls.filter((c) => ['failed', 'error', 'cancelled'].includes(String(c.outcome || '').toLowerCase())).length;
+  const inboundCount = filteredCalls.filter((c) => c.direction === 'inbound').length;
+  const outboundCount = filteredCalls.filter((c) => c.direction !== 'inbound').length;
+  const confirmedCount = filteredCalls.filter((c) => String(c.outcome || '').toLowerCase() === 'confirmed').length;
+  const totalSecs = filteredCalls.reduce((sum, c) => sum + Math.max(0, Number(c.duration) || 0), 0);
+  const formatDuration = (seconds: number) => {
+    const s = Math.max(0, Math.floor(seconds || 0));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const rem = s % 60;
+    return `${h ? `${h}h ` : ''}${m}m ${rem}s`;
+  };
+  const talkTimeStr = formatDuration(totalSecs);
+  const avgDuration = filteredCalls.length ? Math.round(totalSecs / filteredCalls.length) : 0;
+  const confRate = filteredCalls.length ? Math.round((confirmedCount / filteredCalls.length) * 100) : 0;
+  const callKpis = [
+    { label: 'Missed calls', value: missedCount, note: 'Missed or no answer', icon: '↙', tone: 'amber' },
+    { label: 'Failed calls', value: failedCount, note: 'Failed, error or cancelled', icon: '×', tone: 'rose' },
+    { label: 'Total calls', value: filteredCalls.length, note: `${dateFilter === 'today' ? 'Today' : dateFilter === '7d' ? 'Last 7 days' : dateFilter === '30d' ? 'Last 30 days' : 'Selected period'}`, icon: '☎', tone: 'violet' },
+    { label: 'Incoming', value: inboundCount, note: 'Inbound calls', icon: '↓', tone: 'blue' },
+    { label: 'Outgoing', value: outboundCount, note: 'Outbound calls', icon: '↑', tone: 'purple' },
+    { label: 'Talk time', value: talkTimeStr, note: `Average ${formatDuration(avgDuration)}`, icon: '◷', tone: 'teal' },
+    { label: 'Confirmed', value: `${confRate}%`, note: `${confirmedCount} confirmed outcomes`, icon: '✓', tone: 'green' },
+  ];
+  const callTrend = Array.from({ length: 7 }, (_, index) => {
+    const day = new Date();
+    day.setDate(day.getDate() - (6 - index));
+    const key = getDhakaDateKey(day);
+    return { key, label: day.toLocaleDateString('en-BD', { timeZone: 'Asia/Dhaka', weekday: 'short' }), count: filteredCalls.filter((c) => c.createdAt && getDhakaDateKey(c.createdAt) === key).length };
+  });
+  const trendMax = Math.max(1, ...callTrend.map((d) => d.count));
+  const trendPoints = callTrend.map((d, i) => `${36 + i * 104},${122 - (d.count / trendMax) * 90}`).join(' ');
 
   return (
-    <div style={{ paddingBottom: 60, fontFamily: "'Hind Siliguri', 'Inter', sans-serif" }}>
+    <div className="cc-page" style={{ paddingBottom: 60, fontFamily: "'Hind Siliguri', 'Inter', sans-serif" }}>
       {/* Top Header */}
-      <div className="sa-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+      <div className="sa-top cc-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, display: 'flex', alignItems: 'center', gap: 10, color: '#f8fafc' }}>
-            <span>📞</span>
-            <span>Voice Audit &amp; Call Center Logs</span>
+            <span className="cc-title-icon">☎</span>
+            <span>Call Center Dashboard</span>
           </h1>
           <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 4 }}>
-            ব্রাউজার আইপি কলিং, স্টাফদের কথা বলার অডিও রেকর্ডিং এবং অর্ডার কোয়ালিটি অডিট।
+            কল অপারেশন, এজেন্ট উপস্থিতি, কাস্টমার ফলো-আপ ও কল রেকর্ড এক জায়গায়।
           </div>
         </div>
 
@@ -19659,9 +25657,45 @@ function CallsAdmin() {
                 ? 'Connecting SIP...'
                 : sipConn.status === 'error'
                 ? 'SIP Auth Error'
-                : 'Test / Simulation Mode'}
+                : 'SIP Disconnected'}
             </span>
           </span>
+          <button
+            type="button"
+            className="sa-btn ghost"
+            onClick={() => {
+              const next = !dnd;
+              setDnd(next);
+              window.dispatchEvent(new CustomEvent('call-center-toggle-dnd', { detail: { dnd: next } }));
+              setTimeout(loadWallboard, 400);
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              borderColor: dnd ? 'rgba(245, 158, 11, 0.5)' : 'rgba(16, 185, 129, 0.45)',
+              color: dnd ? '#fbbf24' : '#34d399',
+              background: dnd ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.08)'
+            }}
+          >
+            <span>{dnd ? '🟡' : '🟢'}</span>
+            <span>{dnd ? 'On Break (DND)' : 'Available'}</span>
+          </button>
+          {notifPerm !== 'granted' && (
+            <button
+              type="button"
+              className="sa-btn ghost"
+              onClick={() => {
+                if ('Notification' in window) {
+                  Notification.requestPermission().then((p) => setNotifPerm(p)).catch(() => {});
+                }
+              }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderColor: 'rgba(245, 158, 11, 0.45)', color: '#fbbf24' }}
+            >
+              <span>🔔</span>
+              <span>Enable Alerts</span>
+            </button>
+          )}
           <button
             type="button"
             className="sa-btn ghost"
@@ -19671,6 +25705,24 @@ function CallsAdmin() {
           >
             <span>📲</span>
             <span>Test Incoming</span>
+          </button>
+          <button
+            type="button"
+            className="sa-btn ghost"
+            onClick={powerActive ? stopPowerDialer : startPowerDialer}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              borderColor: powerActive ? 'rgba(239, 68, 68, 0.5)' : 'rgba(168, 85, 247, 0.5)',
+              color: powerActive ? '#f87171' : '#c084fc',
+              background: powerActive ? 'rgba(239, 68, 68, 0.12)' : 'rgba(168, 85, 247, 0.12)',
+              fontWeight: 700
+            }}
+            title="Pending অর্ডারগুলো একের পর এক অটো-কল করুন"
+          >
+            <span>{powerActive ? '⏹️' : '🚀'}</span>
+            <span>{powerActive ? `Stop Dialer (${powerIdx + 1}/${powerQueue.length})` : 'Start Power Dialer'}</span>
           </button>
           <button
             type="button"
@@ -19693,77 +25745,364 @@ function CallsAdmin() {
         </div>
       </div>
 
+      <div className="cc-hero-banner">
+        <span className="cc-hero-icon">◖</span>
+        <div className="cc-hero-copy">
+          <strong>Call Operations Desk</strong>
+          <span>Live agent status, call outcomes, voice assistant and customer follow-up</span>
+        </div>
+        <span className={`cc-connection-pill ${sipConn.status === 'registered' ? 'online' : sipConn.status === 'error' ? 'error' : 'pending'}`}>
+          <i />{sipConn.status === 'registered' ? 'SIP Connected' : sipConn.status === 'error' ? 'SIP Needs Attention' : 'SIP Disconnected'}
+        </span>
+      </div>
+
+      {/* Live Smart Call Center Wallboard */}
+      <div
+        id="calls-wallboard"
+        className="call-center-wallboard"
+        style={{
+          marginTop: 18,
+          padding: 16,
+          borderRadius: 16,
+          background: 'linear-gradient(135deg, rgba(19, 17, 31, 0.98) 0%, rgba(25, 22, 43, 0.96) 100%)',
+          border: '1px solid rgba(139, 92, 246, 0.24)',
+          boxShadow: '0 12px 30px rgba(0, 0, 0, 0.25)'
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, background: 'rgba(16, 185, 129, 0.16)', border: '1px solid rgba(16, 185, 129, 0.4)', color: '#34d399', fontSize: 11, fontWeight: 800, letterSpacing: '0.04em' }}>
+              <span>●</span> LIVE CALL CENTER
+            </span>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#f8fafc' }}>
+              লাইভ এজেন্ট স্ট্যাটাস · প্রতি ৮ সেকেন্ডে আপডেট
+            </span>
+          </div>
+          <div className="call-center-live-metrics" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 11.5, fontWeight: 700 }}>
+            <span style={{ color: '#f43f5e' }}>🔴 On Call: {wallboard.summary?.onCall || 0}</span>
+            <span style={{ color: '#a78bfa' }}>⏳ Queue: {Array.isArray(wallboard.queue) ? wallboard.queue.length : 0}</span>
+            <span style={{ color: '#38bdf8' }}>📞 Today: {wallboard.summary?.todayTotal || 0}</span>
+            <span style={{ color: '#fbbf24' }}>📵 Missed: {wallboard.summary?.todayMissed || 0}</span>
+          </div>
+        </div>
+
+        <div className="call-center-agent-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(245px, 300px))', justifyContent: 'start', gap: 10 }}>
+          {wallboard.agents.map((ag: any) => {
+            const isAvail = ag.status === 'available';
+            const isOnCall = ag.status === 'on_call';
+            const isDnd = ag.status === 'dnd';
+            const statusColor = isOnCall ? '#f43f5e' : isAvail ? '#10b981' : isDnd ? '#f59e0b' : '#64748b';
+            const statusLabel = isOnCall ? 'On Call' : isAvail ? 'Available' : isDnd ? 'Break / DND' : 'Offline';
+            return (
+              <div className="call-center-agent-card"
+                key={ag.username}
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: 12,
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: `1px solid ${isOnCall ? 'rgba(244, 63, 94, 0.4)' : isAvail ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255, 255, 255, 0.08)'}`,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)', color: '#fff', fontWeight: 800, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {(ag.name || ag.username || 'A').charAt(0).toUpperCase()}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {ag.name || ag.username}
+                      </div>
+                      <div style={{ fontSize: 10.5, color: '#94a3b8', textTransform: 'capitalize' }}>
+                        {ag.role} · <span style={{ color: '#c4b5fd', fontWeight: 700 }}>Ext {ag.ext}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: `${statusColor}22`, color: statusColor, border: `1px solid ${statusColor}55`, whiteSpace: 'nowrap' }}>
+                    {statusLabel}
+                  </span>
+                </div>
+
+                {isOnCall && ag.currentCaller && (
+                  <div style={{ fontSize: 11, color: '#fda4af', background: 'rgba(244, 63, 94, 0.1)', padding: '4px 8px', borderRadius: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    🎙️ {ag.currentCaller}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#94a3b8', paddingTop: 2 }}>
+                  <span>Today: <strong style={{ color: '#e2e8f0' }}>{ag.todayCalls}</strong> calls · <strong style={{ color: '#34d399' }}>{ag.todayConfirmed}</strong> conf.</span>
+                  <button
+                    type="button"
+                    onClick={() => triggerAdminIPCall({ phone: ag.ext, name: `${ag.name || ag.username} (Ext ${ag.ext})` })}
+                    style={{ background: 'rgba(56, 189, 248, 0.14)', border: '1px solid rgba(56, 189, 248, 0.35)', borderRadius: 6, color: '#38bdf8', padding: '2px 8px', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}
+                    title={`Internal call to Ext ${ag.ext}`}
+                  >
+                    📞 Call
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ marginTop: 16, padding: 14, borderRadius: 13, background: 'rgba(56, 189, 248, 0.055)', border: '1px solid rgba(56, 189, 248, 0.22)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+            <div>
+              <strong style={{ color: '#e0f2fe', fontSize: 13 }}>🤖 AI callback approval queue</strong>
+              <div style={{ color: '#94a3b8', fontSize: 11, marginTop: 3 }}>AI থেকে আসা কলের অনুরোধ এখানে অনুমোদন করে গ্রাহককে সরাসরি call দিন। এগুলো live-call bridge নয়—নিরাপদ callback request।</div>
+            </div>
+            <span style={{ borderRadius: 999, padding: '4px 9px', background: 'rgba(56,189,248,.12)', color: '#7dd3fc', fontSize: 11, fontWeight: 800 }}>
+              {(wallboard.pendingTransfers || []).length} open
+            </span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: 9 }}>
+            {(wallboard.pendingTransfers || []).map((transfer: any) => (
+              <article key={transfer.id} style={{ padding: 12, borderRadius: 11, background: 'rgba(14,12,24,.72)', border: `1px solid ${transfer.status === 'pending' ? 'rgba(245,158,11,.35)' : transfer.status === 'calling' ? 'rgba(16,185,129,.35)' : 'rgba(139,92,246,.3)'}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <strong style={{ display: 'block', color: '#f8fafc', fontSize: 13 }}>{transfer.customerName || 'Website Visitor'}</strong>
+                    <span style={{ display: 'block', color: '#7dd3fc', fontSize: 12, marginTop: 2 }}>{transfer.customerPhone || 'ফোন নম্বর নেই'}</span>
+                  </div>
+                  <span style={{ flexShrink: 0, color: transfer.status === 'pending' ? '#fbbf24' : transfer.status === 'calling' ? '#34d399' : '#c4b5fd', fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>
+                    {transfer.status === 'pending' ? 'Approval needed' : transfer.status === 'calling' ? 'Calling' : 'Approved'}
+                  </span>
+                </div>
+                {transfer.orderId && <div style={{ color: '#c4b5fd', fontSize: 11, marginTop: 5 }}>Order #{String(transfer.orderId).replace('DOT-', '')}{transfer.productName ? ` · ${transfer.productName}` : ''}</div>}
+                <div style={{ color: '#cbd5e1', fontSize: 11, lineHeight: 1.5, marginTop: 7, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{transfer.note || transfer.reason || 'গ্রাহক মানব প্রতিনিধির সাথে কথা বলতে চেয়েছেন।'}</div>
+                <div style={{ color: '#64748b', fontSize: 10, marginTop: 7 }}>{transfer.assignedName ? `Assigned: ${transfer.assignedName} · ` : ''}{transfer.createdAt ? new Date(transfer.createdAt).toLocaleString('en-BD', { timeZone: 'Asia/Dhaka' }) : ''}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 10 }}>
+                  {transfer.status === 'pending' && <>
+                    <button type="button" className="sa-btn" disabled={transferBusyId === transfer.id} onClick={() => updateTransferStatus(transfer, 'approved')}>{transferBusyId === transfer.id ? 'Saving…' : '✓ Approve'}</button>
+                    <button type="button" className="sa-btn ghost" disabled={transferBusyId === transfer.id} onClick={() => updateTransferStatus(transfer, 'rejected')}>Decline</button>
+                  </>}
+                  {transfer.status === 'approved' && <button type="button" className="sa-btn" disabled={transferBusyId === transfer.id || !transfer.customerPhone} onClick={() => callApprovedTransfer(transfer)}>📞 Call customer</button>}
+                  {transfer.status === 'calling' && <button type="button" className="sa-btn ghost" disabled={transferBusyId === transfer.id} onClick={() => updateTransferStatus(transfer, 'completed')}>✓ Mark callback complete</button>}
+                </div>
+              </article>
+            ))}
+            {!(wallboard.pendingTransfers || []).length && <div style={{ color: '#64748b', fontSize: 11.5, padding: '9px 2px' }}>এখনো কোনো AI callback approval বাকি নেই।</div>}
+          </div>
+        </div>
+
+        {Array.isArray((wallboard as any).queue) && (wallboard as any).queue.length > 0 && (
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#c4b5fd', marginBottom: 8 }}>
+              ⏳ Waiting Queue ({(wallboard as any).queue.length})
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {(wallboard as any).queue.map((q: any) => (
+                <div key={q.id || q.serialNumber} style={{ padding: '6px 10px', borderRadius: 10, background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.35)', fontSize: 11.5, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 800, color: '#6ee7b7' }}>#{String(q.serialNumber || 1).padStart(2, '0')}</span>
+                  <span style={{ fontWeight: 700 }}>{q.name || 'Visitor'}</span>
+                  {q.phone && <span style={{ color: '#38bdf8' }}>{q.phone}</span>}
+                  {q.dept && <span style={{ fontSize: 10, color: '#cbd5e1', background: 'rgba(255,255,255,0.06)', padding: '1px 6px', borderRadius: 999 }}>{q.dept}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Smart AI Calling Control Center */}
+      {(() => {
+        const ai = settings.aiCalling || {};
+        const toggles = [
+          { key: 'enabled', label: '🤖 AI Calling চালু', desc: 'সিস্টেম অ্যাক্টিভ রাখুন', on: ai.enabled !== false },
+          { key: 'marketingModeEnabled', label: '📣 Marketing & New Order', desc: 'অফার ও কলের ভেতর নতুন অর্ডার', on: ai.marketingModeEnabled !== false },
+          { key: 'websiteInboundAi', label: '🌐 Website Inbound AI', desc: 'সাইটের কলে AI আগে কথা বলবে', on: ai.websiteInboundAi !== false }
+        ];
+        return (
+          <div className="call-center-ai-panel" style={{ marginTop: 16, padding: 18, borderRadius: 16, background: 'linear-gradient(135deg, rgba(17, 24, 39, 0.96) 0%, rgba(28, 25, 55, 0.94) 100%)', border: '1px solid rgba(56, 189, 248, 0.22)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 14.5, fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>🧠 Smart AI Voice Agent Control Center</span>
+                  {aiSaving && <span style={{ fontSize: 11, color: '#38bdf8' }}>Saving...</span>}
+                </div>
+                <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
+                  ইনকামিং ওয়েব কল ও অ্যাডমিনের ভয়েস টেস্ট এখানে চালু/বন্ধ করতে পারবেন। স্বয়ংক্রিয় আউটবাউন্ড কল এখনো টেলিফোনি কিউয়ের সঙ্গে যুক্ত নয়।
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <select
+                  value={ai.voiceEngine || 'gemini_browser'}
+                  onChange={(e) => toggleAiOption('voiceEngine', e.target.value)}
+                  style={{ padding: '7px 10px', borderRadius: 8, background: '#0e0c18', color: '#e2e8f0', border: '1px solid rgba(56, 189, 248, 0.35)', fontSize: 12, fontWeight: 600 }}
+                >
+                  <option value="gemini_browser">🎙️ Gemini Smart Bengali (Free)</option>
+                  <option value="elevenlabs">✨ ElevenLabs Natural Voice</option>
+                </select>
+                <button
+                  type="button"
+                  className="sa-btn ghost"
+                  onClick={runAiAutoDispatch}
+                  style={{ borderColor: 'rgba(16, 185, 129, 0.45)', color: '#34d399', fontSize: 12, fontWeight: 700 }}
+                >
+                  📋 Check Pending Orders
+                </button>
+                {aiDispatchMsg && <span style={{ maxWidth: 330, fontSize: 11.5, color: '#94a3b8' }}>{aiDispatchMsg}</span>}
+                <button
+                  type="button"
+                  className="sa-btn primary"
+                  onClick={() => setAiTestOpen(true)}
+                  style={{ background: 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)', border: 'none', fontSize: 12, fontWeight: 700 }}
+                >
+                  🎙️ Test AI Voice Call
+                </button>
+                <select
+                  value={ai.voiceName || 'Aoede'}
+                  onChange={(e) => toggleAiOption('voiceName', e.target.value)}
+                  title="Saika Voice Style"
+                  style={{ width: 'auto', height: 34, padding: '0 10px', borderRadius: 8, border: '1px solid rgba(168, 85, 247, 0.45)', background: '#13111f', color: '#e9d5ff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  <option value="Aoede">🎙️ Voice: Aoede (Warm)</option>
+                  <option value="Kore">🎙️ Voice: Kore (Soft)</option>
+                  <option value="Leda">🎙️ Voice: Leda (Youthful)</option>
+                  <option value="Zephyr">🎙️ Voice: Zephyr (Bright)</option>
+                  <option value="Puck">🎙️ Voice: Puck (Casual)</option>
+                </select>
+              </div>
+            </div>
+
+            {aiDispatchMsg && (
+              <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.3)', color: '#bae6fd', fontSize: 12 }}>
+                {aiDispatchMsg}
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 10 }}>
+              {toggles.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => toggleAiOption(t.key, !t.on)}
+                  style={{
+                    textAlign: 'left',
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    cursor: 'pointer',
+                    background: t.on ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                    border: t.on ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 8
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: t.on ? '#ecfdf5' : '#94a3b8' }}>{t.label}</div>
+                    <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>{t.desc}</div>
+                  </div>
+                  <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 999, background: t.on ? '#10b981' : '#334155', color: '#fff' }}>
+                    {t.on ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {Array.isArray((wallboard as any).aiCalls) && (wallboard as any).aiCalls.length > 0 && (
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8', marginBottom: 8 }}>
+                  🔊 Live AI Calls ({(wallboard as any).aiCalls.length})
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {(wallboard as any).aiCalls.map((ac: any) => (
+                    <div key={ac.sessionId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)' }}>
+                      <div style={{ fontSize: 12, color: '#e2e8f0' }}>
+                        <strong>{ac.customerName}</strong> ({ac.customerPhone}) · <span style={{ color: '#a78bfa' }}>{ac.mode}</span> · <span style={{ color: '#fbbf24' }}>{ac.customerTier}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => takeOverAiCall(ac.sessionId)}
+                        disabled={!!ac.takeOverBy}
+                        style={{ padding: '5px 12px', borderRadius: 8, border: 'none', background: ac.takeOverBy ? '#475569' : '#f43f5e', color: '#fff', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        {ac.takeOverBy ? `Follow-up requested by ${ac.takeOverBy}` : '🙋 Request Human Follow-up'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* KPI Stats Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, margin: '20px 0' }}>
-        <div style={{ padding: 18, background: '#13111f', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
-          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
-            <span>মোট সম্পন্ন কল</span>
-            <span style={{ color: '#38bdf8' }}>📞</span>
+      <div className="call-center-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, margin: '18px 0' }}>
+        {callKpis.map((metric) => (
+          <div key={metric.label} className={`call-center-kpi cc-kpi cc-kpi-${metric.tone}`}>
+            <div className="cc-kpi-head"><span>{metric.label}</span><i>{metric.icon}</i></div>
+            <strong>{metric.value}</strong>
+            <small>{metric.note}</small>
           </div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', marginTop: 6 }}>
-            {stats.totalCalls}
-          </div>
-          <div style={{ fontSize: 11, color: '#10b981', marginTop: 4, fontWeight: 600 }}>
-            আজকে: {stats.todayCallsCount} টি কল
-          </div>
-        </div>
+        ))}
+      </div>
 
-        <div style={{ padding: 18, background: '#13111f', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
-          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
-            <span>মোট কথা বলার সময়</span>
-            <span style={{ color: '#a78bfa' }}>⏱️</span>
+      <div className="cc-insights-grid">
+        <section className="sa-card cc-insight-card cc-trend-card">
+          <div className="cc-insight-heading">
+            <div><span className="cc-section-eyebrow">CALL ACTIVITY</span><h2>কলের প্রবাহ</h2></div>
+            <span className="cc-insight-range">শেষ ৭ দিন · ঢাকা সময়</span>
           </div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#a78bfa', marginTop: 6 }}>
-            {talkTimeStr || '0m'}
-          </div>
-          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-            গড় কল: {Math.floor((stats.avgDuration || 0) / 60)}m {(stats.avgDuration || 0) % 60}s
-          </div>
-        </div>
-
-        <div style={{ padding: 18, background: '#13111f', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
-          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
-            <span>কল কনভার্সন রেট</span>
-            <span style={{ color: '#10b981' }}>🎯</span>
-          </div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#10b981', marginTop: 6 }}>
-            {confRate}%
-          </div>
-          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-            {stats.confirmedCallsCount} টি অর্ডার কনফার্মড
-          </div>
-        </div>
-
-        <div style={{ padding: 18, background: '#13111f', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)' }}>
-          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
-            <span>অডিও ব্যাকআপ পলিসি</span>
-            <span style={{ color: '#fbbf24' }}>🛡️</span>
-          </div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: '#fbbf24', marginTop: 6 }}>
-            {settings.retentionDays || 30} Days
-          </div>
-          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-            অটো ক্লিনআপ চালু (ডিস্ক সেফ)
-          </div>
-        </div>
+          <svg className="cc-trend-chart" viewBox="0 0 696 158" role="img" aria-label="Last seven days call activity chart">
+            {[30, 70, 110, 150].map((y) => <line key={y} x1="30" x2="666" y1={y} y2={y} />)}
+            <polyline points={trendPoints} />
+            {callTrend.map((d, i) => {
+              const x = 36 + i * 104;
+              const y = 122 - (d.count / trendMax) * 90;
+              return <g key={d.key}><circle cx={x} cy={y} r="4" /><text x={x} y="151" textAnchor="middle">{d.label}</text></g>;
+            })}
+          </svg>
+          <div className="cc-trend-summary"><span>এই সময়ের মোট কল</span><strong>{callTrend.reduce((sum, d) => sum + d.count, 0)}</strong></div>
+        </section>
+        <section className="sa-card cc-insight-card cc-outcome-card">
+          <div className="cc-insight-heading"><div><span className="cc-section-eyebrow">OUTCOME OVERVIEW</span><h2>কলের ফলাফল</h2></div></div>
+          {[
+            { label: 'Confirmed', count: confirmedCount, tone: 'green' },
+            { label: 'Missed / No answer', count: missedCount, tone: 'amber' },
+            { label: 'Failed / Cancelled', count: failedCount, tone: 'rose' },
+            { label: 'Call later', count: filteredCalls.filter((c) => c.outcome === 'call_later').length, tone: 'violet' },
+          ].map((item) => {
+            const percent = filteredCalls.length ? Math.round((item.count / filteredCalls.length) * 100) : 0;
+            return <div className={`cc-outcome-row ${item.tone}`} key={item.label}>
+              <div><span>{item.label}</span><strong>{item.count}</strong></div>
+              <div className="cc-outcome-track"><i style={{ width: `${percent}%` }} /></div>
+            </div>;
+          })}
+        </section>
       </div>
 
       {/* Filter Toolbar */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="ফোন নম্বর, কাস্টমার, অর্ডার বা স্টাফ খুঁজুন..."
-          style={{ flex: 1, minWidth: 240, padding: '9px 14px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, fontSize: 13 }}
-        />
+      <div className="call-center-filter-bar" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16, padding: '12px 14px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12 }}>
+        <div style={{ display: 'flex', flex: '1 1 260px', gap: 8, alignItems: 'center' }}>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') loadData(); }}
+            placeholder="ফোন নম্বর, কাস্টমার, অর্ডার বা স্টাফ খুঁজুন..."
+            style={{ flex: 1, minWidth: 180, height: 38, padding: '0 14px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 9, fontSize: 13 }}
+          />
+          <button
+            type="button"
+            className="sa-btn primary"
+            onClick={loadData}
+            style={{ height: 38, padding: '0 16px', borderRadius: 9, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            🔍 Search
+          </button>
+        </div>
 
         <select
           value={outcomeFilter}
           onChange={(e) => setOutcomeFilter(e.target.value)}
-          style={{ padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, fontSize: 13 }}
+          style={{ width: 'auto', minWidth: 175, height: 38, padding: '0 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 9, fontSize: 12.5, fontWeight: 600 }}
         >
           <option value="all">সকল ফলাফল (All Outcomes)</option>
           <option value="confirmed">✅ Confirmed</option>
+          <option value="missed">📵 Missed</option>
           <option value="call_later">⏰ Call Later</option>
           <option value="no_answer">⚠️ No Answer</option>
           <option value="cancelled">❌ Cancelled</option>
@@ -19772,7 +26111,7 @@ function CallsAdmin() {
         <select
           value={staffFilter}
           onChange={(e) => setStaffFilter(e.target.value)}
-          style={{ padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, fontSize: 13 }}
+          style={{ width: 'auto', minWidth: 165, height: 38, padding: '0 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 9, fontSize: 12.5, fontWeight: 600 }}
         >
           <option value="all">সকল স্টাফ (All Staff)</option>
           {allStaffNames.map(s => <option key={s} value={s}>{s}</option>)}
@@ -19781,7 +26120,7 @@ function CallsAdmin() {
         <select
           value={dateFilter}
           onChange={(e) => setDateFilter(e.target.value)}
-          style={{ padding: '9px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, fontSize: 13 }}
+          style={{ width: 'auto', minWidth: 155, height: 38, padding: '0 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 9, fontSize: 12.5, fontWeight: 600 }}
         >
           <option value="all">সব সময় (All Time)</option>
           <option value="today">আজকে (Today)</option>
@@ -19793,7 +26132,7 @@ function CallsAdmin() {
           type="button"
           className="sa-btn ghost"
           onClick={loadData}
-          style={{ padding: '8px 12px', fontSize: 13 }}
+          style={{ width: 38, height: 38, padding: 0, borderRadius: 9, fontSize: 15, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
           title="Refresh"
         >
           🔄
@@ -19801,8 +26140,12 @@ function CallsAdmin() {
       </div>
 
       {/* Calls Table */}
-      <div className="sa-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table className="sa-table" style={{ width: '100%' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '0 2px 9px', color: '#94a3b8', fontSize: 12 }}>
+        <span>দেখানো হচ্ছে <strong style={{ color: '#e2e8f0' }}>{filteredCalls.length}</strong> / {calls.length}টি কল রেকর্ড</span>
+        <span>{dateFilter === 'today' ? 'আজ · ঢাকা সময়' : dateFilter === '7d' ? 'গত ৭ দিন' : dateFilter === '30d' ? 'গত ৩০ দিন' : 'সব সময়'}</span>
+      </div>
+      <div id="calls-records" className="sa-card call-center-table-wrap" style={{ padding: 0, overflowX: 'auto' }}>
+        <table className="sa-table call-center-table" style={{ width: '100%', minWidth: 1420 }}>
           <thead>
             <tr>
               <th style={{ width: 140 }}>তারিখ ও সময়</th>
@@ -19812,7 +26155,7 @@ function CallsAdmin() {
               <th style={{ width: 90 }}>স্থিতিকাল</th>
               <th style={{ width: 120 }}>ফলাফল</th>
               <th style={{ minWidth: 260 }}>অডিও রেকর্ডিং (Audio Player)</th>
-              <th>নোট</th>
+              <th style={{ minWidth: 210 }}>AI অডিট ও নোট</th>
               <th className="r" style={{ width: 60 }}>অ্যাকশন</th>
             </tr>
           </thead>
@@ -19844,16 +26187,36 @@ function CallsAdmin() {
                         {c.direction === 'inbound' ? '📥 In' : '📤 Out'}
                       </span>
                     </div>
-                    <div style={{ fontSize: 12, color: '#38bdf8', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ fontSize: 12, color: '#38bdf8', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 3 }}>
                       <span>{c.customerPhone}</span>
-                      <button
-                        type="button"
-                        onClick={() => triggerAdminIPCall({ phone: c.customerPhone, name: c.customerName, orderId: c.orderId })}
-                        style={{ background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: 0, fontSize: 11 }}
-                        title="Re-dial"
-                      >
-                        📞
-                      </button>
+                      {c.customerPhone && c.customerPhone !== 'Guest' && c.customerPhone !== 'Website Visitor' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => triggerAdminIPCall({ phone: c.customerPhone, name: c.customerName, orderId: c.orderId })}
+                            style={{ height: 24, display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(56, 189, 248, 0.14)', border: '1px solid rgba(56, 189, 248, 0.35)', borderRadius: 6, color: '#38bdf8', cursor: 'pointer', padding: '0 9px', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}
+                            title="Call Back via Softphone"
+                          >
+                            📞 Call Back
+                          </button>
+                          <a
+                            href={`tel:${String(c.customerPhone).replace(/[^0-9+]/g, '')}`}
+                            style={{ height: 24, display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(16, 185, 129, 0.14)', border: '1px solid rgba(16, 185, 129, 0.32)', borderRadius: 6, color: '#34d399', textDecoration: 'none', padding: '0 9px', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}
+                            title="Dial via Phone"
+                          >
+                            📱 Tel
+                          </a>
+                          <a
+                            href={`https://wa.me/${(() => { const d = String(c.customerPhone).replace(/\D/g, ''); return d.startsWith('0') ? '88' + d : d; })()}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ height: 24, display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(37, 211, 102, 0.14)', border: '1px solid rgba(37, 211, 102, 0.32)', borderRadius: 6, color: '#4ade80', textDecoration: 'none', padding: '0 9px', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}
+                            title="Call / Message on WhatsApp"
+                          >
+                            💬 WA
+                          </a>
+                        </>
+                      )}
                     </div>
                   </td>
                   <td>
@@ -19870,16 +26233,21 @@ function CallsAdmin() {
                   <td>
                     <span
                       style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        whiteSpace: 'nowrap',
+                        height: 26,
                         fontSize: 11,
-                        padding: '3px 8px',
+                        padding: '0 11px',
                         borderRadius: 999,
                         fontWeight: 700,
-                        background: c.outcome === 'confirmed' ? 'rgba(16, 185, 129, 0.15)' : c.outcome === 'cancelled' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                        color: c.outcome === 'confirmed' ? '#34d399' : c.outcome === 'cancelled' ? '#f87171' : '#fbbf24',
-                        border: `1px solid ${c.outcome === 'confirmed' ? 'rgba(16, 185, 129, 0.3)' : c.outcome === 'cancelled' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`
+                        background: c.outcome === 'confirmed' ? 'rgba(16, 185, 129, 0.15)' : (c.outcome === 'cancelled' || c.outcome === 'missed') ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                        color: c.outcome === 'confirmed' ? '#34d399' : (c.outcome === 'cancelled' || c.outcome === 'missed') ? '#f87171' : '#fbbf24',
+                        border: `1px solid ${c.outcome === 'confirmed' ? 'rgba(16, 185, 129, 0.35)' : (c.outcome === 'cancelled' || c.outcome === 'missed') ? 'rgba(239, 68, 68, 0.35)' : 'rgba(245, 158, 11, 0.35)'}`
                       }}
                     >
-                      {c.outcome === 'confirmed' ? '✅ Confirmed' : c.outcome === 'cancelled' ? '❌ Cancelled' : c.outcome === 'call_later' ? '⏰ Call Later' : c.outcome === 'no_answer' ? '⚠️ No Answer' : c.outcome || 'Completed'}
+                      {c.outcome === 'confirmed' ? '✅ Confirmed' : c.outcome === 'cancelled' ? '❌ Cancelled' : c.outcome === 'missed' ? '📵 Missed' : c.outcome === 'call_later' ? '⏰ Call Later' : c.outcome === 'no_answer' ? '⚠️ No Answer' : c.outcome || 'Completed'}
                     </span>
                   </td>
                   <td>
@@ -19889,17 +26257,16 @@ function CallsAdmin() {
                           src={c.recordingUrl}
                           controls
                           preload="none"
-                          style={{ width: '100%', height: 32, borderRadius: 6 }}
+                          style={{ width: '100%', minWidth: 150, height: 32, borderRadius: 6, colorScheme: 'dark' }}
                         />
                         <a
                           href={c.recordingUrl}
-                          download
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{ padding: '4px 8px', background: 'rgba(255,255,255,0.06)', borderRadius: 5, color: '#38bdf8', textDecoration: 'none', fontSize: 11, fontWeight: 600 }}
+                          download={`call_${String(c.customerPhone || c.id || 'recording').replace(/[^a-zA-Z0-9_-]/g, '')}.${String(c.recordingUrl).endsWith('.wav') ? 'wav' : 'webm'}`}
+                          style={{ height: 32, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '0 11px', background: 'rgba(56, 189, 248, 0.14)', border: '1px solid rgba(56, 189, 248, 0.35)', borderRadius: 8, color: '#38bdf8', textDecoration: 'none', fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}
                           title="Download audio recording"
                         >
-                          📥
+                          <span>⬇</span>
+                          <span>{adminTranslate("Download")}</span>
                         </a>
                       </div>
                     ) : (
@@ -19908,15 +26275,49 @@ function CallsAdmin() {
                       </span>
                     )}
                   </td>
-                  <td style={{ fontSize: 11.5, color: '#cbd5e1', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.notes}>
-                    {c.notes || '—'}
+                  <td style={{ fontSize: 11.5, color: '#cbd5e1', maxWidth: 240 }}>
+                    {c.aiAudit ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ padding: '1px 7px', borderRadius: 999, fontSize: 10.5, fontWeight: 800, background: (c.aiAudit.score || 0) >= 8 ? 'rgba(16, 185, 129, 0.18)' : (c.aiAudit.score || 0) >= 5 ? 'rgba(245, 158, 11, 0.18)' : 'rgba(239, 68, 68, 0.18)', color: (c.aiAudit.score || 0) >= 8 ? '#34d399' : (c.aiAudit.score || 0) >= 5 ? '#fbbf24' : '#f87171' }}>
+                            🤖 {c.aiAudit.score}/10
+                          </span>
+                          {c.aiAudit.customerMood && (
+                            <span style={{ fontSize: 10, color: '#94a3b8' }}>({c.aiAudit.customerMood})</span>
+                          )}
+                        </div>
+                        {c.aiAudit.summary && (
+                          <div style={{ fontSize: 11, color: '#e2e8f0', lineHeight: 1.35 }}>{c.aiAudit.summary}</div>
+                        )}
+                        {c.aiAudit.coachingTip && (
+                          <div style={{ fontSize: 10.5, color: '#a78bfa' }}>💡 {c.aiAudit.coachingTip}</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {c.notes && (
+                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.notes}>
+                            {c.notes}
+                          </div>
+                        )}
+                        {c.recordingUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => handleRunAiAudit(c.id)}
+                            disabled={auditingCallId === c.id}
+                            style={{ alignSelf: 'flex-start', height: 26, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '0 10px', borderRadius: 7, border: '1px solid rgba(168, 85, 247, 0.45)', background: 'rgba(168, 85, 247, 0.16)', color: '#d8b4fe', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            {auditingCallId === c.id ? '⏳ Analyzing...' : '🤖 AI Audit'}
+                          </button>
+                        ) : (!c.notes && <span style={{ color: '#64748b' }}>—</span>)}
+                      </div>
+                    )}
                   </td>
                   <td className="r">
                     <button
                       type="button"
-                      className="sa-link danger"
                       onClick={() => handleDeleteCall(c.id)}
-                      style={{ fontSize: 12 }}
+                      style={{ width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, border: '1px solid rgba(239, 68, 68, 0.25)', background: 'rgba(239, 68, 68, 0.1)', color: '#f87171', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
                       title="Delete log"
                     >
                       ✕
@@ -20005,7 +26406,7 @@ function CallsAdmin() {
             )}
 
             <div style={{ background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, lineHeight: 1.5, color: '#bae6fd' }}>
-              💡 <b>IPTSP বা SIP API কানেকশন গাইড:</b> আপনার IPTSP অপারেটর (যেমন: Amber IT, Brilliant Cloud, BDCOM) থেকে পাওয়া <b>Caller ID</b>, <b>SIP Server IP</b>, <b>Extension/Username</b> ও <b>Password</b> এখানে ইনপুট করে সেভ করুন। প্রোভাইডারের WebRTC সাপোর্ট থাকলে <b>WSS Gateway URL</b> দিন।
+              💡 <b>IPTSP বা SIP API কানেকশন গাইড:</b> আপনার IPTSP অপারেটর (যেমন: Amber IT, Brilliant Cloud, BDCOM) থেকে পাওয়া <b>Caller ID</b>, <b>SIP Server IP</b>, <b>Extension/Username</b> ও <b>{adminTranslate("Password")}</b> এখানে ইনপুট করে সেভ করুন। প্রোভাইডারের WebRTC সাপোর্ট থাকলে <b>WSS Gateway URL</b> দিন।
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, marginBottom: 16 }}>
@@ -20092,6 +26493,77 @@ function CallsAdmin() {
                   </span>
                 </div>
               </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>ElevenLabs API Key (ঐচ্ছিক - ন্যাচারাল ভয়েস)</label>
+                <input
+                  type="password"
+                  value={settings.aiCalling?.elevenLabsKey || ''}
+                  onChange={(e) => setSettings({ ...settings, aiCalling: { ...(settings.aiCalling || {}), elevenLabsKey: e.target.value } })}
+                  placeholder="sk_..."
+                  style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>ElevenLabs Voice ID</label>
+                <input
+                  value={settings.aiCalling?.elevenLabsVoiceId || ''}
+                  onChange={(e) => setSettings({ ...settings, aiCalling: { ...(settings.aiCalling || {}), elevenLabsVoiceId: e.target.value } })}
+                  placeholder="pNInz6obpgDQGcFmaJgB"
+                  style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
+                />
+              </div>
+
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
+                  Gemini API Key (AI Calling &amp; Call Audit-এর জন্য) {settings.hasGeminiKey ? <span style={{ color: '#34d399' }}>· ✅ সেট করা আছে</span> : <span style={{ color: '#f87171' }}>· ⚠️ সেট করা নেই</span>}
+                </label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="password"
+                    value={settings.geminiApiKey || ''}
+                    onChange={(e) => setSettings({ ...settings, geminiApiKey: e.target.value })}
+                    placeholder="নতুন Gemini API Key (AIzaSy...) এখানে পেস্ট করুন"
+                    style={{ flex: 1, padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(56, 189, 248, 0.35)', borderRadius: 6, fontSize: 13 }}
+                  />
+                  <button
+                    type="button"
+                    className="sa-btn ghost"
+                    onClick={async () => {
+                      setSettingsMsg('🔍 Gemini API Key টেস্ট করা হচ্ছে...');
+                      try {
+                        const r = await aFetch('/ai-call/test-key', {
+                          method: 'POST',
+                          body: JSON.stringify({ geminiApiKey: settings.geminiApiKey || '' })
+                        }).then((x) => x.json());
+                        if (r.ok) {
+                          setSettingsMsg(r.message || '✅ Gemini API Key কাজ করছে!');
+                          setSettings((s: any) => ({ ...s, hasGeminiKey: true }));
+                        } else {
+                          setSettingsMsg('❌ Google Key Error: ' + (r.error || 'Invalid key'));
+                        }
+                      } catch (e: any) {
+                        setSettingsMsg('❌ Test failed: ' + e.message);
+                      }
+                    }}
+                    style={{ whiteSpace: 'nowrap', borderColor: 'rgba(56, 189, 248, 0.45)', color: '#38bdf8', fontWeight: 700, fontSize: 12 }}
+                  >
+                    🔍 Test &amp; Save Key
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>কাস্টম AI আচরণ / স্ক্রিপ্ট নির্দেশনা (ঐচ্ছিক)</label>
+                <textarea
+                  rows={2}
+                  value={settings.aiCalling?.aiPersonaPrompt || ''}
+                  onChange={(e) => setSettings({ ...settings, aiCalling: { ...(settings.aiCalling || {}), aiPersonaPrompt: e.target.value } })}
+                  placeholder="যেমন: প্রতিটি অর্ডারে ডেলিভারি চার্জ ও ব্যবহারের নিয়ম সংক্ষেপে বলবে..."
+                  style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 12.5, boxSizing: 'border-box' }}
+                />
+              </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 14 }}>
@@ -20106,6 +26578,166 @@ function CallsAdmin() {
                 {savingSettings ? 'সেভ হচ্ছে...' : '💾 সেটিংস সংরক্ষণ করুন'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* AI Voice Call Test Simulator Modal */}
+      {aiTestOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#13111f', borderRadius: 16, border: '1px solid rgba(56, 189, 248, 0.4)', padding: 20, width: 'min(520px, 95%)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 10 }}>
+              <h3 style={{ margin: 0, fontSize: 16, color: '#fff' }}>🎙️ Smart AI Voice Call Simulator</h3>
+              <button type="button" onClick={() => { endAiTestCall(); setAiTestOpen(false); }} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 16, cursor: 'pointer' }}>✕</button>
+            </div>
+
+            {aiTestCallStatus === 'idle' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                  {[
+                    { id: 'outbound_confirm', label: '✅ Order Confirm' },
+                    { id: 'marketing', label: '📣 Marketing' },
+                    { id: 'website_inbound', label: '🌐 Website Inbound' }
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setAiTestMode(m.id as any)}
+                      style={{
+                        padding: '9px 6px',
+                        borderRadius: 8,
+                        fontSize: 11.5,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        border: aiTestMode === m.id ? '1.5px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                        background: aiTestMode === m.id ? 'rgba(56, 189, 248, 0.16)' : 'rgba(255,255,255,0.03)',
+                        color: aiTestMode === m.id ? '#38bdf8' : '#cbd5e1'
+                      }}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  value={aiTestPhone}
+                  onChange={(e) => setAiTestPhone(e.target.value)}
+                  placeholder="কাস্টমার ফোন নম্বর (অর্ডার ও ঠিকানা চেকের জন্য, ঐচ্ছিক)"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', fontSize: 13, boxSizing: 'border-box' }}
+                />
+                <button
+                  type="button"
+                  onClick={startAiTestCall}
+                  style={{ padding: '11px 16px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}
+                >
+                  📞 Start Live AI Call Test
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Real-time Phone Call Status Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: 12, background: 'linear-gradient(135deg, rgba(16,185,129,0.14), rgba(56,189,248,0.10))', border: '1px solid rgba(16,185,129,0.3)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: '50%',
+                      background: aiTestCallStatus === 'connected' ? '#10b981' : aiTestCallStatus === 'error' ? '#ef4444' : '#f59e0b',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 20,
+                      boxShadow: `0 0 ${Math.round(8 + aiTestVol * 24)}px ${aiTestCallStatus === 'connected' ? 'rgba(16,185,129,0.7)' : 'rgba(245,158,11,0.5)'}`,
+                      transition: 'box-shadow 0.08s ease'
+                    }}>
+                      {aiTestCallStatus === 'connected' ? '📞' : aiTestCallStatus === 'error' ? '⚠️' : '🔔'}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13.5, fontWeight: 800, color: '#fff' }}>
+                        {aiTestCallStatus === 'connecting' ? 'সংযুক্ত হচ্ছে...' : aiTestCallStatus === 'ringing' ? 'রিং হচ্ছে (Ringing)...' : aiTestCallStatus === 'connected' ? 'লাইভ এআই কল চলছে' : aiTestCallStatus === 'error' ? 'কল ত্রুটি' : 'কল শেষ'}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: '#94a3b8' }}>
+                        {aiTestCallStatus === 'connected' ? `⏱️ ${String(Math.floor(aiTestSeconds / 60)).padStart(2, '0')}:${String(aiTestSeconds % 60).padStart(2, '0')} · হ্যান্ডস-ফ্রি সরাসরি কথা বলুন` : 'Gemini 3.8 Live Audio'}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 26 }}>
+                    {[0.35, 0.65, 1, 0.7, 0.4].map((m, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          width: 4,
+                          height: `${Math.max(5, Math.round((aiTestCallStatus === 'connected' ? (0.2 + aiTestVol * 1.4) : 0.2) * m * 24))}px`,
+                          borderRadius: 4,
+                          background: '#38bdf8',
+                          transition: 'height 0.08s ease'
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Live Captions */}
+                <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 10, background: '#0b0a14', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  {aiTestMessages.map((m, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        alignSelf: m.role === 'user' ? 'flex-end' : m.role === 'sys' ? 'center' : 'flex-start',
+                        maxWidth: '85%',
+                        padding: m.role === 'sys' ? '3px 10px' : '8px 12px',
+                        borderRadius: 10,
+                        fontSize: m.role === 'sys' ? 11 : 12.5,
+                        background: m.role === 'user' ? '#4f46e5' : m.role === 'sys' ? 'rgba(245, 158, 11, 0.14)' : 'rgba(255,255,255,0.08)',
+                        color: m.role === 'sys' ? '#fbbf24' : '#f8fafc'
+                      }}
+                    >
+                      {m.text}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Call Controls: Mute + Quick Text + End Call */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={toggleAiTestMute}
+                    style={{
+                      padding: '0 14px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: aiTestMuted ? '#f59e0b' : '#1e293b',
+                      color: '#fff',
+                      fontWeight: 700,
+                      fontSize: 12.5,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {aiTestMuted ? '🔇 Muted' : '🎙️ Mic On'}
+                  </button>
+                  <input
+                    value={aiTestInput}
+                    onChange={(e) => setAiTestInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') sendAiTestTurn(); }}
+                    placeholder="চাইলে টেক্সট পাঠান (ঐচ্ছিক)..."
+                    style={{ flex: 1, padding: '9px 12px', borderRadius: 8, background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', fontSize: 12.5 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={sendAiTestTurn}
+                    style={{ padding: '0 12px', borderRadius: 8, border: 'none', background: '#8b5cf6', color: '#fff', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Send
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={endAiTestCall}
+                  style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: '#dc2626', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                >
+                  📵 End Live Call
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -20248,7 +26880,7 @@ function MediaAdmin() {
   return (
     <>
       <div className="sa-top">
-        <h1>Media Library</h1>
+        <h1>{adminTranslate("Media Library")}</h1>
         <div className="sa-toprow">
           <input
             className="sa-search"
@@ -20297,11 +26929,11 @@ function MediaAdmin() {
       {/* Filter Tabs & Bulk Selection Row */}
       <div className="sa-toolbar">
         <div className="sa-filters">
-          <button className={filter === 'all' ? 'on' : ''} onClick={() => setFilter('all')}>All {list.length}</button>
+          <button className={filter === 'all' ? 'on' : ''} onClick={() => setFilter('all')}>{adminTranslate("All") + " "}{list.length}</button>
           <button className={filter === 'used' ? 'on' : ''} onClick={() => setFilter('used')}>Used in Store {usedCount}</button>
           <button className={filter === 'unused' ? 'on' : ''} onClick={() => setFilter('unused')}>Unused {unusedCount}</button>
           {dupCount > 0 && (
-            <button className={filter === 'duplicate' ? 'on' : ''} onClick={() => setFilter('duplicate')}>Duplicates {dupCount}</button>
+            <button className={filter === 'duplicate' ? 'on' : ''} onClick={() => setFilter('duplicate')}>{adminTranslate("Duplicates") + " "}{dupCount}</button>
           )}
           {brokenCount > 0 && (
             <button className={filter === 'broken' ? 'on' : ''} onClick={() => setFilter('broken')}>Broken {brokenCount}</button>
@@ -20311,7 +26943,7 @@ function MediaAdmin() {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span className="dim small">{selectedCount} selected</span>
             <button className="sa-btn ghost sa-mini danger" onClick={deleteSelected}>Delete Selected</button>
-            <button className="sa-btn ghost sa-mini" onClick={() => setSelected({})}>Clear</button>
+            <button className="sa-btn ghost sa-mini" onClick={() => setSelected({})}>{adminTranslate("Clear")}</button>
           </div>
         )}
       </div>
@@ -20391,8 +27023,8 @@ function MediaAdmin() {
                 <div className="mediainfo-row">
                   <span className="dim small">{kb(m.size)}</span>
                   <div className="mediaacts">
-                    <button className="sa-link" onClick={() => copy(m.url)} title="Copy URL">Copy</button>
-                    <button className="sa-link danger" onClick={() => del(m.name)} title="Delete image">Delete</button>
+                    <button className="sa-link" onClick={() => copy(m.url)} title="Copy URL">{adminTranslate("Copy")}</button>
+                    <button className="sa-link danger" onClick={() => del(m.name)} title="Delete image">{adminTranslate("Delete")}</button>
                   </div>
                 </div>
                 <div className="mediainfo-name" title={m.name}>{m.name}</div>
@@ -20446,7 +27078,7 @@ function MediaAdmin() {
                   <label>Public Link</label>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     <input readOnly value={location.origin + inspecting.url} style={{ flex: 1, fontSize: 12, padding: '5px 8px' }} />
-                    <button className="sa-btn sa-mini" onClick={() => copy(inspecting.url)}>Copy</button>
+                    <button className="sa-btn sa-mini" onClick={() => copy(inspecting.url)}>{adminTranslate("Copy")}</button>
                   </div>
                 </div>
 
@@ -21005,7 +27637,7 @@ function ScannerAdmin() {
                   <strong>Address:</strong> {lastResult.data.order?.customer?.address || 'N/A'}, {lastResult.data.order?.customer?.city}
                 </div>
                 <div>
-                  <strong>Total:</strong> {taka(lastResult.data.order?.total || 0)} ({lastResult.data.order?.paymentMethod || 'COD'})
+                  <strong>{adminTranslate("Total:")}</strong> {taka(lastResult.data.order?.total || 0)} ({lastResult.data.order?.paymentMethod || 'COD'})
                 </div>
                 {lastResult.data.order?.courier?.name && (
                   <div>
@@ -21029,7 +27661,7 @@ function ScannerAdmin() {
           <div>
             <h3 style={{ margin: 0, fontSize: 14 }}>Session Scan Log</h3>
             <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
-              Total: {stats.total} | Shipped: {stats.ship} | Returns: {stats.ret} | Lookups: {stats.look}
+              {adminTranslate("Total:") + " "}{stats.total} | Shipped: {stats.ship} | Returns: {stats.ret} | Lookups: {stats.look}
             </div>
           </div>
           {history.length > 0 && (
@@ -21203,10 +27835,10 @@ function CustomersAdmin() {
         <table className="sa-table">
           <thead>
             <tr>
-              <th>Customer</th>
-              <th>Phone</th>
+              <th>{adminTranslate("Customer")}</th>
+              <th>{adminTranslate("Phone")}</th>
               <th>VIP Welcome (5%)</th>
-              <th>Orders</th>
+              <th>{adminTranslate("Orders")}</th>
               <th>Last Activity</th>
               <th className="r">Total Spent</th>
             </tr>
@@ -21258,7 +27890,9 @@ function CustomersAdmin() {
 function StaffAdmin() {
   // Sub-tabs & Monitoring states
   const [staffTab, setStaffTab] = useState<'monitor' | 'team' | 'audit' | 'whatsapp'>('monitor');
+  const [monRange, setMonRange] = useState<'today' | 'yesterday' | '7d' | '30d'>('today');
   const [monitoring, setMonitoring] = useState<any>(null);
+  const [autoAssignBusy, setAutoAssignBusy] = useState(false);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [auditStaffFilter, setAuditStaffFilter] = useState('');
   const [auditActionFilter, setAuditActionFilter] = useState('');
@@ -21267,9 +27901,10 @@ function StaffAdmin() {
   const [reportSentMsg, setReportSentMsg] = useState('');
   const [reportPreviewMsg, setReportPreviewMsg] = useState('');
 
-  const fetchMonitoring = () => {
-    aFetch('/admin/staff-monitoring')
-      .then((r) => r.ok ? r.json() : null)
+  const fetchMonitoring = (rangeOverride?: string) => {
+    const r = rangeOverride || monRange;
+    aFetch('/admin/staff-monitoring?range=' + encodeURIComponent(r))
+      .then((res) => res.ok ? res.json() : null)
       .then((d) => {
         if (d) {
           setMonitoring(d);
@@ -21280,10 +27915,57 @@ function StaffAdmin() {
   };
 
   useEffect(() => {
-    fetchMonitoring();
-    const interval = setInterval(fetchMonitoring, 15000);
+    fetchMonitoring(monRange);
+    const interval = setInterval(() => fetchMonitoring(monRange), 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [monRange]);
+
+  const toggleAutoAssign = async () => {
+    setAutoAssignBusy(true);
+    try {
+      const next = !monitoring?.autoAssignOrders;
+      const res = await aFetch('/admin/staff/settings', {
+        method: 'PUT',
+        body: JSON.stringify({ autoAssignOrders: next })
+      });
+      if (res.ok) {
+        setMonitoring((prev: any) => prev ? { ...prev, autoAssignOrders: next } : prev);
+      }
+    } finally {
+      setAutoAssignBusy(false);
+    }
+  };
+
+  const exportStaffKpiCsv = () => {
+    const rows = monitoring?.staff || [];
+    const headers = ['Name', 'Username', 'Role', 'Status', 'ActiveMinutes', 'IdleMinutes', 'Confirmed', 'Cancelled', 'Couriers', 'CallsMade', 'CallsAnswered', 'DeliveryRatePct', 'SalesBDT', 'CommissionBDT'];
+    const csvLines = [
+      headers.join(','),
+      ...rows.map((s: any) => [
+        `"${String(s.name || '').replace(/"/g, '""')}"`,
+        s.username,
+        s.role,
+        s.status,
+        Math.round((s.activeSeconds || 0) / 60),
+        Math.round((s.idleSeconds || 0) / 60),
+        s.ordersHandled?.confirmed || 0,
+        s.ordersHandled?.cancelled || 0,
+        s.couriersBooked || 0,
+        s.callsMade || 0,
+        s.callsAnswered || 0,
+        s.deliverySuccessRate ?? '',
+        s.totalRevenueProcessed || 0,
+        s.commissionEarned || 0
+      ].join(','))
+    ];
+    const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `staff-kpi-${monRange}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const loadFilteredAuditLogs = () => {
     let url = '/admin/audit-logs?limit=250';
@@ -21320,7 +28002,11 @@ function StaffAdmin() {
 
   const [list, setList] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
-  const [f, setF] = useState<any>({ username: '', name: '', email: '', password: '', role: 'staff', accessAll: true, allowedProducts: [] });
+  const [f, setF] = useState<any>({
+    username: '', name: '', email: '', password: '', role: 'staff', accessAll: true, allowedProducts: [],
+    dailyTarget: 25, commissionPerOrder: 0, shiftStart: '10:00', shiftEnd: '20:00',
+    permissions: { canCancel: false, canEditPrice: false, canExportCsv: true, maskPhone: false }
+  });
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
   const [ownerEmail, setOwnerEmail] = useState('metroomaa@gmail.com');
@@ -21430,7 +28116,11 @@ function StaffAdmin() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
       setMsg(f.email ? `Team member added! Login details emailed to ${f.email}` : 'Team member added successfully!');
-      setF({ username: '', name: '', email: '', password: '', role: 'staff', accessAll: true, allowedProducts: [], skipOtp: false });
+      setF({
+        username: '', name: '', email: '', password: '', role: 'staff', accessAll: true, allowedProducts: [], skipOtp: false,
+        dailyTarget: 25, commissionPerOrder: 0, shiftStart: '10:00', shiftEnd: '20:00',
+        permissions: { canCancel: false, canEditPrice: false, canExportCsv: true, maskPhone: false }
+      });
       load();
       setTimeout(() => setMsg(''), 6000);
     }
@@ -21445,6 +28135,11 @@ function StaffAdmin() {
       email: editUser.email,
       role: editUser.role,
       skipOtp: !!editUser.skipOtp,
+      dailyTarget: Number(editUser.dailyTarget) || 25,
+      commissionPerOrder: Number(editUser.commissionPerOrder) || 0,
+      shiftStart: editUser.shiftStart || '10:00',
+      shiftEnd: editUser.shiftEnd || '20:00',
+      permissions: editUser.permissions || { canCancel: false, canEditPrice: false, canExportCsv: true, maskPhone: false },
       allowedProducts: editUser.accessAll ? [] : editUser.allowedProducts,
       password: editUser.password || undefined
     };
@@ -21506,47 +28201,140 @@ function StaffAdmin() {
         </div>
       </div>
 
-      {/* Sub Tabs */}
-      <div style={{ display: 'flex', gap: 6, margin: '16px 0 22px', borderBottom: '1px solid rgba(255,255,255,0.1)', overflowX: 'auto', paddingBottom: 2 }}>
+      {/* Sub Tabs (Modern Pill Switcher) */}
+      <div style={{
+        display: 'inline-flex',
+        flexWrap: 'wrap',
+        gap: 6,
+        margin: '16px 0 22px',
+        padding: 5,
+        background: 'rgba(15, 23, 42, 0.72)',
+        border: '1px solid rgba(139, 92, 246, 0.22)',
+        borderRadius: 14,
+        backdropFilter: 'blur(12px)',
+        maxWidth: '100%',
+        overflowX: 'auto'
+      }}>
         {[
           { id: 'monitor', label: '📊 Live Monitor & KPI', badge: 'Live' },
           { id: 'audit', label: '📜 Detailed Audit Logs' },
           { id: 'whatsapp', label: '📱 WhatsApp Reports' },
           { id: 'team', label: '👥 Team Accounts & Access' }
-        ].map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setStaffTab(t.id as any)}
-            style={{
-              padding: '10px 18px',
-              background: staffTab === t.id ? '#1e1b34' : 'transparent',
-              border: 'none',
-              borderBottom: staffTab === t.id ? '2px solid #8b5cf6' : '2px solid transparent',
-              color: staffTab === t.id ? '#fff' : '#94a3b8',
-              fontWeight: staffTab === t.id ? 700 : 500,
-              fontSize: 13.5,
-              cursor: 'pointer',
-              borderRadius: '6px 6px 0 0',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              whiteSpace: 'nowrap'
-            }}
-          >
-            <span>{t.label}</span>
-            {t.badge && (
-              <span style={{ fontSize: 10, background: '#10b981', color: '#fff', padding: '2px 7px', borderRadius: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                {t.badge}
-              </span>
-            )}
-          </button>
-        ))}
+        ].map((t) => {
+          const isActive = staffTab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setStaffTab(t.id as any)}
+              style={{
+                padding: '9px 16px',
+                background: isActive ? 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)' : 'transparent',
+                border: isActive ? '1px solid rgba(196, 181, 253, 0.45)' : '1px solid transparent',
+                boxShadow: isActive ? '0 4px 14px rgba(139, 92, 246, 0.35)' : 'none',
+                color: isActive ? '#ffffff' : '#94a3b8',
+                fontWeight: isActive ? 700 : 500,
+                fontSize: 13,
+                cursor: 'pointer',
+                borderRadius: 10,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                whiteSpace: 'nowrap',
+                transition: 'all 0.18s ease'
+              }}
+            >
+              <span>{t.label}</span>
+              {t.badge && (
+                <span style={{
+                  fontSize: 10,
+                  background: isActive ? 'rgba(16, 185, 129, 0.95)' : 'rgba(16, 185, 129, 0.18)',
+                  color: isActive ? '#fff' : '#34d399',
+                  border: isActive ? 'none' : '1px solid rgba(16, 185, 129, 0.35)',
+                  padding: '2px 7px',
+                  borderRadius: 999,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em'
+                }}>
+                  {t.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* TAB 1: LIVE MONITOR & KPI */}
       {staffTab === 'monitor' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Smart Control Bar: Date Range, Auto-Assign, CSV Export */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, padding: '12px 16px', background: 'rgba(15, 23, 42, 0.72)', border: '1px solid rgba(139, 92, 246, 0.22)', borderRadius: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, marginRight: 4 }}>📅 Range:</span>
+              {([
+                { id: 'today', label: 'Today' },
+                { id: 'yesterday', label: 'Yesterday' },
+                { id: '7d', label: 'Last 7 Days' },
+                { id: '30d', label: '30 Days' }
+              ] as const).map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setMonRange(r.id)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: monRange === r.id ? 700 : 500,
+                    cursor: 'pointer',
+                    background: monRange === r.id ? 'rgba(139, 92, 246, 0.28)' : 'rgba(255,255,255,0.04)',
+                    border: monRange === r.id ? '1px solid rgba(139, 92, 246, 0.55)' : '1px solid rgba(255,255,255,0.08)',
+                    color: monRange === r.id ? '#e9d5ff' : '#94a3b8'
+                  }}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                disabled={autoAssignBusy}
+                onClick={toggleAutoAssign}
+                style={{
+                  padding: '7px 12px',
+                  borderRadius: 9,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  background: monitoring?.autoAssignOrders ? 'rgba(16, 185, 129, 0.18)' : 'rgba(255,255,255,0.05)',
+                  border: monitoring?.autoAssignOrders ? '1px solid rgba(16, 185, 129, 0.45)' : '1px solid rgba(255,255,255,0.12)',
+                  color: monitoring?.autoAssignOrders ? '#34d399' : '#94a3b8'
+                }}
+                title="নতুন অর্ডার এলে শুধুমাত্র Active স্টাফদের মাঝে সমানভাবে অটো-অ্যাসাইন হবে"
+              >
+                🧠 Auto-Assign Online: {monitoring?.autoAssignOrders ? 'ON' : 'OFF'}
+              </button>
+              <button type="button" className="sa-btn ghost sa-mini" onClick={exportStaffKpiCsv}>
+                📥 Export KPI CSV
+              </button>
+            </div>
+          </div>
+
+          {/* Shift / Late / Long Idle Alerts */}
+          {(monitoring?.staff || []).some((s: any) => s.isLateLogin || s.isLongIdle) && (
+            <div style={{ padding: '12px 16px', borderRadius: 12, background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.35)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12.5, color: '#fde68a' }}>
+              <span style={{ fontWeight: 700 }}>⚠️ Shift Alerts:</span>
+              {(monitoring?.staff || []).filter((s: any) => s.isLateLogin || s.isLongIdle).map((s: any) => (
+                <span key={s.username} style={{ background: 'rgba(0,0,0,0.35)', padding: '3px 9px', borderRadius: 99, border: '1px solid rgba(245, 158, 11, 0.3)' }}>
+                  {s.name}: {s.isLateLogin ? '⏰ Late Login' : ''}{s.isLateLogin && s.isLongIdle ? ' · ' : ''}{s.isLongIdle ? '💤 Long Idle (15m+)' : ''}
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* Top KPI Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14 }}>
             <div className="sa-card" style={{ padding: 18, border: '1px solid rgba(16, 185, 129, 0.3)', background: 'linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(19,17,28,0.95) 100%)' }}>
@@ -21596,73 +28384,143 @@ function StaffAdmin() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+              {!monitoring && (
+                <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                  Loading live staff monitoring data…
+                </div>
+              )}
               {(monitoring?.staff || []).map((s: any) => {
-                const activeHrs = Math.floor(s.activeSeconds / 3600);
-                const activeMins = Math.floor((s.activeSeconds % 3600) / 60);
-                const idleHrs = Math.floor(s.idleSeconds / 3600);
-                const idleMins = Math.floor((s.idleSeconds % 3600) / 60);
+                const fmtDur = (sec: number) => {
+                  const total = Math.max(0, Math.round(sec || 0));
+                  const h = Math.floor(total / 3600);
+                  const m = Math.floor((total % 3600) / 60);
+                  const rSec = total % 60;
+                  if (h > 0) return `${h}h ${m}m`;
+                  if (m > 0) return `${m}m`;
+                  return `${rSec}s`;
+                };
                 const isOnline = s.status === 'active';
                 const isIdle = s.status === 'idle';
+                const actSec = Number(s.activeSeconds || 0);
+                const idlSec = Number(s.idleSeconds || 0);
+                const totalSec = actSec + idlSec;
+                const focusPct = totalSec > 0 ? Math.round((actSec / totalSec) * 100) : 0;
 
                 return (
                   <div
                     key={s.username}
                     style={{
-                      padding: 16,
-                      background: '#141122',
-                      borderRadius: 12,
+                      padding: 18,
+                      background: isOnline
+                        ? 'linear-gradient(145deg, rgba(16, 185, 129, 0.06) 0%, #131122 65%)'
+                        : 'linear-gradient(145deg, rgba(139, 92, 246, 0.04) 0%, #131122 65%)',
+                      borderRadius: 14,
                       border: isOnline
-                        ? '1px solid rgba(16, 185, 129, 0.4)'
+                        ? '1px solid rgba(16, 185, 129, 0.42)'
                         : isIdle
                         ? '1px solid rgba(245, 158, 11, 0.4)'
                         : '1px solid rgba(255,255,255,0.08)',
-                      boxShadow: isOnline ? '0 4px 18px rgba(16, 185, 129, 0.1)' : 'none'
+                      boxShadow: isOnline ? '0 8px 24px rgba(16, 185, 129, 0.08)' : '0 4px 16px rgba(0,0,0,0.2)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 12,
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 10, background: '#1e1b34', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: '#a78bfa' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                        <div style={{ position: 'relative', width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #2e2654 0%, #1a1630 100%)', border: '1px solid rgba(139, 92, 246, 0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#c4b5fd' }}>
                           {s.name ? s.name[0].toUpperCase() : 'U'}
+                          <span
+                            style={{
+                              position: 'absolute',
+                              bottom: -2,
+                              right: -2,
+                              width: 11,
+                              height: 11,
+                              borderRadius: '50%',
+                              border: '2px solid #131122',
+                              background: isOnline ? '#10b981' : isIdle ? '#f59e0b' : '#64748b',
+                            }}
+                          />
                         </div>
                         <div>
-                          <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{s.name}</div>
-                          <div style={{ fontSize: 11, color: '#94a3b8' }}>@{s.username} · <span style={{ textTransform: 'uppercase', color: '#c084fc', fontWeight: 600 }}>{s.role}</span></div>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>{s.name}</div>
+                          <div style={{ fontSize: 11.5, color: '#94a3b8' }}>@{s.username} · <span style={{ textTransform: 'uppercase', color: '#a78bfa', fontWeight: 700 }}>{s.role}</span></div>
                         </div>
                       </div>
                       <span
                         style={{
                           fontSize: 11,
                           fontWeight: 700,
-                          padding: '3px 8px',
-                          borderRadius: 6,
-                          background: isOnline ? 'rgba(16, 185, 129, 0.18)' : isIdle ? 'rgba(245, 158, 11, 0.18)' : 'rgba(255,255,255,0.06)',
+                          padding: '4px 9px',
+                          borderRadius: 99,
+                          background: isOnline ? 'rgba(16, 185, 129, 0.16)' : isIdle ? 'rgba(245, 158, 11, 0.16)' : 'rgba(255,255,255,0.06)',
                           color: isOnline ? '#34d399' : isIdle ? '#fbbf24' : '#94a3b8',
                           border: isOnline ? '1px solid rgba(16, 185, 129, 0.35)' : isIdle ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid rgba(255,255,255,0.1)'
                         }}
                       >
-                        {isOnline ? '🟢 Online' : isIdle ? '🟡 Away (Idle)' : '⚪ Offline'}
+                        {isOnline ? '● Online' : isIdle ? '● Away' : '○ Offline'}
                       </span>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, background: '#0e0c18', padding: 12, borderRadius: 8, marginBottom: 12 }}>
-                      <div>
-                        <div style={{ fontSize: 10.5, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Active Hours</div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: '#34d399', marginTop: 2 }}>
-                          {activeHrs > 0 ? `${activeHrs}h ${activeMins}m` : `${activeMins}m`}
-                        </div>
+                    {/* Focus / Efficiency Bar */}
+                    <div style={{ background: 'rgba(10, 9, 18, 0.7)', padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Active: <strong style={{ color: '#34d399' }}>{fmtDur(actSec)}</strong></span>
+                        <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Idle: <strong style={{ color: '#fbbf24' }}>{fmtDur(idlSec)}</strong></span>
+                        <span style={{ fontSize: 11, color: '#c4b5fd', fontWeight: 700 }}>{focusPct}% Focus</span>
                       </div>
-                      <div>
-                        <div style={{ fontSize: 10.5, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Idle / Away</div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: '#fbbf24', marginTop: 2 }}>
-                          {idleHrs > 0 ? `${idleHrs}h ${idleMins}m` : `${idleMins}m`}
+                      <div style={{ height: 6, borderRadius: 99, background: 'rgba(255,255,255,0.07)', overflow: 'hidden', display: 'flex' }}>
+                        <div style={{ width: `${focusPct}%`, background: 'linear-gradient(90deg, #10b981, #34d399)', transition: 'width 0.3s ease' }} />
+                      </div>
+                      {s.targetTotal > 0 && (
+                        <div style={{ marginTop: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: '#94a3b8', marginBottom: 4 }}>
+                            <span>🎯 Target: <strong style={{ color: '#e2e8f0' }}>{s.ordersHandled?.confirmed || 0}/{s.targetTotal}</strong></span>
+                            <span style={{ color: s.targetProgressPct >= 100 ? '#34d399' : '#a78bfa', fontWeight: 700 }}>{s.targetProgressPct}%</span>
+                          </div>
+                          <div style={{ height: 5, borderRadius: 99, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                            <div style={{ width: `${s.targetProgressPct}%`, background: 'linear-gradient(90deg, #8b5cf6, #ec4899)', height: '100%' }} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Quick Performance Counters */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                      <div style={{ background: 'rgba(16, 185, 129, 0.07)', border: '1px solid rgba(16, 185, 129, 0.16)', borderRadius: 8, padding: '7px 8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase' }}>{adminTranslate("Confirmed")}</div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: '#34d399' }}>{s.ordersHandled?.confirmed || 0}</div>
+                      </div>
+                      <div style={{ background: 'rgba(59, 130, 246, 0.07)', border: '1px solid rgba(59, 130, 246, 0.16)', borderRadius: 8, padding: '7px 8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase' }}>{adminTranslate("IP Calls")}</div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: '#60a5fa' }}>{s.callsMade || 0} <span style={{ fontSize: 10, fontWeight: 500, color: '#94a3b8' }}>({s.callsAnswered || 0})</span></div>
+                      </div>
+                      <div style={{ background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.2)', borderRadius: 8, padding: '7px 8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase' }}>Del. Quality</div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: s.deliverySuccessRate != null && s.deliverySuccessRate >= 70 ? '#34d399' : '#c4b5fd' }}>
+                          {s.deliverySuccessRate != null ? `${s.deliverySuccessRate}%` : '—'}
                         </div>
                       </div>
                     </div>
 
-                    <div style={{ fontSize: 11.5, color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <div>🚪 <strong>First Login:</strong> {s.firstLogin ? new Date(s.firstLogin).toLocaleTimeString('bn-BD', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit' }) : 'আজকে লগইন করেনি'}</div>
-                      <div>⚡ <strong>Last Active:</strong> {s.lastActive ? new Date(s.lastActive).toLocaleTimeString('bn-BD', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'N/A'}</div>
-                      {s.currentPath && <div>📍 <strong>Currently Viewing:</strong> <code style={{ color: '#c084fc' }}>{s.currentPath}</code></div>}
+                    {/* Shift / Commission Strip */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#94a3b8', flexWrap: 'wrap', gap: 6 }}>
+                      <span>🕒 {s.shiftStart || '10:00'}–{s.shiftEnd || '20:00'}</span>
+                      {s.commissionEarned > 0 && <span style={{ color: '#fbbf24', fontWeight: 700 }}>💰 ৳{s.commissionEarned.toLocaleString()} Comm.</span>}
+                      {(s.isLateLogin || s.isLongIdle) && (
+                        <span style={{ color: '#fbbf24', fontWeight: 700 }}>
+                          {s.isLateLogin ? '⏰ Late' : '💤 Idle'}
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{ fontSize: 11.5, color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>🚪 First Login: <strong style={{ color: '#e2e8f0' }}>{s.firstLogin ? new Date(s.firstLogin).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }) : 'আজকে লগইন করেনি'}</strong></span>
+                      </div>
+                      <div>⚡ Last Active: <strong style={{ color: '#e2e8f0' }}>{s.lastActive ? new Date(s.lastActive).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }) : 'N/A'}</strong></div>
+                      {s.currentPath && <div>📍 Viewing: <code style={{ color: '#c4b5fd', background: 'rgba(139,92,246,0.14)', padding: '1px 6px', borderRadius: 4 }}>{s.currentPath}</code></div>}
                     </div>
                   </div>
                 );
@@ -21670,34 +28528,44 @@ function StaffAdmin() {
             </div>
           </div>
 
-          {/* Today's KPI Performance Leaderboard */}
+          {/* KPI Performance Leaderboard */}
           <div className="sa-card" style={{ padding: 22 }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: 16, color: '#fff', fontWeight: 700 }}>🏆 Today's Staff KPI &amp; Performance Scorecard</h3>
+            <h3 style={{ margin: '0 0 16px', fontSize: 16, color: '#fff', fontWeight: 700 }}>🏆 Staff KPI, Call &amp; Quality Scorecard ({monRange === 'today' ? 'Today' : monRange === 'yesterday' ? 'Yesterday' : monRange === '7d' ? 'Last 7 Days' : 'Last 30 Days'})</h3>
             <div className="sa-table-wrap">
               <table className="sa-table">
                 <thead>
                   <tr>
                     <th>Staff Member</th>
-                    <th>Status</th>
+                    <th>{adminTranslate("Status")}</th>
                     <th>Working Hours</th>
-                    <th>Confirmed Orders</th>
-                    <th>Cancelled</th>
-                    <th>Couriers Booked</th>
-                    <th>Processed Sales</th>
+                    <th>Confirmed / Target</th>
+                    <th>{adminTranslate("IP Calls")}</th>
+                    <th>Del. Quality</th>
+                    <th>Couriers</th>
+                    <th>Sales &amp; Comm.</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(monitoring?.staff || []).map((s: any) => {
+                  {[...(monitoring?.staff || [])]
+                    .sort((a: any, b: any) => ((b.ordersHandled?.confirmed || 0) + (b.couriersBooked || 0)) - ((a.ordersHandled?.confirmed || 0) + (a.couriersBooked || 0)))
+                    .map((s: any, idx: number) => {
                     const activeHrs = Math.floor(s.activeSeconds / 3600);
                     const activeMins = Math.floor((s.activeSeconds % 3600) / 60);
                     const isOnline = s.status === 'active';
                     const isIdle = s.status === 'idle';
+                    const rankBadge = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
+                    const callMins = Math.round((s.callDurationSec || 0) / 60);
 
                     return (
                       <tr key={s.username}>
                         <td>
-                          <div style={{ fontWeight: 700, color: '#f8fafc' }}>{s.name}</div>
-                          <div style={{ fontSize: 11, color: '#94a3b8' }}>@{s.username} · {s.role}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 14, minWidth: 22 }}>{rankBadge}</span>
+                            <div>
+                              <div style={{ fontWeight: 700, color: '#f8fafc' }}>{s.name}</div>
+                              <div style={{ fontSize: 11, color: '#94a3b8' }}>@{s.username} · {s.role}</div>
+                            </div>
+                          </div>
                         </td>
                         <td>
                           <span
@@ -21714,20 +28582,38 @@ function StaffAdmin() {
                           </span>
                         </td>
                         <td>
-                          <span style={{ fontWeight: 600, color: '#34d399' }}>{activeHrs > 0 ? `${activeHrs}h ${activeMins}m` : `${activeMins}m`}</span>
-                          <span style={{ fontSize: 11, color: '#64748b', marginLeft: 6 }}>(Idle: {Math.round(s.idleSeconds / 60)}m)</span>
+                          <span style={{ fontWeight: 600, color: '#34d399' }}>
+                            {activeHrs > 0 ? `${activeHrs}h ${activeMins}m` : activeMins > 0 ? `${activeMins}m` : `${Math.round(s.activeSeconds || 0)}s`}
+                          </span>
+                          <span style={{ fontSize: 11, color: '#64748b', marginLeft: 6 }}>(Idle: {Math.round((s.idleSeconds || 0) / 60)}m)</span>
                         </td>
                         <td>
                           <span style={{ fontWeight: 700, color: '#34d399', fontSize: 14 }}>✓ {s.ordersHandled?.confirmed || 0}</span>
+                          {s.targetTotal > 0 && (
+                            <span style={{ fontSize: 11, color: '#a78bfa', marginLeft: 6 }}>/ {s.targetTotal} ({s.targetProgressPct}%)</span>
+                          )}
                         </td>
                         <td>
-                          <span style={{ color: (s.ordersHandled?.cancelled || 0) > 0 ? '#f87171' : '#64748b', fontWeight: 600 }}>✕ {s.ordersHandled?.cancelled || 0}</span>
+                          <span style={{ fontWeight: 600, color: '#60a5fa' }}>📞 {s.callsMade || 0}</span>
+                          <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 4 }}>({s.callsAnswered || 0} ans · {callMins}m)</span>
+                        </td>
+                        <td>
+                          {s.deliverySuccessRate != null ? (
+                            <span style={{ fontWeight: 700, color: s.deliverySuccessRate >= 75 ? '#34d399' : s.deliverySuccessRate >= 50 ? '#fbbf24' : '#f87171' }}>
+                              {s.deliverySuccessRate}% <span style={{ fontSize: 10.5, color: '#64748b', fontWeight: 500 }}>({s.deliveredCount}✓/{s.returnCount}↩)</span>
+                            </span>
+                          ) : (
+                            <span style={{ color: '#64748b', fontSize: 12 }}>—</span>
+                          )}
                         </td>
                         <td>
                           <span style={{ fontWeight: 700, color: '#60a5fa' }}>🚚 {s.couriersBooked || 0}</span>
                         </td>
                         <td>
                           <strong style={{ color: '#fbbf24' }}>৳ {(s.totalRevenueProcessed || 0).toLocaleString()}</strong>
+                          {s.commissionEarned > 0 && (
+                            <div style={{ fontSize: 11, color: '#34d399', fontWeight: 600 }}>+৳{s.commissionEarned.toLocaleString()} comm.</div>
+                          )}
                         </td>
                       </tr>
                     );
@@ -21781,7 +28667,7 @@ function StaffAdmin() {
                 <tr>
                   <th>Timestamp</th>
                   <th>Staff</th>
-                  <th>Action</th>
+                  <th>{adminTranslate("Action")}</th>
                   <th>Summary</th>
                   <th>Target Order</th>
                 </tr>
@@ -21893,7 +28779,7 @@ function StaffAdmin() {
           <div className="sa-card" style={{ padding: 22 }}>
             <h4 style={{ margin: '0 0 12px', fontSize: 14, color: '#fff', fontWeight: 700 }}>👁️ WhatsApp Message Preview</h4>
             <div style={{ background: '#0e0c18', padding: 16, borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', fontFamily: 'monospace', fontSize: 13, color: '#e2e8f0', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
-              {reportPreviewMsg || `📊 *[TimeBoost] স্টাফ দৈনিক পারফরম্যান্স রিপোর্ট*
+              {reportPreviewMsg || `📊 *[${getAdminSiteBrand()}] স্টাফ দৈনিক পারফরম্যান্স রিপোর্ট*
 📅 তারিখ: ${new Date().toLocaleDateString('bn-BD', { timeZone: 'Asia/Dhaka', day: 'numeric', month: 'long', year: 'numeric' })}
 ⏰ সময়: রাত ১১:০০ টা
 ━━━━━━━━━━━━━━━━━━━━
@@ -21907,7 +28793,7 @@ function StaffAdmin() {
 
 ━━━━━━━━━━━━━━━━━━━━
 🏆 *আজকের সেরা পারফর্মার:* Rocky
-🔗 *লাইভ ড্যাশবোর্ড:* https://timingboost.xyz/wp-admin`}
+🔗 *লাইভ ড্যাশবোর্ড:* https://${getAdminSiteDomain()}/wp-admin`}
             </div>
           </div>
         </div>
@@ -21941,13 +28827,13 @@ function StaffAdmin() {
             {editingEmail ? (
               <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                 <input style={{ padding: '5px 8px', fontSize: 13 }} value={newOwnerEmail} onChange={(e) => setNewOwnerEmail(e.target.value)} placeholder="new@gmail.com" />
-                <button className="sa-btn sa-mini" onClick={updateSecurityEmail}>Save</button>
+                <button className="sa-btn sa-mini" onClick={updateSecurityEmail}>{adminTranslate("Save")}</button>
                 <button className="sa-btn ghost sa-mini" onClick={() => setEditingEmail(false)}>Cancel</button>
               </div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
                 <span style={{ fontSize: 14, fontWeight: 600, color: '#a78bfa' }}>{ownerEmail}</span>
-                <button style={{ background: 'none', border: 'none', color: '#94a3b8', textDecoration: 'underline', fontSize: 12, cursor: 'pointer' }} onClick={() => { setNewOwnerEmail(ownerEmail); setEditingEmail(true); }}>Edit</button>
+                <button style={{ background: 'none', border: 'none', color: '#94a3b8', textDecoration: 'underline', fontSize: 12, cursor: 'pointer' }} onClick={() => { setNewOwnerEmail(ownerEmail); setEditingEmail(true); }}>{adminTranslate("Edit")}</button>
               </div>
             )}
           </div>
@@ -22153,6 +29039,48 @@ function StaffAdmin() {
             )}
           </div>
 
+          {/* Target, Commission, Shift & Granular Permissions */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: '#cbd5e1' }}>
+              🎯 Daily Target (Orders)
+              <input type="number" min={1} value={f.dailyTarget ?? 25} onChange={(e) => setF((s: any) => ({ ...s, dailyTarget: Number(e.target.value) }))} />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: '#cbd5e1' }}>
+              💰 Commission / Order (৳)
+              <input type="number" min={0} value={f.commissionPerOrder ?? 0} onChange={(e) => setF((s: any) => ({ ...s, commissionPerOrder: Number(e.target.value) }))} />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: '#cbd5e1' }}>
+              🕒 Shift Start
+              <input type="time" value={f.shiftStart || '10:00'} onChange={(e) => setF((s: any) => ({ ...s, shiftStart: e.target.value }))} />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: '#cbd5e1' }}>
+              🕕 Shift End
+              <input type="time" value={f.shiftEnd || '20:00'} onChange={(e) => setF((s: any) => ({ ...s, shiftEnd: e.target.value }))} />
+            </label>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
+            {[
+              { key: 'canCancel', label: '✕ Can Cancel Orders' },
+              { key: 'canEditPrice', label: '✏️ Can Edit Price/Discount' },
+              { key: 'canExportCsv', label: '📥 Can Export CSV' },
+              { key: 'maskPhone', label: '🔒 Mask Customer Phone' },
+              { key: 'canViewCampaigns', label: '🎯 View & Manage Ads' },
+              { key: 'canViewWhatsApp', label: '💬 View & Reply WhatsApp Inbox' },
+              { key: 'canViewFinance', label: '💰 View Finance & Profit' },
+              { key: 'canAccessSaika', label: '🔮 Access Saika AI (Voice & Store Control)' }
+            ].map((pm) => (
+              <label key={pm.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', fontSize: 12, color: '#cbd5e1', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={!!f.permissions?.[pm.key]}
+                  onChange={(e) => setF((s: any) => ({ ...s, permissions: { ...(s.permissions || {}), [pm.key]: e.target.checked } }))}
+                />
+                <span>{pm.label}</span>
+              </label>
+            ))}
+          </div>
+
           {/* Direct Login / OTP Toggle */}
           <div style={{ marginTop: 12 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, cursor: 'pointer', fontSize: 13, color: '#e2e8f0' }}>
@@ -22185,12 +29113,12 @@ function StaffAdmin() {
           <thead>
             <tr>
               <th>Member Name</th>
-              <th>Username</th>
+              <th>{adminTranslate("Username")}</th>
               <th>Email</th>
               <th>Role</th>
               <th>Authentication</th>
               <th>Product Permissions</th>
-              <th className="r">Action</th>
+              <th className="r">{adminTranslate("Action")}</th>
             </tr>
           </thead>
           <tbody>
@@ -22200,7 +29128,7 @@ function StaffAdmin() {
                 <tr key={u.id}>
                   <td><b>{u.name}</b></td>
                   <td><code style={{ background: 'rgba(255,255,255,0.06)', padding: '3px 7px', borderRadius: 5 }}>{u.username}</code></td>
-                  <td>{u.email ? <span style={{ color: '#a78bfa' }}>{u.email}</span> : <span className="dim">None</span>}</td>
+                  <td>{u.email ? <span style={{ color: '#a78bfa' }}>{u.email}</span> : <span className="dim">{adminTranslate("None")}</span>}</td>
                   <td><span className="sa-badge" style={{ background: u.role === 'manager' ? 'rgba(139,92,246,0.18)' : 'rgba(255,255,255,0.08)', color: u.role === 'manager' ? '#c4b5fd' : '#cbd5e1' }}>{u.role}</span></td>
                   <td>
                     {u.skipOtp ? (
@@ -22240,7 +29168,7 @@ function StaffAdmin() {
                     <button className="sa-link" style={{ marginRight: 10, color: '#a78bfa' }} onClick={() => setEditUser({ ...u, accessAll: !u.allowedProducts || u.allowedProducts.length === 0, allowedProducts: u.allowedProducts || [], password: '' })}>
                       Edit Access
                     </button>
-                    <button className="sa-link danger" onClick={() => del(u.id)}>Remove</button>
+                    <button className="sa-link danger" onClick={() => del(u.id)}>{adminTranslate("Remove")}</button>
                   </td>
                 </tr>
               );
@@ -22290,6 +29218,47 @@ function StaffAdmin() {
                 Update Password <span className="dim">(leave blank to keep current)</span>
                 <input type="password" value={editUser.password || ''} onChange={(e) => setEditUser((s: any) => ({ ...s, password: e.target.value }))} placeholder="New password" />
               </label>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: '#cbd5e1' }}>
+                  🎯 Daily Target
+                  <input type="number" min={1} value={editUser.dailyTarget ?? 25} onChange={(e) => setEditUser((s: any) => ({ ...s, dailyTarget: Number(e.target.value) }))} />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: '#cbd5e1' }}>
+                  💰 Commission / Order (৳)
+                  <input type="number" min={0} value={editUser.commissionPerOrder ?? 0} onChange={(e) => setEditUser((s: any) => ({ ...s, commissionPerOrder: Number(e.target.value) }))} />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: '#cbd5e1' }}>
+                  🕒 Shift Start
+                  <input type="time" value={editUser.shiftStart || '10:00'} onChange={(e) => setEditUser((s: any) => ({ ...s, shiftStart: e.target.value }))} />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: '#cbd5e1' }}>
+                  🕕 Shift End
+                  <input type="time" value={editUser.shiftEnd || '20:00'} onChange={(e) => setEditUser((s: any) => ({ ...s, shiftEnd: e.target.value }))} />
+                </label>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {[
+                  { key: 'canCancel', label: '✕ Can Cancel Orders' },
+                  { key: 'canEditPrice', label: '✏️ Can Edit Price' },
+                  { key: 'canExportCsv', label: '📥 Can Export CSV' },
+                  { key: 'maskPhone', label: '🔒 Mask Phone' },
+                  { key: 'canViewCampaigns', label: '🎯 View & Manage Ads' },
+                  { key: 'canViewWhatsApp', label: '💬 View WhatsApp Inbox' },
+                  { key: 'canViewFinance', label: '💰 View Finance & Profit' },
+              { key: 'canAccessSaika', label: '🔮 Access Saika AI (Voice & Store Control)' }
+                ].map((pm) => (
+                  <label key={pm.key} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', fontSize: 12, color: '#cbd5e1', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={!!editUser.permissions?.[pm.key]}
+                      onChange={(e) => setEditUser((s: any) => ({ ...s, permissions: { ...(s.permissions || {}), [pm.key]: e.target.checked } }))}
+                    />
+                    <span>{pm.label}</span>
+                  </label>
+                ))}
+              </div>
 
               {/* Product permissions in edit modal */}
               <div style={{ marginTop: 8, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
@@ -22368,5 +29337,1555 @@ function StaffAdmin() {
         </div>
       )}
     </>
+  );
+}
+
+function CampaignAnalyticsAdmin({
+  onViewOrders,
+  activeTab = 'profit',
+  onTabChange
+}: {
+  onViewOrders: (campaign: string) => void;
+  activeTab?: 'dashboard' | 'meta' | 'spend' | 'profit' | 'tiktok' | 'google';
+  onTabChange?: (tab: 'dashboard' | 'meta' | 'spend' | 'profit' | 'tiktok' | 'google', label?: string) => void;
+}) {
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'meta' | 'spend' | 'profit' | 'tiktok' | 'google'>(activeTab);
+
+  useEffect(() => {
+    if (activeTab) setCurrentTab(activeTab);
+  }, [activeTab]);
+
+  const switchTab = (t: 'dashboard' | 'meta' | 'spend' | 'profit' | 'tiktok' | 'google', label: string) => {
+    setCurrentTab(t);
+    if (onTabChange) onTabChange(t, label);
+  };
+
+  const [range, setRange] = useState<'today' | 'yesterday' | '7d' | '30d' | 'all'>('7d');
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [spendDrafts, setSpendDrafts] = useState<Record<string, string>>({});
+  const [savingCamp, setSavingCamp] = useState('');
+  const [savingAllSpends, setSavingAllSpends] = useState(false);
+  const [showConfigBox, setShowConfigBox] = useState(false);
+  const [metaAccounts, setMetaAccounts] = useState<any[]>([]);
+  const [tiktokAccounts, setTiktokAccounts] = useState<any[]>([]);
+  const [usdRate, setUsdRate] = useState('122');
+  const [metaSyncing, setMetaSyncing] = useState(false);
+  const [metaMsg, setMetaMsg] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'high_loss'>('all');
+  const [campSearch, setCampSearch] = useState('');
+
+  const load = (r = range) => {
+    setLoading(true);
+    aFetch('/admin/campaign-analytics?range=' + encodeURIComponent(r))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((d) => {
+        if (d) {
+          setData(d);
+          const drafts: Record<string, string> = {};
+          (d.campaigns || []).forEach((c: any) => { drafts[c.campaign] = String(c.adSpend || 0); });
+          setSpendDrafts(drafts);
+          if (d.adsConfig) {
+            setMetaAccounts((d.adsConfig.metaAccounts || []).map((a: any) => ({ ...a, accessToken: '' })));
+            setTiktokAccounts((d.adsConfig.tiktokAccounts || []).map((a: any) => ({ ...a, accessToken: '' })));
+            if (d.adsConfig.usdToBdtRate) setUsdRate(String(d.adsConfig.usdToBdtRate));
+          }
+        }
+      })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(range); }, [range]);
+
+  const saveAdsConfig = async () => {
+    setMetaMsg('');
+    const r = await aFetch('/admin/campaign-analytics/ads-config', {
+      method: 'PUT',
+      body: JSON.stringify({
+        metaAccounts,
+        tiktokAccounts,
+        usdToBdtRate: Number(usdRate) || 122
+      })
+    });
+    const d = await r.json();
+    if (r.ok) {
+      setMetaMsg('✅ Ad account configurations saved successfully! Click Sync Ads to update.');
+      load(range);
+    } else {
+      setMetaMsg('⚠️ ' + (d.error || 'Failed to save configuration'));
+    }
+  };
+
+  const saveAllSpends = async () => {
+    setSavingAllSpends(true);
+    setMetaMsg('');
+    try {
+      const entries = Object.entries(spendDrafts);
+      for (const [camp, spendStr] of entries) {
+        await aFetch('/admin/campaign-analytics/' + encodeURIComponent(camp), {
+          method: 'PUT',
+          body: JSON.stringify({ adSpend: Number(spendStr || 0) })
+        });
+      }
+      setMetaMsg('✅ All campaign ad spend values updated successfully!');
+      load(range);
+    } catch (e: any) {
+      setMetaMsg('⚠️ ' + (e.message || 'Error saving spend values'));
+    } finally {
+      setSavingAllSpends(false);
+    }
+  };
+
+  const syncAllNow = async () => {
+    setMetaSyncing(true);
+    setMetaMsg('');
+    try {
+      const r = await aFetch('/admin/campaign-analytics/sync-all', {
+        method: 'POST',
+        body: JSON.stringify({ range })
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setMetaMsg('⚠️ ' + (d.error || 'Sync failed'));
+        setShowConfigBox(true);
+      } else {
+        const errNote = d.errors?.length ? ` (Issues in some accounts: ${d.errors.join(' | ')})` : '';
+        setMetaMsg(`✅ Sync complete: ${d.metaSynced} Meta, ${d.tiktokSynced} TikTok campaigns updated.${errNote}`);
+        load(range);
+      }
+    } catch (e: any) {
+      setMetaMsg('⚠️ ' + (e.message || 'Network error during sync'));
+    } finally {
+      setMetaSyncing(false);
+    }
+  };
+
+  const handleCsvImport = async (e: any) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter((l: string) => l.trim());
+      if (lines.length < 2) { setMetaMsg('⚠️ The selected CSV file is empty.'); return; }
+      const parseLine = (line: string) => {
+        const res: string[] = []; let cur = ''; let inQ = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') { inQ = !inQ; }
+          else if (ch === ',' && !inQ) { res.push(cur.trim()); cur = ''; }
+          else cur += ch;
+        }
+        res.push(cur.trim());
+        return res;
+      };
+      const hdrs = parseLine(lines[0]).map((h) => h.toLowerCase());
+      const findIdx = (keys: string[]) => hdrs.findIndex((h) => keys.some((k) => h.includes(k)));
+      const idIdx = findIdx(['campaign id', 'campaign_id']);
+      const nameIdx = findIdx(['campaign name', 'campaign_name', 'campaign']);
+      const spendIdx = findIdx(['amount spent', 'cost', 'spend']);
+      const impIdx = findIdx(['impression', 'impr']);
+      const clkIdx = findIdx(['click']);
+      const curIdx = findIdx(['currency']);
+
+      if ((idIdx < 0 && nameIdx < 0) || spendIdx < 0) {
+        setMetaMsg('⚠️ CSV file must include Campaign / Campaign ID and Cost / Spend columns.');
+        return;
+      }
+      const rows = lines.slice(1).map((ln: string) => {
+        const cols = parseLine(ln);
+        return {
+          campaignId: idIdx >= 0 ? cols[idIdx] : '',
+          campaignName: nameIdx >= 0 ? cols[nameIdx] : '',
+          spend: Number(String(cols[spendIdx] || '0').replace(/[^0-9.-]/g, '')) || 0,
+          impressions: impIdx >= 0 ? Number(String(cols[impIdx] || '0').replace(/[^0-9]/g, '')) || 0 : 0,
+          clicks: clkIdx >= 0 ? Number(String(cols[clkIdx] || '0').replace(/[^0-9]/g, '')) || 0 : 0,
+          currency: curIdx >= 0 ? cols[curIdx] : 'BDT'
+        };
+      }).filter((r: any) => r.campaignId || r.campaignName);
+
+      const res = await aFetch('/admin/campaign-analytics/import-csv', {
+        method: 'POST',
+        body: JSON.stringify({ rows, usdToBdtRate: Number(usdRate) || 122 })
+      });
+      const d = await res.json();
+      if (res.ok) {
+        setMetaMsg(`✅ Successfully imported spend data for ${d.imported} campaigns from CSV!`);
+        load(range);
+      } else {
+        setMetaMsg('⚠️ ' + (d.error || 'Import failed'));
+      }
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const saveCampaignCfg = async (campaign: string, patch: { adSpend?: number; isPriority?: boolean }) => {
+    setSavingCamp(campaign);
+    try {
+      const r = await aFetch('/admin/campaign-analytics/' + encodeURIComponent(campaign), {
+        method: 'PUT',
+        body: JSON.stringify(patch)
+      });
+      if (r.ok) load(range);
+    } finally {
+      setSavingCamp('');
+    }
+  };
+
+  const exportCsv = () => {
+    const rows = data?.campaigns || [];
+    const headers = ['Campaign', 'Channel', 'Orders', 'Confirmed', 'Delivered', 'Cancelled', 'Returned', 'Lost', 'ConfirmRatePct', 'DeliveryRatePct', 'CancelReturnRatePct', 'AdSpendBDT', 'CostPerOrderBDT', 'CostPerDeliveredBDT', 'DeliveredSalesBDT', 'NetProfitBDT', 'ROAS'];
+    const lines = [
+      headers.join(','),
+      ...rows.map((c: any) => [
+        `"${String(c.campaign || '').replace(/"/g, '""')}"`,
+        c.channel,
+        c.totalOrders,
+        c.confirmed,
+        c.delivered,
+        c.cancelled,
+        c.returned,
+        c.lost,
+        c.confirmRate,
+        c.deliveryRate ?? '',
+        c.cancelReturnRate,
+        c.adSpend,
+        c.costPerOrder,
+        c.costPerDelivered,
+        c.deliveredSales,
+        c.netProfit,
+        c.roas ?? ''
+      ].join(','))
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ads-analytics-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const toggleAdControl = async (c: any) => {
+    const isAct = String(c.adStatus || '').toUpperCase() === 'ACTIVE';
+    const nextStatus = isAct ? 'PAUSED' : 'ACTIVE';
+    setSavingCamp(c.campaign);
+    setMetaMsg('');
+    try {
+      const r = await aFetch('/admin/campaign-analytics/ad-control', {
+        method: 'POST',
+        body: JSON.stringify({ campaignId: c.campaign, status: nextStatus }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setMetaMsg(`✅ Campaign "${c.metaCampaignName || c.campaign}" is now ${nextStatus === 'ACTIVE' ? 'Running' : 'Paused'}.`);
+        load(range);
+      } else {
+        setMetaMsg('⚠️ ' + (d.error || 'Failed to update ad status'));
+      }
+    } finally {
+      setSavingCamp('');
+    }
+  };
+
+  const campaigns = data?.campaigns || [];
+  const summary = data?.summary || {};
+  const highLossList = campaigns.filter((c: any) => c.isHighLossAlert);
+  const netTotal = (summary.totalDeliveredSales || 0) - (summary.totalAdSpend || 0);
+
+  const isAdActive = (c: any) => String(c.adStatus || '').toUpperCase() === 'ACTIVE';
+  const isAdPaused = (c: any) => {
+    const s = String(c.adStatus || '').toUpperCase();
+    return !!s && s !== 'ACTIVE';
+  };
+
+  const isTikTok = (c: any) => {
+    const ch = String(c.channel || '').toLowerCase();
+    const nm = String(c.metaCampaignName || '').toLowerCase();
+    return ch.includes('tiktok') || nm.includes('[tiktok]');
+  };
+  const isGoogle = (c: any) => {
+    const ch = String(c.channel || '').toLowerCase();
+    return ch.includes('google');
+  };
+  const isMeta = (c: any) => {
+    if (c.isDirect) return false;
+    return !isTikTok(c) && !isGoogle(c);
+  };
+
+  const activeCount = campaigns.filter(isAdActive).length;
+  const pausedCount = campaigns.filter(isAdPaused).length;
+  const totalRoas = (summary.totalAdSpend || 0) > 0 ? ((summary.totalDeliveredSales || 0) / summary.totalAdSpend).toFixed(2) : null;
+
+  const metaCamps = campaigns.filter(isMeta);
+  const tiktokCamps = campaigns.filter(isTikTok);
+  const googleCamps = campaigns.filter(isGoogle);
+
+  const calcStats = (list: any[]) => {
+    const count = list.length;
+    const orders = list.reduce((s, c) => s + (c.totalOrders || 0), 0);
+    const delivered = list.reduce((s, c) => s + (c.delivered || 0), 0);
+    const spend = list.reduce((s, c) => s + (c.adSpend || 0), 0);
+    const revenue = list.reduce((s, c) => s + (c.deliveredSales || 0), 0);
+    const net = revenue - spend;
+    const roas = spend > 0 ? (revenue / spend).toFixed(2) : '—';
+    const active = list.filter(isAdActive).length;
+    const paused = list.filter(isAdPaused).length;
+    return { count, orders, delivered, spend, revenue, net, roas, active, paused };
+  };
+
+  const metaStats = calcStats(metaCamps);
+  const tiktokStats = calcStats(tiktokCamps);
+  const googleStats = calcStats(googleCamps);
+
+  const getPlatformBadge = (c: any) => {
+    if (c.isDirect) return { icon: '📞', label: 'Direct / Organic' };
+    if (isTikTok(c)) return { icon: '🎵', label: 'TikTok Ads' };
+    if (isGoogle(c)) return { icon: '🔍', label: 'Google Ads' };
+    return { icon: '📘', label: 'Meta Ads' };
+  };
+
+  const renderAdStatusPill = (c: any) => {
+    if (c.isDirect) {
+      return (
+        <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 999, background: 'rgba(255, 255, 255, 0.05)', color: '#94a3b8', border: '1px solid rgba(255, 255, 255, 0.1)', fontWeight: 600 }}>
+          Direct / Organic
+        </span>
+      );
+    }
+    const st = String(c.adStatus || '').toUpperCase();
+    if (st === 'ACTIVE') {
+      return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '3px 10px', borderRadius: 999, background: 'rgba(139, 92, 246, 0.15)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.35)', fontWeight: 700 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#8b5cf6', boxShadow: '0 0 6px #8b5cf6', display: 'inline-block' }} />
+          Running
+        </span>
+      );
+    }
+    if (st) {
+      const label = st.includes('PAUSED') ? 'Paused' : st === 'ARCHIVED' ? 'Archived' : st === 'DELETED' ? 'Deleted' : st;
+      return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '3px 10px', borderRadius: 999, background: 'rgba(255, 255, 255, 0.05)', color: '#94a3b8', border: '1px solid rgba(255, 255, 255, 0.1)', fontWeight: 600 }}>
+          ⏸️ {label}
+        </span>
+      );
+    }
+    return (
+      <span title="Status unknown. Click Sync to refresh." style={{ fontSize: 11, padding: '3px 10px', borderRadius: 999, background: 'rgba(255, 255, 255, 0.04)', color: '#71717a', border: '1px solid rgba(255, 255, 255, 0.08)', fontWeight: 500 }}>
+        ⚪ Sync Needed
+      </span>
+    );
+  };
+
+  const renderProgressMetric = (pct: number | null) => {
+    if (pct == null) return <span className="dim">—</span>;
+    return (
+      <div style={{ minWidth: 68 }}>
+        <div style={{ fontWeight: 800, fontSize: 13, color: '#ffffff' }}>{pct}%</div>
+        <div style={{ width: '100%', height: 4, borderRadius: 99, background: 'rgba(255, 255, 255, 0.08)', marginTop: 4, overflow: 'hidden' }}>
+          <div style={{ width: `${Math.min(100, Math.max(4, pct))}%`, height: '100%', background: 'linear-gradient(90deg, #8b5cf6, #c4b5fd)', borderRadius: 99 }} />
+        </div>
+      </div>
+    );
+  };
+
+  const filterList = (list: any[]) => {
+    const q = campSearch.trim().toLowerCase();
+    return list.filter((c: any) => {
+      if (statusFilter === 'active' && !isAdActive(c)) return false;
+      if (statusFilter === 'paused' && !isAdPaused(c)) return false;
+      if (statusFilter === 'high_loss' && !c.isHighLossAlert) return false;
+      if (q) {
+        const hay = `${c.campaign} ${c.metaCampaignName || ''} ${c.channel || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Top Header */}
+      <div className="sa-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: '#ffffff', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span>📢</span>
+            {currentTab === 'dashboard' && 'Ads Dashboard & Multi-Platform Intelligence'}
+            {currentTab === 'meta' && 'Meta (Facebook) Ads Manager'}
+            {currentTab === 'spend' && 'Record Ad Spend & Cost Tracking'}
+            {currentTab === 'profit' && 'Ad Profit Analysis (True Profit Tracker)'}
+            {currentTab === 'tiktok' && 'TikTok Ads Manager'}
+            {currentTab === 'google' && 'Google Ads Manager & Tracking'}
+          </h1>
+          <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span>Unified campaign analytics and courier-verified ROI attribution</span>
+            <span style={{ color: '#c4b5fd', fontWeight: 600 }}>· ⏱ Auto-Sync: Every 30 min</span>
+            {data?.adsConfig?.lastSyncedAt && (
+              <span style={{ color: '#a78bfa' }}>
+                · Last Synced: {new Date(data.adsConfig.lastSyncedAt).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+              </span>
+            )}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="sa-btn sa-mini"
+            disabled={metaSyncing}
+            onClick={syncAllNow}
+          >
+            {metaSyncing ? '⏳ Syncing…' : '🔄 Sync All Ads'}
+          </button>
+          <button type="button" className="sa-btn ghost sa-mini" onClick={() => setShowConfigBox((v) => !v)}>
+            ⚙️ Accounts &amp; Settings
+          </button>
+          <button type="button" className="sa-btn ghost sa-mini" onClick={exportCsv}>📥 Export CSV</button>
+          <button type="button" className="sa-btn ghost sa-mini" onClick={() => load(range)}>🔄 Refresh</button>
+        </div>
+      </div>
+
+      {/* 6 Sub-Navigation Tabs matching Admin Theme */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '6px', background: '#13111c', borderRadius: 14, border: '1px solid rgba(255, 255, 255, 0.08)', width: 'fit-content' }}>
+        {[
+          { id: 'dashboard', label: 'Ads Dashboard', icon: '🎯' },
+          { id: 'meta', label: 'Meta Ads', icon: '📘' },
+          { id: 'spend', label: 'Record Ad Spend', icon: '💵' },
+          { id: 'profit', label: 'Ad Profit Analysis', icon: '📈' },
+          { id: 'tiktok', label: 'TikTok Ads', icon: '🎵' },
+          { id: 'google', label: 'Google Ads', icon: '🔍' },
+        ].map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => switchTab(t.id as any, t.label)}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: currentTab === t.id ? 700 : 500,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              background: currentTab === t.id ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.35) 0%, rgba(109, 40, 217, 0.25) 100%)' : 'transparent',
+              border: currentTab === t.id ? '1px solid rgba(139, 92, 246, 0.5)' : '1px solid transparent',
+              color: currentTab === t.id ? '#ffffff' : '#94a3b8',
+              boxShadow: currentTab === t.id ? '0 4px 14px rgba(139, 92, 246, 0.25)' : 'none',
+              transition: 'all 0.18s ease'
+            }}
+          >
+            <span>{t.icon}</span>
+            <span>{t.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Date Range Selector */}
+      <div style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 6, padding: 5, background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: 12, width: 'fit-content' }}>
+        {([
+          { id: 'today', label: 'Today' },
+          { id: 'yesterday', label: 'Yesterday' },
+          { id: '7d', label: 'Last 7 Days' },
+          { id: '30d', label: '30 Days' },
+          { id: 'all', label: 'All Time' }
+        ] as const).map((r) => (
+          <button
+            key={r.id}
+            type="button"
+            onClick={() => setRange(r.id)}
+            style={{
+              padding: '7px 14px',
+              borderRadius: 8,
+              fontSize: 12.5,
+              fontWeight: range === r.id ? 700 : 500,
+              cursor: 'pointer',
+              background: range === r.id ? 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)' : 'transparent',
+              border: range === r.id ? '1px solid #8b5cf6' : '1px solid transparent',
+              color: range === r.id ? '#ffffff' : '#94a3b8',
+              boxShadow: range === r.id ? '0 2px 8px rgba(124, 58, 237, 0.3)' : 'none'
+            }}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+
+      {metaMsg && (
+        <div style={{ padding: '12px 16px', borderRadius: 12, fontSize: 13, background: '#161426', border: '1px solid rgba(139, 92, 246, 0.35)', color: '#c4b5fd' }}>
+          {metaMsg}
+        </div>
+      )}
+
+      {/* Global Config Settings Dropdown */}
+      {showConfigBox && (
+        <div style={{ padding: 20, border: '1px solid rgba(139, 92, 246, 0.25)', background: '#13111c', borderRadius: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, fontSize: 15, color: '#ffffff', fontWeight: 700 }}>⚙️ Multi-Account &amp; Currency Settings</h3>
+            <button type="button" className="sa-btn ghost sa-mini" onClick={() => setShowConfigBox(false)}>✕</button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#cbd5e1' }}>
+              USD → BDT Rate (৳):
+              <input type="number" min={1} value={usdRate} onChange={(e) => setUsdRate(e.target.value)} style={{ width: 100 }} />
+            </label>
+            <button type="button" className="sa-btn sa-mini" onClick={saveAdsConfig}>💾 Save Settings</button>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 1. ADS DASHBOARD */}
+      {/* ============================================================== */}
+      {currentTab === 'dashboard' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Executive KPI Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+            <div style={{ padding: 20, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c', borderRadius: 16, position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, #8b5cf6, transparent)' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.06em' }}>Tracked Campaigns</span>
+                <span>🎯</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 10 }}>
+                <div style={{ fontSize: 28, fontWeight: 900, color: '#ffffff', letterSpacing: '-0.02em' }}>{summary.totalCampaigns || 0}</div>
+                <div style={{ fontSize: 12.5, color: '#94a3b8' }}>{summary.totalOrders || 0} orders</div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12, fontSize: 12 }}>
+                <span style={{ color: '#c4b5fd', fontWeight: 600 }}>🟢 {activeCount} Running</span>
+                <span style={{ color: '#94a3b8', fontWeight: 500 }}>⏸️ {pausedCount} Paused</span>
+              </div>
+            </div>
+
+            <div style={{ padding: 20, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c', borderRadius: 16, position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, #8b5cf6, transparent)' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.06em' }}>{adminTranslate("Delivered Revenue")}</span>
+                <span>💰</span>
+              </div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: '#ffffff', marginTop: 10, letterSpacing: '-0.02em' }}>৳{(summary.totalDeliveredSales || 0).toLocaleString()}</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 10 }}>Courier-verified cash collection</div>
+            </div>
+
+            <div style={{ padding: 20, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c', borderRadius: 16, position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, #8b5cf6, transparent)' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.06em' }}>Ad Spend &amp; Net</span>
+                {totalRoas && (
+                  <span style={{ fontSize: 11, padding: '2px 9px', borderRadius: 999, background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.3)', color: '#c4b5fd', fontWeight: 700 }}>
+                    {totalRoas}x ROAS
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: '#ffffff', marginTop: 10, letterSpacing: '-0.02em' }}>৳{(summary.totalAdSpend || 0).toLocaleString()}</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 10 }}>
+                Net Profit: <strong style={{ color: '#c4b5fd' }}>{netTotal >= 0 ? '+' : ''}৳{netTotal.toLocaleString()}</strong>
+              </div>
+            </div>
+
+            <div style={{ padding: 20, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c', borderRadius: 16, position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, #8b5cf6, transparent)' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.06em' }}>Return Alerts</span>
+                <span>⚡</span>
+              </div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: '#ffffff', marginTop: 10, letterSpacing: '-0.02em' }}>{highLossList.length}</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 10 }}>Campaigns with &gt;40% return/cancel</div>
+            </div>
+          </div>
+
+          {/* Platform Performance Comparison Cards */}
+          <div>
+            <h3 style={{ margin: '0 0 14px 0', fontSize: 16, color: '#ffffff', fontWeight: 700, letterSpacing: '-0.01em' }}>📊 Platform Comparison (Meta vs TikTok vs Google)</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14 }}>
+              {/* Meta Card */}
+              <div style={{ padding: 20, borderRadius: 16, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(139, 92, 246, 0.12)', border: '1px solid rgba(139, 92, 246, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+                      📘
+                    </div>
+                    <div>
+                      <strong style={{ fontSize: 15, color: '#ffffff' }}>Meta (Facebook) Ads</strong>
+                      <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>{metaStats.count} Campaigns ({metaStats.active} Running)</div>
+                    </div>
+                  </div>
+                  <button type="button" className="sa-btn ghost sa-mini" onClick={() => switchTab('meta', 'Meta Ads')}>
+                    Manage →
+                  </button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{adminTranslate("Ad Spend")}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#ffffff', marginTop: 4 }}>৳{metaStats.spend.toLocaleString()}</div>
+                  </div>
+                  <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{adminTranslate("Delivered Revenue")}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#ffffff', marginTop: 4 }}>৳{metaStats.revenue.toLocaleString()}</div>
+                  </div>
+                  <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{adminTranslate("Orders (Delivered)")}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', marginTop: 4 }}>{metaStats.orders} ({metaStats.delivered}✓)</div>
+                  </div>
+                  <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Real ROAS / Net</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#c4b5fd', marginTop: 4 }}>{metaStats.roas}x ({metaStats.net >= 0 ? '+' : ''}৳{metaStats.net.toLocaleString()})</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* TikTok Card */}
+              <div style={{ padding: 20, borderRadius: 16, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(139, 92, 246, 0.12)', border: '1px solid rgba(139, 92, 246, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+                      🎵
+                    </div>
+                    <div>
+                      <strong style={{ fontSize: 15, color: '#ffffff' }}>{adminTranslate("TikTok Ads")}</strong>
+                      <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>{tiktokStats.count} Campaigns ({tiktokStats.active} Running)</div>
+                    </div>
+                  </div>
+                  <button type="button" className="sa-btn ghost sa-mini" onClick={() => switchTab('tiktok', 'TikTok Ads')}>
+                    Manage →
+                  </button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{adminTranslate("Ad Spend")}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#ffffff', marginTop: 4 }}>৳{tiktokStats.spend.toLocaleString()}</div>
+                  </div>
+                  <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{adminTranslate("Delivered Revenue")}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#ffffff', marginTop: 4 }}>৳{tiktokStats.revenue.toLocaleString()}</div>
+                  </div>
+                  <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{adminTranslate("Orders (Delivered)")}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', marginTop: 4 }}>{tiktokStats.orders} ({tiktokStats.delivered}✓)</div>
+                  </div>
+                  <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Real ROAS / Net</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#c4b5fd', marginTop: 4 }}>{tiktokStats.roas}x ({tiktokStats.net >= 0 ? '+' : ''}৳{tiktokStats.net.toLocaleString()})</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Google Card */}
+              <div style={{ padding: 20, borderRadius: 16, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(139, 92, 246, 0.12)', border: '1px solid rgba(139, 92, 246, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+                      🔍
+                    </div>
+                    <div>
+                      <strong style={{ fontSize: 15, color: '#ffffff' }}>{adminTranslate("Google Ads")}</strong>
+                      <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>{googleStats.count} {adminTranslate("Campaigns")}</div>
+                    </div>
+                  </div>
+                  <button type="button" className="sa-btn ghost sa-mini" onClick={() => switchTab('google', 'Google Ads')}>
+                    Manage →
+                  </button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{adminTranslate("Ad Spend")}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#ffffff', marginTop: 4 }}>৳{googleStats.spend.toLocaleString()}</div>
+                  </div>
+                  <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{adminTranslate("Delivered Revenue")}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#ffffff', marginTop: 4 }}>৳{googleStats.revenue.toLocaleString()}</div>
+                  </div>
+                  <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{adminTranslate("Orders (Delivered)")}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#e2e8f0', marginTop: 4 }}>{googleStats.orders} ({googleStats.delivered}✓)</div>
+                  </div>
+                  <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Real ROAS / Net</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#c4b5fd', marginTop: 4 }}>{googleStats.roas}x ({googleStats.net >= 0 ? '+' : ''}৳{googleStats.net.toLocaleString()})</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* All Active Campaigns Overview Table */}
+          <div style={{ padding: 20, borderRadius: 16, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+              <h3 style={{ margin: 0, fontSize: 15.5, color: '#ffffff', fontWeight: 700 }}>🎯 All Active Campaigns Overview</h3>
+              <input
+                type="text"
+                placeholder="Search campaigns..."
+                value={campSearch}
+                onChange={(e) => setCampSearch(e.target.value)}
+                style={{ minWidth: 220, padding: '7px 12px', borderRadius: 8, background: '#161422', border: '1px solid rgba(255, 255, 255, 0.12)', color: '#ffffff', fontSize: 13 }}
+              />
+            </div>
+            {campaigns.length === 0 ? (
+              <div style={{ padding: 36, textAlign: 'center', color: '#94a3b8' }}>No campaigns found. Click "Sync All Ads" to fetch latest data.</div>
+            ) : (
+              <div className="sa-table-wrap">
+                <table className="sa-table">
+                  <thead>
+                    <tr>
+                      <th>Campaign &amp; Channel</th>
+                      <th>{adminTranslate("Status")}</th>
+                      <th>{adminTranslate("Orders")}</th>
+                      <th>Delivery %</th>
+                      <th>{adminTranslate("Ad Spend")}</th>
+                      <th>Delivered Sales</th>
+                      <th>{adminTranslate("True Net Profit")}</th>
+                      <th>ROAS</th>
+                      <th>{adminTranslate("Action")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filterList(campaigns).slice(0, 15).map((c: any) => {
+                      const plat = getPlatformBadge(c);
+                      return (
+                        <tr key={c.campaign}>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                              <span style={{ fontSize: 16 }}>{plat.icon}</span>
+                              <div>
+                                <strong style={{ color: '#ffffff', fontSize: 13.5 }}>{c.metaCampaignName || c.campaign}</strong>
+                                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{plat.label}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{renderAdStatusPill(c)}</td>
+                          <td>
+                            <strong style={{ color: '#ffffff' }}>{c.totalOrders}</strong>
+                            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{c.delivered}✓ · {c.returned + c.lost}↩</div>
+                          </td>
+                          <td>{renderProgressMetric(c.deliveryRate)}</td>
+                          <td style={{ color: '#ffffff', fontWeight: 700 }}>৳{(c.adSpend || 0).toLocaleString()}</td>
+                          <td style={{ color: '#ffffff', fontWeight: 700 }}>৳{(c.deliveredSales || 0).toLocaleString()}</td>
+                          <td style={{ color: '#c4b5fd', fontWeight: 800 }}>
+                            {c.netProfit >= 0 ? '+' : ''}৳{c.netProfit.toLocaleString()}
+                          </td>
+                          <td>
+                            <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.3)', color: '#c4b5fd', fontWeight: 700, fontSize: 11.5 }}>
+                              {c.roas ? `${c.roas}x` : '—'}
+                            </span>
+                          </td>
+                          <td>
+                            <button type="button" className="sa-btn ghost sa-mini" onClick={() => onViewOrders(c.isDirect ? '__direct__' : c.campaign)}>
+                              Orders →
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 2. META ADS */}
+      {/* ============================================================== */}
+      {currentTab === 'meta' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Meta Accounts Configuration Card */}
+          <div style={{ padding: 20, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c', borderRadius: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+              <div>
+                <strong style={{ fontSize: 15.5, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>📘</span> Meta (Facebook) Ad Accounts ({metaAccounts.length})
+                </strong>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
+                  Connect Meta Business Manager Ad Account IDs (<code style={{ color: '#c4b5fd' }}>act_...</code>) and System User Access Tokens.
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="sa-btn ghost sa-mini" onClick={() => setMetaAccounts((p) => [...p, { id: 'meta_' + Date.now().toString(36), label: `Meta Account ${p.length + 1}`, adAccountId: '', accessToken: '', hasToken: false }])}>
+                  + Add Meta Account
+                </button>
+                <button type="button" className="sa-btn sa-mini" onClick={saveAdsConfig}>
+                  💾 Save Accounts
+                </button>
+              </div>
+            </div>
+
+            {metaAccounts.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr 90px auto', gap: 8, marginBottom: 6, fontSize: 11, fontWeight: 700, color: '#94a3b8' }}>
+                <span>1. Account Label</span>
+                <span>2. Meta Ad Account ID (act_...)</span>
+                <span>3. Access Token</span>
+                <span>4. Rate (৳)</span>
+                <span style={{ width: 28 }}></span>
+              </div>
+            )}
+            {metaAccounts.map((a, idx) => (
+              <div key={a.id || idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr 90px auto', gap: 8, marginBottom: 8 }}>
+                <input autoComplete="off" value={a.label || ''} onChange={(e) => setMetaAccounts((p) => p.map((x, i) => i === idx ? { ...x, label: e.target.value } : x))} placeholder="e.g. Primary BM" />
+                <input autoComplete="off" value={a.adAccountId || ''} onChange={(e) => setMetaAccounts((p) => p.map((x, i) => i === idx ? { ...x, adAccountId: e.target.value } : x))} placeholder="act_1234567890" />
+                <input type="text" autoComplete="off" style={{ fontFamily: 'monospace', fontSize: 12 }} value={a.accessToken || ''} onChange={(e) => setMetaAccounts((p) => p.map((x, i) => i === idx ? { ...x, accessToken: e.target.value } : x))} placeholder={a.hasToken ? '✓ Token Saved (leave empty to keep)' : (idx > 0 ? 'Leave empty to use 1st token' : 'EAAB... paste token here')} />
+                <input type="number" min={1} autoComplete="off" value={a.usdRate ?? ''} onChange={(e) => setMetaAccounts((p) => p.map((x, i) => i === idx ? { ...x, usdRate: e.target.value ? Number(e.target.value) : null } : x))} placeholder={usdRate || '122'} />
+                <button type="button" className="sa-btn ghost sa-mini" style={{ color: '#94a3b8' }} onClick={() => setMetaAccounts((p) => p.filter((_, i) => i !== idx))}>✕</button>
+              </div>
+            ))}
+          </div>
+
+          {/* Meta Scorecards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14 }}>
+            <div style={{ padding: 18, borderRadius: 16, background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>Meta Ad Spend</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#ffffff', marginTop: 8 }}>৳{metaStats.spend.toLocaleString()}</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>≈ ${(metaStats.spend / (Number(usdRate) || 122)).toFixed(1)} USD</div>
+            </div>
+            <div style={{ padding: 18, borderRadius: 16, background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>{adminTranslate("Delivered Revenue")}</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#ffffff', marginTop: 8 }}>৳{metaStats.revenue.toLocaleString()}</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>{metaStats.delivered} successful deliveries</div>
+            </div>
+            <div style={{ padding: 18, borderRadius: 16, background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>{adminTranslate("True Net Profit")}</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#c4b5fd', marginTop: 8 }}>
+                {metaStats.net >= 0 ? '+' : ''}৳{metaStats.net.toLocaleString()}
+              </div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>Net cash margin</div>
+            </div>
+            <div style={{ padding: 18, borderRadius: 16, background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>Meta ROAS &amp; Status</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#ffffff', marginTop: 8 }}>{metaStats.roas}x</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>🟢 {metaStats.active} Running / ⏸️ {metaStats.paused} Paused</div>
+            </div>
+          </div>
+
+          {/* Filter Bar & Search */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '12px 16px', borderRadius: 14, background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {[
+                { id: 'all', label: `All Meta (${metaCamps.length})` },
+                { id: 'active', label: `🟢 Running (${metaStats.active})` },
+                { id: 'paused', label: `⏸️ Off / Paused (${metaStats.paused})` },
+                { id: 'high_loss', label: '⚠️ High Return' },
+              ].map((f: any) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setStatusFilter(f.id)}
+                  style={{
+                    padding: '7px 14px',
+                    borderRadius: 999,
+                    fontSize: 12,
+                    fontWeight: statusFilter === f.id ? 700 : 500,
+                    cursor: 'pointer',
+                    border: statusFilter === f.id ? '1px solid rgba(139, 92, 246, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
+                    background: statusFilter === f.id ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                    color: statusFilter === f.id ? '#ffffff' : '#94a3b8'
+                  }}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text"
+              placeholder="Search Meta campaign name or ID..."
+              value={campSearch}
+              onChange={(e) => setCampSearch(e.target.value)}
+              style={{ minWidth: 240, padding: '7px 12px', borderRadius: 8, background: '#161422', border: '1px solid rgba(255, 255, 255, 0.12)', color: '#ffffff', fontSize: 12.5 }}
+            />
+          </div>
+
+          {/* Dedicated Meta Campaigns Table */}
+          <div style={{ padding: 20, borderRadius: 16, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c' }}>
+            {filterList(metaCamps).length === 0 ? (
+              <div style={{ padding: 36, textAlign: 'center', color: '#94a3b8' }}>
+                No Meta campaigns found. Click "Sync All Ads" above or add your Meta Ad Account.
+              </div>
+            ) : (
+              <div className="sa-table-wrap">
+                <table className="sa-table">
+                  <thead>
+                    <tr>
+                      <th>Status &amp; Switch</th>
+                      <th>Campaign &amp; Meta ID</th>
+                      <th>Impressions &amp; CTR</th>
+                      <th>Orders (Del/Ret)</th>
+                      <th>Delivery %</th>
+                      <th>Meta Spend</th>
+                      <th>Cost / Order</th>
+                      <th>Delivered Sales &amp; Profit</th>
+                      <th>{adminTranslate("Actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filterList(metaCamps).map((c: any) => {
+                      const isAct = isAdActive(c);
+                      return (
+                        <tr key={c.campaign}>
+                          <td>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {renderAdStatusPill(c)}
+                              {/^\d+$/.test(String(c.campaign || '')) && (
+                                <button
+                                  type="button"
+                                  className="sa-btn ghost sa-mini"
+                                  disabled={savingCamp === c.campaign}
+                                  onClick={() => toggleAdControl(c)}
+                                  style={{
+                                    padding: '3px 8px',
+                                    fontSize: 10.5
+                                  }}
+                                >
+                                  {savingCamp === c.campaign ? '…' : isAct ? '⏸️ Pause' : '▶️ Run'}
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <strong style={{ color: '#ffffff', fontSize: 13.5 }}>{c.metaCampaignName || c.campaign}</strong>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                              <button
+                                type="button"
+                                title="Copy ID"
+                                onClick={() => navigator.clipboard?.writeText(c.campaign)}
+                                style={{ fontSize: 10.5, fontFamily: 'monospace', color: '#94a3b8', background: 'rgba(255, 255, 255, 0.05)', padding: '1px 6px', borderRadius: 4, border: '1px solid rgba(255, 255, 255, 0.08)', cursor: 'pointer' }}
+                              >
+                                ID: {c.campaign} 📋
+                              </button>
+                              {c.isPriority && <span style={{ fontSize: 10.5, color: '#c4b5fd', fontWeight: 700 }}>VIP</span>}
+                              {c.isHighLossAlert && <span style={{ fontSize: 10.5, color: '#94a3b8', fontWeight: 600 }}>⚠️ Return Alert</span>}
+                            </div>
+                          </td>
+                          <td>
+                            {(c.impressions > 0 || c.clicks > 0) ? (
+                              <div style={{ fontSize: 11.5, color: '#94a3b8', lineHeight: 1.5 }}>
+                                <div>👁 {c.impressions?.toLocaleString()}</div>
+                                <div>🖱 {c.clicks?.toLocaleString()}</div>
+                                <div>CTR: <strong style={{ color: '#ffffff' }}>{c.ctr}%</strong></div>
+                              </div>
+                            ) : <span className="dim">—</span>}
+                          </td>
+                          <td>
+                            <strong style={{ color: '#ffffff', fontSize: 14.5 }}>{c.totalOrders}</strong>
+                            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                              <span>{c.delivered}✓</span> · <span>{c.returned + c.lost}↩</span>
+                            </div>
+                          </td>
+                          <td>{renderProgressMetric(c.deliveryRate)}</td>
+                          <td>
+                            <div style={{ fontWeight: 800, color: '#ffffff' }}>৳{(c.adSpend || 0).toLocaleString()}</div>
+                            {c.spendUsd > 0 && <div style={{ fontSize: 11, color: '#94a3b8' }}>${c.spendUsd} USD</div>}
+                          </td>
+                          <td>
+                            {c.adSpend > 0 ? (
+                              <div style={{ fontSize: 11.5, lineHeight: 1.5 }}>
+                                <div style={{ color: '#cbd5e1' }}>CPO: <strong>৳{c.costPerOrder}</strong></div>
+                                <div style={{ color: '#c4b5fd' }}>Del: <strong>৳{c.costPerDelivered || '—'}</strong></div>
+                              </div>
+                            ) : <span className="dim">—</span>}
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 800, fontSize: 14, color: '#ffffff' }}>৳{c.deliveredSales.toLocaleString()}</div>
+                            {c.adSpend > 0 && (
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4, padding: '2px 8px', borderRadius: 6, background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.3)', color: '#c4b5fd', fontSize: 11, fontWeight: 700 }}>
+                                {c.netProfit >= 0 ? '+' : ''}৳{c.netProfit.toLocaleString()} · {c.roas}x
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                className={`sa-btn sa-mini ${c.isPriority ? '' : 'ghost'}`}
+                                onClick={() => saveCampaignCfg(c.campaign, { isPriority: !c.isPriority })}
+                                title="VIP Priority"
+                              >
+                                {c.isPriority ? '★ VIP' : '☆ VIP'}
+                              </button>
+                              <button type="button" className="sa-btn ghost sa-mini" onClick={() => onViewOrders(c.campaign)}>
+                                Orders →
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 3. RECORD AD SPEND */}
+      {/* ============================================================== */}
+      {currentTab === 'spend' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Action Toolbar */}
+          <div style={{ padding: 20, borderRadius: 16, background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+            <div>
+              <strong style={{ fontSize: 15.5, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>💵</span> Manual Ad Spend Entry &amp; CSV Bulk Import
+              </strong>
+              <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 4 }}>
+                Enter ad spend (BDT) per campaign or upload an export CSV from Meta / TikTok Ads Manager.
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: '#cbd5e1' }}>
+                USD Rate:
+                <input type="number" min={1} value={usdRate} onChange={(e) => setUsdRate(e.target.value)} style={{ width: 85, padding: '5px 8px' }} />
+              </label>
+              <label className="sa-btn ghost sa-mini" style={{ cursor: 'pointer', margin: 0 }}>
+                📤 Import CSV
+                <input type="file" accept=".csv,text/csv" onChange={handleCsvImport} style={{ display: 'none' }} />
+              </label>
+              <button type="button" className="sa-btn sa-mini" disabled={savingAllSpends} onClick={saveAllSpends}>
+                {savingAllSpends ? 'Saving…' : '💾 Save All Spends'}
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Search */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 13, color: '#94a3b8' }}>
+              {adminTranslate("Showing") + " "}<strong>{campaigns.length}</strong> campaigns
+            </span>
+            <input
+              type="text"
+              placeholder="Filter by campaign name..."
+              value={campSearch}
+              onChange={(e) => setCampSearch(e.target.value)}
+              style={{ minWidth: 260, padding: '7px 12px', borderRadius: 8, background: '#161422', border: '1px solid rgba(255, 255, 255, 0.12)', color: '#ffffff', fontSize: 12.5 }}
+            />
+          </div>
+
+          {/* Dedicated Spend Entry Table */}
+          <div style={{ padding: 20, borderRadius: 16, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c' }}>
+            <div className="sa-table-wrap">
+              <table className="sa-table">
+                <thead>
+                  <tr>
+                    <th>Campaign &amp; Channel</th>
+                    <th>Total Orders</th>
+                    <th>{adminTranslate("Delivered Orders")}</th>
+                    <th style={{ width: 170 }}>Ad Spend (BDT ৳)</th>
+                    <th>USD ($) Equiv.</th>
+                    <th>Est. CPO</th>
+                    <th>Est. CPD</th>
+                    <th>{adminTranslate("Action")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filterList(campaigns).map((c: any) => {
+                    const plat = getPlatformBadge(c);
+                    const currentVal = spendDrafts[c.campaign] ?? String(c.adSpend || 0);
+                    const valNum = Number(currentVal) || 0;
+                    const usdEquiv = valNum > 0 ? (valNum / (Number(usdRate) || 122)).toFixed(2) : '0';
+                    const estCpo = c.totalOrders > 0 && valNum > 0 ? Math.round(valNum / c.totalOrders) : '—';
+                    const estCpd = c.delivered > 0 && valNum > 0 ? Math.round(valNum / c.delivered) : '—';
+
+                    return (
+                      <tr key={c.campaign}>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 16 }}>{plat.icon}</span>
+                            <div>
+                              <strong style={{ color: '#ffffff', fontSize: 13.5 }}>{c.metaCampaignName || c.campaign}</strong>
+                              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{plat.label}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <strong style={{ color: '#ffffff', fontSize: 14 }}>{c.totalOrders}</strong>
+                        </td>
+                        <td>
+                          <strong style={{ color: '#ffffff', fontSize: 14 }}>{c.delivered}</strong>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ color: '#94a3b8', fontSize: 13 }}>৳</span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={currentVal}
+                              onChange={(e) => setSpendDrafts((p) => ({ ...p, [c.campaign]: e.target.value }))}
+                              style={{ width: 110, padding: '6px 10px', fontSize: 13, fontWeight: 700, borderRadius: 8, background: '#161422', border: '1px solid rgba(255, 255, 255, 0.14)', color: '#ffffff' }}
+                            />
+                          </div>
+                        </td>
+                        <td style={{ color: '#94a3b8', fontSize: 12 }}>
+                          ${usdEquiv} USD
+                        </td>
+                        <td style={{ color: '#cbd5e1', fontWeight: 600 }}>
+                          {estCpo !== '—' ? `৳${estCpo}` : '—'}
+                        </td>
+                        <td style={{ color: '#c4b5fd', fontWeight: 600 }}>
+                          {estCpd !== '—' ? `৳${estCpd}` : '—'}
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="sa-btn ghost sa-mini"
+                            disabled={savingCamp === c.campaign}
+                            onClick={() => saveCampaignCfg(c.campaign, { adSpend: Number(spendDrafts[c.campaign] || 0) })}
+                          >
+                            {savingCamp === c.campaign ? '…' : 'Save'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+              <button type="button" className="sa-btn" disabled={savingAllSpends} onClick={saveAllSpends}>
+                {savingAllSpends ? 'Saving All…' : '💾 Save All Spends'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 4. AD PROFIT ANALYSIS */}
+      {/* ============================================================== */}
+      {currentTab === 'profit' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Post-Delivery True Profit Scorecard */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+            <div style={{ padding: 20, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c', borderRadius: 16, position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, #8b5cf6, transparent)' }} />
+              <div style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.06em' }}>Delivered Cash Collection</div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: '#ffffff', marginTop: 10, letterSpacing: '-0.02em' }}>৳{(summary.totalDeliveredSales || 0).toLocaleString()}</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 10 }}>Actual cash received from courier</div>
+            </div>
+
+            <div style={{ padding: 20, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c', borderRadius: 16, position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, #8b5cf6, transparent)' }} />
+              <div style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.06em' }}>Total Ad Spend</div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: '#ffffff', marginTop: 10, letterSpacing: '-0.02em' }}>৳{(summary.totalAdSpend || 0).toLocaleString()}</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 10 }}>Total marketing &amp; ad expenses</div>
+            </div>
+
+            <div style={{ padding: 20, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c', borderRadius: 16, position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, #8b5cf6, transparent)' }} />
+              <div style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.06em' }}>{adminTranslate("True Net Cash Profit")}</div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: '#c4b5fd', marginTop: 10, letterSpacing: '-0.02em' }}>
+                {netTotal >= 0 ? '+' : ''}৳{netTotal.toLocaleString()}
+              </div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 10 }}>Net revenue minus total ad spend</div>
+            </div>
+
+            <div style={{ padding: 20, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c', borderRadius: 16, position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, #8b5cf6, transparent)' }} />
+              <div style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.06em' }}>Overall Real ROAS</div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: '#ffffff', marginTop: 10, letterSpacing: '-0.02em' }}>{totalRoas ? `${totalRoas}x` : '—'}</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 10 }}>Delivered revenue return on spend</div>
+            </div>
+          </div>
+
+          {/* High Loss / Notice Banner */}
+          {highLossList.length > 0 && (
+            <div style={{ padding: '14px 18px', borderRadius: 14, background: '#161426', border: '1px solid rgba(139, 92, 246, 0.35)', color: '#e2e8f0', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 700, color: '#c4b5fd' }}>⚡ High Return Alert:</span>
+              {highLossList.slice(0, 4).map((c: any) => (
+                <span key={c.campaign} style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '4px 10px', borderRadius: 999, border: '1px solid rgba(255, 255, 255, 0.1)', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <strong style={{ color: '#ffffff' }}>{c.metaCampaignName || c.campaign}</strong>
+                  <span style={{ color: '#c4b5fd', fontWeight: 700 }}>{c.cancelReturnRate}% Return</span>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Filter Pills */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '12px 16px', borderRadius: 14, background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {[
+                { id: 'all', label: `All Campaigns (${campaigns.length})` },
+                { id: 'active', label: `🟢 Running (${activeCount})` },
+                { id: 'paused', label: `⏸️ Off / Paused (${pausedCount})` },
+                { id: 'high_loss', label: `⚠️ High Return (${highLossList.length})` },
+              ].map((f: any) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setStatusFilter(f.id)}
+                  style={{
+                    padding: '7px 14px',
+                    borderRadius: 999,
+                    fontSize: 12,
+                    fontWeight: statusFilter === f.id ? 700 : 500,
+                    cursor: 'pointer',
+                    border: statusFilter === f.id ? '1px solid rgba(139, 92, 246, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
+                    background: statusFilter === f.id ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                    color: statusFilter === f.id ? '#ffffff' : '#94a3b8'
+                  }}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text"
+              placeholder="Search by campaign name..."
+              value={campSearch}
+              onChange={(e) => setCampSearch(e.target.value)}
+              style={{ minWidth: 240, padding: '7px 12px', borderRadius: 8, background: '#161422', border: '1px solid rgba(255, 255, 255, 0.12)', color: '#ffffff', fontSize: 12.5 }}
+            />
+          </div>
+
+          {/* Dedicated True Profit Table */}
+          <div style={{ padding: 20, borderRadius: 16, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c' }}>
+            <div className="sa-table-wrap">
+              <table className="sa-table">
+                <thead>
+                  <tr>
+                    <th>Campaign &amp; Channel</th>
+                    <th>Delivery Rate %</th>
+                    <th>Return / Cancel %</th>
+                    <th>{adminTranslate("Ad Spend")}</th>
+                    <th>Cost / Delivered (CPD)</th>
+                    <th>{adminTranslate("Delivered Revenue")}</th>
+                    <th>{adminTranslate("True Net Cash Profit")}</th>
+                    <th>Real ROAS</th>
+                    <th>{adminTranslate("Actions")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filterList(campaigns).map((c: any) => {
+                    const plat = getPlatformBadge(c);
+                    return (
+                      <tr key={c.campaign}>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 16 }}>{plat.icon}</span>
+                            <div>
+                              <strong style={{ color: '#ffffff', fontSize: 13.5 }}>{c.metaCampaignName || c.campaign}</strong>
+                              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                                {plat.label} · <strong>{c.totalOrders}</strong> orders ({c.delivered} delivered)
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>{renderProgressMetric(c.deliveryRate)}</td>
+                        <td>{renderProgressMetric(c.cancelReturnRate)}</td>
+                        <td>
+                          <div style={{ fontWeight: 700, color: '#ffffff' }}>৳{(c.adSpend || 0).toLocaleString()}</div>
+                          {c.spendUsd > 0 && <div style={{ fontSize: 11, color: '#94a3b8' }}>${c.spendUsd} USD</div>}
+                        </td>
+                        <td>
+                          {c.costPerDelivered ? <strong style={{ color: '#c4b5fd' }}>৳{c.costPerDelivered}</strong> : <span className="dim">—</span>}
+                        </td>
+                        <td>
+                          <strong style={{ color: '#ffffff', fontSize: 14 }}>৳{c.deliveredSales.toLocaleString()}</strong>
+                        </td>
+                        <td>
+                          <div style={{ fontSize: 14, fontWeight: 800, color: '#c4b5fd' }}>
+                            {c.netProfit >= 0 ? '+' : ''}৳{c.netProfit.toLocaleString()}
+                          </div>
+                        </td>
+                        <td>
+                          <span style={{ padding: '3px 8px', borderRadius: 6, background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.3)', color: '#c4b5fd', fontWeight: 800, fontSize: 12 }}>
+                            {c.roas ? `${c.roas}x` : '—'}
+                          </span>
+                        </td>
+                        <td>
+                          <button type="button" className="sa-btn ghost sa-mini" onClick={() => onViewOrders(c.isDirect ? '__direct__' : c.campaign)}>
+                            Orders →
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 5. TIKTOK ADS */}
+      {/* ============================================================== */}
+      {currentTab === 'tiktok' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* TikTok Accounts Config Card */}
+          <div style={{ padding: 20, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c', borderRadius: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+              <div>
+                <strong style={{ fontSize: 15.5, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>🎵</span> TikTok Ad Accounts ({tiktokAccounts.length})
+                </strong>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
+                  Connect TikTok For Business Advertiser ID and API Access-Token.
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="sa-btn ghost sa-mini" onClick={() => setTiktokAccounts((p) => [...p, { id: 'tik_' + Date.now().toString(36), label: `TikTok Account ${p.length + 1}`, advertiserId: '', accessToken: '', hasToken: false }])}>
+                  + Add TikTok Account
+                </button>
+                <button type="button" className="sa-btn sa-mini" onClick={saveAdsConfig}>
+                  💾 Save Accounts
+                </button>
+              </div>
+            </div>
+
+            {tiktokAccounts.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr 90px auto', gap: 8, marginBottom: 6, fontSize: 11, fontWeight: 700, color: '#94a3b8' }}>
+                <span>1. Account Label</span>
+                <span>2. TikTok Advertiser ID</span>
+                <span>3. Access-Token</span>
+                <span>4. Rate (৳)</span>
+                <span style={{ width: 28 }}></span>
+              </div>
+            )}
+            {tiktokAccounts.map((a, idx) => (
+              <div key={a.id || idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr 90px auto', gap: 8, marginBottom: 8 }}>
+                <input autoComplete="off" value={a.label || ''} onChange={(e) => setTiktokAccounts((p) => p.map((x, i) => i === idx ? { ...x, label: e.target.value } : x))} placeholder="e.g. TikTok Ads 1" />
+                <input autoComplete="off" value={a.advertiserId || ''} onChange={(e) => setTiktokAccounts((p) => p.map((x, i) => i === idx ? { ...x, advertiserId: e.target.value } : x))} placeholder="Advertiser ID" />
+                <input type="text" autoComplete="off" style={{ fontFamily: 'monospace', fontSize: 12 }} value={a.accessToken || ''} onChange={(e) => setTiktokAccounts((p) => p.map((x, i) => i === idx ? { ...x, accessToken: e.target.value } : x))} placeholder={a.hasToken ? '✓ Token Saved' : 'Paste TikTok Token'} />
+                <input type="number" min={1} autoComplete="off" value={a.usdRate ?? ''} onChange={(e) => setTiktokAccounts((p) => p.map((x, i) => i === idx ? { ...x, usdRate: e.target.value ? Number(e.target.value) : null } : x))} placeholder={usdRate || '122'} />
+                <button type="button" className="sa-btn ghost sa-mini" style={{ color: '#94a3b8' }} onClick={() => setTiktokAccounts((p) => p.filter((_, i) => i !== idx))}>✕</button>
+              </div>
+            ))}
+          </div>
+
+          {/* TikTok Scorecards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14 }}>
+            <div style={{ padding: 18, borderRadius: 16, background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>TikTok Ad Spend</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#ffffff', marginTop: 8 }}>৳{tiktokStats.spend.toLocaleString()}</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>≈ ${(tiktokStats.spend / (Number(usdRate) || 122)).toFixed(1)} USD</div>
+            </div>
+            <div style={{ padding: 18, borderRadius: 16, background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>{adminTranslate("Delivered Revenue")}</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#ffffff', marginTop: 8 }}>৳{tiktokStats.revenue.toLocaleString()}</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>{tiktokStats.delivered} successful deliveries</div>
+            </div>
+            <div style={{ padding: 18, borderRadius: 16, background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>{adminTranslate("True Net Profit")}</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#c4b5fd', marginTop: 8 }}>
+                {tiktokStats.net >= 0 ? '+' : ''}৳{tiktokStats.net.toLocaleString()}
+              </div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>Net profit after TikTok spend</div>
+            </div>
+            <div style={{ padding: 18, borderRadius: 16, background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>TikTok ROAS</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#ffffff', marginTop: 8 }}>{tiktokStats.roas}x</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>🟢 {tiktokStats.active} Running / {tiktokStats.count} {adminTranslate("Total")}</div>
+            </div>
+          </div>
+
+          {/* Dedicated TikTok Campaigns Table */}
+          <div style={{ padding: 20, borderRadius: 16, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+              <h3 style={{ margin: 0, fontSize: 15.5, color: '#ffffff', fontWeight: 700 }}>🎵 TikTok Campaigns ({tiktokCamps.length})</h3>
+              <input
+                type="text"
+                placeholder="Search TikTok campaigns..."
+                value={campSearch}
+                onChange={(e) => setCampSearch(e.target.value)}
+                style={{ minWidth: 220, padding: '7px 12px', borderRadius: 8, background: '#161422', border: '1px solid rgba(255, 255, 255, 0.12)', color: '#ffffff', fontSize: 12.5 }}
+              />
+            </div>
+
+            {tiktokCamps.length === 0 ? (
+              <div style={{ padding: 36, textAlign: 'center', color: '#94a3b8' }}>
+                <div style={{ fontSize: 24, marginBottom: 8 }}>🎵</div>
+                No TikTok campaigns found. Connect your TikTok Advertiser ID and Access-Token above to sync campaigns.
+              </div>
+            ) : (
+              <div className="sa-table-wrap">
+                <table className="sa-table">
+                  <thead>
+                    <tr>
+                      <th>{adminTranslate("Status")}</th>
+                      <th>Campaign &amp; TikTok ID</th>
+                      <th>{adminTranslate("Orders (Delivered)")}</th>
+                      <th>Delivery %</th>
+                      <th>TikTok Spend</th>
+                      <th>CPD</th>
+                      <th>Delivered Sales</th>
+                      <th>{adminTranslate("Net Profit")}</th>
+                      <th>ROAS</th>
+                      <th>{adminTranslate("Actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filterList(tiktokCamps).map((c: any) => (
+                      <tr key={c.campaign}>
+                        <td>{renderAdStatusPill(c)}</td>
+                        <td>
+                          <strong style={{ color: '#ffffff', fontSize: 13.5 }}>{c.metaCampaignName || c.campaign}</strong>
+                          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>ID: {c.campaign}</div>
+                        </td>
+                        <td>
+                          <strong style={{ color: '#ffffff' }}>{c.totalOrders}</strong>
+                          <div style={{ fontSize: 11, color: '#94a3b8' }}>{c.delivered} delivered</div>
+                        </td>
+                        <td>{renderProgressMetric(c.deliveryRate)}</td>
+                        <td style={{ color: '#ffffff', fontWeight: 700 }}>৳{(c.adSpend || 0).toLocaleString()}</td>
+                        <td>{c.costPerDelivered ? `৳${c.costPerDelivered}` : '—'}</td>
+                        <td style={{ color: '#ffffff', fontWeight: 700 }}>৳{c.deliveredSales.toLocaleString()}</td>
+                        <td style={{ color: '#c4b5fd', fontWeight: 800 }}>
+                          {c.netProfit >= 0 ? '+' : ''}৳{c.netProfit.toLocaleString()}
+                        </td>
+                        <td>
+                          <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.3)', color: '#c4b5fd', fontWeight: 700, fontSize: 11.5 }}>
+                            {c.roas ? `${c.roas}x` : '—'}
+                          </span>
+                        </td>
+                        <td>
+                          <button type="button" className="sa-btn ghost sa-mini" onClick={() => onViewOrders(c.campaign)}>
+                            Orders →
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 6. GOOGLE ADS */}
+      {/* ============================================================== */}
+      {currentTab === 'google' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Google Ads Script Setup Card */}
+          <div style={{ padding: 20, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c', borderRadius: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+              <div>
+                <strong style={{ fontSize: 15.5, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>🔍</span> Google Ads Auto-Sync Script (No Developer Token Needed)
+                </strong>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
+                  Paste this script in Google Ads under <strong>Tools &amp; Settings → Scripts</strong> and set to run hourly.
+                </div>
+              </div>
+              <button
+                type="button"
+                className="sa-btn sa-mini"
+                onClick={() => {
+                  const script = `function main() {\n  var rows = [];\n  var it = AdsApp.campaigns().withCondition("Impressions > 0").forDateRange("LAST_7_DAYS").get();\n  while (it.hasNext()) {\n    var c = it.next();\n    var st = c.getStatsFor("LAST_7_DAYS");\n    rows.push({ campaignId: String(c.getId()), campaignName: c.getName(), spend: st.getCost(), impressions: st.getImpressions(), clicks: st.getClicks(), currency: AdsApp.currentAccount().getCurrencyCode() });\n  }\n  UrlFetchApp.fetch("${window.location.origin}/api/webhooks/google-ads-spend", { method: "post", contentType: "application/json", headers: { "x-webhook-secret": "${data?.adsConfig?.webhookSecret || ''}" }, payload: JSON.stringify({ rows: rows }) });\n}`;
+                  navigator.clipboard.writeText(script);
+                  setMetaMsg('✅ Google Ads Script copied to clipboard! Paste it into Google Ads → Tools → Scripts.');
+                }}
+              >
+                📋 Copy 1-Click Script
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)', padding: '10px 14px', borderRadius: 10, fontSize: 12 }}>
+              <div><strong>Webhook URL:</strong> <code style={{ color: '#c4b5fd' }}>{window.location.origin}/api/webhooks/google-ads-spend</code></div>
+              <div><strong>Webhook Secret:</strong> <code style={{ color: '#a78bfa' }}>{data?.adsConfig?.webhookSecret || '••••••••'}</code></div>
+            </div>
+          </div>
+
+          {/* Google Ads Scorecards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14 }}>
+            <div style={{ padding: 18, borderRadius: 16, background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>Google Ad Spend</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#ffffff', marginTop: 8 }}>৳{googleStats.spend.toLocaleString()}</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>Total Google Ads spend</div>
+            </div>
+            <div style={{ padding: 18, borderRadius: 16, background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>{adminTranslate("Delivered Revenue")}</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#ffffff', marginTop: 8 }}>৳{googleStats.revenue.toLocaleString()}</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>{googleStats.delivered} successful deliveries</div>
+            </div>
+            <div style={{ padding: 18, borderRadius: 16, background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>{adminTranslate("True Net Profit")}</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#c4b5fd', marginTop: 8 }}>
+                {googleStats.net >= 0 ? '+' : ''}৳{googleStats.net.toLocaleString()}
+              </div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>Net profit after Google spend</div>
+            </div>
+            <div style={{ padding: 18, borderRadius: 16, background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ fontSize: 11, color: '#c4b5fd', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>Google ROAS</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#ffffff', marginTop: 8 }}>{googleStats.roas}x</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>{googleStats.count} {adminTranslate("Campaigns")}</div>
+            </div>
+          </div>
+
+          {/* Dedicated Google Campaigns Table */}
+          <div style={{ padding: 20, borderRadius: 16, border: '1px solid rgba(255, 255, 255, 0.08)', background: '#13111c' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+              <h3 style={{ margin: 0, fontSize: 15.5, color: '#ffffff', fontWeight: 700 }}>🔍 Google Ads Campaigns ({googleCamps.length})</h3>
+              <input
+                type="text"
+                placeholder="Search Google campaigns..."
+                value={campSearch}
+                onChange={(e) => setCampSearch(e.target.value)}
+                style={{ minWidth: 220, padding: '7px 12px', borderRadius: 8, background: '#161422', border: '1px solid rgba(255, 255, 255, 0.12)', color: '#ffffff', fontSize: 12.5 }}
+              />
+            </div>
+
+            {googleCamps.length === 0 ? (
+              <div style={{ padding: 36, textAlign: 'center', color: '#94a3b8' }}>
+                <div style={{ fontSize: 24, marginBottom: 8 }}>🔍</div>
+                No Google Ads campaigns found. Click "Copy 1-Click Script" above and add it to your Google Ads account to sync.
+              </div>
+            ) : (
+              <div className="sa-table-wrap">
+                <table className="sa-table">
+                  <thead>
+                    <tr>
+                      <th>Campaign &amp; Google ID</th>
+                      <th>Clicks &amp; Impressions</th>
+                      <th>{adminTranslate("Orders (Delivered)")}</th>
+                      <th>Google Spend</th>
+                      <th>Delivered Sales</th>
+                      <th>{adminTranslate("Net Profit")}</th>
+                      <th>ROAS</th>
+                      <th>{adminTranslate("Actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filterList(googleCamps).map((c: any) => (
+                      <tr key={c.campaign}>
+                        <td>
+                          <strong style={{ color: '#ffffff', fontSize: 13.5 }}>{c.metaCampaignName || c.campaign}</strong>
+                          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>ID: {c.campaign}</div>
+                        </td>
+                        <td>
+                          <div style={{ fontSize: 11.5, color: '#94a3b8' }}>
+                            <div>👁 {c.impressions?.toLocaleString()}</div>
+                            <div>🖱 {c.clicks?.toLocaleString()}</div>
+                          </div>
+                        </td>
+                        <td>
+                          <strong style={{ color: '#ffffff' }}>{c.totalOrders}</strong>
+                          <div style={{ fontSize: 11, color: '#94a3b8' }}>{c.delivered} delivered</div>
+                        </td>
+                        <td style={{ color: '#ffffff', fontWeight: 700 }}>৳{(c.adSpend || 0).toLocaleString()}</td>
+                        <td style={{ color: '#ffffff', fontWeight: 700 }}>৳{c.deliveredSales.toLocaleString()}</td>
+                        <td style={{ color: '#c4b5fd', fontWeight: 800 }}>
+                          {c.netProfit >= 0 ? '+' : ''}৳{c.netProfit.toLocaleString()}
+                        </td>
+                        <td>
+                          <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.3)', color: '#c4b5fd', fontWeight: 700, fontSize: 11.5 }}>
+                            {c.roas ? `${c.roas}x` : '—'}
+                          </span>
+                        </td>
+                        <td>
+                          <button type="button" className="sa-btn ghost sa-mini" onClick={() => onViewOrders(c.campaign)}>
+                            Orders →
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

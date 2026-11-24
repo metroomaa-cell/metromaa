@@ -106,7 +106,7 @@ export function PushPopupsAdmin() {
     mode: 'image_text',
     image: '',
     badge: 'SPECIAL OFFER ✨',
-    title: 'Welcome to METRROMA',
+    title: 'Welcome to SECRATE',
     description: 'আপনার প্রথম অর্ডারে স্পেশাল ডিসকাউন্ট উপভোগ করুন। ১০০% গোপনীয় প্যাকিংয়ে সারা দেশে ক্যাশ অন ডেলিভারি।',
     couponCode: '',
     buttonText: 'অফার দেখুন',
@@ -145,7 +145,7 @@ export function PushPopupsAdmin() {
   const [resetPromoDismissals, setResetPromoDismissals] = useState(true);
 
   // Broadcast composer state
-  const [bcTitle, setBcTitle] = useState('✨ METRROMA স্পেশাল অফার!');
+  const [bcTitle, setBcTitle] = useState('✨ SECRATE স্পেশাল অফার!');
   const [bcBody, setBcBody] = useState('আজকের অর্ডারে পাচ্ছেন বিশেষ ছাড় ও ১০০% গোপনীয় হোম ডেলিভারি। এখনই ভিজিট করুন!');
   const [bcImage, setBcImage] = useState('');
   const [bcUrl, setBcUrl] = useState('/shop');
@@ -822,7 +822,7 @@ export function PushPopupsAdmin() {
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: '#64748b', marginBottom: 6 }}>
                     <span>🔔</span>
-                    <strong>metrroma.com</strong>
+                    <strong>secrate.shop</strong>
                     <span>• এখনই</span>
                   </div>
                   <div style={{ fontSize: 14.5, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { createRoot } from 'react-dom/client';
 import { placeOrder, getSettings, taka, getDeviceId, isSkincareSite, getTrafficAttribution } from './api';
 import { dl, ecView, ecAdd, ecBeginCheckout, ecPurchase, pushUserData } from './analytics';
 import { go } from './cart';
@@ -197,8 +198,9 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
   useEffect(() => {
     if (!cfg) return;
-    const brand = 'TimeBoost';
-    const lTitle = `${cfg.headline || cfg.title} — ${brand}`;
+    const brand = typeof window !== 'undefined' && window.location.hostname.includes('secrate') ? 'Secrate' : 'TimeBoost';
+    const rawTitle = cfg.mode === 'html' ? (cfg.title || cfg.headline) : (cfg.headline || cfg.title);
+    const lTitle = `${rawTitle} — ${brand}`;
     document.title = lTitle;
     const q = new URLSearchParams(location.search);
     dl({
@@ -463,6 +465,249 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!cfg || cfg.mode !== 'html' || !cfg.customHtml) return;
+    const container = document.querySelector('.custom-html-landing') as HTMLElement | null;
+    if (!container) return;
+
+    const submitCustomOrder = async (payload: any) => {
+      const cName = String(payload?.name || payload?.customerName || '').trim();
+      const cAddr = String(payload?.address || '').trim();
+      const phoneCheck = cleanAndValidateBDPhone(String(payload?.phone || payload?.customerPhone || ''));
+      if (!cName) throw new Error('অনুগ্রহ করে আপনার নাম লিখুন');
+      if (!phoneCheck.isValid) throw new Error(phoneCheck.error || 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন');
+      if (!cAddr) throw new Error('অনুগ্রহ করে আপনার সম্পূর্ণ ঠিকানা লিখুন');
+      const zone: 'inside' | 'outside' = payload?.area === 'inside' || /inside|ঢাকা/i.test(String(payload?.area || '')) ? 'inside' : 'outside';
+      const qty = Math.max(1, parseInt(payload?.qty || payload?.quantity || '1', 10) || 1);
+      const unitPrice = Number(payload?.price || currentItem?.price || cfg?.price || 0);
+      const shipCost = payload?.shippingCost !== undefined ? Number(payload.shippingCost) : (isFreeDelivery ? 0 : (zone === 'inside' ? Number(cfg?.insideDhakaShipping ?? 60) : Number(cfg?.outsideDhakaShipping ?? 120)));
+      const itemTitle = String(payload?.productName || currentItem?.title || cfg?.title || 'Product').trim();
+      const itemImage = String(payload?.image || currentItem?.image || cfg?.heroImage || '').trim();
+      const itemColor = String(payload?.color || '').trim();
+      const itemSize = String(payload?.size || '').trim();
+      const res = await placeOrder({
+        items: Array.isArray(payload?.items) && payload.items.length > 0 ? payload.items : [{
+          id: currentItem?.id || cfg?.slug || 'custom-item',
+          name: itemTitle,
+          sku: currentItem?.sku || cfg?.sku || '',
+          price: unitPrice,
+          qty,
+          image: itemImage,
+          color: itemColor,
+          size: itemSize,
+          variantTitle: payload?.variantTitle || [itemColor ? `Color: ${itemColor}` : '', itemSize ? `Size: ${itemSize}` : ''].filter(Boolean).join(' · ') || itemTitle
+        }],
+        customer: {
+          name: cName,
+          phone: phoneCheck.clean,
+          address: cAddr,
+          area: zone,
+          landing: cfg?.slug || slug,
+          source: getTrafficAttribution().channel || 'direct',
+          freeDelivery: shipCost === 0,
+          shippingCost: shipCost
+        },
+        attribution: getTrafficAttribution(),
+        shipping: { cost: shipCost, method: shipCost === 0 ? 'free' : zone }
+      });
+      const finalItems = Array.isArray(res?.items) && res.items.length > 0
+        ? res.items.map((it: any) => ({ id: String(it.id || currentItem?.id || cfg?.slug || 'custom-item'), name: String(it.name || itemTitle), price: Number(it.price) || unitPrice, qty: Number(it.qty) || 1 }))
+        : [{ id: currentItem?.id || cfg?.slug || 'custom-item', name: itemTitle, price: unitPrice, qty }];
+      ecPurchase(
+        res.id,
+        res.total ?? (unitPrice * qty + shipCost),
+        finalItems,
+        `landing_${cfg?.slug || slug}`,
+        { name: cName, phone: phoneCheck.clean, address: cAddr, city: zone === 'inside' ? 'Dhaka' : 'Outside Dhaka' }
+      );
+      go('confirm/' + res.id);
+      return res;
+    };
+
+    (window as any).secrateSubmitOrder = submitCustomOrder;
+
+    const onFormSubmit = async (e: Event) => {
+      const form = e.target as HTMLFormElement | null;
+      if (!form || form.tagName !== 'FORM' || form.hasAttribute('data-no-intercept')) return;
+      e.preventDefault();
+      const fd = new FormData(form);
+      const pick = (...keys: string[]) => {
+        for (const k of keys) {
+          const v = fd.get(k);
+          if (v !== null && String(v).trim()) return String(v).trim();
+        }
+        for (const el of Array.from(form.querySelectorAll('input, textarea, select')) as any[]) {
+          const hint = `${el.name || ''} ${el.id || ''} ${el.placeholder || ''}`.toLowerCase();
+          if (keys.some((k) => hint.includes(k)) && String(el.value || '').trim()) return String(el.value).trim();
+        }
+        return '';
+      };
+      const btn = form.querySelector('button[type="submit"], input[type="submit"]') as HTMLButtonElement | null;
+      const oldTxt = btn ? (btn.tagName === 'INPUT' ? (btn as any).value : btn.textContent) : '';
+      if (btn) {
+        btn.disabled = true;
+        if (btn.tagName === 'INPUT') (btn as any).value = 'অর্ডার প্রসেস হচ্ছে...';
+        else btn.textContent = 'অর্ডার প্রসেস হচ্ছে...';
+      }
+      try {
+        const activeColorEl = (
+          form.querySelector('[data-color].active, [data-color].selected, [data-color][aria-pressed="true"], input[type="radio"][name*="color" i]:checked, input[type="radio"][name*="colour" i]:checked')
+          || container.querySelector('[data-color].active, [data-color].selected, [data-color][aria-pressed="true"], input[type="radio"][name*="color" i]:checked, input[type="radio"][name*="colour" i]:checked')
+        ) as HTMLElement | null;
+        const pickedColor = pick('color', 'colour', 'রং', 'কালার', 'variant')
+          || activeColorEl?.getAttribute('data-color')
+          || (activeColorEl as HTMLInputElement | null)?.value
+          || activeColorEl?.textContent?.trim()
+          || '';
+        const pickedImage = pick('image', 'img', 'photo')
+          || activeColorEl?.getAttribute('data-image')
+          || activeColorEl?.getAttribute('data-img')
+          || activeColorEl?.querySelector('img')?.getAttribute('src')
+          || container.querySelector('[data-product-image], .product-main-img, .main-image img')?.getAttribute('src')
+          || '';
+        await submitCustomOrder({
+          name: pick('name', 'customername', 'fullname', 'নাম'),
+          phone: pick('phone', 'mobile', 'tel', 'number', 'ফোন', 'মোবাইল'),
+          address: pick('address', 'location', 'thikana', 'ঠিকানা'),
+          area: pick('area', 'zone', 'delivery', 'shipping'),
+          qty: pick('qty', 'quantity', 'পরিমাণ') || '1',
+          price: pick('price', 'amount', 'total') || undefined,
+          productName: pick('product', 'package', 'item') || undefined,
+          color: pickedColor,
+          size: pick('size', 'সাইজ'),
+          image: pickedImage || undefined
+        });
+      } catch (err: any) {
+        alert(err?.message || 'অর্ডার সম্পন্ন হতে সমস্যা হয়েছে');
+        if (btn) {
+          btn.disabled = false;
+          if (btn.tagName === 'INPUT') (btn as any).value = oldTxt;
+          else btn.textContent = oldTxt;
+        }
+      }
+    };
+
+    container.addEventListener('submit', onFormSubmit);
+
+    const onCustomCallClick = (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      const callEl = target?.closest('a[href^="tel:"], [data-saika-call]') as HTMLElement | null;
+      if (callEl && !callEl.hasAttribute('data-direct-tel')) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('open-saika-ai-call'));
+      }
+    };
+    container.addEventListener('click', onCustomCallClick);
+
+    const rawCode = String(cfg.customHtml || '');
+    const isReactCode = /^\s*import\s+React|export\s+default\s+function|\buseState\s*\(/m.test(rawCode);
+    let reactRoot: any = null;
+    let cancelled = false;
+
+    const loadScript = (src: string, check?: () => boolean) =>
+      new Promise<void>((resolve, reject) => {
+        if (check && check()) { resolve(); return; }
+        const existing = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement | null;
+        if (existing) {
+          if (existing.dataset.loaded === '1') { resolve(); return; }
+          existing.addEventListener('load', () => { existing.dataset.loaded = '1'; resolve(); }, { once: true });
+          existing.addEventListener('error', () => reject(new Error('Script load failed')), { once: true });
+          return;
+        }
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = () => { s.dataset.loaded = '1'; resolve(); };
+        s.onerror = () => reject(new Error('Script load failed: ' + src));
+        document.head.appendChild(s);
+      });
+
+    const isFullHtmlDoc = /<!doctype\s+html|<html[\s>]/i.test(rawCode);
+    if (isFullHtmlDoc) {
+      return () => {
+        cancelled = true;
+        container.removeEventListener('submit', onFormSubmit);
+        container.removeEventListener('click', onCustomCallClick);
+      };
+    }
+
+    if (isReactCode) {
+      const mountEl = container.querySelector('#custom-react-root') as HTMLElement | null;
+      if (mountEl) {
+        (async () => {
+          try {
+            await Promise.all([
+              loadScript('https://cdn.tailwindcss.com', () => !!(window as any).tailwind),
+              loadScript('https://unpkg.com/@babel/standalone@7/babel.min.js', () => !!(window as any).Babel)
+            ]);
+            if (cancelled) return;
+            const Babel = (window as any).Babel;
+            // Collect lucide-react / icon imports so missing icon components never throw ReferenceError
+            const iconNames: string[] = [];
+            for (const m of rawCode.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"][^'"]*lucide[^'"]*['"]/g)) {
+              m[1].split(',').forEach((part) => {
+                const nm = part.trim().split(/\s+as\s+/).pop()?.trim();
+                if (nm && /^[A-Z][A-Za-z0-9_]*$/.test(nm)) iconNames.push(nm);
+              });
+            }
+            const iconShims = iconNames.map((nm) => `const ${nm} = (p) => React.createElement('span', { ...p, style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', ...(p?.style || {}) } }, '✦');`).join('\n');
+            let cleaned = rawCode
+              .replace(/^\s*import\s+[\s\S]*?from\s+['"][^'"]+['"];?\s*$/gm, '')
+              .replace(/export\s+default\s+function\s+([A-Za-z0-9_]+)?/, 'function __CustomLanding')
+              .replace(/export\s+default\s+/, 'const __CustomLanding = ');
+            const compiled = Babel.transform(`${iconShims}\n${cleaned}`, { presets: ['react'] }).code;
+            const fn = new Function(
+              'React', 'useState', 'useEffect', 'useRef', 'useMemo', 'useCallback',
+              `${compiled}\nreturn typeof __CustomLanding !== 'undefined' ? __CustomLanding : null;`
+            );
+            const Comp = fn(React, useState, useEffect, useRef, useMemo, useCallback);
+            if (!cancelled && Comp) {
+              reactRoot = createRoot(mountEl);
+              reactRoot.render(React.createElement(Comp));
+            }
+          } catch (err: any) {
+            if (!cancelled) {
+              mountEl.innerHTML = `<div style="padding:24px;color:#ef4444;font-family:sans-serif">React/JSX রেন্ডার এরর: ${String(err?.message || err)}</div>`;
+            }
+          }
+        })();
+      }
+    } else {
+      (async () => {
+        try {
+          await loadScript('https://cdn.tailwindcss.com', () => !!(window as any).tailwind);
+        } catch (_) {}
+        if (cancelled) return;
+        const scripts = Array.from(container.querySelectorAll('script'));
+        for (const oldScript of scripts) {
+          if (cancelled || oldScript.dataset.executed) continue;
+          oldScript.dataset.executed = '1';
+          if (oldScript.src) {
+            await loadScript(oldScript.src).catch(() => {});
+          } else {
+            const s = document.createElement('script');
+            s.textContent = oldScript.textContent || '';
+            oldScript.parentNode?.replaceChild(s, oldScript);
+          }
+        }
+        if (!cancelled) {
+          try { document.dispatchEvent(new Event('DOMContentLoaded')); } catch (_) {}
+          try { window.dispatchEvent(new Event('load')); } catch (_) {}
+          try { window.dispatchEvent(new Event('scroll')); } catch (_) {}
+          try { if ((window as any).AOS?.refreshHard) (window as any).AOS.refreshHard(); } catch (_) {}
+        }
+      })();
+    }
+
+    return () => {
+      cancelled = true;
+      container.removeEventListener('submit', onFormSubmit);
+      container.removeEventListener('click', onCustomCallClick);
+      if (reactRoot) {
+        try { reactRoot.unmount(); } catch (_) {}
+      }
+    };
+  }, [cfg?.mode, cfg?.customHtml, cfg?.slug, slug]);
 
   if (pageLoading) {
     return (
@@ -893,30 +1138,69 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
     </section>
   );
 
-  // If page is set to Custom HTML mode, render custom HTML with embedded checkout form
+  // If page is set to Custom HTML mode, render custom HTML with embedded or custom checkout form
   if (cfg.mode === 'html' && cfg.customHtml) {
     const phone = cfg.phone || '09638752122';
     const rawWa = String(cfg.whatsapp || '8801351107157').replace(/[^0-9]/g, '');
     const waUrl = `https://wa.me/${rawWa}`;
-    const rawHtml = String(cfg.customHtml || '')
+    let rawHtml = String(cfg.customHtml || '')
+      .replaceAll('https://wa.me/[WHATSAPP]', waUrl)
+      .replaceAll('wa.me/[WHATSAPP]', `wa.me/${rawWa}`)
       .replaceAll('[PHONE]', phone)
       .replaceAll('{{phone}}', phone)
       .replaceAll('[WHATSAPP_URL]', waUrl)
       .replaceAll('[WHATSAPP]', waUrl)
       .replaceAll('{{whatsapp}}', waUrl)
-      .replaceAll('[WHATSAPP_NUMBER]', cfg.whatsapp || '8801351107157');
+      .replaceAll('[WHATSAPP_NUMBER]', rawWa);
+    const isFullHtmlDoc = /<!doctype\s+html|<html[\s>]/i.test(rawHtml);
+    if (isFullHtmlDoc) {
+      const bridgeScript = `<script>(function(){document.addEventListener('click',function(e){var hashLink=e.target&&e.target.closest?e.target.closest('a[href^="#"]'):null;if(hashLink){var hid=(hashLink.getAttribute('href')||'').slice(1);if(hid){var targetEl=document.getElementById(hid);if(targetEl){e.preventDefault();targetEl.scrollIntoView({behavior:'smooth'});return;}}}var el=e.target&&e.target.closest?e.target.closest('a[href^="tel:"],[data-saika-call]'):null;if(el&&!el.hasAttribute('data-direct-tel')){e.preventDefault();try{window.parent.dispatchEvent(new CustomEvent('open-saika-ai-call'));}catch(_){}}},true);window.secrateSubmitOrder=function(p){if(window.parent&&typeof window.parent.secrateSubmitOrder==='function'){return window.parent.secrateSubmitOrder(p);}return Promise.reject(new Error('অর্ডার সিস্টেম প্রস্তুত নয়, পেজটি রিফ্রেশ করে আবার চেষ্টা করুন।'));};document.addEventListener('submit',function(e){var f=e.target;if(!f||f.tagName!=='FORM'||f.hasAttribute('data-no-intercept'))return;var pick=function(){for(var i=0;i<arguments.length;i++){var k=arguments[i];var els=f.querySelectorAll('input,textarea,select');for(var j=0;j<els.length;j++){var el=els[j];var h=(el.name+' '+el.id+' '+el.placeholder).toLowerCase();if(h.indexOf(k)!==-1&&el.value&&el.value.trim())return el.value.trim();}}return '';};var ph=pick('phone','mobile','tel','number','ফোন','মোবাইল');var nm=pick('name','customername','fullname','নাম');var ad=pick('address','location','thikana','ঠিকানা');var actCol=f.querySelector('[data-color].active,[data-color].selected,input[type="radio"][name*="color" i]:checked')||document.querySelector('[data-color].active,[data-color].selected,input[type="radio"][name*="color" i]:checked');var col=pick('color','colour','রং','কালার','variant')||(actCol?(actCol.getAttribute('data-color')||actCol.value||actCol.textContent||'').trim():'');var img=(actCol&&(actCol.getAttribute('data-image')||actCol.getAttribute('data-img')||(actCol.querySelector('img')&&actCol.querySelector('img').getAttribute('src'))))||'';if(ph&&nm&&ad&&window.secrateSubmitOrder){try{window.secrateSubmitOrder({name:nm,phone:ph,address:ad,area:pick('area','zone','delivery','shipping'),qty:pick('qty','quantity')||'1',color:col,size:pick('size','সাইজ'),price:pick('price','amount','total')||undefined,productName:pick('product','package','item')||undefined,image:img||undefined});}catch(_){}}});})();<\/script>`;
+      const docWithBridge = /<\/body>/i.test(rawHtml) ? rawHtml.replace(/<\/body>/i, `${bridgeScript}</body>`) : `${rawHtml}${bridgeScript}`;
+      return (
+        <div className="custom-html-landing" style={{ width: '100%', height: '100vh', overflow: 'hidden', margin: 0, padding: 0 }}>
+          <iframe
+            title={cfg.title || 'Landing Page'}
+            srcDoc={docWithBridge}
+            style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+            allow="autoplay; fullscreen; microphone"
+          />
+        </div>
+      );
+    }
+    const isReactCode = /^\s*import\s+React|export\s+default\s+function|\buseState\s*\(/m.test(rawHtml);
     const hasOrderTag = rawHtml.includes('[ORDER_FORM]');
+    const hasCustomForm = isReactCode || Boolean(cfg.hideDefaultCheckout) || rawHtml.includes('[CUSTOM_CHECKOUT]') || (!hasOrderTag && /<form[\s>]/i.test(rawHtml));
+    const cleanCustomHtml = rawHtml.replaceAll('[CUSTOM_CHECKOUT]', '');
     return (
-      <div className="lovelock-landing custom-html-landing" style={themeVars}>
-        {hasOrderTag ? (
+      <div
+        className="custom-html-landing"
+        style={{ ...themeVars, fontFamily: "'Hind Siliguri', 'Noto Sans Bengali', system-ui, sans-serif", lineHeight: 1.6, overflowX: 'hidden', width: '100%' }}
+      >
+        <style>{`
+          .custom-html-landing { overflow-x: hidden; width: 100%; max-width: 100vw; }
+          .custom-html-landing header, .custom-html-landing section, .custom-html-landing footer { position: static; width: auto; height: auto; }
+          .custom-html-landing img, .custom-html-landing video { max-width: 100%; }
+          @media (max-width: 640px) {
+            .custom-html-landing { font-size: 14.5px; }
+            .custom-html-landing h1 { font-size: 1.55rem !important; line-height: 1.32 !important; }
+            .custom-html-landing h2 { font-size: 1.28rem !important; line-height: 1.35 !important; }
+            .custom-html-landing h3 { font-size: 1.1rem !important; line-height: 1.38 !important; }
+            .custom-html-landing input, .custom-html-landing select, .custom-html-landing textarea { font-size: 16px !important; }
+          }
+        `}</style>
+        {isReactCode ? (
+          <div id="custom-react-root" />
+        ) : hasOrderTag ? (
           <>
-            <div dangerouslySetInnerHTML={{ __html: rawHtml.split('[ORDER_FORM]')[0] }} />
+            <div dangerouslySetInnerHTML={{ __html: cleanCustomHtml.split('[ORDER_FORM]')[0] }} />
             {renderCheckoutForm()}
-            <div dangerouslySetInnerHTML={{ __html: rawHtml.split('[ORDER_FORM]')[1] }} />
+            <div dangerouslySetInnerHTML={{ __html: cleanCustomHtml.split('[ORDER_FORM]')[1] }} />
           </>
+        ) : hasCustomForm ? (
+          <div dangerouslySetInnerHTML={{ __html: cleanCustomHtml }} />
         ) : (
           <>
-            <div dangerouslySetInnerHTML={{ __html: rawHtml }} />
+            <div dangerouslySetInnerHTML={{ __html: cleanCustomHtml }} />
             {renderCheckoutForm()}
           </>
         )}
@@ -1207,7 +1491,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
             </button>
 
             {phoneNum && (
-              <a href={`tel:${phoneNum}`} className="ll-banner-btn ll-btn-phone">
+              <a href={`tel:${phoneNum}`} onClick={(e) => { e.preventDefault(); window.dispatchEvent(new CustomEvent('open-saika-ai-call')); }} className="ll-banner-btn ll-btn-phone">
                 <PhoneIcon size={20} />
                 <span>কল করুনঃ {phoneNum}</span>
               </a>
@@ -1236,7 +1520,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
         <div className="ll-inner ll-footer-inner">
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center' }}>
             {phoneNum && (
-              <a href={`tel:${phoneNum}`} className="ll-footer-call-btn">
+              <a href={`tel:${phoneNum}`} onClick={(e) => { e.preventDefault(); window.dispatchEvent(new CustomEvent('open-saika-ai-call')); }} className="ll-footer-call-btn">
                 <PhoneIcon size={18} />
                 <span>কল করুনঃ {phoneNum}</span>
               </a>
@@ -1266,7 +1550,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
       {/* Sticky Bottom Order Bar for Mobile */}
       <div className="ll-mobile-sticky-bar">
         {phoneNum && (
-          <a href={`tel:${phoneNum}`} className="ll-sticky-call" title="কল করুন">
+          <a href={`tel:${phoneNum}`} onClick={(e) => { e.preventDefault(); window.dispatchEvent(new CustomEvent('open-saika-ai-call')); }} className="ll-sticky-call" title="কল করুন">
             <PhoneIcon size={15} />
             <span>কল</span>
           </a>

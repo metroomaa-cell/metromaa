@@ -109,7 +109,7 @@ export type Product = {
   categories?: string[];
   adult: boolean; tag: string; desc: string; size: string; image: string;
   images?: string[]; stock?: number | null; compareAt?: number; soldOut?: boolean;
-  sku?: string; shortDesc?: string; longDesc?: string; weight?: string;
+  sku?: string; skus?: string[]; shortDesc?: string; longDesc?: string; weight?: string;
   customDeliveryInside?: number | null; customDeliveryOutside?: number | null;
   seoTitle?: string; seoDesc?: string; seoKeywords?: string;
   noIndex?: boolean; seoExclude?: boolean;
@@ -270,6 +270,47 @@ export type OrderPayload = {
   shipping?: { cost: number; method: string };
 };
 
+function orderRiskOtpDialog(challengeId: string, maskedPhone: string, channel = 'message'): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(8,7,14,.78);backdrop-filter:blur(6px);display:grid;place-items:center;padding:18px;font-family:Inter,system-ui,sans-serif';
+    const card = document.createElement('form');
+    card.style.cssText = 'width:min(440px,100%);box-sizing:border-box;padding:24px;border:1px solid rgba(168,85,247,.45);border-radius:18px;background:#171321;color:#f8fafc;box-shadow:0 24px 90px rgba(0,0,0,.55)';
+    const title = document.createElement('h2'); title.textContent = 'Verify your phone'; title.style.cssText = 'margin:0 0 8px;font-size:20px';
+    const detail = document.createElement('p'); detail.textContent = `We sent a one-time code via ${channel} to ${maskedPhone}. Enter it to confirm this order.`; detail.style.cssText = 'margin:0 0 18px;color:#b8b2c8;font-size:13px;line-height:1.55';
+    const input = document.createElement('input'); input.type = 'text'; input.inputMode = 'numeric'; input.autocomplete = 'one-time-code'; input.maxLength = 6; input.required = true; input.placeholder = '6-digit code'; input.setAttribute('aria-label', '6-digit verification code'); input.style.cssText = 'box-sizing:border-box;width:100%;padding:13px 14px;border:1px solid #55436f;border-radius:10px;background:#0e0c14;color:#fff;font-size:20px;letter-spacing:8px;text-align:center;outline:none';
+    const status = document.createElement('div'); status.setAttribute('role', 'alert'); status.style.cssText = 'min-height:18px;margin:9px 0;color:#fca5a5;font-size:12px';
+    const actions = document.createElement('div'); actions.style.cssText = 'display:flex;justify-content:flex-end;gap:9px;margin-top:8px';
+    const resend = document.createElement('button'); resend.type = 'button'; resend.textContent = 'Resend code'; resend.style.cssText = 'margin-right:auto;padding:10px 12px;border:1px solid #443a50;border-radius:9px;color:#c4b5fd;background:transparent;cursor:pointer';
+    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; cancel.style.cssText = 'padding:10px 14px;border:1px solid #443a50;border-radius:9px;color:#ddd6e8;background:#211c2a;cursor:pointer';
+    const submit = document.createElement('button'); submit.type = 'submit'; submit.textContent = 'Verify & place order'; submit.style.cssText = 'padding:10px 15px;border:0;border-radius:9px;color:#fff;background:linear-gradient(100deg,#7c3aed,#a855f7);font-weight:700;cursor:pointer';
+    actions.append(resend, cancel, submit); card.append(title, detail, input, status, actions); overlay.append(card); document.body.append(overlay);
+    const finish = (error?: Error) => { overlay.remove(); error ? reject(error) : resolve(); };
+    cancel.onclick = () => finish(new Error('Phone verification was cancelled. Your order was not placed.'));
+    resend.onclick = async () => {
+      status.style.color = '#c4b5fd'; status.textContent = 'Requesting a new code…'; resend.disabled = true;
+      try {
+        const response = await fetch('/api/orders/resend-risk-otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId }) });
+        const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Could not resend the code.');
+        status.style.color = '#4ade80'; status.textContent = data.message || 'A new code was sent.'; input.value = ''; input.focus();
+      } catch (error: any) { status.style.color = '#fca5a5'; status.textContent = error?.message || 'Could not resend the code.'; }
+      finally { resend.disabled = false; }
+    };
+    card.onsubmit = async event => {
+      event.preventDefault(); status.textContent = ''; submit.disabled = true; submit.textContent = 'Checking…';
+      try {
+        const response = await fetch('/api/orders/verify-risk-otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId, code: input.value }) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not verify this code.');
+        finish();
+      } catch (error: any) { status.textContent = error?.message || 'Could not verify this code.'; submit.disabled = false; submit.textContent = 'Verify & place order'; input.focus(); }
+    };
+    input.oninput = () => { input.value = input.value.replace(/\D/g, '').slice(0, 6); };
+    overlay.onclick = event => { if (event.target === overlay) finish(new Error('Phone verification was cancelled. Your order was not placed.')); };
+    input.focus();
+  });
+}
+
 
 export function getSource(): string {
   try {
@@ -315,17 +356,21 @@ export async function placeOrder(p: OrderPayload) {
     }
   };
 
-  const r = await fetch('/api/orders', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-device-id': did,
-    },
-    body: JSON.stringify(finalPayload),
-  });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.error || 'could not place order');
-  return data as { id: string; total: number; status: string };
+  const submitOrder = async (challengeId = ''): Promise<{ id: string; total: number; status: string }> => {
+    const r = await fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-device-id': did },
+      body: JSON.stringify({ ...finalPayload, ...(challengeId ? { riskVerification: { challengeId } } : {}) }),
+    });
+    const data = await r.json();
+    if (r.status === 202 && data.verificationRequired && data.challengeId) {
+      await orderRiskOtpDialog(String(data.challengeId), String(data.phone || p.customer.phone), String(data.channel || 'message'));
+      return submitOrder(String(data.challengeId));
+    }
+    if (!r.ok) throw new Error(data.error || 'could not place order');
+    return data as { id: string; total: number; status: string };
+  };
+  return submitOrder();
 }
 
 export const taka = (n: number) => 'Tk ' + (Number(n) || 0).toLocaleString('en-US');

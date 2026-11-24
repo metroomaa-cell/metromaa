@@ -509,7 +509,7 @@ export function NotificationWidgets() {
                 <div style={{ width: '100%', maxHeight: 225, overflow: 'hidden', background: '#f1ece3' }}>
                   <img
                     src={cfg.promoPopup.image}
-                    alt={cfg.promoPopup.title || 'METRROMA Offer'}
+                    alt={cfg.promoPopup.title || 'SECRATE Offer'}
                     style={{ width: '100%', height: 225, objectFit: 'cover', display: 'block' }}
                   />
                 </div>
@@ -674,7 +674,7 @@ export function NotificationWidgets() {
               {cfg.pushPrompt.icon || fallbackIcon ? (
                 <img
                   src={cfg.pushPrompt.icon || fallbackIcon}
-                  alt="METRROMA"
+                  alt="SECRATE"
                   style={{
                     width: 44,
                     height: 44,

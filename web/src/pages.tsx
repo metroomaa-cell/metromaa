@@ -371,7 +371,7 @@ const secondaryImage = Array.isArray(p.images) && p.images.length > 1 ? p.images
       {/* Card Content — Ultra Clean Luxury */}
       <div className="pc-content">
         <div className="pc-eyebrow">
-          {p.category ? tr(p.category.replace(/-/g, ' '), language) : tr('METRROMA COLLECTION', language)}
+          {p.category ? tr(p.category.replace(/-/g, ' '), language) : tr('TimeBoost COLLECTION', language)}
         </div>
 
         <a className="pc-title">{p.name}</a>
@@ -942,7 +942,7 @@ const INFO: Record<string, { title: string; body: string[] }> = {
   shipping: { title: 'shipping & delivery', body: ['We deliver nationwide across Bangladesh through trusted express couriers. Inside Dhaka usually arrives in 24–48 hours, outside Dhaka in 2–3 business days.', 'You pay cash on delivery when your order reaches your doorstep. You can inspect the parcel before acceptance.'] },
   returns: { title: 'returns & exchanges', body: ['We offer a 7-day hassle-free exchange policy. If the size, color, or fit is not ideal, message our support team with your order ID.', 'We will immediately arrange a replacement sent to your doorstep.'] },
   contact: { title: 'contact customer support', body: ['Questions about an order or a product? Our customer care team is here to assist you 7 days a week, 10:00 AM – 10:00 PM.', 'Call our helpline or message us directly on WhatsApp using the button below.'] },
-  about: { title: 'about METRROMA', body: ['METRROMA offers skincare, beauty, and personal care products from a range of brands.', 'Product and ingredient details are provided on individual listings and packaging. Orders are delivered across Bangladesh with cash on delivery.'] },
+  about: { title: 'about TimeBoost', body: ['TimeBoost offers skincare, beauty, and personal care products from a range of brands.', 'Product and ingredient details are provided on individual listings and packaging. Orders are delivered across Bangladesh with cash on delivery.'] },
   privacy: { title: 'privacy policy', body: ['Your details are used strictly to process and deliver your order. We never sell or share your personal information with third parties.'] },
   terms: { title: 'terms of service', body: ['By placing an order you confirm that your shipping details and contact number are accurate.', 'All prices are in BDT and payable via Cash on Delivery upon receiving your package.'] },
   journal: { title: 'the journal', body: ['Style guides, fabric care notes & lifestyle stories — coming soon.'] },
@@ -1044,10 +1044,10 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
       <section className="tabaya-hero clean-banner" style={isSkin ? { background: 'radial-gradient(ellipse at 78% 35%, rgba(104,126,78,.38), transparent 44%), radial-gradient(ellipse at 12% 100%, rgba(174,142,80,.18), transparent 42%), linear-gradient(120deg,#101b16 0%,#1d2b20 54%,#111914 100%)' } : undefined}>
         <div className="tabaya-hero-bg">
           <picture>
-            <source media="(max-width: 768px)" srcSet="/uploads/img_mvdpqsl1t81m6.webp" />
+            <source media="(max-width: 768px)" srcSet="/uploads/logo_timeboost.png" />
             <img
-              src="/uploads/img_mvdpqsl1t81m6.webp"
-              alt="METRROMA — For your personal world."
+              src="/uploads/logo_timeboost.png"
+              alt="TimeBoost — For your personal world."
               loading="eager"
               fetchPriority="high"
               decoding="async"
@@ -1285,7 +1285,7 @@ export function Home() {
     const cached = getCachedSettings();
     if (cached) return cached;
     return {
-      storeName: 'METRROMA',
+      storeName: 'TimeBoost',
       announce: '✨ FREE DISCREET SHIPPING ON ORDERS OVER ৳2,500 · 100% AUTHENTIC SKINCARE & SELF-CARE · CASH ON DELIVERY NATIONWIDE',
       deliveryInside: 80,
       deliveryOutside: 130,
@@ -1738,7 +1738,7 @@ export function Home() {
             </p>
             {subbed ? (
               <div style={{ color: '#10b981', fontWeight: 700, fontSize: 16 }}>
-                '✓ Thank you! You have been subscribed to METRROMA VIP Club.'
+                '✓ Thank you! You have been subscribed to TimeBoost VIP Club.'
               </div>
             ) : (
               <form
@@ -1831,7 +1831,7 @@ export function Shop({ category }: { category: string }) {
           <p className="pc-section-kicker">
             {parentCat
               ? `${tr(parentCat.name, language)} · ${tr(activeCat?.name || '', language)}`
-              : tr('METRROMA SKINCARE & SELF-CARE PICKS', language)}
+              : tr('TimeBoost SKINCARE & SELF-CARE PICKS', language)}
           </p>
           <h1 className="pc-section-title">
             {activeCat ? tr(activeCat.name, language) : tr(isSkin ? 'All Skincare & Essentials' : 'All Collections', language)}
@@ -1843,7 +1843,7 @@ export function Shop({ category }: { category: string }) {
           </p>
         </div>
 
-        {/* METRROMA Modern Unified Category Filter System */}
+        {/* TimeBoost Modern Unified Category Filter System */}
         <div className="secrate-cat-filters">
           {/* Primary Main Categories Bar */}
           <div className="secrate-maincat-bar">
@@ -2400,7 +2400,7 @@ export function ProductPage({ slug }: { slug: string }) {
         ) || pr.variations[0];
         setSelVar(found);
       }
-      const pTitle = `${pr.name} — METRROMA`;
+      const pTitle = `${pr.name} — TimeBoost`;
       document.title = pTitle;
       if (!import.meta.env.DEV) {
         const q = new URLSearchParams(location.search);
@@ -2754,7 +2754,7 @@ export function ProductPage({ slug }: { slug: string }) {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
               <span className="pc-eyebrow" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '2.5px', color: '#9a7030', textTransform: 'uppercase' }}>
-                {p.category ? p.category.replace(/-/g, ' ').toUpperCase() : 'METRROMA LUXURY CARE'}
+                {p.category ? p.category.replace(/-/g, ' ').toUpperCase() : 'TimeBoost LUXURY CARE'}
               </span>
               <span style={{ fontSize: 10, color: '#9a7030', fontWeight: 700, background: 'rgba(180, 142, 76, 0.1)', border: '1px solid rgba(180, 142, 76, 0.28)', padding: '2px 8px', borderRadius: 12, letterSpacing: '0.06em' }}>
                 ✓ DIRECT IMPORT
@@ -3125,8 +3125,8 @@ export function ProductPage({ slug }: { slug: string }) {
                       <a
                         href={`https://wa.me/${waNum}?text=${encodeURIComponent(
                           language === 'bn'
-                            ? `আসসালামু আলাইকুম METRROMA, আমি এই প্রোডাক্টটি অর্ডার করতে চাই:\n🛍️ প্রোডাক্ট: ${p.name}\n[Code: ${p.slug || p.id}]\n💰 মূল্য: ${taka(currentPrice)}\n\nনাম: \nফোন: \nঠিকানা: `
-                            : `Hello METRROMA, I would like to order:\n🛍️ Product: ${p.name}\n[Code: ${p.slug || p.id}]\n💰 Price: ${taka(currentPrice)}\n\nName: \nPhone: \nAddress: `
+                            ? `আসসালামু আলাইকুম TimeBoost, আমি এই প্রোডাক্টটি অর্ডার করতে চাই:\n🛍️ প্রোডাক্ট: ${p.name}\n[Code: ${p.slug || p.id}]\n💰 মূল্য: ${taka(currentPrice)}\n\nনাম: \nফোন: \nঠিকানা: `
+                            : `Hello TimeBoost, I would like to order:\n🛍️ Product: ${p.name}\n[Code: ${p.slug || p.id}]\n💰 Price: ${taka(currentPrice)}\n\nName: \nPhone: \nAddress: `
                         )}`}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -3345,7 +3345,7 @@ export function ProductPage({ slug }: { slug: string }) {
           {/* Section Heading */}
           <div style={{ textAlign: 'center', padding: '36px 20px 22px', borderBottom: '1px solid rgba(180, 142, 76, 0.2)' }}>
             <span className="pc-eyebrow" style={{ display: 'block', marginBottom: 8, letterSpacing: '3px', color: '#9a7030', fontWeight: 700 }}>
-              {p.category ? p.category.toUpperCase().replace('-', ' ') : 'METRROMA SKINCARE & SELF-CARE'} • PRODUCT DETAILS
+              {p.category ? p.category.toUpperCase().replace('-', ' ') : 'TimeBoost SKINCARE & SELF-CARE'} • PRODUCT DETAILS
             </span>
             <h2 className="serif" style={{ fontSize: 'clamp(22px, 2.5vw, 32px)', color: '#1f3147', margin: 0, fontWeight: 600 }}>
               {isSkin ? 'Product Information & Details' : 'Product Information & Specifications'}
@@ -4215,7 +4215,7 @@ export function Checkout() {
         {/* Header */}
         <div className="phead" style={{ textAlign: 'center', padding: '6px 0 28px' }}>
           <p className="pc-section-kicker">
-            METRROMA • SECURE ORDER CHECKOUT
+            TimeBoost • SECURE ORDER CHECKOUT
           </p>
           <h1 className="serif" style={{ fontSize: 'clamp(28px, 3.4vw, 40px)', fontWeight: 500, color: '#1f3147', margin: '6px 0 10px' }}>
             {tr('Finalize Your Order', language)}
@@ -4534,7 +4534,7 @@ export function Confirm({ id }: { id: string }) {
           <div className="pc-corner-tr" />
           <div className="pc-corner-bl" />
           <div className="okcheck"><svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5" /></svg></div>
-          <p className="pc-section-kicker">METRROMA • ORDER RECEIVED</p>
+          <p className="pc-section-kicker">TimeBoost • ORDER RECEIVED</p>
           <h1 className="serif" style={{ fontSize: 'clamp(26px, 3.2vw, 36px)', color: '#1f3147', fontWeight: 500, margin: '8px 0 12px' }}>
             Order Placed Successfully!
           </h1>
@@ -4933,11 +4933,11 @@ function TrackResult({ o, language, settings }: { o: any; language: 'en' | 'bn';
   const hotlineNumber = settings?.phone || '09697101762';
   const waClean = waNumber.replace(/\D/g, '');
   const waPreFilled = bn
-    ? `আসসালামু আলাইকুম METRROMA, আমার অর্ডার #${o.id} সম্পর্কে জানতে চাচ্ছি।`
-    : `Hi METRROMA, I would like to inquire about my order #${o.id}.`;
+    ? `আসসালামু আলাইকুম TimeBoost, আমার অর্ডার #${o.id} সম্পর্কে জানতে চাচ্ছি।`
+    : `Hi TimeBoost, I would like to inquire about my order #${o.id}.`;
   const waUrl = `https://wa.me/${waClean}?text=${encodeURIComponent(waPreFilled)}`;
 
-  // Status Badge Configuration in METRROMA Luxury Style
+  // Status Badge Configuration in TimeBoost Luxury Style
   const getBadge = () => {
     if (rawStatus === 'delivered') return { label: bn ? 'ডেলিভারি সম্পন্ন' : 'Delivered', bg: 'linear-gradient(135deg, #065f46 0%, #047857 100%)', color: '#ffffff', border: '#34d399', icon: '🎁' };
     if (rawStatus === 'shipped') return { label: bn ? 'কুরিয়ারে ট্রানজিটে রয়েছে' : 'In Transit with Courier', bg: 'linear-gradient(135deg, #1f3147 0%, #152232 100%)', color: '#e6c887', border: '#b48e4c', icon: '🚚' };
@@ -5050,6 +5050,7 @@ function TrackResult({ o, language, settings }: { o: any; language: 'en' | 'bn';
                     </a>
                     <a
                       href={'tel:' + hotlineNumber}
+                      onClick={(e) => { e.preventDefault(); window.dispatchEvent(new CustomEvent('open-saika-ai-call')); }}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -5357,6 +5358,7 @@ function TrackResult({ o, language, settings }: { o: any; language: 'en' | 'bn';
               </a>
               <a
                 href={'tel:' + hotlineNumber}
+                onClick={(e) => { e.preventDefault(); window.dispatchEvent(new CustomEvent('open-saika-ai-call')); }}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -5479,7 +5481,7 @@ function smartSearch(items: Product[], q: string): Product[] {
     const varSizes = (p.variations || []).map((v) => v.size || '').join(' ').toLowerCase();
     const sizes = (p.sizes || []).join(' ').toLowerCase();
 
-    const hay = `${p.name} ${p.desc} ${p.shortDesc || ''} ${p.category} ${p.tag || ''} ${p.sku || ''} ${p.size || ''} ${colorNames} ${colorHexes} ${cleanColorHexes} ${varColors} ${varSizes} ${sizes}`.toLowerCase();
+    const hay = `${p.name} ${p.desc} ${p.shortDesc || ''} ${p.category} ${p.tag || ''} ${p.sku || ''} ${(Array.isArray(p.skus) ? p.skus : []).join(' ')} ${p.size || ''} ${colorNames} ${colorHexes} ${cleanColorHexes} ${varColors} ${varSizes} ${sizes}`.toLowerCase();
 
     const hexMatch = (cleanHex.length >= 3 && cleanColorHexes.includes(cleanHex)) || (colorHexes.includes(query));
     const match = hexMatch || terms.every((t) => hay.includes(t) || (SYN[t] || []).some((s) => hay.includes(s)));
