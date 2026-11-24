@@ -14421,7 +14421,7 @@ function SettingsAdmin() {
               আপনার পছন্দমতো স্টোরফ্রন্ট ব্যানার স্টাইল সিলেক্ট করুন। সিলেক্ট করে ওপরের বা নিচের "Save" বাটনে ক্লিক করুন।
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
-              {/* Option 1: RoyalMan Style (New) */}
+              {/* Option 1: Watch & Luxury Style */}
               <div
                 onClick={() => setF((p) => ({ ...p, appearance: { ...(p?.appearance || {}), heroStyle: 'royalman' } }))}
                 style={{
@@ -14435,7 +14435,7 @@ function SettingsAdmin() {
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                   <span style={{ fontWeight: 700, fontSize: 14, color: (f?.appearance?.heroStyle !== 'tabaya') ? '#c4b5fd' : '#fff' }}>
-                    👑 RoyalMan Style (New)
+                    ⌚ Watch &amp; Luxury Banner
                   </span>
                   {(f?.appearance?.heroStyle !== 'tabaya') && <span style={{ fontSize: 11, background: '#8b5cf6', color: '#fff', padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>ACTIVE</span>}
                 </div>
@@ -14726,37 +14726,42 @@ function SettingsAdmin() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
                 {[
                   {
-                    id: 'royalman',
-                    title: '👑 RoyalMan Style',
-                    subtitle: '4-Columns, Brand Bio, Support hotline pill (9AM-8PM) & round social media buttons.',
-                    tag: 'Watches / Luxury'
+                    id: 'watch_luxury',
+                    title: '⌚ Watch & Luxury',
+                    subtitle: '4-Columns, Left Logo & Bio, Support hotline pill (9AM-8PM) & round social media buttons.',
+                    tag: 'Watch & Luxury',
+                    image: '/templates/footer_watch_luxury.png'
                   },
                   {
                     id: 'avora',
                     title: '🔲 Avora Style',
                     subtitle: 'Ultra-minimal editorial fashion: 5-Col top, newsletter input, and HUGE brand wordmark at bottom.',
-                    tag: 'Minimal / Editorial'
+                    tag: 'Minimal / Editorial',
+                    image: '/templates/footer_avora.webp'
                   },
                   {
                     id: 'boutique',
                     title: '🌸 Boutique Style',
                     subtitle: 'Soft blush tone: Centered circular logo seal, horizontal divider nav bar, 3 detail columns & hours.',
-                    tag: 'Boutique / Cosmetics'
+                    tag: 'Boutique / Cosmetics',
+                    image: '/templates/footer_boutique.webp'
                   },
                   {
                     id: 'enky',
                     title: '💥 Enky Modern',
                     subtitle: 'Bold designer style: Capsule newsletter input with subscribe button, 3 sitemaps & massive brand wordmark.',
-                    tag: 'Modern / Punchy'
+                    tag: 'Modern / Punchy',
+                    image: '/templates/footer_enky.webp'
                   },
                   {
                     id: 'classic',
                     title: '🏛️ Classic Tabaya',
                     subtitle: 'Original rich dark luxury 4-column footer with gold accents, trust pills & WhatsApp helpline.',
-                    tag: 'Default Luxury'
+                    tag: 'Default Luxury',
+                    image: '/templates/footer_classic.svg'
                   }
                 ].map((tpl) => {
-                  const isSelected = (f.footer?.template || 'classic') === tpl.id;
+                  const isSelected = (f.footer?.template || 'classic') === tpl.id || (tpl.id === 'watch_luxury' && f.footer?.template === 'royalman');
                   return (
                     <div
                       key={tpl.id}
@@ -14765,7 +14770,7 @@ function SettingsAdmin() {
                         setF({ ...f, footer: { ...curFooter, template: tpl.id } });
                       }}
                       style={{
-                        padding: '16px',
+                        padding: '14px',
                         borderRadius: 10,
                         border: isSelected ? '2px solid #8b5cf6' : '1px solid rgba(255,255,255,0.08)',
                         background: isSelected ? 'rgba(139, 92, 246, 0.12)' : 'rgba(255,255,255,0.02)',
@@ -14778,6 +14783,33 @@ function SettingsAdmin() {
                       }}
                     >
                       <div>
+                        {/* Template Preview Picture */}
+                        <div style={{
+                          width: '100%',
+                          height: 110,
+                          borderRadius: 8,
+                          overflow: 'hidden',
+                          marginBottom: 12,
+                          background: tpl.id === 'classic' ? '#111827' : '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: isSelected ? '1px solid rgba(139, 92, 246, 0.5)' : '1px solid rgba(255,255,255,0.08)',
+                          boxShadow: '0 4px 14px rgba(0,0,0,0.2)'
+                        }}>
+                          <img
+                            src={tpl.image}
+                            alt={tpl.title}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: tpl.id === 'watch_luxury' ? 'contain' : 'cover',
+                              objectPosition: 'top center',
+                              display: 'block'
+                            }}
+                          />
+                        </div>
+
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                           <span style={{ fontWeight: 700, fontSize: 14, color: isSelected ? '#a78bfa' : '#fff' }}>{tpl.title}</span>
                           <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: isSelected ? '#8b5cf6' : 'rgba(255,255,255,0.08)', color: '#fff' }}>
@@ -14811,7 +14843,7 @@ function SettingsAdmin() {
                         const curFooter = f.footer || {};
                         setF({ ...f, footer: { ...curFooter, aboutText: e.target.value } });
                       }}
-                      placeholder="e.g. Royalman - The crown is Yours! Premium watches and lifestyle accessories crafted for timeless presence."
+                      placeholder="e.g. Premium watches, sunglasses and curated lifestyle collections crafted for everyday elegance and presence."
                       style={{ width: '100%', padding: '10px 14px', borderRadius: 8, background: '#0e0b1d', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: 13, resize: 'vertical' }}
                     />
                   </label>
@@ -14856,7 +14888,7 @@ function SettingsAdmin() {
                         const curFooter = f.footer || {};
                         setF({ ...f, footer: { ...curFooter, email: e.target.value } });
                       }}
-                      placeholder="contact@royalman.com.bd"
+                      placeholder="contact@store.com"
                     />
                   </label>
                   <label style={{ gridColumn: 'span 2' }}>

@@ -14,7 +14,7 @@ export interface FooterColumn {
 }
 
 export interface FooterSettings {
-  template?: 'royalman' | 'avora' | 'boutique' | 'enky' | 'classic';
+  template?: 'watch_luxury' | 'royalman' | 'avora' | 'boutique' | 'enky' | 'classic';
   mode?: 'easy' | 'custom_html';
   customHtml?: string;
   aboutText?: string;
@@ -141,10 +141,9 @@ function handleLinkClick(url: string, e: React.MouseEvent) {
 }
 
 /**
- * 👑 TEMPLATE 1: RoyalMan Style (media_1795556253279_33147a70.png)
- * 4 Columns: Logo + About + Address/Phone/Email | Company | Useful Links | Support Pill Hotline & Round Social Icons
+ * ⌚ TEMPLATE 1: Watch & Luxury Style (4 Columns: Left Logo & Contacts, 2 Menu Columns, Support Hotline Pill & Circular Socials)
  */
-export function RoyalManFooter({
+export function WatchLuxuryFooter({
   settings,
   logo,
   name,
@@ -161,7 +160,7 @@ export function RoyalManFooter({
   const hours = f.phoneHours || '9 AM - 8 PM';
   const email = f.email || 'support@' + (typeof window !== 'undefined' ? window.location.hostname.replace(/^www\./, '') : 'store.com');
   const address = f.address || 'House-14/16, Road-4, Block-D, Dhaka Uddan, Mohammadpur, Dhaka';
-  const about = f.aboutText || `${name} - The crown is Yours! Premium watches and lifestyle accessories crafted for timeless presence.`;
+  const about = f.aboutText || `${name} - Premium watches, sunglasses and curated lifestyle collections crafted for everyday elegance and presence.`;
   const cols = Array.isArray(f.columns) && f.columns.length > 0 ? f.columns : DEFAULT_COLUMNS;
   const col1 = cols[0] || DEFAULT_COLUMNS[0];
   const col2 = cols[1] || DEFAULT_COLUMNS[1];
@@ -842,8 +841,9 @@ export function RenderFooter({
   // Ready Template Switcher
   const template = f.template || 'classic';
   switch (template) {
+    case 'watch_luxury':
     case 'royalman':
-      return <RoyalManFooter settings={settings} logo={logo} name={name} preview={preview} />;
+      return <WatchLuxuryFooter settings={settings} logo={logo} name={name} preview={preview} />;
     case 'avora':
       return <AvoraFooter settings={settings} logo={logo} name={name} preview={preview} />;
     case 'boutique':
