@@ -145,9 +145,15 @@ function Effects() {
 
     getSettings().then((s) => {
       const brand = resolveBrandName(s.storeName);
+      const customSiteTitle = (s.siteTitle || s.metaTitle || '').trim();
+      const defaultHomeTitle = isSkin
+        ? `${brand} — For your personal world.`
+        : `${brand} | Embrace the metro lifestyle`;
+      const homeTitle = customSiteTitle || defaultHomeTitle;
+
       const t: any = isSkin
         ? {
-            home: `${brand} — For your personal world.`,
+            home: homeTitle,
             shop: `Shop Skincare, Makeup, Hair Care & Personal Care in Bangladesh | ${brand}`,
             track: `Track Your Order — ${brand}`,
             checkout: `Checkout (Cash on Delivery) — ${brand}`,
@@ -156,7 +162,7 @@ function Effects() {
             admin: `Admin Dashboard — ${brand}`,
           }
         : {
-            home: `${brand} | Embrace the metro lifestyle`,
+            home: homeTitle,
             shop: `All Collections — ${brand}`,
             track: `Track Your Order — ${brand}`,
             checkout: `Checkout (Cash on Delivery) — ${brand}`,

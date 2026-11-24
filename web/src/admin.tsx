@@ -14242,7 +14242,7 @@ function SettingsAdmin() {
                   <span style={{ fontSize: 14 }}>🌐</span>
                 )}
                 <span style={{ fontSize: 12, color: '#e2e8f0', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {f.storeName || 'TimeBoost'} — Online Store
+                  {f.siteTitle || `${f.storeName || 'TimeBoost'} — Online Store`}
                 </span>
                 <span style={{ color: '#71717a', fontSize: 11, marginLeft: 'auto' }}>×</span>
               </div>
@@ -14297,7 +14297,129 @@ function SettingsAdmin() {
             </div>
           </div>
 
-          {/* 3. Hero Sliders & Banners Quick Access Hub */}
+          {/* 3. Site Title & Browser Header Manager */}
+          <div className="sa-card" style={{ gridColumn: '1 / -1', padding: 24, display: 'flex', flexDirection: 'column', gap: 18, background: 'linear-gradient(135deg, #130f24 0%, #0e0b1c 100%)', border: '1px solid rgba(139, 92, 246, 0.25)', borderRadius: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>🌐 Website Title (ব্রাউজার ট্যাব ও সার্চ টাইটেল)</h3>
+                  <span
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                      background: f.siteTitle ? 'rgba(34, 197, 94, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                      color: f.siteTitle ? '#4ade80' : '#94a3b8',
+                      border: '1px solid ' + (f.siteTitle ? 'rgba(34, 197, 94, 0.3)' : 'rgba(148, 163, 184, 0.2)'),
+                    }}
+                  >
+                    {f.siteTitle ? '● Custom Title Active' : '○ Default Brand Title'}
+                  </span>
+                </div>
+                <p style={{ margin: '4px 0 0', fontSize: 12.5, color: '#94a3b8', lineHeight: 1.45 }}>
+                  ব্রাউজারের ট্যাব হেডার, গুগল সার্চ রেজাল্ট, বুকমার্ক এবং ফেসবুক/হোয়াটসঅ্যাপে ওয়েবসাইট শেয়ার করার সময় এই টাইটেলটি প্রধান শিরোনাম হিসেবে প্রদর্শিত হবে।
+                </p>
+              </div>
+              {f.siteTitle && (
+                <button
+                  type="button"
+                  className="sa-btn ghost small"
+                  style={{ color: '#f87171', background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.25)' }}
+                  onClick={() => setF((s: any) => ({ ...s, siteTitle: '' }))}
+                >
+                  Reset to Default
+                </button>
+              )}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
+              {/* Input Area */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, fontWeight: 700, color: '#cbd5e1' }}>
+                  SITE TITLE (BROWSER TAB HEADER)
+                  <input
+                    value={f.siteTitle || ''}
+                    onChange={set('siteTitle')}
+                    placeholder={`e.g. ${f.storeName || 'SECRATE'} — Luxury Watches & Lifestyle in Bangladesh`}
+                    style={{
+                      width: '100%',
+                      height: 44,
+                      padding: '0 14px',
+                      background: '#181624',
+                      border: '1px solid rgba(139, 92, 246, 0.35)',
+                      borderRadius: 8,
+                      color: '#fff',
+                      fontSize: 14,
+                      fontWeight: 600,
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                    }}
+                  />
+                </label>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#71717a', textTransform: 'uppercase' }}>Quick Presets (এক ক্লিকে সেট করুন):</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    <button
+                      type="button"
+                      className="sa-btn ghost small"
+                      onClick={() => setF((s: any) => ({ ...s, siteTitle: `${f.storeName || 'SECRATE'} — Premium Watches & Luxury in Bangladesh` }))}
+                      style={{ fontSize: 11.5, padding: '6px 10px', background: 'rgba(255,255,255,0.04)', color: '#c4b5fd', borderColor: 'rgba(139, 92, 246, 0.25)' }}
+                    >
+                      Preset 1: Luxury &amp; Watches
+                    </button>
+                    <button
+                      type="button"
+                      className="sa-btn ghost small"
+                      onClick={() => setF((s: any) => ({ ...s, siteTitle: `${f.storeName || 'Store'} | Cash on Delivery Across Bangladesh` }))}
+                      style={{ fontSize: 11.5, padding: '6px 10px', background: 'rgba(255,255,255,0.04)', color: '#c4b5fd', borderColor: 'rgba(139, 92, 246, 0.25)' }}
+                    >
+                      Preset 2: Cash on Delivery
+                    </button>
+                    <button
+                      type="button"
+                      className="sa-btn ghost small"
+                      onClick={() => setF((s: any) => ({ ...s, siteTitle: `${f.storeName || 'Store'} — For your personal world.` }))}
+                      style={{ fontSize: 11.5, padding: '6px 10px', background: 'rgba(255,255,255,0.04)', color: '#c4b5fd', borderColor: 'rgba(139, 92, 246, 0.25)' }}
+                    >
+                      Preset 3: Editorial Minimal
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Google Search & Social Link Preview */}
+              <div style={{ background: '#090812', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 18, display: 'flex', flexDirection: 'column', gap: 8, boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.4)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: 11, color: '#a78bfa', fontWeight: 700, letterSpacing: 0.5 }}>
+                    🔍 GOOGLE &amp; SOCIAL PREVIEW
+                  </span>
+                  <span style={{ fontSize: 10, color: '#64748b' }}>Live snippet</span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {f.favicon ? (
+                    <img src={f.favicon} alt="" style={{ width: 16, height: 16, borderRadius: 2, objectFit: 'contain' }} />
+                  ) : (
+                    <span style={{ fontSize: 12 }}>🌐</span>
+                  )}
+                  <span style={{ fontSize: 12, color: '#38bdf8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {typeof window !== 'undefined' ? window.location.origin : 'https://secrate.shop'}
+                  </span>
+                </div>
+
+                <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#818cf8', lineHeight: 1.35, wordBreak: 'break-word' }}>
+                  {f.siteTitle || `${f.storeName || 'SECRATE'} — For your personal world.`}
+                </h4>
+
+                <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', lineHeight: 1.45 }}>
+                  {f.announce || 'Authentic curated lifestyle collections and premium watches delivered nationwide across Bangladesh with Cash on Delivery.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Hero Sliders & Banners Quick Access Hub */}
           <div
             className="sa-card"
             style={{
@@ -15563,7 +15685,8 @@ function SettingsAdmin() {
         <div className="sa-card" style={{ padding: 24 }}>
           <div className="sa-sgrid">
             <label>Store name<input value={f.storeName || ''} onChange={set('storeName')} placeholder="TimeBoost" /></label>
-            <label>Announcement text<input value={f.announce || ''} onChange={set('announce')} /></label>
+            <label>Site Title (Browser Tab &amp; Google SEO)<input value={f.siteTitle || ''} onChange={set('siteTitle')} placeholder="e.g. SECRATE — Luxury Watches in Bangladesh" /></label>
+            <label style={{ gridColumn: '1 / -1' }}>Announcement text<input value={f.announce || ''} onChange={set('announce')} placeholder="Free shipping on orders over ৳2000" /></label>
             <label>WhatsApp number (with country code)<input value={f.whatsapp || ''} onChange={set('whatsapp')} placeholder="8801XXXXXXXXX" /></label>
             <label>Store phone<input value={f.phone || ''} onChange={set('phone')} placeholder="8801XXXXXXXXX" /></label>
             <label>Delivery — inside Dhaka (৳)<input value={f.deliveryInside ?? ''} onChange={set('deliveryInside')} /></label>

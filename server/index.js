@@ -6448,7 +6448,18 @@ if (existsSync(dist)) {
           .replace(/<link rel="canonical" href="[^"]*"\s*\/?\s*>/i, `<link rel="canonical" href="${htmlEscape(url)}" />`)
           .replace('</head>', `\n    <meta property="og:url" content="${htmlEscape(url)}" /><meta property="og:type" content="website" /><script type="application/ld+json">${JSON.stringify(listJsonLd).replace(/</g, '\\u003c')}</script>\n</head>`);
       } else {
-        html = html.replace(/<meta property="og:image" content="(\/[^"]+)"/i, `<meta property="og:image" content="${baseUrl}$1"`);
+        const s = getSettings();
+        const brand = (s.storeName && s.storeName !== 'dot.' && s.storeName !== 'Dot Store')
+          ? s.storeName
+          : (req.hostname && req.hostname.includes('secrate') ? 'SECRATE' : (req.hostname && req.hostname.includes('metr') ? 'METRROMA' : 'TimeBoost'));
+        const customTitle = (s.siteTitle || s.metaTitle || '').trim();
+        const finalTitle = customTitle || `${brand} — For your personal world.`;
+        html = html
+          .replace(/<title>[\s\S]*?<\/title>/i, `<title>${htmlEscape(finalTitle)}</title>`)
+          .replace(/<meta property="og:title" content="[^"]*"/i, `<meta property="og:title" content="${htmlEscape(finalTitle)}"`)
+          .replace(/<meta property="og:site_name" content="[^"]*"/i, `<meta property="og:site_name" content="${htmlEscape(brand)}"`)
+          .replace(/<meta name="twitter:title" content="[^"]*"/i, `<meta name="twitter:title" content="${htmlEscape(finalTitle)}"`)
+          .replace(/<meta property="og:image" content="(\/[^"]+)"/i, `<meta property="og:image" content="${baseUrl}$1"`);
       }
 
       const activeGtmId = getSettings().gtmId;
