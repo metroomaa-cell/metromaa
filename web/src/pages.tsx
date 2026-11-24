@@ -8,6 +8,16 @@ import { ecView, ecBeginCheckout, ecPurchase, dl, pushUserData } from './analyti
 import { WhatsAppIcon } from './icons';
 import { tr, useStoreLanguage } from './language';
 
+function getStoreBrand(): string {
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname.toLowerCase();
+    if (h.includes('secrate')) return 'SECRATE';
+    if (h.includes('metrroma') || h.includes('metromaa')) return 'METRROMA';
+  }
+  return isSkincareSite() ? 'SECRATE' : 'METRROMA';
+}
+
+
 export function formatProductDescription(raw?: string): string {
   if (!raw || typeof raw !== 'string') return '';
   // Drop only a legacy mojibake word rather than rendering replacement glyphs in product copy.
@@ -371,7 +381,7 @@ const secondaryImage = Array.isArray(p.images) && p.images.length > 1 ? p.images
       {/* Card Content — Ultra Clean Luxury */}
       <div className="pc-content">
         <div className="pc-eyebrow">
-          {p.category ? tr(p.category.replace(/-/g, ' '), language) : tr(isSkin ? 'SECRATE COLLECTION' : 'METRROMA COLLECTION', language)}
+          {p.category ? tr(p.category.replace(/-/g, ' '), language) : tr(getStoreBrand() + ' COLLECTION', language)}
         </div>
 
         <a className="pc-title">{p.name}</a>
@@ -942,7 +952,7 @@ const INFO: Record<string, { title: string; body: string[] }> = {
   shipping: { title: 'shipping & delivery', body: ['We deliver nationwide across Bangladesh through trusted express couriers. Inside Dhaka usually arrives in 24–48 hours, outside Dhaka in 2–3 business days.', 'You pay cash on delivery when your order reaches your doorstep. You can inspect the parcel before acceptance.'] },
   returns: { title: 'returns & exchanges', body: ['We offer a 7-day hassle-free exchange policy. If the size, color, or fit is not ideal, message our support team with your order ID.', 'We will immediately arrange a replacement sent to your doorstep.'] },
   contact: { title: 'contact customer support', body: ['Questions about an order or a product? Our customer care team is here to assist you 7 days a week, 10:00 AM – 10:00 PM.', 'Call our helpline or message us directly on WhatsApp using the button below.'] },
-  about: { title: isSkin ? 'about SECRATE' : 'about METRROMA', body: [isSkin ? 'SECRATE offers curated authentic skincare, beauty, and wellness products.' : 'METRROMA offers curated watches, sunglasses, and luxury gifts.', 'Product and ingredient details are provided on individual listings and packaging. Orders are delivered across Bangladesh with cash on delivery.'] },
+  about: { title: 'about ' + getStoreBrand(), body: ['Curated authentic products with express cash on delivery nationwide.', 'Product and ingredient details are provided on individual listings and packaging. Orders are delivered across Bangladesh with cash on delivery.'] },
   privacy: { title: 'privacy policy', body: ['Your details are used strictly to process and deliver your order. We never sell or share your personal information with third parties.'] },
   terms: { title: 'terms of service', body: ['By placing an order you confirm that your shipping details and contact number are accurate.', 'All prices are in BDT and payable via Cash on Delivery upon receiving your package.'] },
   journal: { title: 'the journal', body: ['Style guides, fabric care notes & lifestyle stories — coming soon.'] },
@@ -1305,7 +1315,7 @@ export function Home() {
     const cached = getCachedSettings();
     if (cached) return cached;
     return {
-      storeName: isSkin ? 'SECRATE' : 'METRROMA',
+      storeName: getStoreBrand(),
       announce: '✨ FREE DISCREET SHIPPING ON ORDERS OVER ৳2,500 · 100% AUTHENTIC SKINCARE & SELF-CARE · CASH ON DELIVERY NATIONWIDE',
       deliveryInside: 80,
       deliveryOutside: 130,
@@ -1758,7 +1768,7 @@ export function Home() {
             </p>
             {subbed ? (
               <div style={{ color: '#10b981', fontWeight: 700, fontSize: 16 }}>
-                `✓ Thank you! You have been subscribed to ${isSkin ? 'SECRATE' : 'METRROMA'} VIP Club.`
+                '✓ Thank you! You have been subscribed to ' + getStoreBrand() + ' VIP Club.'
               </div>
             ) : (
               <form
@@ -1851,7 +1861,7 @@ export function Shop({ category }: { category: string }) {
           <p className="pc-section-kicker">
             {parentCat
               ? `${tr(parentCat.name, language)} · ${tr(activeCat?.name || '', language)}`
-              : tr(isSkin ? 'SECRATE SKINCARE & SELF-CARE PICKS' : 'METRROMA CURATED PICKS', language)}
+              : tr(getStoreBrand() + ' CURATED PICKS', language)}
           </p>
           <h1 className="pc-section-title">
             {activeCat ? tr(activeCat.name, language) : tr(isSkin ? 'All Skincare & Essentials' : 'All Collections', language)}
@@ -2420,7 +2430,7 @@ export function ProductPage({ slug }: { slug: string }) {
         ) || pr.variations[0];
         setSelVar(found);
       }
-      const pTitle = `${pr.name} — ${isSkin ? 'SECRATE' : 'METRROMA'}`;
+      const pTitle = `${pr.name} — ${getStoreBrand()}`;
       document.title = pTitle;
       if (!import.meta.env.DEV) {
         const q = new URLSearchParams(location.search);
@@ -2774,7 +2784,7 @@ export function ProductPage({ slug }: { slug: string }) {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
               <span className="pc-eyebrow" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '2.5px', color: '#9a7030', textTransform: 'uppercase' }}>
-                {p.category ? p.category.replace(/-/g, ' ').toUpperCase() : (isSkin ? 'SECRATE LUXURY CARE' : 'METRROMA LUXURY')}
+                {p.category ? p.category.replace(/-/g, ' ').toUpperCase() : (getStoreBrand() + ' LUXURY')}
               </span>
               <span style={{ fontSize: 10, color: '#9a7030', fontWeight: 700, background: 'rgba(180, 142, 76, 0.1)', border: '1px solid rgba(180, 142, 76, 0.28)', padding: '2px 8px', borderRadius: 12, letterSpacing: '0.06em' }}>
                 ✓ DIRECT IMPORT
@@ -3145,8 +3155,8 @@ export function ProductPage({ slug }: { slug: string }) {
                       <a
                         href={`https://wa.me/${waNum}?text=${encodeURIComponent(
                           language === 'bn'
-                            ? `আসসালামু আলাইকুম ${isSkin ? 'SECRATE' : 'METRROMA'}, আমি এই প্রোডাক্টটি অর্ডার করতে চাই:\n🛍️ প্রোডাক্ট: ${p.name}\n[Code: ${p.slug || p.id}]\n💰 মূল্য: ${taka(currentPrice)}\n\nনাম: \nফোন: \nঠিকানা: `
-                            : `Hello ${isSkin ? 'SECRATE' : 'METRROMA'}, I would like to order:\n🛍️ Product: ${p.name}\n[Code: ${p.slug || p.id}]\n💰 Price: ${taka(currentPrice)}\n\nName: \nPhone: \nAddress: `
+                            ? `আসসালামু আলাইকুম ${getStoreBrand()}, আমি এই প্রোডাক্টটি অর্ডার করতে চাই:\n🛍️ প্রোডাক্ট: ${p.name}\n[Code: ${p.slug || p.id}]\n💰 মূল্য: ${taka(currentPrice)}\n\nনাম: \nফোন: \nঠিকানা: `
+                            : `Hello ${getStoreBrand()}, I would like to order:\n🛍️ Product: ${p.name}\n[Code: ${p.slug || p.id}]\n💰 Price: ${taka(currentPrice)}\n\nName: \nPhone: \nAddress: `
                         )}`}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -3365,7 +3375,7 @@ export function ProductPage({ slug }: { slug: string }) {
           {/* Section Heading */}
           <div style={{ textAlign: 'center', padding: '36px 20px 22px', borderBottom: '1px solid rgba(180, 142, 76, 0.2)' }}>
             <span className="pc-eyebrow" style={{ display: 'block', marginBottom: 8, letterSpacing: '3px', color: '#9a7030', fontWeight: 700 }}>
-              {p.category ? p.category.toUpperCase().replace('-', ' ') : (isSkin ? 'SECRATE SKINCARE & SELF-CARE' : 'METRROMA COLLECTION')} • PRODUCT DETAILS
+              {p.category ? p.category.toUpperCase().replace('-', ' ') : (getStoreBrand() + ' SELECTION')} • PRODUCT DETAILS
             </span>
             <h2 className="serif" style={{ fontSize: 'clamp(22px, 2.5vw, 32px)', color: '#1f3147', margin: 0, fontWeight: 600 }}>
               {isSkin ? 'Product Information & Details' : 'Product Information & Specifications'}
@@ -4235,7 +4245,7 @@ export function Checkout() {
         {/* Header */}
         <div className="phead" style={{ textAlign: 'center', padding: '6px 0 28px' }}>
           <p className="pc-section-kicker">
-            ${isSkin ? 'SECRATE' : 'METRROMA'} • SECURE ORDER CHECKOUT
+            {getStoreBrand()} • SECURE ORDER CHECKOUT
           </p>
           <h1 className="serif" style={{ fontSize: 'clamp(28px, 3.4vw, 40px)', fontWeight: 500, color: '#1f3147', margin: '6px 0 10px' }}>
             {tr('Finalize Your Order', language)}
@@ -4554,7 +4564,7 @@ export function Confirm({ id }: { id: string }) {
           <div className="pc-corner-tr" />
           <div className="pc-corner-bl" />
           <div className="okcheck"><svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5" /></svg></div>
-          <p className="pc-section-kicker">{isSkin ? 'SECRATE' : 'METRROMA'} • ORDER RECEIVED</p>
+          <p className="pc-section-kicker">{getStoreBrand()} • ORDER RECEIVED</p>
           <h1 className="serif" style={{ fontSize: 'clamp(26px, 3.2vw, 36px)', color: '#1f3147', fontWeight: 500, margin: '8px 0 12px' }}>
             Order Placed Successfully!
           </h1>
@@ -4953,8 +4963,8 @@ function TrackResult({ o, language, settings }: { o: any; language: 'en' | 'bn';
   const hotlineNumber = settings?.phone || '09697101762';
   const waClean = waNumber.replace(/\D/g, '');
   const waPreFilled = bn
-    ? `আসসালামু আলাইকুম ${isSkin ? 'SECRATE' : 'METRROMA'}, আমার অর্ডার #${o.id} সম্পর্কে জানতে চাচ্ছি।`
-    : `Hi ${isSkin ? 'SECRATE' : 'METRROMA'}, I would like to inquire about my order #${o.id}.`;
+    ? `আসসালামু আলাইকুম ${getStoreBrand()}, আমার অর্ডার #${o.id} সম্পর্কে জানতে চাচ্ছি।`
+    : `Hi ${getStoreBrand()}, I would like to inquire about my order #${o.id}.`;
   const waUrl = `https://wa.me/${waClean}?text=${encodeURIComponent(waPreFilled)}`;
 
   // Status Badge Configuration in TimeBoost Luxury Style

@@ -396,7 +396,10 @@ function Header({ onSearch }: { onSearch: () => void }) {
                 className="tabaya-header-logo-img"
                 src={logo}
                 alt={storeName}
-                onError={() => setLogo('')}
+                onError={() => {
+                  const fallback = getSiteBrandDefaults().logo;
+                  if (logo !== fallback) setLogo(fallback);
+                }}
               />
             ) : (
               <span className="tabaya-header-logo" style={{ fontSize: 20 }}>{storeName}</span>
