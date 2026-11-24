@@ -126,11 +126,11 @@ export const TEMPLATE_DEFAULT_CONFIGS: Record<string, {
 }> = {
   watch_luxury: {
     name: 'Watch & Luxury',
-    aboutText: 'The crown is Yours! Royalman is one of the largest Online Watch store In Bangladesh!',
-    phone: '09613008080',
-    phoneHours: '9 AM - 8 PM',
-    email: 'contact@royalman.com.bd',
-    address: 'House-14/16, Road-4, Block-D, Dhaka Uddan, Mohammadpur, Dhaka',
+    aboutText: 'Curated luxury watches, premium sunglasses and timeless lifestyle accessories crafted for everyday distinction and elegance across Bangladesh.',
+    phone: '+880 1878-374762',
+    phoneHours: '10:00 AM – 10:00 PM (Everyday)',
+    email: 'support@secrate.shop',
+    address: 'House-12, Road-5, Dhanmondi, Dhaka-1205, Bangladesh',
     columns: [
       {
         title: 'COMPANY',
@@ -146,20 +146,21 @@ export const TEMPLATE_DEFAULT_CONFIGS: Record<string, {
         title: 'USEFUL LINKS',
         links: [
           { text: 'Home', url: 'home' },
-          { text: 'Shop', url: 'shop' },
+          { text: 'All Collections', url: 'shop' },
+          { text: 'Track Your Order', url: 'track' },
           { text: 'Checkout', url: 'checkout' },
-          { text: 'My account', url: 'account' },
+          { text: 'My Account', url: 'account' },
         ],
       },
     ],
   },
   royalman: {
     name: 'Watch & Luxury',
-    aboutText: 'The crown is Yours! Royalman is one of the largest Online Watch store In Bangladesh!',
-    phone: '09613008080',
-    phoneHours: '9 AM - 8 PM',
-    email: 'contact@royalman.com.bd',
-    address: 'House-14/16, Road-4, Block-D, Dhaka Uddan, Mohammadpur, Dhaka',
+    aboutText: 'Curated luxury watches, premium sunglasses and timeless lifestyle accessories crafted for everyday distinction and elegance across Bangladesh.',
+    phone: '+880 1878-374762',
+    phoneHours: '10:00 AM – 10:00 PM (Everyday)',
+    email: 'support@secrate.shop',
+    address: 'House-12, Road-5, Dhanmondi, Dhaka-1205, Bangladesh',
     columns: [
       {
         title: 'COMPANY',
@@ -175,31 +176,33 @@ export const TEMPLATE_DEFAULT_CONFIGS: Record<string, {
         title: 'USEFUL LINKS',
         links: [
           { text: 'Home', url: 'home' },
-          { text: 'Shop', url: 'shop' },
+          { text: 'All Collections', url: 'shop' },
+          { text: 'Track Your Order', url: 'track' },
           { text: 'Checkout', url: 'checkout' },
-          { text: 'My account', url: 'account' },
+          { text: 'My Account', url: 'account' },
         ],
       },
     ],
   },
   avora: {
-    name: 'Avora Style',
-    aboutText: 'AVORA',
-    newsletterTitle: 'Newsletter',
+    name: 'Avora Minimal',
+    aboutText: 'Curated modern luxury collections, precision timepieces and premium lifestyle essentials.',
+    newsletterTitle: 'Join Our VIP Newsletter',
     columns: [
       {
-        title: 'Skincare',
+        title: 'Collections',
         links: [
-          { text: 'Balms', url: 'shop' },
-          { text: 'Body', url: 'shop' },
-          { text: 'Fragrance', url: 'shop' },
-          { text: 'Sets', url: 'shop' },
+          { text: 'Luxury Watches', url: 'shop' },
+          { text: 'Premium Sunglasses', url: 'shop' },
+          { text: 'Curated Essentials', url: 'shop' },
+          { text: 'New Arrivals', url: 'shop' },
         ],
       },
       {
-        title: 'Support',
+        title: 'Customer Care',
         links: [
-          { text: '24/7 Support', url: 'info/contact' },
+          { text: 'Order Helpline', url: 'info/contact' },
+          { text: 'Track Order', url: 'track' },
           { text: 'Terms & Conditions', url: 'info/terms' },
           { text: 'Privacy Policy', url: 'info/privacy' },
         ],
@@ -208,67 +211,69 @@ export const TEMPLATE_DEFAULT_CONFIGS: Record<string, {
   },
   boutique: {
     name: 'Boutique Style',
-    phone: '248.879.0833',
-    email: 'info@joyabendmode.com',
-    address: '506 S. Washington Avenue\nRoyal Oak, Michigan 48067',
-    phoneHours: '*by appointment only\nTues, Thurs, & Fri | 11AM-5PM\nWed & Sat | 11AM-7PM\nCLOSED SUNDAY & MONDAY',
+    phone: '+880 1878-374762',
+    email: 'support@secrate.shop',
+    address: 'House-12, Road-5, Dhanmondi, Dhaka-1205, Bangladesh',
+    phoneHours: 'Saturday – Thursday | 10:00 AM – 10:00 PM\nFriday | 2:00 PM – 10:00 PM\nCash on Delivery 24/7 Nationwide',
     columns: [
       {
         title: 'CONTACT',
         links: [
-          { text: '248.879.0833', url: 'tel:2488790833' },
-          { text: 'info@joyabendmode.com', url: 'mailto:info@joyabendmode.com' },
-          { text: '506 S. Washington Avenue', url: 'info/contact' },
-          { text: 'Royal Oak, Michigan 48067', url: 'info/contact' },
+          { text: '+880 1878-374762', url: 'tel:+8801878374762' },
+          { text: 'support@secrate.shop', url: 'mailto:support@secrate.shop' },
+          { text: 'Dhanmondi, Dhaka, Bangladesh', url: 'info/contact' },
+          { text: 'Fast Delivery Across Bangladesh', url: 'info/shipping' },
         ],
       },
       {
-        title: 'HOURS',
+        title: 'SUPPORT HOURS',
         links: [
-          { text: '*by appointment only', url: '#' },
-          { text: 'Tues, Thurs, & Fri | 11AM-5PM', url: '#' },
-          { text: 'Wed & Sat | 11AM-7PM', url: '#' },
-          { text: 'CLOSED SUNDAY & MONDAY', url: '#' },
+          { text: 'Saturday – Thursday | 10AM - 10PM', url: '#' },
+          { text: 'Friday | 2PM - 10PM', url: '#' },
+          { text: 'Dedicated Customer Helpline', url: '#' },
+          { text: 'Cash on Delivery Nationwide', url: '#' },
         ],
       },
       {
         title: 'INFORMATION',
         links: [
-          { text: 'Contact Us', url: 'info/contact' },
-          { text: 'Browse Collections', url: 'shop' },
-          { text: 'Terms & Conditions', url: 'info/terms' },
-          { text: 'Privacy Policy', url: 'info/privacy' },
+          { text: 'About Our Brand', url: 'info/about' },
+          { text: 'Browse All Collections', url: 'shop' },
+          { text: 'Track Your Order', url: 'track' },
+          { text: 'Returns & Exchange Policy', url: 'info/returns' },
         ],
       },
     ],
   },
   enky: {
     name: 'Enky Modern',
-    newsletterTitle: 'Join our newsletter to stay up to date on the latest news and updates.',
+    newsletterTitle: 'Subscribe for exclusive discounts, new arrival alerts and member rewards.',
     columns: [
       {
-        title: 'Sitemap',
+        title: 'Collections',
         links: [
-          { text: 'About Us', url: 'info/about' },
-          { text: 'Space design', url: 'shop' },
-          { text: 'Customer Stories', url: 'info/about' },
-          { text: 'FAQ', url: 'info/shipping' },
+          { text: 'All Products', url: 'shop' },
+          { text: 'Featured Best Sellers', url: 'shop' },
+          { text: 'New Arrivals', url: 'shop' },
+          { text: 'Special Offers', url: 'shop' },
         ],
       },
       {
-        title: 'Partners',
+        title: 'Customer Care',
         links: [
-          { text: 'Architects', url: 'info/contact' },
-          { text: 'Co-Working', url: 'info/contact' },
-          { text: 'Real Estate', url: 'info/contact' },
+          { text: 'Track Order', url: 'track' },
+          { text: 'Shipping & Delivery', url: 'info/shipping' },
+          { text: 'Returns & Exchange', url: 'info/returns' },
+          { text: 'Order Helpline', url: 'info/contact' },
         ],
       },
       {
-        title: 'Services',
+        title: 'Company',
         links: [
-          { text: 'Furniture as Service', url: 'shop' },
-          { text: 'Second-Hand Marketplace', url: 'shop' },
-          { text: 'Enky Invest', url: 'shop' },
+          { text: 'About Our Brand', url: 'info/about' },
+          { text: 'Terms & Conditions', url: 'info/terms' },
+          { text: 'Privacy Policy', url: 'info/privacy' },
+          { text: 'FAQ & Help Center', url: 'info/shipping' },
         ],
       },
     ],
@@ -564,11 +569,11 @@ export function WatchLuxuryFooter({
   const language = useStoreLanguage();
   const f: FooterSettings = settings?.footer || {};
   const tplDef = getTemplateDefaults('watch_luxury');
-  const phone = f.phone || settings?.phone || tplDef.phone || '09613008080';
-  const hours = f.phoneHours || tplDef.phoneHours || '9 AM - 8 PM';
-  const email = f.email || tplDef.email || 'contact@royalman.com.bd';
-  const address = f.address || tplDef.address || 'House-14/16, Road-4, Block-D, Dhaka Uddan, Mohammadpur, Dhaka';
-  const about = f.aboutText || tplDef.aboutText || 'The crown is Yours! Royalman is one of the largest Online Watch store In Bangladesh!';
+  const phone = f.phone || settings?.phone || tplDef.phone || '+880 1878-374762';
+  const hours = f.phoneHours || tplDef.phoneHours || '10:00 AM – 10:00 PM';
+  const email = f.email || tplDef.email || 'support@secrate.shop';
+  const address = f.address || tplDef.address || 'House-12, Road-5, Dhanmondi, Dhaka-1205, Bangladesh';
+  const about = f.aboutText || tplDef.aboutText || `${name} — Premium luxury watches, curated lifestyle accessories and precision timepieces crafted for everyday elegance across Bangladesh.`;
   const cols = Array.isArray(f.columns) && f.columns.length > 0 ? f.columns : tplDef.columns;
   const col1 = cols[0] || tplDef.columns[0];
   const col2 = cols[1] || tplDef.columns[1];
@@ -804,10 +809,10 @@ export function BoutiqueFooter({
   const tplDef = getTemplateDefaults('boutique');
   const [email, setEmail] = useState('');
   const [subbed, setSubbed] = useState(false);
-  const phone = f.phone || settings?.phone || tplDef.phone || '248.879.0833';
-  const emailAddr = f.email || tplDef.email || 'info@joyabendmode.com';
-  const address = f.address || tplDef.address || '506 S. Washington Avenue\nRoyal Oak, Michigan 48067';
-  const hours = f.phoneHours || tplDef.phoneHours || '*by appointment only\nTues, Thurs, & Fri | 11AM-5PM\nWed & Sat | 11AM-7PM\nCLOSED SUNDAY & MONDAY';
+  const phone = f.phone || settings?.phone || tplDef.phone || '+880 1878-374762';
+  const emailAddr = f.email || tplDef.email || 'support@secrate.shop';
+  const address = f.address || tplDef.address || 'House-12, Road-5, Dhanmondi, Dhaka-1205, Bangladesh';
+  const hours = f.phoneHours || tplDef.phoneHours || 'Saturday – Thursday | 10:00 AM – 10:00 PM\nFriday | 2:00 PM – 10:00 PM\nCash on Delivery 24/7 Nationwide';
   const cols = Array.isArray(f.columns) && f.columns.length > 0 ? f.columns : tplDef.columns;
   const col1 = cols[0] || tplDef.columns[0];
   const col2 = cols[1] || tplDef.columns[1];
@@ -836,13 +841,13 @@ export function BoutiqueFooter({
         <div className="ft-btq-nav-bar">
           <a href="#info/about" onClick={(e) => handleLinkClick('info/about', e)}>ABOUT US</a>
           <span className="ft-btq-dot">|</span>
-          <a href="#shop" onClick={(e) => handleLinkClick('shop', e)}>EVENTS & OFFERS</a>
+          <a href="#shop" onClick={(e) => handleLinkClick('shop', e)}>ALL COLLECTIONS</a>
           <span className="ft-btq-dot">|</span>
-          <a href="#info/contact" onClick={(e) => handleLinkClick('info/contact', e)}>CONSULTATIONS</a>
+          <a href="#track" onClick={(e) => handleLinkClick('track', e)}>TRACK ORDER</a>
           <span className="ft-btq-dot">|</span>
-          <a href="#info/about" onClick={(e) => handleLinkClick('info/about', e)}>OUR STORY</a>
+          <a href="#info/shipping" onClick={(e) => handleLinkClick('info/shipping', e)}>SHIPPING POLICY</a>
           <span className="ft-btq-dot">|</span>
-          <a href="#info/shipping" onClick={(e) => handleLinkClick('info/shipping', e)}>FAQ</a>
+          <a href="#info/returns" onClick={(e) => handleLinkClick('info/returns', e)}>RETURNS &amp; EXCHANGE</a>
         </div>
 
         {/* 3 Detail Columns: Contact, Hours, Information */}

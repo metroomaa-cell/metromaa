@@ -14850,35 +14850,35 @@ function SettingsAdmin() {
                   {
                     id: 'watch_luxury',
                     title: '⌚ Watch & Luxury',
-                    subtitle: '4-Columns, Left Logo & Bio, Support hotline pill (9AM-8PM) & round social media buttons.',
+                    subtitle: 'Premium 4-column luxury layout: Left brand bio, Company & Useful links, Support hotline pill & circular socials.',
                     tag: 'Watch & Luxury',
                     image: '/templates/footer_watch_luxury.png'
                   },
                   {
                     id: 'avora',
-                    title: '🔲 Avora Style',
-                    subtitle: 'Ultra-minimal editorial fashion: 5-Col top, newsletter input, and HUGE brand wordmark at bottom.',
+                    title: '🔲 Minimal Editorial',
+                    subtitle: 'Sleek editorial luxury: Curated collections, VIP newsletter signup, social connect, Customer Care & oversized brand typography.',
                     tag: 'Minimal / Editorial',
                     image: '/templates/footer_avora.webp'
                   },
                   {
                     id: 'boutique',
-                    title: '🌸 Boutique Style',
-                    subtitle: 'Soft blush tone: Centered circular logo seal, horizontal divider nav bar, 3 detail columns & hours.',
+                    title: '🌸 Boutique & Beauty',
+                    subtitle: 'Soft luxury tone: Centered circular logo seal, horizontal navigation divider bar, contact & customer hours, and connect social bar.',
                     tag: 'Boutique / Cosmetics',
                     image: '/templates/footer_boutique.webp'
                   },
                   {
                     id: 'enky',
-                    title: '💥 Enky Modern',
-                    subtitle: 'Bold designer style: Capsule newsletter input with subscribe button, 3 sitemaps & massive brand wordmark.',
+                    title: '💥 Modern Designer',
+                    subtitle: 'High-contrast punchy style: Left newsletter capsule with subscribe button, 3 navigation menus & bold brand mark.',
                     tag: 'Modern / Punchy',
                     image: '/templates/footer_enky.webp'
                   },
                   {
                     id: 'classic',
-                    title: '🏛️ Classic Tabaya',
-                    subtitle: 'Original rich dark luxury 4-column footer with gold accents, trust pills & WhatsApp helpline.',
+                    title: '🏛️ Classic Luxury',
+                    subtitle: 'Signature dark luxury 4-column footer with gold accents, COD & exchange trust pills & WhatsApp helpline.',
                     tag: 'Default Luxury',
                     image: '/templates/footer_classic.svg'
                   }
@@ -14991,18 +14991,18 @@ function SettingsAdmin() {
                         const curFooter = f.footer || {};
                         setF({ ...f, footer: { ...curFooter, phone: e.target.value } });
                       }}
-                      placeholder="09613-008080"
+                      placeholder="+880 1878-374762"
                     />
                   </label>
                   <label>
                     Operating Hours
                     <input
-                      value={f.footer?.phoneHours ?? '9 AM - 8 PM'}
+                      value={f.footer?.phoneHours ?? '10:00 AM – 10:00 PM (Everyday)'}
                       onChange={(e) => {
                         const curFooter = f.footer || {};
                         setF({ ...f, footer: { ...curFooter, phoneHours: e.target.value } });
                       }}
-                      placeholder="e.g. 9 AM - 8 PM"
+                      placeholder="10:00 AM – 10:00 PM (Everyday)"
                     />
                   </label>
                   <label>
@@ -15024,7 +15024,7 @@ function SettingsAdmin() {
                         const curFooter = f.footer || {};
                         setF({ ...f, footer: { ...curFooter, email: e.target.value } });
                       }}
-                      placeholder="contact@store.com"
+                      placeholder="support@secrate.shop"
                     />
                   </label>
                   <label style={{ gridColumn: 'span 2' }}>
@@ -15035,7 +15035,7 @@ function SettingsAdmin() {
                         const curFooter = f.footer || {};
                         setF({ ...f, footer: { ...curFooter, address: e.target.value } });
                       }}
-                      placeholder="House-14/16, Road-4, Block-D, Dhaka Uddan, Mohammadpur, Dhaka"
+                      placeholder="House-12, Road-5, Dhanmondi, Dhaka-1205, Bangladesh"
                     />
                   </label>
                 </div>
