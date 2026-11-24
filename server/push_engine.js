@@ -62,7 +62,7 @@ if (!vapidKeys || !vapidKeys.publicKey || !vapidKeys.privateKey) {
 
 try {
   webpush.setVapidDetails(
-    'mailto:support@metrroma.com',
+    'mailto:support@secrate.shop',
     vapidKeys.publicKey,
     vapidKeys.privateKey
   );
@@ -80,7 +80,7 @@ export const DEFAULT_PUSH_POPUP_SETTINGS = {
     mode: 'image_text', // 'image_only' | 'image_text'
     image: '',
     badge: 'SPECIAL OFFER ✨',
-    title: 'Welcome to METRROMA',
+    title: 'Welcome to SECRATE',
     description: 'আপনার প্রথম অর্ডারে স্পেশাল ডিসকাউন্ট উপভোগ করুন। ১০০% গোপনীয় প্যাকিংয়ে সারা দেশে ক্যাশ অন ডেলিভারি।',
     couponCode: '',
     buttonText: 'অফার দেখুন',
@@ -370,15 +370,15 @@ export async function sendOrderPushNotifications(order, kind) {
     let body = '';
 
     if (status === 'approved' || status === 'confirmed') {
-      title = 'METRROMA — অর্ডার কনফার্ম হয়েছে ✨';
+      title = 'SECRATE — অর্ডার কনফার্ম হয়েছে ✨';
       body = `আপনার অর্ডার #${order.id} কনফার্ম করা হয়েছে এবং গোপনীয় প্যাকিংয়ে প্রস্তুত হচ্ছে।`;
     } else if (status === 'shipped') {
       const tracking = order.courier?.consignment ? ` (Tracking: ${order.courier.consignment})` : '';
-      title = 'METRROMA — পার্সেল কুরিয়ারে পাঠানো হয়েছে 🚚';
+      title = 'SECRATE — পার্সেল কুরিয়ারে পাঠানো হয়েছে 🚚';
       body = `আপনার অর্ডার #${order.id} ডেলিভারির জন্য পাঠানো হয়েছে${tracking}।`;
     } else if (status === 'delivered') {
-      title = 'METRROMA — ডেলিভারি সম্পন্ন হয়েছে 💛';
-      body = `আপনার অর্ডার #${order.id} সফলভাবে ডেলিভারি হয়েছে। METRROMA-এর সাথে থাকার জন্য ধন্যবাদ!`;
+      title = 'SECRATE — ডেলিভারি সম্পন্ন হয়েছে 💛';
+      body = `আপনার অর্ডার #${order.id} সফলভাবে ডেলিভারি হয়েছে। SECRATE-এর সাথে থাকার জন্য ধন্যবাদ!`;
     }
 
     if (title && body) {

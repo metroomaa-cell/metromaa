@@ -30,13 +30,12 @@ export function getActiveVisionCatalog() {
             seenIds.add(pkg.id);
             list.unshift({
               id: pkg.id,
-              name: `${pkg.title || L.productTitle || L.title} (Love Lock Magic Condom / Sleeve)`.trim(),
+              name: String(pkg.title || L.productTitle || L.title || '').trim(),
               price: pkg.price,
               sku: pkg.sku || '',
               image: pkg.image || L.heroImage || '',
               slug: L.slug || '',
               category: 'Adult Wellness / Magic Condom',
-              stock: 999,
             });
           }
         }
@@ -44,24 +43,49 @@ export function getActiveVisionCatalog() {
     }
   } catch (_) {}
 
-  // Hot store items
-  const popularExtras = [
-    { id: 'pmv7bramh', name: 'যাদের পেনিস ৪ ইঞ্চি থেকে ৫.৫ ইঞ্চি তাদের জন্য ৬.৭ (ম্যাজিক লাভ লক কনডম)', price: 899, sku: 'LL6.7', category: 'Love Lock', image: '/uploads/img_mv7u70cc5edq0.jpg', stock: 999 },
-    { id: 'lovelock-5-7', name: '৩.৫ থেকে ৪ ইঞ্চি পেনিস এর জন্য সাইজ ৫.৭ (ম্যাজিক লাভ লক কনডম)', price: 1190, sku: 'LL5.7', category: 'Love Lock', image: '/uploads/img_mv9njraqylyt3.webp', stock: 999 },
-    { id: 'pkg_mvxb6grh', name: '৬ ইঞ্চি পেনিস এর জন্য সাইজ ৮ (ম্যাজিক লাভ লক কনডম)', price: 1190, sku: 'LL8', category: 'Love Lock', image: '/uploads/img_mv7n9xfvjcfif.jpg', stock: 999 },
-    { id: 'pkg_mv9nk03y', name: 'Belt Condom ( Free Size )', price: 1800, sku: 'BC', category: 'Belt Condom', image: '/uploads/img_mvjrc118tfffg.webp', stock: 999 },
-    { id: 'item_softcore_cup', name: 'SoftCore Realistic Male Pleasure Cup', price: 3150, sku: 'CUP', category: 'Male Pleasure', image: '/uploads/img_mv7u70cc5edq0.jpg', stock: 999 },
-    { id: 'item_dildo_9', name: 'KOXTEN Up Down Remote Control Vibrator Realistic Dildo 9 inch', price: 3500, sku: 'DILDO9', category: 'Adult Wellness', image: '', stock: 999 },
-  ];
-
-  for (const extra of popularExtras) {
-    if (!seenIds.has(extra.id)) {
-      list.unshift(extra);
-      seenIds.add(extra.id);
-    }
-  }
-
   return list;
+}
+
+function getProductImage(product) {
+  const raw = product?.image || product?.mainImage || product?.imageUrl || product?.images?.[0] || '';
+  return typeof raw === 'string' ? raw : String(raw?.url || raw?.src || '');
+}
+
+function getProductStockText(product) {
+  const rawStock = product?.stock ?? product?.quantity;
+  if (/out of stock|sold out|স্টক নেই|শেষ/i.test(String(rawStock || ''))) return 'Currently marked out of stock';
+  const stock = rawStock === '' || rawStock == null ? null : Number(rawStock);
+  if (product?.soldOut === true || (Number.isFinite(stock) && stock <= 0)) return 'Currently marked out of stock';
+  if (Number.isFinite(stock) && stock > 0) return 'In stock';
+  return 'Stock needs confirmation';
+}
+
+function formatProductReply(product, { storeName, delInside, delOutside, lead = '' }) {
+  const description = String(product?.description || product?.shortDescription || product?.details || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 650);
+  const variations = Array.isArray(product?.variations) ? product.variations : [];
+  const optionText = variations.length
+    ? `\nOptions: ${variations.map((v) => `${v.name || v.label || v.title || 'Option'}${v.price != null && Number.isFinite(Number(v.price)) && Number(v.price) > 0 ? ` — ৳${Number(v.price)}` : ''}${v.soldOut === true || Number(v.stock) === 0 ? ' (out of stock)' : ''}`).join(', ')}`
+    : '';
+  const link = `https://secrate.shop/product/${product?.slug || product?.id}`;
+  const priceText = product?.price != null && Number.isFinite(Number(product.price)) && Number(product.price) > 0 ? `৳${Number(product.price)}` : 'Price needs confirmation';
+  return `${lead ? `${lead}\n` : ''}${product.name}\nPrice: ${priceText}\nAvailability: ${getProductStockText(product)}${optionText}${description ? `\nDetails: ${description}` : ''}\nDelivery: Inside Dhaka ৳${delInside}; outside Dhaka ৳${delOutside}\nProduct page: ${link}\n\nWould you like help with this item?\n— ${storeName}`;
+}
+
+function getCatalogForAudience(catalog, audience) {
+  const signals = audience === 'women'
+    ? /women|female|feminine|girls|মেয়|মেয়ে|মহিলা|নারী/i
+    : /\bmen(?:'s|s)?\b|\bmale\b|\bboys?\b|পুরুষ|ছেল|ম্যাসাজ|প্রোলং/i;
+  return catalog.filter((p) => signals.test(`${p.name || ''} ${p.category || ''} ${Array.isArray(p.categories) ? p.categories.join(' ') : ''}`));
+}
+
+function formatCatalogListReply(products, { audience, storeName, delInside, delOutside }) {
+  if (!products.length) return `আমি catalog-এ ${audience === 'women' ? 'women’s' : 'men’s'} বিভাগে নির্ভরযোগ্য পণ্য খুঁজে পাইনি। পণ্যের নাম বা ছবি পাঠালে আমি মিলিয়ে দেখব।\n— ${storeName}`;
+  const rows = products.slice(0, 6).map((p) => `• ${p.name} — ${p.price != null && Number.isFinite(Number(p.price)) && Number(p.price) > 0 ? `৳${Number(p.price)}` : 'Price needs confirmation'} · ${getProductStockText(p)}\n  https://secrate.shop/product/${p.slug || p.id}`).join('\n');
+  return `Catalog-এ পাওয়া ${audience === 'women' ? 'women’s' : 'men’s'} items:\n${rows}\n\nDelivery: Inside Dhaka ৳${delInside}; outside Dhaka ৳${delOutside}. Stock status may need confirmation when the catalog has no stock count.\n— ${storeName}`;
 }
 
 /**
@@ -79,7 +103,7 @@ export function isWhatsAppImageMessage(m) {
 }
 
 /**
- * Calls Google Gemini Vision API with 100% strict zero-guesswork instructions
+ * Uses a conservative catalog matcher; uncertain image matches are never presented as confirmed.
  */
 async function callGeminiVisionMatcher({ imageBuffer, mimeType = 'image/jpeg', apiKey, catalog }) {
   if (!apiKey || !imageBuffer) return null;
@@ -90,17 +114,20 @@ async function callGeminiVisionMatcher({ imageBuffer, mimeType = 'image/jpeg', a
     sku: p.sku || '',
     slug: p.slug || '',
     price: p.price,
+    stock: p.stock ?? null,
+    soldOut: p.soldOut === true,
+    variations: Array.isArray(p.variations) ? p.variations.map((v) => ({ name: v.name || v.label || v.title || '', price: v.price ?? p.price, stock: v.stock ?? null, soldOut: v.soldOut === true })) : [],
   }));
 
-  const systemPrompt = `You are a strict, precision product identifier for METRROMA, an authorized luxury health, personal care, and wellness store in Bangladesh.
+  const systemPrompt = `You are a strict, precision product identifier for SECRATE, an authorized luxury health, personal care, and wellness store in Bangladesh.
 A customer sent an image (photo or screenshot) of a product via WhatsApp asking if it is available in our store.
 
 Here is our complete store catalog (${catalogSummary.length} products):
 ${JSON.stringify(catalogSummary)}
 
-RULES FOR 100% ACCURACY (ZERO GUESSWORK):
+STRICT MATCHING RULES:
 1. Carefully inspect the text on the box/packaging, brand name (e.g. Durex, Pasante, Stud 100, Okamoto, Carex, Fiesta, Procomil, Viga, Super Dragon, etc.), specific variant/model, volume (e.g. 12ml, 50ml, 3s, 12s), packaging color, and design.
-2. If and ONLY if you are 100% CERTAIN that the product in the image EXACTLY matches one of the items in our catalog, return:
+2. Return a catalog match only when the visible brand and specific variant clearly match. Use confidence from 0 to 1; ambiguous or partial evidence is not a confirmed match:
 {
   "matched": true,
   "confidence": 1.0,
@@ -108,10 +135,10 @@ RULES FOR 100% ACCURACY (ZERO GUESSWORK):
   "productName": "<exact name from catalog>",
   "reason": "<short explanation of how brand and variant matched>"
 }
-3. If the product in the image is NOT in our catalog, or is a DIFFERENT brand or a DIFFERENT variant that we do not sell:
+3. Return not_in_catalog only when the image is clear enough to identify the product and it is not in this catalog:
 {
   "matched": false,
-  "confidence": 0.0,
+  "confidence": 0.95,
   "reason": "not_in_catalog",
   "detectedProduct": "<exact brand and name visible on the image, or empty if unknown>"
 }
@@ -123,9 +150,9 @@ RULES FOR 100% ACCURACY (ZERO GUESSWORK):
   "detectedProduct": ""
 }
 
-DO NOT GUESS. Never return matched=true if there is any doubt or ambiguity.`;
+4. If uncertain, blurry, partly hidden, or several catalog variants look similar, return reason="unclear_image". Never guess stock, price, or variant.`;
 
-  const models = ['gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite'];
+  const models = ['gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'];
   let lastError = null;
 
   for (const model of models) {
@@ -151,7 +178,7 @@ DO NOT GUESS. Never return matched=true if there is any doubt or ambiguity.`;
             },
           ],
           generationConfig: {
-            temperature: 0.1,
+          temperature: 0,
             responseMimeType: 'application/json',
           },
         }),
@@ -168,7 +195,17 @@ DO NOT GUESS. Never return matched=true if there is any doubt or ambiguity.`;
       if (!rawJson) continue;
 
       const parsed = JSON.parse(rawJson);
-      return parsed;
+      if (parsed?.matched === true) {
+        const product = catalog.find((p) => String(p.id) === String(parsed.productId));
+        const confidence = Number(parsed.confidence);
+        const modelName = String(parsed.productName || '').trim().toLocaleLowerCase();
+        if (!product || !Number.isFinite(confidence) || confidence < 0.93 || (modelName && modelName !== String(product.name || '').trim().toLocaleLowerCase())) {
+          return { matched: false, confidence: 0, reason: 'unclear_image', detectedProduct: String(parsed.detectedProduct || '') };
+        }
+        return { ...parsed, productName: product.name };
+      }
+      if (parsed?.reason === 'not_in_catalog' && Number(parsed.confidence) >= 0.9 && parsed.detectedProduct) return parsed;
+      return { matched: false, confidence: 0, reason: 'unclear_image', detectedProduct: String(parsed?.detectedProduct || '') };
     } catch (err) {
       lastError = err;
       console.warn(`[Gemini Vision API Error with ${model}]:`, err?.message || err);
@@ -244,7 +281,7 @@ export function findCustomerOrder(phoneOrJid, text = '') {
 /**
  * Formats full real-time live order delivery tracking message
  */
-export function formatOrderTrackingMessage(order, storeName = 'METRROMA') {
+export function formatOrderTrackingMessage(order, storeName = 'SECRATE') {
   if (!order) return null;
 
   const customerName = order.customer?.name || 'Sir/Mam';
@@ -269,7 +306,7 @@ export function formatOrderTrackingMessage(order, storeName = 'METRROMA') {
       trackingUrl = `https://steadfast.com.bd/track/${encodeURIComponent(consignment)}`;
     }
   }
-  const storeTrackingUrl = `https://metrroma.com/track?id=${encodeURIComponent(orderId)}`;
+  const storeTrackingUrl = `https://secrate.shop/track?id=${encodeURIComponent(orderId)}`;
   if (!trackingUrl) trackingUrl = storeTrackingUrl;
 
   // Status: SHIPPED (অন ট্রানজিট / কুরিয়ারে আছে)
@@ -465,7 +502,7 @@ export async function handleWhatsAppVisionOrInquiryFlow({
 
   const waSettings = getWhatsAppSettings();
   const st = getSettings();
-  const storeName = st.storeName || 'METRROMA';
+  const storeName = st.storeName || 'SECRATE';
   const delInside = Number(st.deliveryInside ?? 60);
   const delOutside = Number(st.deliveryOutside ?? 120);
   const catalog = getActiveVisionCatalog();
@@ -576,21 +613,8 @@ export async function handleWhatsAppVisionOrInquiryFlow({
             caption: rawText || '',
           });
 
-          const matchMsg = `🛍️ **প্রোডাক্ট নিশ্চিত পাওয়া গেছে:** ${product.name}
-💰 **অফিশিয়াল মূল্য:** ৳${product.price} (স্টক: Available ✅)
-🚚 **ডেলিভারি চার্জ:** ঢাকা সিটিতে ৳${delInside}, ঢাকার বাইরে ৳${delOutside}
-📦 **প্যাকেজিং:** ১০০% গোপনীয় ও ডিসক্রিট সিকিউরড বক্স।
-🔗 **ওয়েবসাইট লিঙ্ক:** https://metrroma.com/product/${product.slug || product.id}
-
-❓ **সম্মানিত Sir/Mam, আপনি কি এই প্রোডাক্টটি অর্ডার করতে চান?**
-ক্যাশ অন ডেলিভারিতে সরাসরি অর্ডার করতে আপনার:
-১. নাম
-২. সম্পূর্ণ ডেলিভারি ঠিকানা (থানা ও জেলা সহ)
-৩. মোবাইল নম্বর
-লিখে পাঠিয়ে দিন! 💖
-— ${storeName}`;
-
-          await simulateHumanTypingAndSend(remoteJid, matchMsg, senderPhone, null, 'wa_vision_matched');
+          const matchMsg = formatProductReply(product, { storeName, delInside, delOutside, lead: `Possible catalog match: ${product.name}. Please confirm the product and option before ordering.` });
+          await simulateHumanTypingAndSend(remoteJid, matchMsg, senderPhone, null, 'wa_vision_matched', getProductImage(product));
           return true;
         }
       }
@@ -606,14 +630,7 @@ export async function handleWhatsAppVisionOrInquiryFlow({
           caption: rawText || '',
         });
 
-        const notFoundMsg = `সম্মানিত Sir/Mam! 🌸
-আপনার পাঠানো ছবিটি আমরা সতর্কতার সাথে যাচাই করেছি${detected}। দুঃখজনকভাবে এই নির্দিষ্ট প্রোডাক্টটি বর্তমানে আমাদের স্টকে নেই। ❌
-
-তবে আমাদের স্টকে প্রিমিয়াম ও ১০০% অরিজিনাল কালেকশনের আরও আকর্ষণীয় পণ্য রয়েছে!
-👉 আমাদের সম্পূর্ণ কালেকশন দেখতে ভিজিট করুন: https://metrroma.com
-
-আপনি কি ধরণের সুবিধা বা পণ্য খুঁজছেন তা জানালে আমরা আপনাকে সেরা অপশন সাজেস্ট করতে পারি! ✨
-— ${storeName}`;
+        const notFoundMsg = `I couldn't find a confident exact match in the current catalog${detected}. This does not confirm that the product is unavailable. Please send the product name or a clearer image so I can check again.\n— ${storeName}`;
 
         await simulateHumanTypingAndSend(remoteJid, notFoundMsg, senderPhone, null, 'wa_vision_not_found');
         return true;
@@ -621,11 +638,7 @@ export async function handleWhatsAppVisionOrInquiryFlow({
 
       // If image was blurry or unclear
       if (visionResult && visionResult.reason === 'unclear_image') {
-        const unclearMsg = `সম্মানিত Sir/Mam! 🌸
-আপনার পাঠানো ছবিটি স্পষ্ট বোঝা যাচ্ছে না। 
-
-দয়া করে প্রোডাক্টটির নাম লিখে জানান অথবা মোড়কটি যাতে পড়া যায় এমন একটি স্পষ্ট ছবি বা স্ক্রিনশট পাঠিয়ে দিন। আমি সাথে সাথে দেখে বিস্তারিত জানিয়ে দিচ্ছি! 📸
-— ${storeName}`;
+        const unclearMsg = `I couldn't identify the product clearly from this image. Please send a sharper photo or type the product name; I won't guess the variant or stock.\n— ${storeName}`;
 
         await simulateHumanTypingAndSend(remoteJid, unclearMsg, senderPhone, null, 'wa_vision_unclear');
         return true;
@@ -646,28 +659,14 @@ export async function handleWhatsAppVisionOrInquiryFlow({
           caption: rawText || '',
         });
 
-        const capMsg = `🛍️ **সম্মানিত Sir/Mam, "${product.name}" আমাদের স্টকে রয়েছে!** ✅
-💰 **মূল্য:** ৳${product.price}
-🚚 **ডেলিভারি চার্জ:** ঢাকা সিটিতে ৳${delInside}, ঢাকার বাইরে ৳${delOutside}
-🔗 **প্রোডাক্ট লিঙ্ক:** https://metrroma.com/product/${product.slug || product.id}
-
-❓ আপনি কি এটি ক্যাশ অন ডেলিভারিতে অর্ডার করতে চান?
-অর্ডার করতে আপনার নাম, ডেলিভারি ঠিকানা ও ফোন নম্বর পাঠিয়ে দিন! 💖
-— ${storeName}`;
-
-        await simulateHumanTypingAndSend(remoteJid, capMsg, senderPhone, null, 'wa_caption_matched');
+        const capMsg = formatProductReply(product, { storeName, delInside, delOutside, lead: 'Possible catalog match from the image caption. Please confirm this is the item you mean.' });
+        await simulateHumanTypingAndSend(remoteJid, capMsg, senderPhone, null, 'wa_caption_matched', getProductImage(product));
         return true;
       }
     }
 
     // Default polite photo acknowledgment when Vision Key is pending
-    const photoReceivedMsg = `সম্মানিত Sir/Mam! 🌸
-আপনার পাঠানো প্রোডাক্টের ছবিটি আমরা পেয়েছি। 
-
-আমাদের প্রতিনিধি এখনই ছবিটি চেক করে প্রোডাক্টের বর্তমান স্টক ও ডিসকাউন্ট মূল্য এই চ্যাটে জানিয়ে দিচ্ছেন। অল্প কিছুক্ষণ অনুগ্রহ করে অপেক্ষা করুন! 💖
-
-(ক্যাশ অন ডেলিভারিতে দ্রুত পার্সেল পেতে চাইলে আপনার নাম, মোবাইল নম্বর ও ডেলিভারি ঠিকানা এখনই পাঠিয়ে রাখতে পারেন।)
-— ${storeName}`;
+    const photoReceivedMsg = `I received the product image, but couldn't verify an exact catalog match automatically. Send the product name or a clearer photo and I can check again.\n— ${storeName}`;
 
     await simulateHumanTypingAndSend(remoteJid, photoReceivedMsg, senderPhone, null, 'wa_photo_ack');
     return true;
@@ -677,21 +676,7 @@ export async function handleWhatsAppVisionOrInquiryFlow({
   // CASE 2: Customer asked about WOMEN'S CARE (মেয়েদের কি কি প্রোডাক্ট আছে?)
   // =========================================================================
   if (isWomenInquiry) {
-    const womenMsg = `আসসালামু আলাইকুম সম্মানিত Sir/Mam! 🌸
-
-জি, আমাদের স্টোরে মেয়েদের পার্সোনাল কেয়ার ও ওয়েলনেসের জন্য ১০০% অরিজিনাল প্রিমিয়াম কালেকশন রয়েছে:
-
-🚺 **মেয়েদের জনপ্রিয় কালেকশনসমূহ:**
-১. **Intimate Lubricant & Stimulant Gel** (ন্যাচারাল স্মুথনেস ও প্লেজার বাড়ানোর জন্য)
-২. **Feminine Tightening & Care Serum**
-৩. **Intimate Hygiene Wash** (দৈনন্দিন পরিচ্ছন্নতা ও ফ্রেশনেসের জন্য)
-৪. **Female Libido & Arousal Drops / Capsules**
-
-🔗 **মেয়েদের সম্পূর্ণ কালেকশন দেখতে ভিজিট করুন:**
-👉 https://metrroma.com/shop/wellness-corner
-
-❓ **সম্মানিত Sir/Mam, আপনি কি নির্দিষ্ট কোনো সুবিধার প্রোডাক্ট খুঁজছেন?** আমাদের জানালে আমরা আপনার জন্য সেরা প্রোডাক্ট সাজেস্ট করতে পারি! 💖
-— ${storeName}`;
+    const womenMsg = formatCatalogListReply(getCatalogForAudience(catalog, 'women'), { audience: 'women', storeName, delInside, delOutside });
 
     await simulateHumanTypingAndSend(remoteJid, womenMsg, senderPhone, null, 'wa_womens_care_guide');
     return true;
@@ -701,20 +686,7 @@ export async function handleWhatsAppVisionOrInquiryFlow({
   // CASE 3: Customer asked about MEN'S CARE (ছেলেদের জন্য কি কি আছে?)
   // =========================================================================
   if (isMenInquiry) {
-    const menMsg = `আসসালামু আলাইকুম সম্মানিত Sir/Mam! 🌸
-
-জি, আমাদের স্টোরে ছেলেদের জন্য বিশ্বমানের প্রিমিয়াম কালেকশন অ্যাভেইলেবল রয়েছে:
-
-🚹 **ছেলেদের জনপ্রিয় কালেকশনসমূহ:**
-১. **লং-টাইম ডিলে স্প্রে ও ক্রিম** (যেমন: Stud 100, Procomil, Super Dragon ইত্যাদি)
-২. **আল্ট্রা-থিন ও ডটেড প্রিমিয়াম কনডম** (Durex, Pasante, Okamoto, Skyn)
-৩. **ম্যাসেজ অয়েল ও পার্সোনাল ওয়েলনেস কেয়ার**
-
-🔗 **ছেলেদের সম্পূর্ণ কালেকশন দেখতে ভিজিট করুন:**
-👉 https://metrroma.com/category/mens-care
-
-❓ **সম্মানিত Sir/Mam, আপনি এর মধ্যে কোনটি সম্পর্কে বিস্তারিত জানতে চাচ্ছেন?** নাম বা প্রয়োজন লিখলে আমি মূল্য ও বিস্তারিত জানিয়ে দিচ্ছি! ✨
-— ${storeName}`;
+    const menMsg = formatCatalogListReply(getCatalogForAudience(catalog, 'men'), { audience: 'men', storeName, delInside, delOutside });
 
     await simulateHumanTypingAndSend(remoteJid, menMsg, senderPhone, null, 'wa_mens_care_guide');
     return true;
@@ -751,18 +723,8 @@ ${storeName} Luxury Wellness & Personal Care-এ আপনাকে আন্ত
       const product = prodMatch.product;
       recentProductInquiries.set(remoteJid, { product, at: Date.now() });
 
-      const textInquiryMsg = `🛍️ **সম্মানিত Sir/Mam, "${product.name}" আমাদের স্টকে অ্যাভেইলেবল আছে!** ✅
-
-💰 **অফিশিয়াল মূল্য:** ৳${product.price}
-🚚 **ডেলিভারি চার্জ:** ঢাকা সিটিতে ৳${delInside}, ঢাকার বাইরে ৳${delOutside}
-📦 **প্যাকেজিং:** ১০০% গোপনীয় ডিসক্রিট পার্সেল।
-🔗 **বিস্তারিত জানতে:** https://metrroma.com/product/${product.slug || product.id}
-
-❓ **আপনি কি এটি সরাসরি অর্ডার করতে চান?**
-ক্যাশ অন ডেলিভারিতে অর্ডার করতে আপনার নাম, ডেলিভারি ঠিকানা ও মোবাইল নম্বর পাঠিয়ে দিন! 🌸
-— ${storeName}`;
-
-      await simulateHumanTypingAndSend(remoteJid, textInquiryMsg, senderPhone, null, 'wa_text_inquiry_matched');
+      const textInquiryMsg = formatProductReply(product, { storeName, delInside, delOutside });
+      await simulateHumanTypingAndSend(remoteJid, textInquiryMsg, senderPhone, null, 'wa_text_inquiry_matched', getProductImage(product));
       return true;
     }
 
@@ -791,21 +753,8 @@ ${list}
         const product = recentPhoto.matchedProduct;
         recentProductInquiries.set(remoteJid, { product, at: Date.now() });
 
-        const photoMatchedMsg = `🛍️ **সম্মানিত Sir/Mam, আপনার পাঠানো ছবির "${product.name}" আমাদের স্টকে রয়েছে!** ✅
-
-💰 **অফিশিয়াল মূল্য:** ৳${product.price}
-🚚 **ডেলিভারি চার্জ:** ঢাকা সিটিতে ৳${delInside}, ঢাকার বাইরে ৳${delOutside}
-📦 **প্যাকেজিং:** ১০০% গোপনীয় ও ডিসক্রিট সিকিউরড পার্সেল।
-🔗 **ওয়েবসাইট লিঙ্ক:** https://metrroma.com/product/${product.slug || product.id}
-
-❓ **ক্যাশ অন ডেলিভারিতে সরাসরি অর্ডার করতে আপনার:**
-১. নাম
-২. সম্পূর্ণ ডেলিভারি ঠিকানা (থানা ও জেলা সহ)
-৩. মোবাইল নম্বর
-এখানে লিখে পাঠিয়ে দিন! 💖
-— ${storeName}`;
-
-        await simulateHumanTypingAndSend(remoteJid, photoMatchedMsg, senderPhone, null, 'wa_recent_photo_matched_reply');
+        const photoMatchedMsg = formatProductReply(product, { storeName, delInside, delOutside });
+        await simulateHumanTypingAndSend(remoteJid, photoMatchedMsg, senderPhone, null, 'wa_recent_photo_matched_reply', getProductImage(product));
         return true;
       }
 
@@ -816,7 +765,7 @@ ${list}
 আপনার পাঠানো ছবিটি আমরা সতর্কতার সাথে যাচাই করেছি${detected}। দুঃখজনকভাবে এই নির্দিষ্ট প্রোডাক্টটি বর্তমানে আমাদের স্টকে নেই। ❌
 
 আমাদের স্টকে প্রিমিয়াম ও ১০০% অরিজিনাল কালেকশনের আরও চমৎকার পণ্য রয়েছে!
-👉 দেখতে ভিজিট করুন: https://metrroma.com
+👉 দেখতে ভিজিট করুন: https://secrate.shop
 
 আপনি কি ধরণের সুবিধা বা পণ্য খুঁজছেন তা জানালে আমরা সেরা অপশন সাজেস্ট করতে পারি! ✨
 — ${storeName}`;

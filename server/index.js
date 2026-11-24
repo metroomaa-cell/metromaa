@@ -625,6 +625,7 @@ app.put('/api/settings', adminAuth, requireRole('owner', 'manager'), (req, res) 
     })).filter((section) => section.title && section.category) : (cur.homepageSections || []),
     apkVersion: typeof b.apkVersion === 'string' ? b.apkVersion.trim().slice(0, 30) : (cur.apkVersion || ''),
     fraudDetector,
+    footer: b.footer && typeof b.footer === 'object' ? b.footer : (cur.footer || null),
   }));
 });
 

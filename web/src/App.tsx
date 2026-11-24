@@ -6,6 +6,7 @@ import { initGTM, initFB, dl, trackEngagement, initInteractionTracking } from '.
 import { Home, Shop, ProductPage, Checkout, Confirm, Track, SearchOverlay, InfoPage } from './pages';
 import { CustomerProvider, useCustomer, CustomerHeaderIcon, CustomerAccountPage } from './CustomerAccount';
 import { WhatsAppIcon } from './icons';
+import { RenderFooter } from './FooterTemplates';
 import { setStoreLanguage, setStoreCopyOverrides, tr, useStoreLanguage } from './language';
 import { NotificationWidgets } from './NotificationWidgets';
 import { getTrafficAttribution } from './attribution';
@@ -755,106 +756,13 @@ function Header({ onSearch }: { onSearch: () => void }) {
 }
 
 function Footer() {
-  const language = useStoreLanguage();
-  const [phone, setPhone] = useState('+880 1878-374762');
-  const [whatsapp, setWhatsapp] = useState('');
-  const isSkin = isSkincareSite();
-  const [name, setName] = useState(() => resolveBrandName(getCachedSettings()?.storeName));
-  const [logo, setLogo] = useState(() => resolveBrandLogo(getCachedSettings()?.logo));
-  const [cats, setCats] = useState<{ slug: string; name: string; adult?: boolean }[]>([]);
+  const [settings, setSettings] = useState<any>(() => getCachedSettings() || {});
   useEffect(() => {
     getSettings().then((s) => {
-      if (s.phone) setPhone(s.phone);
-      if (s.whatsapp) setWhatsapp(s.whatsapp);
-      setName(resolveBrandName(s.storeName));
-      setLogo(resolveBrandLogo(s.logo));
+      if (s) setSettings(s);
     }).catch(() => {});
-    getCategories().then((cs) => {
-      if (Array.isArray(cs)) setCats(cs);
-    }).catch(() => {});
-  }, [isSkin]);
-  return (
-    <footer className="tabaya-footer">
-      <div className="wrap">
-        <div className="tabaya-footer-grid">
-          <div>
-            <div className="tabaya-footer-logo serif" style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 12 }}>
-              {logo ? (
-                <img
-                  src={logo}
-                  alt={name}
-                  style={{ maxHeight: 46, width: 'auto', objectFit: 'contain', display: 'block' }}
-                />
-              ) : null}
-            </div>
-            <p className="tabaya-footer-desc">
-              {tr(isSkin
-                ? 'Skincare, beauty and self-care products from a range of brands, delivered across Bangladesh with cash on delivery. Check each listing for product and ingredient details.'
-                : 'Watches, sunglasses and gift collections for everyday style. Cash on delivery across Bangladesh.', language)}
-            </p>
-            <div className="tabaya-trust-pill">
-              <span>🚚 {tr('Cash on Delivery Nationwide', language)}</span>
-              <span>{isSkin ? `🌿 ${tr('Product Details & Ingredient Information', language)}` : `🔄 ${tr('7-Day Easy Exchange Policy', language)}`}</span>
-            </div>
-          </div>
-          <div>
-            <h4>{tr('Collections', language)}</h4>
-            <a onClick={() => go('shop')}>{tr(isSkin ? 'All Skincare & Essentials' : 'All Collections', language)}</a>
-            {cats.filter((c: any) => !c.parentSlug && !c.adult && !isWellnessOrExcludedCategory(c.slug)).slice(0, 6).map((c) => (
-            <a key={c.slug} onClick={() => go('categories/' + c.slug)}>{tr(c.name, language)}</a>
-            ))}
-          </div>
-          <div>
-            <h4>{tr('Customer Care', language)}</h4>
-            <a onClick={() => go('track')}>{tr('Track Your Order', language)}</a>
-            <a onClick={() => go('info/shipping')}>{tr('Shipping & Delivery', language)}</a>
-            <a onClick={() => go('info/returns')}>{tr('Returns & Exchanges', language)}</a>
-            <a onClick={() => go('info/contact')}>{tr('Contact Customer Support', language)}</a>
-          </div>
-          <div>
-            <h4>{tr('Hotline & Inquiries', language)}</h4>
-            <p style={{ fontSize: 14, color: '#9ca3af', lineHeight: 1.6 }}>
-              {tr('Need assistance? Call or WhatsApp our helpline:', language)}
-            </p>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff', margin: '8px 0' }}>
-              <a href={`tel:${phone}`} style={{ color: '#fff', textDecoration: 'none' }}>📞 {phone}</a>
-            </div>
-            {whatsapp && (
-              <div style={{ marginTop: 6 }}>
-                <a
-                  href={`https://wa.me/${whatsapp}?text=${encodeURIComponent(`Hello! I have an inquiry about ${name}.`)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 7,
-                    color: '#25D366',
-                    textDecoration: 'none',
-                    fontSize: 14,
-                    fontWeight: 600,
-                  }}
-                >
-                  <WhatsAppIcon size={18} variant="official" />
-                  <span>WhatsApp: +{whatsapp.replace(/[^0-9]/g, '')}</span>
-                </a>
-              </div>
-            )}
-            <div style={{ fontSize: 13, color: '#9ca3af', marginTop: 8 }}>
-              {tr('Everyday: 10:00 AM – 10:00 PM', language)}
-            </div>
-          </div>
-        </div>
-        <div className="tabaya-footer-bottom">
-          <span>{language === 'bn' ? `© ২০২৬ ${name}. সর্বস্বত্ব সংরক্ষিত।` : `© 2026 ${name}. All Rights Reserved.`}</span>
-          <span>
-            Designed & Developed by{' '}
-            <span style={{ color: '#b48e4c', fontWeight: 600 }}>Shakil</span>
-          </span>
-        </div>
-      </div>
-    </footer>
-  );
+  }, []);
+  return <RenderFooter settings={settings} />;
 }
 
 function CartDrawer() {

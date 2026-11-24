@@ -1,3 +1,4 @@
+import { RenderFooter, DEFAULT_COLUMNS, type FooterSettings } from './FooterTemplates';
 import React, { useState, useEffect, useMemo, useRef, useCallback, Fragment } from 'react';
 import qrcode from 'qrcode-generator';
 import JsSIP from 'jssip';
@@ -13737,7 +13738,7 @@ function SettingsAdmin() {
   const [settingsLoadError, setSettingsLoadError] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState<'brand' | 'slider' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend'>('brand');
+  const [tab, setTab] = useState<'brand' | 'slider' | 'footer' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend'>('brand');
   const [copySearch, setCopySearch] = useState('');
   const [copyKey, setCopyKey] = useState('');
   const [infoSlug, setInfoSlug] = useState('shipping');
@@ -14023,6 +14024,9 @@ function SettingsAdmin() {
           <button className={tab === 'slider' ? 'on' : ''} onClick={() => setTab('slider')}>
             <span>🎠 Homepage Sliders & Banners</span>
             <span className="sa-filter-count">{sliders.length}</span>
+          </button>
+          <button className={tab === 'footer' ? 'on' : ''} onClick={() => setTab('footer')}>
+            <span>👣 Footer Manager</span>
           </button>
           <button className={tab === 'store' ? 'on' : ''} onClick={() => setTab('store')}>
             <span>🏪 Store & Delivery</span>
@@ -14656,6 +14660,446 @@ function SettingsAdmin() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      
+      {/* TAB: FOOTER MANAGER */}
+      {tab === 'footer' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Header & Mode Switcher */}
+          <div className="sa-card" style={{ padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 18, color: '#fff' }}>Footer Designer &amp; Templates</h3>
+                <p style={{ margin: '6px 0 0', fontSize: 13, color: '#94a3b8' }}>
+                  Pick from 5 pre-designed ready templates, easily customize without code, or use custom HTML. Your uploaded store logo automatically displays in all templates.
+                </p>
+              </div>
+              <div style={{ display: 'inline-flex', background: '#0e0b1d', padding: 4, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const curFooter = f.footer || {};
+                    setF({ ...f, footer: { ...curFooter, mode: 'easy' } });
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 6,
+                    border: 'none',
+                    background: (f.footer?.mode || 'easy') === 'easy' ? '#8b5cf6' : 'transparent',
+                    color: '#fff',
+                    fontWeight: 600,
+                    fontSize: 13,
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✨ Easy Form Mode
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const curFooter = f.footer || {};
+                    setF({ ...f, footer: { ...curFooter, mode: 'custom_html' } });
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 6,
+                    border: 'none',
+                    background: f.footer?.mode === 'custom_html' ? '#8b5cf6' : 'transparent',
+                    color: '#fff',
+                    fontWeight: 600,
+                    fontSize: 13,
+                    cursor: 'pointer'
+                  }}
+                >
+                  💻 Custom HTML / CSS
+                </button>
+              </div>
+            </div>
+
+            {/* Template Selection Cards (5 Ready Templates) */}
+            <div style={{ marginTop: 24 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Select Active Footer Template
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+                {[
+                  {
+                    id: 'royalman',
+                    title: '👑 RoyalMan Style',
+                    subtitle: '4-Columns, Brand Bio, Support hotline pill (9AM-8PM) & round social media buttons.',
+                    tag: 'Watches / Luxury'
+                  },
+                  {
+                    id: 'avora',
+                    title: '🔲 Avora Style',
+                    subtitle: 'Ultra-minimal editorial fashion: 5-Col top, newsletter input, and HUGE brand wordmark at bottom.',
+                    tag: 'Minimal / Editorial'
+                  },
+                  {
+                    id: 'boutique',
+                    title: '🌸 Boutique Style',
+                    subtitle: 'Soft blush tone: Centered circular logo seal, horizontal divider nav bar, 3 detail columns & hours.',
+                    tag: 'Boutique / Cosmetics'
+                  },
+                  {
+                    id: 'enky',
+                    title: '💥 Enky Modern',
+                    subtitle: 'Bold designer style: Capsule newsletter input with subscribe button, 3 sitemaps & massive brand wordmark.',
+                    tag: 'Modern / Punchy'
+                  },
+                  {
+                    id: 'classic',
+                    title: '🏛️ Classic Tabaya',
+                    subtitle: 'Original rich dark luxury 4-column footer with gold accents, trust pills & WhatsApp helpline.',
+                    tag: 'Default Luxury'
+                  }
+                ].map((tpl) => {
+                  const isSelected = (f.footer?.template || 'classic') === tpl.id;
+                  return (
+                    <div
+                      key={tpl.id}
+                      onClick={() => {
+                        const curFooter = f.footer || {};
+                        setF({ ...f, footer: { ...curFooter, template: tpl.id } });
+                      }}
+                      style={{
+                        padding: '16px',
+                        borderRadius: 10,
+                        border: isSelected ? '2px solid #8b5cf6' : '1px solid rgba(255,255,255,0.08)',
+                        background: isSelected ? 'rgba(139, 92, 246, 0.12)' : 'rgba(255,255,255,0.02)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <span style={{ fontWeight: 700, fontSize: 14, color: isSelected ? '#a78bfa' : '#fff' }}>{tpl.title}</span>
+                          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: isSelected ? '#8b5cf6' : 'rgba(255,255,255,0.08)', color: '#fff' }}>
+                            {isSelected ? '✓ Active' : tpl.tag}
+                          </span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: 12, color: '#94a3b8', lineHeight: 1.45 }}>{tpl.subtitle}</p>
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: isSelected ? '#c084fc' : '#64748b' }}>
+                        {isSelected ? '● Currently Selected' : 'Click to Apply'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Form Content: Easy Form Mode */}
+          {(f.footer?.mode || 'easy') === 'easy' && (
+            <div className="sa-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <div>
+                <h4 style={{ margin: '0 0 16px', fontSize: 15, color: '#fff' }}>📝 Brand &amp; Contact Details</h4>
+                <div className="sa-sgrid">
+                  <label style={{ gridColumn: 'span 2' }}>
+                    Brand Bio / About Text
+                    <textarea
+                      rows={3}
+                      value={f.footer?.aboutText ?? ''}
+                      onChange={(e) => {
+                        const curFooter = f.footer || {};
+                        setF({ ...f, footer: { ...curFooter, aboutText: e.target.value } });
+                      }}
+                      placeholder="e.g. Royalman - The crown is Yours! Premium watches and lifestyle accessories crafted for timeless presence."
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: 8, background: '#0e0b1d', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: 13, resize: 'vertical' }}
+                    />
+                  </label>
+                  <label>
+                    Support Phone / Hotline
+                    <input
+                      value={f.footer?.phone ?? (f.phone || '')}
+                      onChange={(e) => {
+                        const curFooter = f.footer || {};
+                        setF({ ...f, footer: { ...curFooter, phone: e.target.value } });
+                      }}
+                      placeholder="09613-008080"
+                    />
+                  </label>
+                  <label>
+                    Operating Hours
+                    <input
+                      value={f.footer?.phoneHours ?? '9 AM - 8 PM'}
+                      onChange={(e) => {
+                        const curFooter = f.footer || {};
+                        setF({ ...f, footer: { ...curFooter, phoneHours: e.target.value } });
+                      }}
+                      placeholder="e.g. 9 AM - 8 PM"
+                    />
+                  </label>
+                  <label>
+                    WhatsApp Number
+                    <input
+                      value={f.footer?.whatsapp ?? (f.whatsapp || '')}
+                      onChange={(e) => {
+                        const curFooter = f.footer || {};
+                        setF({ ...f, footer: { ...curFooter, whatsapp: e.target.value } });
+                      }}
+                      placeholder="01878374762"
+                    />
+                  </label>
+                  <label>
+                    Support Email
+                    <input
+                      value={f.footer?.email ?? ''}
+                      onChange={(e) => {
+                        const curFooter = f.footer || {};
+                        setF({ ...f, footer: { ...curFooter, email: e.target.value } });
+                      }}
+                      placeholder="contact@royalman.com.bd"
+                    />
+                  </label>
+                  <label style={{ gridColumn: 'span 2' }}>
+                    Physical Address
+                    <input
+                      value={f.footer?.address ?? ''}
+                      onChange={(e) => {
+                        const curFooter = f.footer || {};
+                        setF({ ...f, footer: { ...curFooter, address: e.target.value } });
+                      }}
+                      placeholder="House-14/16, Road-4, Block-D, Dhaka Uddan, Mohammadpur, Dhaka"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Navigation Columns Editor */}
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: 15, color: '#fff' }}>🔗 Footer Navigation Menus</h4>
+                    <span style={{ fontSize: 12, color: '#94a3b8' }}>Edit column titles and link destinations</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
+                  {[0, 1, 2].map((colIdx) => {
+                    const cols = Array.isArray(f.footer?.columns) && f.footer.columns.length > 0 ? f.footer.columns : DEFAULT_COLUMNS;
+                    const col = cols[colIdx] || DEFAULT_COLUMNS[colIdx] || { title: `COL ${colIdx + 1}`, links: [] };
+                    return (
+                      <div key={colIdx} style={{ background: '#0e0b1d', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 16 }}>
+                        <div style={{ marginBottom: 12 }}>
+                          <label style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>
+                            Column {colIdx + 1} Title
+                            <input
+                              value={col.title}
+                              onChange={(e) => {
+                                const nextCols = JSON.parse(JSON.stringify(cols));
+                                if (!nextCols[colIdx]) nextCols[colIdx] = { title: e.target.value, links: [] };
+                                else nextCols[colIdx].title = e.target.value;
+                                const curFooter = f.footer || {};
+                                setF({ ...f, footer: { ...curFooter, columns: nextCols } });
+                              }}
+                              style={{ marginTop: 4, width: '100%', padding: '8px 12px', borderRadius: 6, background: '#17142b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: 13, fontWeight: 700 }}
+                            />
+                          </label>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflowY: 'auto' }}>
+                          {col.links.map((lnk: any, lIdx: number) => (
+                            <div key={lIdx} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <input
+                                placeholder="Link Label"
+                                value={lnk.text}
+                                onChange={(e) => {
+                                  const nextCols = JSON.parse(JSON.stringify(cols));
+                                  nextCols[colIdx].links[lIdx].text = e.target.value;
+                                  const curFooter = f.footer || {};
+                                  setF({ ...f, footer: { ...curFooter, columns: nextCols } });
+                                }}
+                                style={{ flex: 1, padding: '6px 10px', fontSize: 12, borderRadius: 6, background: '#17142b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                              />
+                              <input
+                                placeholder="URL (e.g. shop)"
+                                value={lnk.url}
+                                onChange={(e) => {
+                                  const nextCols = JSON.parse(JSON.stringify(cols));
+                                  nextCols[colIdx].links[lIdx].url = e.target.value;
+                                  const curFooter = f.footer || {};
+                                  setF({ ...f, footer: { ...curFooter, columns: nextCols } });
+                                }}
+                                style={{ flex: 1, padding: '6px 10px', fontSize: 12, borderRadius: 6, background: '#17142b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nextCols = JSON.parse(JSON.stringify(cols));
+                                  nextCols[colIdx].links.splice(lIdx, 1);
+                                  const curFooter = f.footer || {};
+                                  setF({ ...f, footer: { ...curFooter, columns: nextCols } });
+                                }}
+                                style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 4 }}
+                                title="Remove Link"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextCols = JSON.parse(JSON.stringify(cols));
+                            if (!nextCols[colIdx]) nextCols[colIdx] = { title: col.title, links: [] };
+                            nextCols[colIdx].links.push({ text: 'New Link', url: 'shop' });
+                            const curFooter = f.footer || {};
+                            setF({ ...f, footer: { ...curFooter, columns: nextCols } });
+                          }}
+                          style={{ marginTop: 10, width: '100%', padding: '6px', fontSize: 12, fontWeight: 600, background: 'rgba(255,255,255,0.05)', border: '1px dashed rgba(255,255,255,0.15)', borderRadius: 6, color: '#a78bfa', cursor: 'pointer' }}
+                        >
+                          + Add Link
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Social Media Links */}
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 20 }}>
+                <h4 style={{ margin: '0 0 16px', fontSize: 15, color: '#fff' }}>🌐 Social Media Profiles</h4>
+                <div className="sa-sgrid">
+                  <label>
+                    Facebook URL
+                    <input
+                      value={f.footer?.socials?.facebook ?? ''}
+                      onChange={(e) => {
+                        const curFooter = f.footer || {};
+                        const socials = curFooter.socials || {};
+                        setF({ ...f, footer: { ...curFooter, socials: { ...socials, facebook: e.target.value } } });
+                      }}
+                      placeholder="https://facebook.com/yourpage"
+                    />
+                  </label>
+                  <label>
+                    Instagram URL
+                    <input
+                      value={f.footer?.socials?.instagram ?? ''}
+                      onChange={(e) => {
+                        const curFooter = f.footer || {};
+                        const socials = curFooter.socials || {};
+                        setF({ ...f, footer: { ...curFooter, socials: { ...socials, instagram: e.target.value } } });
+                      }}
+                      placeholder="https://instagram.com/yourpage"
+                    />
+                  </label>
+                  <label>
+                    TikTok URL
+                    <input
+                      value={f.footer?.socials?.tiktok ?? ''}
+                      onChange={(e) => {
+                        const curFooter = f.footer || {};
+                        const socials = curFooter.socials || {};
+                        setF({ ...f, footer: { ...curFooter, socials: { ...socials, tiktok: e.target.value } } });
+                      }}
+                      placeholder="https://tiktok.com/@yourpage"
+                    />
+                  </label>
+                  <label>
+                    YouTube URL
+                    <input
+                      value={f.footer?.socials?.youtube ?? ''}
+                      onChange={(e) => {
+                        const curFooter = f.footer || {};
+                        const socials = curFooter.socials || {};
+                        setF({ ...f, footer: { ...curFooter, socials: { ...socials, youtube: e.target.value } } });
+                      }}
+                      placeholder="https://youtube.com/@yourpage"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Copyright & Newsletter */}
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 20 }}>
+                <h4 style={{ margin: '0 0 16px', fontSize: 15, color: '#fff' }}>© Copyright &amp; Newsletter</h4>
+                <div className="sa-sgrid">
+                  <label>
+                    Newsletter Heading
+                    <input
+                      value={f.footer?.newsletterTitle ?? ''}
+                      onChange={(e) => {
+                        const curFooter = f.footer || {};
+                        setF({ ...f, footer: { ...curFooter, newsletterTitle: e.target.value } });
+                      }}
+                      placeholder="e.g. Join our newsletter to stay up to date"
+                    />
+                  </label>
+                  <label>
+                    Copyright Notice
+                    <input
+                      value={f.footer?.copyright ?? ''}
+                      onChange={(e) => {
+                        const curFooter = f.footer || {};
+                        setF({ ...f, footer: { ...curFooter, copyright: e.target.value } });
+                      }}
+                      placeholder="e.g. © 2026 Store. All Rights Reserved."
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Form Content: Custom HTML / CSS Mode */}
+          {f.footer?.mode === 'custom_html' && (
+            <div className="sa-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <h4 style={{ margin: '0 0 6px', fontSize: 15, color: '#fff' }}>💻 Custom HTML / CSS Code</h4>
+                <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>
+                  Paste any custom HTML markup, SVG icons, or inline &lt;style&gt; blocks. This will render directly inside the footer of your storefront.
+                </p>
+              </div>
+              <textarea
+                rows={14}
+                value={f.footer?.customHtml || ''}
+                onChange={(e) => {
+                  const curFooter = f.footer || {};
+                  setF({ ...f, footer: { ...curFooter, customHtml: e.target.value } });
+                }}
+                placeholder={`<!-- Paste your custom HTML / CSS code here -->\n<footer style="background: #111; color: #fff; padding: 40px; text-align: center;">\n  <p>© 2026 My Store. All rights reserved.</p>\n</footer>`}
+                style={{
+                  width: '100%',
+                  padding: 16,
+                  borderRadius: 8,
+                  background: '#090812',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  color: '#34d399',
+                  fontFamily: 'Consolas, Monaco, monospace',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+          )}
+
+          {/* Live Preview Container */}
+          <div className="sa-card" style={{ padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <h4 style={{ margin: 0, fontSize: 16, color: '#fff' }}>👁️ Real-Time Storefront Preview</h4>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                  Automatically displays your store logo ({f.logo ? 'Custom Logo' : 'Default Brand'}) and chosen template
+                </span>
+              </div>
+              <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: 'rgba(52, 211, 153, 0.15)', color: '#34d399', fontWeight: 600 }}>
+                ● Live Output
+              </span>
+            </div>
+            <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 30px rgba(0,0,0,0.4)' }}>
+              <RenderFooter settings={f} preview={true} />
+            </div>
+          </div>
         </div>
       )}
 
