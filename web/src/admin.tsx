@@ -1,4 +1,4 @@
-import { RenderFooter, DEFAULT_COLUMNS, type FooterSettings } from './FooterTemplates';
+import { RenderFooter, DEFAULT_COLUMNS, AVAILABLE_PLATFORMS, OFFICIAL_COLORS, SocialIcon, normalizeSocialLinks, type FooterSettings, type SocialLinkItem, type SocialStyle } from './FooterTemplates';
 import React, { useState, useEffect, useMemo, useRef, useCallback, Fragment } from 'react';
 import qrcode from 'qrcode-generator';
 import JsSIP from 'jssip';
@@ -14996,58 +14996,319 @@ function SettingsAdmin() {
                 </div>
               </div>
 
-              {/* Social Media Links */}
-              <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 20 }}>
-                <h4 style={{ margin: '0 0 16px', fontSize: 15, color: '#fff' }}>🌐 Social Media Profiles</h4>
-                <div className="sa-sgrid">
-                  <label>
-                    Facebook URL
-                    <input
-                      value={f.footer?.socials?.facebook ?? ''}
-                      onChange={(e) => {
-                        const curFooter = f.footer || {};
-                        const socials = curFooter.socials || {};
-                        setF({ ...f, footer: { ...curFooter, socials: { ...socials, facebook: e.target.value } } });
-                      }}
-                      placeholder="https://facebook.com/yourpage"
-                    />
-                  </label>
-                  <label>
-                    Instagram URL
-                    <input
-                      value={f.footer?.socials?.instagram ?? ''}
-                      onChange={(e) => {
-                        const curFooter = f.footer || {};
-                        const socials = curFooter.socials || {};
-                        setF({ ...f, footer: { ...curFooter, socials: { ...socials, instagram: e.target.value } } });
-                      }}
-                      placeholder="https://instagram.com/yourpage"
-                    />
-                  </label>
-                  <label>
-                    TikTok URL
-                    <input
-                      value={f.footer?.socials?.tiktok ?? ''}
-                      onChange={(e) => {
-                        const curFooter = f.footer || {};
-                        const socials = curFooter.socials || {};
-                        setF({ ...f, footer: { ...curFooter, socials: { ...socials, tiktok: e.target.value } } });
-                      }}
-                      placeholder="https://tiktok.com/@yourpage"
-                    />
-                  </label>
-                  <label>
-                    YouTube URL
-                    <input
-                      value={f.footer?.socials?.youtube ?? ''}
-                      onChange={(e) => {
-                        const curFooter = f.footer || {};
-                        const socials = curFooter.socials || {};
-                        setF({ ...f, footer: { ...curFooter, socials: { ...socials, youtube: e.target.value } } });
-                      }}
-                      placeholder="https://youtube.com/@yourpage"
-                    />
-                  </label>
+              {/* Social Media Links & Universal Color Customizer */}
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: 16, color: '#fff' }}>🌐 Social Media Profiles &amp; Circular Badges</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8' }}>
+                      Add any social media in the world. Customize the circular badge colors (icon color, background, border) to match your brand.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const curFooter = f.footer || {};
+                      const current = normalizeSocialLinks(curFooter);
+                      const next = [...current, { platform: 'whatsapp', url: 'https://wa.me/' }];
+                      setF({ ...f, footer: { ...curFooter, socialLinks: next } });
+                    }}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      background: '#8b5cf6',
+                      border: 'none',
+                      color: '#fff',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6
+                    }}
+                  >
+                    <span>+ Add Social Profile</span>
+                  </button>
+                </div>
+
+                {/* Badge Color & Style Controls */}
+                {(() => {
+                  const curFooter = f.footer || {};
+                  const st = curFooter.socialStyle || {};
+                  const isOfficial = st.preset === 'official';
+                  const iconColor = st.iconColor || '#1e293b';
+                  const bgColor = st.bgColor || '#ffffff';
+                  const borderColor = st.borderColor || '#cbd5e1';
+                  const socialList = normalizeSocialLinks(curFooter);
+
+                  const setStyle = (patch: any) => {
+                    setF({
+                      ...f,
+                      footer: {
+                        ...curFooter,
+                        socialStyle: {
+                          preset: st.preset || 'minimal',
+                          iconColor,
+                          bgColor,
+                          borderColor,
+                          ...patch
+                        }
+                      }
+                    });
+                  };
+
+                  return (
+                    <div style={{ background: '#0e0b1d', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 18, marginBottom: 20 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          🎨 Badge Color Customization
+                        </span>
+                        
+                        {/* Quick Presets */}
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={() => setStyle({ preset: 'minimal', iconColor: '#1e293b', bgColor: '#ffffff', borderColor: '#cbd5e1' })}
+                            style={{ padding: '5px 12px', fontSize: 11, fontWeight: 600, borderRadius: 99, border: '1px solid #cbd5e1', background: '#fff', color: '#1e293b', cursor: 'pointer' }}
+                          >
+                            ⚪ Clean White (Reference)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setStyle({ preset: 'official', bgColor: '#ffffff', borderColor: '#cbd5e1' })}
+                            style={{ padding: '5px 12px', fontSize: 11, fontWeight: 600, borderRadius: 99, border: '1px solid #8b5cf6', background: 'rgba(139,92,246,0.15)', color: '#c084fc', cursor: 'pointer' }}
+                          >
+                            🎨 Official Brand Colors
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setStyle({ preset: 'gold', iconColor: '#b48e4c', bgColor: '#ffffff', borderColor: '#b48e4c' })}
+                            style={{ padding: '5px 12px', fontSize: 11, fontWeight: 600, borderRadius: 99, border: '1px solid #b48e4c', background: 'rgba(180,142,76,0.15)', color: '#d4af37', cursor: 'pointer' }}
+                          >
+                            👑 Theme Gold
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setStyle({ preset: 'dark', iconColor: '#ffffff', bgColor: '#111827', borderColor: '#374151' })}
+                            style={{ padding: '5px 12px', fontSize: 11, fontWeight: 600, borderRadius: 99, border: '1px solid #374151', background: '#111827', color: '#fff', cursor: 'pointer' }}
+                          >
+                            🖤 Dark Luxury
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Color Pickers Grid */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 16 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <label style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>
+                            Icon Color {isOfficial && <span style={{ color: '#c084fc', fontSize: 10 }}>(Official Mode)</span>}
+                          </label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <input
+                              type="color"
+                              value={iconColor}
+                              disabled={isOfficial}
+                              onChange={(e) => setStyle({ preset: 'custom', iconColor: e.target.value })}
+                              style={{ width: 36, height: 36, borderRadius: 6, border: 'none', cursor: 'pointer', background: 'transparent' }}
+                            />
+                            <input
+                              type="text"
+                              value={iconColor}
+                              disabled={isOfficial}
+                              onChange={(e) => setStyle({ preset: 'custom', iconColor: e.target.value })}
+                              style={{ flex: 1, padding: '7px 10px', fontSize: 12, borderRadius: 6, background: '#17142b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <label style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>Circle Background</label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <input
+                              type="color"
+                              value={bgColor}
+                              onChange={(e) => setStyle({ preset: 'custom', bgColor: e.target.value })}
+                              style={{ width: 36, height: 36, borderRadius: 6, border: 'none', cursor: 'pointer', background: 'transparent' }}
+                            />
+                            <input
+                              type="text"
+                              value={bgColor}
+                              onChange={(e) => setStyle({ preset: 'custom', bgColor: e.target.value })}
+                              style={{ flex: 1, padding: '7px 10px', fontSize: 12, borderRadius: 6, background: '#17142b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <label style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>Circle Border Color</label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <input
+                              type="color"
+                              value={borderColor}
+                              onChange={(e) => setStyle({ preset: 'custom', borderColor: e.target.value })}
+                              style={{ width: 36, height: 36, borderRadius: 6, border: 'none', cursor: 'pointer', background: 'transparent' }}
+                            />
+                            <input
+                              type="text"
+                              value={borderColor}
+                              onChange={(e) => setStyle({ preset: 'custom', borderColor: e.target.value })}
+                              style={{ flex: 1, padding: '7px 10px', fontSize: 12, borderRadius: 6, background: '#17142b', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Live Badge Preview Bar */}
+                      <div style={{ background: '#17142b', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>Live Preview:</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                          {socialList.map((item: any, idx: number) => {
+                            const thisIconColor = isOfficial ? (OFFICIAL_COLORS[item.platform.toLowerCase()] || iconColor) : iconColor;
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  width: 38,
+                                  height: 38,
+                                  borderRadius: '50%',
+                                  background: bgColor,
+                                  border: `1.5px solid ${borderColor}`,
+                                  color: thisIconColor,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
+                                }}
+                              >
+                                <SocialIcon type={item.platform} size={18} color={thisIconColor} />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Social Links List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {(() => {
+                    const curFooter = f.footer || {};
+                    const socialList = normalizeSocialLinks(curFooter);
+                    const st = curFooter.socialStyle || {};
+                    const isOfficial = st.preset === 'official';
+                    const iconColor = st.iconColor || '#1e293b';
+
+                    return socialList.map((item: any, idx: number) => {
+                      const thisIconColor = isOfficial ? (OFFICIAL_COLORS[item.platform.toLowerCase()] || iconColor) : iconColor;
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 12,
+                            background: '#0e0b1d',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            borderRadius: 10,
+                            padding: '10px 14px'
+                          }}
+                        >
+                          {/* Mini Icon Preview */}
+                          <div
+                            style={{
+                              width: 36,
+                              height: 36,
+                              borderRadius: '50%',
+                              background: st.bgColor || '#ffffff',
+                              border: `1.5px solid ${st.borderColor || '#cbd5e1'}`,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: thisIconColor,
+                              flexShrink: 0
+                            }}
+                          >
+                            <SocialIcon type={item.platform} size={18} color={thisIconColor} />
+                          </div>
+
+                          {/* Platform Selector */}
+                          <select
+                            value={item.platform}
+                            onChange={(e) => {
+                              const next = [...socialList];
+                              const selectedPlatform = AVAILABLE_PLATFORMS.find((p) => p.id === e.target.value);
+                              next[idx] = {
+                                ...next[idx],
+                                platform: e.target.value,
+                                url: (next[idx].url && next[idx].url !== 'https://facebook.com') ? next[idx].url : (selectedPlatform?.defaultUrl || 'https://')
+                              };
+                              setF({ ...f, footer: { ...curFooter, socialLinks: next } });
+                            }}
+                            style={{
+                              padding: '8px 12px',
+                              borderRadius: 6,
+                              background: '#17142b',
+                              border: '1px solid rgba(255,255,255,0.12)',
+                              color: '#fff',
+                              fontSize: 13,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              minWidth: 150
+                            }}
+                          >
+                            {AVAILABLE_PLATFORMS.map((p) => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+
+                          {/* URL Input */}
+                          <input
+                            type="text"
+                            value={item.url}
+                            onChange={(e) => {
+                              const next = [...socialList];
+                              next[idx] = { ...next[idx], url: e.target.value };
+                              setF({ ...f, footer: { ...curFooter, socialLinks: next } });
+                            }}
+                            placeholder="https://..."
+                            style={{
+                              flex: 1,
+                              padding: '8px 12px',
+                              borderRadius: 6,
+                              background: '#17142b',
+                              border: '1px solid rgba(255,255,255,0.12)',
+                              color: '#fff',
+                              fontSize: 13
+                            }}
+                          />
+
+                          {/* Remove Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = [...socialList];
+                              next.splice(idx, 1);
+                              setF({ ...f, footer: { ...curFooter, socialLinks: next } });
+                            }}
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.12)',
+                              border: '1px solid rgba(239, 68, 68, 0.25)',
+                              color: '#ef4444',
+                              borderRadius: 6,
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              fontSize: 12,
+                              fontWeight: 600
+                            }}
+                            title="Remove Profile"
+                          >
+                            ✕ Remove
+                          </button>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
 

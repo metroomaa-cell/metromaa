@@ -7547,3 +7547,13 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
     gap: 20px;
   }
 }
+
+/* CIRCULAR SOCIAL MEDIA BADGES */
+.ft-social-circle-badge {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease, filter 0.2s ease;
+}
+.ft-social-circle-badge:hover {
+  transform: translateY(-3px) scale(1.06);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+  filter: brightness(0.95);
+}
