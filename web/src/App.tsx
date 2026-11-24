@@ -540,33 +540,20 @@ function Header({ onSearch }: { onSearch: () => void }) {
               </select>
             </label>
 
-            {/* Header Search Icon Button */}
+            {/* Tracking Button (Icon on mobile, pill badge with icon + text on PC) */}
             <button
-              className="tabaya-h-btn desktop-btn-group"
-              onClick={onSearch}
-              aria-label={tr('Search collections', language)}
-              title="Search"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="6.5" />
-                <path d="m16 16 4.2 4.2" />
-              </svg>
-            </button>
-
-            {/* Tracking Button (Icon on mobile, icon + text on PC) */}
-            <button
-              className={`tabaya-h-btn tabaya-h-track-btn ${route.name === 'track' ? 'active' : ''}`}
+              className={`tabaya-h-track-btn ${route.name === 'track' ? 'active' : ''}`}
               onClick={() => nav('track')}
               aria-label={tr('Track Order', language)}
               title={tr('Track Order', language)}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="1" y="3" width="15" height="13" rx="1" />
                 <polygon points="16 8 20 8 23 11 23 16 16 16 8" />
                 <circle cx="5.5" cy="18.5" r="2.5" />
                 <circle cx="18.5" cy="18.5" r="2.5" />
               </svg>
-              <span className="track-btn-label" style={{ fontSize: 12.5, fontWeight: 600 }}>{language === 'bn' ? 'ট্র্যাকিং' : 'Tracking'}</span>
+              <span className="track-btn-label">{language === 'bn' ? 'ট্র্যাকিং' : 'Tracking'}</span>
             </button>
 
             {/* Customer Account Button */}

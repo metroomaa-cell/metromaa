@@ -6496,35 +6496,75 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   align-items: center;
 }
 
-/* Tracking Button */
+/* Header Right spacing & neat button alignment */
+.tabaya-header-right {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  flex: 0 0 auto !important;
+}
+
+.header-language-wrap {
+  display: inline-flex !important;
+  align-items: center !important;
+  margin-right: 2px !important;
+}
+
+.header-language {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 30px !important;
+  width: 50px !important;
+  border: 1px solid rgba(180, 142, 76, 0.35) !important;
+  border-radius: 99px !important;
+  background-color: #faf8f5 !important;
+  color: #1f3147 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  padding: 0 14px 0 8px !important;
+  cursor: pointer;
+}
+
+/* Tracking Button (Desktop pill with icon + label) */
 .tabaya-h-track-btn {
   display: inline-flex !important;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: 99px;
-  background: rgba(180, 142, 76, 0.08);
-  border: 1px solid rgba(180, 142, 76, 0.28);
-  color: #1f3147;
-  font-size: 13px;
-  font-weight: 600;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  width: auto !important;
+  min-width: unset !important;
+  max-width: unset !important;
+  height: 32px !important;
+  padding: 0 14px !important;
+  border-radius: 99px !important;
+  background: rgba(180, 142, 76, 0.08) !important;
+  border: 1px solid rgba(180, 142, 76, 0.28) !important;
+  color: #1f3147 !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
   cursor: pointer;
   transition: all 0.2s ease;
-  white-space: nowrap;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+  text-decoration: none !important;
 }
 
 .tabaya-h-track-btn:hover,
 .tabaya-h-track-btn.active {
-  background: var(--store-accent, #b48e4c);
+  background: var(--store-accent, #b48e4c) !important;
   color: #ffffff !important;
-  border-color: var(--store-accent, #b48e4c);
+  border-color: var(--store-accent, #b48e4c) !important;
 }
 
 .tabaya-h-track-btn svg {
   flex-shrink: 0;
+  width: 17px;
+  height: 17px;
 }
 
-/* Responsive Header */
+/* Responsive Header (Mobile) */
 @media (max-width: 900px) {
   .tabaya-header-inner {
     display: flex !important;
@@ -6567,7 +6607,7 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
     object-fit: contain;
   }
 
-  /* RoyalMan mobile header: ONLY show tracking button (icon only, no label) */
+  /* RoyalMan mobile header: ONLY show tracking button (icon only, circular) */
   .store-royal-header .desktop-btn-group {
     display: none !important;
   }
@@ -6596,7 +6636,7 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
 .store-top-search-wrap {
   width: 100%;
   max-width: 1200px;
-  margin: 6px auto 8px;
+  margin: 6px auto 6px;
   padding: 0 16px;
   box-sizing: border-box;
 }
@@ -6665,22 +6705,23 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
 }
 
 /* ============================================================== */
-/* ROYALMAN HERO BANNER SLIDER & COMPACT SPACING */
+/* ROYALMAN HERO BANNER SLIDER & TIGHT SPACING */
 /* ============================================================== */
 .royal-hero-section {
   width: 100%;
+  margin-bottom: 0 !important;
 }
 .royal-hero-wrap {
   width: 100%;
   max-width: 1200px;
-  margin: 0 auto 12px;
+  margin: 0 auto 4px;
   padding: 0 16px;
   box-sizing: border-box;
 }
 @media (max-width: 640px) {
   .royal-hero-wrap {
     padding: 0 12px;
-    margin-bottom: 8px;
+    margin-bottom: 2px;
   }
 }
 
@@ -6742,7 +6783,7 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   justify-content: center;
   align-items: center;
   gap: 6px;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .royal-hero-dot {
@@ -6759,4 +6800,27 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   background: var(--store-accent, #b48e4c);
   width: 16px;
   border-radius: 99px;
+}
+
+/* ============================================================== */
+/* FIX GAP: REDUCE DEAD SPACE BELOW HERO BANNER SLIDER */
+/* ============================================================== */
+.tabaya-home .ara-section,
+.royal-hero-section + .ara-section {
+  padding-top: 14px !important;
+}
+
+.ara-header {
+  margin-bottom: 24px !important;
+}
+
+@media (max-width: 640px) {
+  .tabaya-home .ara-section,
+  .royal-hero-section + .ara-section {
+    padding-top: 10px !important;
+    padding-bottom: 24px !important;
+  }
+  .ara-header {
+    margin-bottom: 14px !important;
+  }
 }
