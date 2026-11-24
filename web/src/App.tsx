@@ -16,7 +16,7 @@ const LoveLockLanding = lazy(() => import('./LoveLockLanding').then((m) => ({ de
 function getSiteBrandDefaults() {
   const h = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
   if (h.includes('secrate')) return { name: 'SECRATE', logo: '/uploads/logo_secrate_rich.webp', isMetrroma: false };
-  if (h.includes('metrroma') || h.includes('metromaa')) return { name: 'METRROMA', logo: '/uploads/logo_secrate_rich.webp', isMetrroma: true };
+  if (h.includes('metrroma') || h.includes('metromaa')) return { name: 'METRROMA', logo: '/logo_metrroma.png', isMetrroma: true };
   return { name: 'TimeBoost', logo: '/uploads/logo_timeboost.svg', isMetrroma: false };
 }
 
@@ -28,8 +28,8 @@ function resolveBrandName(storeName?: string | null) {
 }
 
 function resolveBrandLogo(logo?: string | null) {
-  if (logo && !logo.includes('img_mvsqgtsqxzgig') && !logo.includes('img_mvddqd311xu5c')) return logo;
-  return '';
+  if (logo && typeof logo === 'string' && logo.trim()) return logo.trim();
+  return getSiteBrandDefaults().logo;
 }
 
 function StoreLoading({ admin = false }: { admin?: boolean }) {
@@ -375,9 +375,14 @@ function Header({ onSearch }: { onSearch: () => void }) {
                   className="tabaya-header-logo-img"
                   src={logo}
                   alt={storeName}
-                  onError={() => setLogo('')}
+                  onError={() => {
+                    const fallback = getSiteBrandDefaults().logo;
+                    if (logo !== fallback) setLogo(fallback);
+                  }}
                 />
-              ) : null}
+              ) : (
+                <span className="tabaya-header-logo" style={{ fontSize: 20 }}>{storeName}</span>
+              )}
             </div>
           </div>
 
