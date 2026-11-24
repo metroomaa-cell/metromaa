@@ -6479,81 +6479,32 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
 /* ============================================================== */
 /* ROYALMAN STYLE: TOP SEARCH BAR & CARD HERO BANNER SLIDER */
 /* ============================================================== */
-.store-top-search-wrap {
-  width: 100%;
-  max-width: 1200px;
-  margin: 10px auto 14px;
-  padding: 0 16px;
-  box-sizing: border-box;
-}
-@media (max-width: 640px) {
-  .store-top-search-wrap {
-    padding: 0 12px;
-    margin: 8px auto 12px;
-  }
-}
 
-.store-top-search-bar {
-  display: flex;
+/* Logo visibility: Desktop left vs Mobile center */
+.desktop-only-logo {
+  display: inline-flex !important;
   align-items: center;
-  background: #ffffff;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  overflow: hidden;
-  height: 44px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.store-top-search-bar:focus-within {
-  border-color: #000000;
-  box-shadow: 0 0 0 1px #000000;
-}
-
-.store-top-search-input {
-  flex: 1;
-  height: 100%;
-  border: none;
-  outline: none;
-  padding: 0 14px;
-  font-size: 14px;
-  color: #1f2937;
-  background: transparent;
-  font-family: inherit;
-}
-
-.store-top-search-input::placeholder {
-  color: #9ca3af;
-}
-
-.store-top-search-btn {
-  width: 48px;
-  height: 100%;
-  background: #000000;
-  border: none;
-  outline: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   cursor: pointer;
-  color: #ffffff;
-  transition: opacity 0.15s;
-  flex-shrink: 0;
+}
+.mobile-only-logo {
+  display: none !important;
 }
 
-.store-top-search-btn:hover {
-  opacity: 0.85;
+/* Header button visibility */
+.desktop-btn-group {
+  display: inline-flex !important;
+  align-items: center;
 }
 
-/* Header Tracking Button */
+/* Tracking Button */
 .tabaya-h-track-btn {
   display: inline-flex !important;
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
   border-radius: 99px;
-  background: rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(0, 0, 0, 0.09);
+  background: rgba(180, 142, 76, 0.08);
+  border: 1px solid rgba(180, 142, 76, 0.28);
   color: #1f3147;
   font-size: 13px;
   font-weight: 600;
@@ -6564,23 +6515,23 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
 
 .tabaya-h-track-btn:hover,
 .tabaya-h-track-btn.active {
-  background: #000000;
+  background: var(--store-accent, #b48e4c);
   color: #ffffff !important;
-  border-color: #000000;
+  border-color: var(--store-accent, #b48e4c);
 }
 
 .tabaya-h-track-btn svg {
   flex-shrink: 0;
 }
 
-/* Centered Header on Mobile */
+/* Responsive Header */
 @media (max-width: 900px) {
   .tabaya-header-inner {
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
     position: relative;
-    height: 58px;
+    height: 52px;
     padding: 0 12px;
   }
   .tabaya-hamburger-btn {
@@ -6589,41 +6540,147 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   .tabaya-header-left {
     flex: 0 0 auto;
   }
-  .tabaya-header-logo-center {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
+  .tabaya-header-right {
+    flex: 0 0 auto;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Hide desktop logo on mobile, show only centered logo */
+  .desktop-only-logo {
+    display: none !important;
+  }
+  .mobile-only-logo {
     display: flex !important;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
   }
-  .tabaya-header-logo-center img {
-    max-height: 38px;
+  .mobile-only-logo img {
+    max-height: 36px;
     width: auto;
     object-fit: contain;
   }
-  .tabaya-header-right {
-    flex: 0 0 auto;
-    margin-left: auto;
+
+  /* RoyalMan mobile header: ONLY show tracking button (icon only, no label) */
+  .store-royal-header .desktop-btn-group {
+    display: none !important;
+  }
+  .store-royal-header .tabaya-h-track-btn {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: #ffffff !important;
+    border: 1.5px solid rgba(180, 142, 76, 0.28) !important;
+    color: #1f3147 !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05) !important;
+  }
+  .store-royal-header .tabaya-h-track-btn .track-btn-label {
+    display: none !important;
   }
 }
 
-/* RoyalMan Hero Banner Card */
+/* ============================================================== */
+/* THEME-MATCHED TOP SEARCH BAR & REDUCED GAPS */
+/* ============================================================== */
+.store-top-search-wrap {
+  width: 100%;
+  max-width: 1200px;
+  margin: 6px auto 8px;
+  padding: 0 16px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .store-top-search-wrap {
+    padding: 0 12px;
+    margin: 4px auto 6px;
+  }
+}
+
+.store-top-search-bar {
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  border: 1.5px solid rgba(180, 142, 76, 0.32);
+  border-radius: 8px;
+  overflow: hidden;
+  height: 40px;
+  box-shadow: 0 2px 8px rgba(31, 49, 71, 0.04);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.store-top-search-bar:focus-within {
+  border-color: var(--store-accent, #b48e4c);
+  box-shadow: 0 0 0 3px rgba(180, 142, 76, 0.16);
+}
+
+.store-top-search-input {
+  flex: 1;
+  height: 100%;
+  border: none;
+  outline: none;
+  padding: 0 14px;
+  font-size: 13.5px;
+  color: #1f3147;
+  background: transparent;
+  font-family: inherit;
+}
+
+.store-top-search-input::placeholder {
+  color: #8c827a;
+}
+
+.store-top-search-btn {
+  width: 44px;
+  height: 100%;
+  background: var(--store-accent, #b48e4c);
+  border: none;
+  outline: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #ffffff;
+  transition: background 0.2s ease, opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.store-top-search-btn:hover {
+  background: #9a7030;
+}
+
+.store-top-search-btn svg {
+  stroke: #ffffff;
+}
+
+/* ============================================================== */
+/* ROYALMAN HERO BANNER SLIDER & COMPACT SPACING */
+/* ============================================================== */
 .royal-hero-section {
   width: 100%;
 }
 .royal-hero-wrap {
   width: 100%;
   max-width: 1200px;
-  margin: 0 auto 18px;
+  margin: 0 auto 12px;
   padding: 0 16px;
   box-sizing: border-box;
 }
 @media (max-width: 640px) {
   .royal-hero-wrap {
     padding: 0 12px;
-    margin-bottom: 14px;
+    margin-bottom: 8px;
   }
 }
 
@@ -6631,15 +6688,15 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   position: relative;
   width: 100%;
   aspect-ratio: 2.1 / 1;
-  border-radius: 14px;
+  border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.07);
-  background: #e2e8f0;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+  background: #ede9e3;
 }
 @media (max-width: 640px) {
   .royal-hero-card {
     aspect-ratio: 2 / 1;
-    border-radius: 12px;
+    border-radius: 10px;
   }
 }
 
@@ -6654,50 +6711,52 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(180, 142, 76, 0.2);
   color: #1f2937;
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   z-index: 5;
-  transition: background 0.15s;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  transition: background 0.15s, transform 0.15s;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
   user-select: none;
 }
 .royal-hero-arrow:hover {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.96);
+  transform: translateY(-50%) scale(1.05);
 }
-.royal-hero-arrow.prev { left: 10px; }
-.royal-hero-arrow.next { right: 10px; }
+.royal-hero-arrow.prev { left: 8px; }
+.royal-hero-arrow.next { right: 8px; }
 
 .royal-hero-dots {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 7px;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .royal-hero-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: #cbd5e1;
+  background: #d8d0c8;
   border: none;
   padding: 0;
   cursor: pointer;
   transition: all 0.25s ease;
 }
 .royal-hero-dot.active {
-  background: #000000;
-  transform: scale(1.3);
+  background: var(--store-accent, #b48e4c);
+  width: 16px;
+  border-radius: 99px;
 }

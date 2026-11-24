@@ -1024,7 +1024,7 @@ function videoEmbed(url: string): { type: 'youtube' | 'facebook' | 'direct'; src
   return null;
 }
 
-function HomeHeroSlider({ slides }: { slides: any[] }) {
+function HomeHeroSlider({ slides, heroStyle = 'royalman' }: { slides: any[]; heroStyle?: 'royalman' | 'tabaya' }) {
   const language = useStoreLanguage();
   const isSkin = isSkincareSite();
   const activeSlides = useMemo(() => {
@@ -1062,7 +1062,131 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
 
   const s = activeSlides[cur] || activeSlides[0];
   const btnLink = String(s?.btnLink || 'shop').trim();
+  const title = String(s?.title || '').trim();
+  const subtitle = String(s?.subtitle || '').trim();
+  const badge = String(s?.badge || '').trim();
+  const description = String(s?.description || '').trim();
+  const btnText = String(s?.btnText || '').trim();
+  const hasContent = Boolean(title || subtitle || badge || description || btnText);
 
+  // STYLE 2: Classic Full-Bleed Luxury Banner
+  if (heroStyle === 'tabaya') {
+    return (
+      <section
+        className={`tabaya-hero ${!hasContent ? 'clean-banner' : ''}`}
+        style={{
+          position: 'relative',
+          overflow: 'hidden',
+          cursor: (!hasContent && btnLink) ? 'pointer' : 'default',
+          ...(isSkin ? { background: 'radial-gradient(ellipse at 78% 35%, rgba(104,126,78,.38), transparent 44%), radial-gradient(ellipse at 12% 100%, rgba(174,142,80,.18), transparent 42%), linear-gradient(120deg,#101b16 0%,#1d2b20 54%,#111914 100%)' } : {})
+        }}
+        onClick={(e) => {
+          if (!hasContent && btnLink && !(e.target as HTMLElement).closest('button')) {
+            go(btnLink);
+          }
+        }}
+        onTouchStart={(e) => setTouchStart(e.touches[0].clientX)}
+        onTouchEnd={(e) => {
+          if (touchStart === null) return;
+          const diff = touchStart - e.changedTouches[0].clientX;
+          if (diff > 45) setCur((c) => (c + 1) % activeSlides.length);
+          else if (diff < -45) setCur((c) => (c - 1 + activeSlides.length) % activeSlides.length);
+          setTouchStart(null);
+        }}
+      >
+        <div className="tabaya-hero-bg">
+          <picture>
+            {s?.mobileImage && <source media="(max-width: 768px)" srcSet={s.mobileImage} />}
+            <img
+              key={(s?.image || '') + (s?.mobileImage || '') + cur}
+              src={s?.image || s?.mobileImage}
+              alt={title || 'Hero Banner'}
+              loading="eager"
+              fetchPriority={cur === 0 ? 'high' : 'auto'}
+              decoding="async"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.6s ease-in-out' }}
+              onError={(e) => {
+                const fallback = '/uploads/banner_secrate_desktop.webp';
+                if (!e.currentTarget.src.endsWith(fallback)) e.currentTarget.src = fallback;
+              }}
+            />
+          </picture>
+        </div>
+
+        {hasContent && (
+          <div
+            className="tabaya-hero-overlay"
+            style={isSkin ? { background: 'linear-gradient(90deg,rgba(12,23,17,.90) 0%,rgba(12,23,17,.58) 60%,rgba(12,23,17,.24) 100%)' } : undefined}
+          />
+        )}
+
+        {activeSlides.length > 1 && (
+          <>
+            <button
+              type="button"
+              className="royal-hero-arrow prev"
+              aria-label="Previous Slide"
+              onClick={(e) => { e.stopPropagation(); setCur((c) => (c - 1 + activeSlides.length) % activeSlides.length); }}
+              style={{ left: 20 }}
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              className="royal-hero-arrow next"
+              aria-label="Next Slide"
+              onClick={(e) => { e.stopPropagation(); setCur((c) => (c + 1) % activeSlides.length); }}
+              style={{ right: 20 }}
+            >
+              ›
+            </button>
+          </>
+        )}
+
+        {hasContent && (
+          <div className="wrap tabaya-hero-wrap">
+            <div className="tabaya-hero-card" key={s?.id || cur} style={{ animation: 'fadeIn 0.5s ease' }}>
+              {badge && <span className="tabaya-hero-badge">{tr(badge, language)}</span>}
+              {(title || subtitle) && (
+                <h1 className="tabaya-hero-title serif">
+                  {title && tr(title, language)}
+                  {subtitle && (
+                    <>
+                      {title && <br />}
+                      <span className="it" style={{ color: '#b48e4c' }}>{tr(subtitle, language)}</span>
+                    </>
+                  )}
+                </h1>
+              )}
+              {description && <p className="tabaya-hero-desc">{tr(description, language)}</p>}
+              {btnText && (
+                <div className="tabaya-hero-btns">
+                  <button className="tabaya-btn primary" onClick={() => go(btnLink || 'shop')}>
+                    {tr(btnText, language)}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeSlides.length > 1 && (
+          <div style={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', gap: 7 }}>
+            {activeSlides.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setCur(i); }}
+                style={{ width: cur === i ? 24 : 7, height: 7, borderRadius: 4, background: cur === i ? '#ffffff' : 'rgba(255,255,255,0.4)', border: 'none', cursor: 'pointer', transition: 'all 0.3s' }}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  // STYLE 1: RoyalMan Modern Style (Compact Card Slider)
   return (
     <section className="royal-hero-section">
       <div className="royal-hero-wrap">
@@ -1084,16 +1208,16 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
           style={{ cursor: btnLink ? 'pointer' : 'default' }}
         >
           <picture>
-            {s.mobileImage && <source media="(max-width: 640px)" srcSet={s.mobileImage} />}
+            {s?.mobileImage && <source media="(max-width: 640px)" srcSet={s.mobileImage} />}
             <img
-              key={(s.image || '') + (s.mobileImage || '') + cur}
-              src={s.image || s.mobileImage}
-              alt={s.title || 'Store Hero Banner'}
+              key={(s?.image || '') + (s?.mobileImage || '') + cur}
+              src={s?.image || s?.mobileImage}
+              alt={s?.title || 'Store Hero Banner'}
               className="royal-hero-img"
               loading="eager"
-              fetchPriority="high"
+              fetchPriority={cur === 0 ? 'high' : 'auto'}
               decoding="async"
-              onError={(e: any) => {
+              onError={(e) => {
                 const fallback = '/uploads/banner_secrate_desktop.webp';
                 if (!e.currentTarget.src.endsWith(fallback)) {
                   e.currentTarget.src = fallback;
@@ -1102,7 +1226,6 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
             />
           </picture>
 
-          {/* Navigation Arrows (RoyalMan Style) */}
           {activeSlides.length > 1 && (
             <>
               <button
@@ -1131,7 +1254,6 @@ function HomeHeroSlider({ slides }: { slides: any[] }) {
           )}
         </div>
 
-        {/* Pagination Dots Below Banner (RoyalMan Style) */}
         {activeSlides.length > 1 && (
           <div className="royal-hero-dots">
             {activeSlides.map((_, i) => (
@@ -1347,7 +1469,7 @@ export function Home() {
   return (
     <div className="tabaya-home">
       {/* 1. HERO BANNER / SLIDER */}
-      {visibleSections.hero !== false && <HomeHeroSlider slides={sliders} />}
+      {visibleSections.hero !== false && <HomeHeroSlider slides={sliders} heroStyle={settings?.appearance?.heroStyle || 'royalman'} />}
 
       
       {/* 2. SHOP BY COLLECTION / CATEGORY (ara-section) */}

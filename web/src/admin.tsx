@@ -14397,6 +14397,77 @@ function SettingsAdmin() {
               Add new slide
             </button>
           </div>
+          {/* Header & Hero Banner Layout Style Chooser */}
+          <div style={{ padding: 18, borderRadius: 12, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(139, 92, 246, 0.35)', marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#e2e8f0' }}>
+                🎨 Header &amp; Hero Banner Layout Style (২টি স্টাইল সুবিধা)
+              </div>
+              <button
+                type="button"
+                className="sa-btn sa-mini"
+                disabled={busy}
+                onClick={save}
+                style={{ background: '#10b981', color: '#fff', fontWeight: 700 }}
+              >
+                💾 Save Layout Style
+              </button>
+            </div>
+            <p style={{ fontSize: 12.5, color: '#94a3b8', margin: '0 0 14px' }}>
+              আপনার পছন্দমতো স্টোরফ্রন্ট ব্যানার স্টাইল সিলেক্ট করুন। সিলেক্ট করে ওপরের বা নিচের "Save" বাটনে ক্লিক করুন।
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
+              {/* Option 1: RoyalMan Style (New) */}
+              <div
+                onClick={() => setF((p) => ({ ...p, appearance: { ...(p?.appearance || {}), heroStyle: 'royalman' } }))}
+                style={{
+                  padding: 16,
+                  borderRadius: 10,
+                  border: '2px solid ' + ((f?.appearance?.heroStyle !== 'tabaya') ? '#8b5cf6' : 'rgba(255,255,255,0.1)'),
+                  background: (f?.appearance?.heroStyle !== 'tabaya') ? 'rgba(139, 92, 246, 0.16)' : 'rgba(255,255,255,0.03)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: (f?.appearance?.heroStyle !== 'tabaya') ? '#c4b5fd' : '#fff' }}>
+                    👑 RoyalMan Style (New)
+                  </span>
+                  {(f?.appearance?.heroStyle !== 'tabaya') && <span style={{ fontSize: 11, background: '#8b5cf6', color: '#fff', padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>ACTIVE</span>}
+                </div>
+                <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
+                  • <strong style={{ color: '#e2e8f0' }}>কুইক সার্চ বার:</strong> হেডারের নিচে সম্পূর্ণ ফুল-উইডথ সার্চ ইনপুট।<br />
+                  • <strong style={{ color: '#e2e8f0' }}>কমপ্যাক্ট কার্ড ব্যানার:</strong> মার্জিনযুক্ত রাউন্ডেড ব্যানার ও পেজিনেশন ডটস।<br />
+                  • <strong style={{ color: '#e2e8f0' }}>ক্লিন হেডার:</strong> ওপরে শুধু লোগো ও ট্র্যাকিং বাটন (সুপার ফাস্ট)।
+                </div>
+              </div>
+
+              {/* Option 2: Classic Full-Bleed Style (Previous) */}
+              <div
+                onClick={() => setF((p) => ({ ...p, appearance: { ...(p?.appearance || {}), heroStyle: 'tabaya' } }))}
+                style={{
+                  padding: 16,
+                  borderRadius: 10,
+                  border: '2px solid ' + ((f?.appearance?.heroStyle === 'tabaya') ? '#8b5cf6' : 'rgba(255,255,255,0.1)'),
+                  background: (f?.appearance?.heroStyle === 'tabaya') ? 'rgba(139, 92, 246, 0.16)' : 'rgba(255,255,255,0.03)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: (f?.appearance?.heroStyle === 'tabaya') ? '#c4b5fd' : '#fff' }}>
+                    🏛️ Classic Full-Bleed Style (Previous)
+                  </span>
+                  {(f?.appearance?.heroStyle === 'tabaya') && <span style={{ fontSize: 11, background: '#8b5cf6', color: '#fff', padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>ACTIVE</span>}
+                </div>
+                <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
+                  • <strong style={{ color: '#e2e8f0' }}>ফুল স্ক্রিন ব্যানার:</strong> কোনো মার্জিন ছাড়া সম্পূর্ণ স্ক্রিনজুড়ে কভার ব্যানার।<br />
+                  • <strong style={{ color: '#e2e8f0' }}>টেক্সট ও বাটন ওভারলে:</strong> ব্যানারের ওপর শপ বাটন ও অফার টেক্সট।<br />
+                  • <strong style={{ color: '#e2e8f0' }}>ফুল হেডার আইকন:</strong> ওপরে সার্চ, কার্ট, ভাষা ও উইশলিস্ট আইকন।
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Slide List */}
           {sliders.length === 0 ? (

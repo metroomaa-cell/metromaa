@@ -308,6 +308,8 @@ function Header({ onSearch }: { onSearch: () => void }) {
   const { customer, openAuth } = useCustomer();
   const [menu, setMenu] = useState(false);
   const isSkin = isSkincareSite();
+  const [heroStyle, setHeroStyle] = useState<'royalman' | 'tabaya'>(() => (getCachedSettings()?.appearance?.heroStyle === 'tabaya' ? 'tabaya' : 'royalman'));
+
   const [storeName, setStoreName] = useState(() => resolveBrandName(getCachedSettings()?.storeName));
   const [logo, setLogo] = useState(() => resolveBrandLogo(getCachedSettings()?.logo));
   const [cats, setCats] = useState<{ slug: string; name: string; parentSlug?: string }[]>(() => getCachedCategories());
@@ -320,6 +322,7 @@ function Header({ onSearch }: { onSearch: () => void }) {
     getSettings().then((s) => {
       setStoreName(resolveBrandName(s.storeName));
       setLogo(resolveBrandLogo(s.logo));
+      if (s?.appearance?.heroStyle) setHeroStyle(s.appearance.heroStyle);
     }).catch(() => {});
     getCategories().then((cs) => {
       if (Array.isArray(cs)) setCats(cs);
@@ -347,7 +350,8 @@ function Header({ onSearch }: { onSearch: () => void }) {
   return (
     <>
       <AnnouncementBar />
-            <header className="tabaya-header">
+            <header className={`tabaya-header ${heroStyle === 'royalman' ? 'store-royal-header' : 'store-tabaya-header'}`}>
+
         <div className="tabaya-header-inner">
           {/* Left Column: Mobile Hamburger & Desktop Logo */}
           <div className="tabaya-header-left">
@@ -365,7 +369,6 @@ function Header({ onSearch }: { onSearch: () => void }) {
             <div
               className="tabaya-header-logo desktop-only-logo"
               onClick={() => nav('home')}
-              style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}
             >
               {logo ? (
                 <img
@@ -527,7 +530,30 @@ function Header({ onSearch }: { onSearch: () => void }) {
           </nav>
 
           {/* Right Column: Only Track Order button as requested */}
+                    {/* Right Column: Dynamic based on heroStyle (royalman vs tabaya) */}
           <div className="tabaya-header-right">
+            {/* Language Selector */}
+            <label className="header-language-wrap desktop-btn-group" aria-label="Choose website language">
+              <select className="header-language" value={language} onChange={(e) => setStoreLanguage(e.target.value as 'en' | 'bn')} aria-label="Choose website language">
+                <option value="en">EN</option>
+                <option value="bn">BN</option>
+              </select>
+            </label>
+
+            {/* Header Search Icon Button */}
+            <button
+              className="tabaya-h-btn desktop-btn-group"
+              onClick={onSearch}
+              aria-label={tr('Search collections', language)}
+              title="Search"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="6.5" />
+                <path d="m16 16 4.2 4.2" />
+              </svg>
+            </button>
+
+            {/* Tracking Button (Icon on mobile, icon + text on PC) */}
             <button
               className={`tabaya-h-btn tabaya-h-track-btn ${route.name === 'track' ? 'active' : ''}`}
               onClick={() => nav('track')}
@@ -542,39 +568,74 @@ function Header({ onSearch }: { onSearch: () => void }) {
               </svg>
               <span className="track-btn-label" style={{ fontSize: 12.5, fontWeight: 600 }}>{language === 'bn' ? 'ট্র্যাকিং' : 'Tracking'}</span>
             </button>
+
+            {/* Customer Account Button */}
+            <span className="desktop-btn-group">
+              <CustomerHeaderIcon onNavigate={nav} />
+            </span>
+
+            {/* Wishlist Button */}
+            <button
+              className="tabaya-h-btn tabaya-h-wishlist-btn desktop-btn-group"
+              onClick={() => setWishlistOpen(true)}
+              aria-label={tr('My Wishlist', language)}
+              title={tr('My Wishlist', language)}
+              style={{ position: 'relative' }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill={wishlistCount > 0 ? '#ef4444' : 'none'} stroke={wishlistCount > 0 ? '#ef4444' : 'currentColor'} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+              </svg>
+              {wishlistCount > 0 && <span className="tabaya-h-cart-badge" style={{ background: '#ef4444', color: '#fff' }}>{wishlistCount}</span>}
+            </button>
+
+            {/* Cart Button */}
+            <button
+              className="tabaya-h-btn tabaya-h-cart-btn desktop-btn-group"
+              onClick={() => setOpen(true)}
+              aria-label="Shopping Cart"
+              title="Cart"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5.5 8h13l-.9 10.5a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8L5.5 8Z" />
+                <path d="M8.5 8V6.5a3.5 3.5 0 0 1 7 0V8" />
+              </svg>
+              {count > 0 && <span className="tabaya-h-cart-badge">{count}</span>}
+            </button>
           </div>
         </div>
 
-        {/* Full-width Search Bar directly under top bar (RoyalMan style) */}
-        <div className="store-top-search-wrap">
-          <form
-            className="store-top-search-bar"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const form = e.currentTarget;
-              const input = (form.elements.namedItem('q') as HTMLInputElement)?.value?.trim();
-              if (input) {
-                go('shop?q=' + encodeURIComponent(input));
-              } else {
-                onSearch();
-              }
-            }}
-          >
-            <input
-              type="search"
-              name="q"
-              className="store-top-search-input"
-              placeholder={language === 'bn' ? 'প্রোডাক্ট খুঁজুন...' : 'Search for products'}
-              autoComplete="off"
-            />
-            <button type="submit" className="store-top-search-btn" aria-label="Search">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="6.5" />
-                <path d="m16 16 4.5 4.5" />
-              </svg>
-            </button>
-          </form>
-        </div>
+        {/* Full-width Search Bar (Shown in RoyalMan style) */}
+        {heroStyle !== 'tabaya' && (
+          <div className="store-top-search-wrap">
+            <form
+              className="store-top-search-bar"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const input = (form.elements.namedItem('q') as HTMLInputElement)?.value?.trim();
+                if (input) {
+                  go('shop?q=' + encodeURIComponent(input));
+                } else {
+                  onSearch();
+                }
+              }}
+            >
+              <input
+                type="search"
+                name="q"
+                className="store-top-search-input"
+                placeholder={language === 'bn' ? 'প্রোডাক্ট খুঁজুন...' : 'Search for products'}
+                autoComplete="off"
+              />
+              <button type="submit" className="store-top-search-btn" aria-label="Search">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="6.5" />
+                  <path d="m16 16 4.5 4.5" />
+                </svg>
+              </button>
+            </form>
+          </div>
+        )}
       </header>
 
       {/* Mobile Backdrop & Drawer Navigation */}
