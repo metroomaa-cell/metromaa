@@ -2443,7 +2443,7 @@ export function Admin() {
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [authed, nav]);
-  if (!authed) return <Login onDone={() => setAuthed(true)} />;
+
   const role = me?.role || 'owner';
   const perms = me?.permissions || {};
   const allowed = role === 'owner'
@@ -2471,6 +2471,7 @@ export function Admin() {
   const [ordersSearch, setOrdersSearch] = useState('');
 
   useEffect(() => {
+    if (!authed) return;
     fetch('/api/mail/list?folder=inbox', {
       headers: { 'x-admin-token': getTok() }
     })
@@ -2834,6 +2835,8 @@ export function Admin() {
       </div>
     );
   };
+
+  if (!authed) return <Login onDone={() => setAuthed(true)} />;
 
   return (
     <div className={`sa ${sidebarCollapsed ? 'collapsed' : ''} ${adminTheme === 'light' ? 'sa-light' : ''}`} data-admin-theme={adminTheme}>
@@ -18143,6 +18146,7 @@ function WhatsAppAdmin() {
   const [connecting, setConnecting] = useState(false);
   const [generatedCode, setGeneratedCode] = useState('');
   const [copied, setCopied] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
 
   const startSession = async (reset = false) => {
     setConnecting(true);
@@ -18347,7 +18351,6 @@ function WhatsAppAdmin() {
   };
 
   // Export Contacts to CSV for Permanent Offline Backup (Anti-Ban Protection)
-  const [exportingCsv, setExportingCsv] = useState(false);
   const exportContacts = async (targetType: string = 'all') => {
     setExportingCsv(true);
     setToast('⏳ কন্টাক্ট ডেটা প্রস্তুত করা হচ্ছে...');
