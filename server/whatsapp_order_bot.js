@@ -71,53 +71,57 @@ export function matchProductFromText(text) {
     if (candidates.length > 1) return { ambiguous: true, candidates: candidates.slice(0, 3) };
   }
 
-  // 4. Conservative name/SKU search across the live catalog. Never pick the
-  // first of several similar variants just because it happened to sort first.
+  // 4. Fuzzy & keyword search across all active catalog products
   const normText = text.toLowerCase();
   const scored = [];
 
   for (const p of catalog) {
+    if (p.soldOut || (p.stock != null && p.stock <= 0)) continue;
     const rawName = (p.name || '').toLowerCase();
     const cleanName = rawName.replace(/\([^)]*\)/g, '').trim(); // strip brackets
     const pSlug = (p.slug || '').toLowerCase();
     const pSku = (p.sku || '').toLowerCase();
 
-    // Exact SKU / slug are safe identifiers, including sold-out products.
-    if (pSku && pSku.length >= 3 && normText.includes(pSku)) {
-      scored.push({ product: p, score: 1000, exact: true });
-      continue;
-    }
-    if (pSlug && pSlug.length >= 4 && normText.includes(pSlug)) {
-      scored.push({ product: p, score: 1000, exact: true });
-      continue;
-    }
-
     // Direct match with full or cleaned name
     if (normText.includes(rawName)) {
-      scored.push({ product: p, score: 900 + rawName.length, exact: true });
+      scored.push({ product: p, score: rawName.length * 2 });
       continue;
     }
     if (cleanName.length > 5 && normText.includes(cleanName)) {
-      scored.push({ product: p, score: 850 + cleanName.length, exact: false });
+      scored.push({ product: p, score: cleanName.length * 1.8 });
+      continue;
+    }
+    if (pSku && pSku.length >= 3 && normText.includes(pSku)) {
+      scored.push({ product: p, score: pSku.length * 2.5 });
       continue;
     }
 
-    const tokens = cleanName.split(/[^\p{L}\p{N}]+/u).filter((token) => token.length >= 2);
-    const matched = tokens.filter((token) => normText.includes(token));
-    const distinctive = matched.filter((token) => token.length >= 3);
-    if (distinctive.length >= 2 || (tokens.length === 1 && distinctive.length === 1)) {
-      const coverage = distinctive.length / Math.max(1, tokens.filter((token) => token.length >= 3).length);
-      scored.push({ product: p, score: Math.round(100 * coverage + distinctive.reduce((sum, token) => sum + Math.min(token.length, 16), 0)), exact: false });
+    // Specific aliases & product signals
+    let aliasScore = 0;
+    if ((pSku === 'll6.7' || cleanName.includes('৬.৭')) && (normText.includes('৬.৭') || normText.includes('6.7') || (normText.includes('৪') && normText.includes('৫.৫')))) {
+      aliasScore = 80;
+    } else if ((pSku === 'll8' || cleanName.includes('৮')) && (normText.includes('সাইজ ৮') || normText.includes('size 8') || normText.includes('৮ ইঞ্চি') || normText.includes('8 inch') || normText.includes('ll8'))) {
+      aliasScore = 85;
+    } else if ((pSku === 'll5.7' || cleanName.includes('৫.৭')) && (normText.includes('৫.৭') || normText.includes('5.7') || normText.includes('৩.৫'))) {
+      aliasScore = 80;
+    } else if ((cleanName.includes('belt') || pSku === 'bc') && (normText.includes('belt') || normText.includes('বেল্ট'))) {
+      aliasScore = 90;
+    } else if (cleanName.includes('pleasure cup') && (normText.includes('cup') || normText.includes('কাপ') || normText.includes('softcore'))) {
+      aliasScore = 90;
+    } else if (cleanName.includes('dildo') && (normText.includes('dildo') || normText.includes('ডিলডো') || normText.includes('koxten'))) {
+      aliasScore = 90;
+    } else if ((normText.includes('love lock') || normText.includes('lovelock') || normText.includes('লাভ লক') || normText.includes('ম্যাজিক কনডম')) && (pSku === 'll6.7' || cleanName.includes('৬.৭'))) {
+      aliasScore = 75; // Default love lock variant
+    }
+
+    if (aliasScore > 0) {
+      scored.push({ product: p, score: aliasScore });
     }
   }
 
   if (scored.length > 0) {
     scored.sort((a, b) => b.score - a.score);
-    const best = scored[0];
-    if (best.exact) return { product: best.product, confidence: 1.0, exact: true };
-    const nearMatches = scored.filter((item) => best.score - item.score <= Math.max(8, best.score * 0.12));
-    if (nearMatches.length > 1) return { ambiguous: true, candidates: nearMatches.slice(0, 4).map((item) => item.product) };
-    if (best.score >= 110) return { product: best.product, confidence: 0.78, exact: false };
+    return { product: scored[0].product, confidence: 0.9, exact: false };
   }
 
   return null;
@@ -217,7 +221,7 @@ export async function handleWhatsAppAutoOrderFlow({ m, rawText, remoteJid, sende
   if (!rawText || !remoteJid) return false;
 
   const settings = getSettings();
-  const storeName = settings.storeName || 'SECRATE';
+  const storeName = settings.storeName || 'METRROMA';
   const delInside = Number(settings.deliveryInside ?? 60);
   const delOutside = Number(settings.deliveryOutside ?? 120);
 
@@ -310,7 +314,7 @@ export async function handleWhatsAppAutoOrderFlow({ m, rawText, remoteJid, sende
 📍 ডেলিভারি ঠিকানা: ${existingDraft.address}
 ${phoneDisplay}
 
-🚚 লাইভ ট্র্যাকিং লিংক: https://secrate.shop/track?id=${orderId}
+🚚 লাইভ ট্র্যাকিং লিংক: https://metrroma.com/track?id=${orderId}
 
 আমাদের টিম দ্রুত পার্সেল প্রস্তুত করে সম্পূর্ণ গোপনীয় ও সুরক্ষিত প্যাকেজিংয়ে কুরিয়ারে হস্তান্তর করবে। ${storeName}-এর সাথে থাকার জন্য ধন্যবাদ! 🌸`;
 
@@ -450,7 +454,7 @@ ${phoneDisplay}
   });
 
   if (recentOrdersFromPhone.length >= 2) {
-    const limitMsg = `সম্মানিত Sir/Mam! 🌸\nআপনার এই নম্বর থেকে গত ২৪ ঘণ্টায় ইতোমধ্যে ${recentOrdersFromPhone.length}টি অর্ডার প্রক্রিয়াধীন রয়েছে।\n\nভুয়া বা অনিচ্ছাকৃত ডুপ্লিকেট অর্ডার প্রতিরোধে একই নম্বর থেকে দিনে সর্বোচ্চ ২টি অর্ডার সীমাবদ্ধ রাখা হয়েছে।\nপূর্বের অর্ডার ট্র্যাক করতে: https://secrate.shop/track\nবিশেষ প্রয়োজনে আমাদের হটলাইনে যোগাযোগ করার অনুরোধ রইল। ধন্যবাদ! 💖\n— ${storeName}`;
+    const limitMsg = `সম্মানিত Sir/Mam! 🌸\nআপনার এই নম্বর থেকে গত ২৪ ঘণ্টায় ইতোমধ্যে ${recentOrdersFromPhone.length}টি অর্ডার প্রক্রিয়াধীন রয়েছে।\n\nভুয়া বা অনিচ্ছাকৃত ডুপ্লিকেট অর্ডার প্রতিরোধে একই নম্বর থেকে দিনে সর্বোচ্চ ২টি অর্ডার সীমাবদ্ধ রাখা হয়েছে।\nপূর্বের অর্ডার ট্র্যাক করতে: https://metrroma.com/track\nবিশেষ প্রয়োজনে আমাদের হটলাইনে যোগাযোগ করার অনুরোধ রইল। ধন্যবাদ! 💖\n— ${storeName}`;
     await simulateHumanTypingAndSend(remoteJid, limitMsg, customerPhone, null, 'wa_order_rate_limit');
     return true;
   }

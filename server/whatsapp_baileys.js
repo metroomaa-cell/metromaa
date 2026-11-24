@@ -1,12 +1,10 @@
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
-import { getWhatsAppSettings, saveWhatsAppSettings, formatWhatsAppMessage, registerBaileysSender, isPhoneOptedOut, markPhoneOptedOut } from './whatsapp_engine.js';
+import { existsSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
+import { getWhatsAppSettings, saveWhatsAppSettings, formatWhatsAppMessage, registerBaileysSender } from './whatsapp_engine.js';
 import { handleWhatsAppAutoOrderFlow } from './whatsapp_order_bot.js';
 import { handleWhatsAppVisionOrInquiryFlow, isWhatsAppImageMessage, recentCustomerPhotos, recentProductInquiries } from './whatsapp_vision_bot.js';
-import { getWaAiConfig, handleSmartWhatsAppAI, isWhatsAppAudioMessage, isAiPausedForChat, pauseAiForChat } from './whatsapp_ai_agent.js';
-import { getPersistentDataDirectory, getOrders, saveOrders, updateOrder, upsertWaChatContact, getWaChatContacts, getWaMessages, pruneWhatsAppInboxMedia, syncWhatsAppSessionContacts, appendWaMessage, appendWaMessages, updateWaMessageDeliveryStatus, updateWaMessageMedia, normalizeWhatsAppInboxLidAliases } from './store.js';
+import { getPersistentDataDirectory, getOrders, saveOrders, updateOrder, upsertWaChatContact, getWaChatContacts, syncWhatsAppSessionContacts } from './store.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 
@@ -33,26 +31,9 @@ let connectedPhone = '';
 let connectionError = null;
 let consecutiveFailures = 0;
 const recentMessageMap = new Map(); // id -> message proto
-const processedIncomingMessageIds = new Map(); // message id -> processed timestamp
-const profilePictureCache = new Map();
-const profilePictureInflight = new Map();
-async function mappedPnJidForLid(lidJid) {
-  const lid = String(lidJid || '').split('@')[0].split(':')[0];
-  const reversePath = join(AUTH_DIR, `lid-mapping-${lid}_reverse.json`);
-  if (existsSync(reversePath)) {
-    try {
-      const stored = JSON.parse(readFileSync(reversePath, 'utf8'));
-      if (typeof stored === 'string' && stored) return stored.includes('@') ? stored : `${stored.replace(/\D/g, '')}@s.whatsapp.net`;
-    } catch (_) {}
-  }
-  try { return await sock?.signalRepository?.lidMapping?.getPNForLID(lidJid).catch(() => null) || null; }
-  catch (_) { return null; }
-}
 const msgRetryCounterCache = new Map();
 let reconnectTimer = null;
 const botSentMessageIds = new Set();
-const recentAutomatedReplies = new Map(); // recipient + exact reply -> send timestamp
-const recentAutomatedReplyEvents = new Map(); // recipient + event -> cooldown timestamp
 // Active Human Representative Takeover Tracker: remoteJid/phone -> timestamp
 export const humanRepresentativeActiveChats = new Map();
 // Seed active chat from recent representative interaction so bot stays silent immediately
@@ -75,7 +56,6 @@ async function safeSendMessage(targetJid, content) {
 }
 
 let makeWASocket = null;
-let downloadMediaMessage = null;
 let DisconnectReason = null;
 let useMultiFileAuthState = null;
 let fetchLatestBaileysVersion = null;
@@ -89,7 +69,6 @@ async function loadBaileysModules() {
   try {
     const baileys = await import('@whiskeysockets/baileys');
     makeWASocket = baileys.default || baileys.makeWASocket;
-    downloadMediaMessage = baileys.downloadMediaMessage;
     DisconnectReason = baileys.DisconnectReason;
     useMultiFileAuthState = baileys.useMultiFileAuthState;
     fetchLatestBaileysVersion = baileys.fetchLatestBaileysVersion;
@@ -107,64 +86,6 @@ async function loadBaileysModules() {
     connectionError = 'Baileys not installed: ' + err.message;
     console.warn('[Baileys load warning]:', err.message);
     return false;
-  }
-}
-
-function unwrapWhatsAppMessage(message) {
-  let current = message?.message || message || {};
-  for (let depth = 0; depth < 8; depth++) {
-    const wrapped = current.ephemeralMessage?.message || current.viewOnceMessage?.message || current.viewOnceMessageV2?.message || current.viewOnceMessageV2Extension?.message || current.documentWithCaptionMessage?.message || current.deviceSentMessage?.message;
-    if (!wrapped) break;
-    current = wrapped;
-  }
-  return current;
-}
-
-function describeWhatsAppMedia(message, mediaType) {
-  const body = unwrapWhatsAppMessage(message);
-  const node = mediaType === 'image' ? body.imageMessage
-    : mediaType === 'audio' ? body.audioMessage
-      : mediaType === 'video' ? body.videoMessage
-        : body.documentMessage || body.stickerMessage;
-  if (!node) return null;
-  const mimeType = String(node.mimetype || (mediaType === 'image' ? 'image/jpeg' : mediaType === 'audio' ? 'audio/ogg' : mediaType === 'video' ? 'video/mp4' : 'application/octet-stream')).toLowerCase().split(';')[0];
-  const extensionByMime = {
-    'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif',
-    'video/mp4': 'mp4', 'video/3gpp': '3gp', 'video/quicktime': 'mov',
-    'audio/ogg': 'ogg', 'audio/opus': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp4': 'mp4', 'audio/webm': 'webm', 'audio/wav': 'wav', 'audio/amr': 'amr',
-    'application/pdf': 'pdf', 'text/plain': 'txt',
-    'application/vnd.android.package-archive': 'apk',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
-  };
-  const ext = extensionByMime[mimeType];
-  if (!ext) return null;
-  const suppliedName = String(node.fileName || node.fileNameHint || '').replace(/[\\/\0-\x1f]/g, '').slice(0, 120);
-  return { mimeType, fileName: suppliedName || `whatsapp-${mediaType}-${Date.now()}.${ext}`, ext };
-}
-
-async function persistWhatsAppInboxMedia(message, mediaType) {
-  if (!downloadMediaMessage || !sock || !['image', 'audio', 'video', 'document'].includes(mediaType)) return {};
-  const media = describeWhatsAppMedia(message, mediaType);
-  if (!media) return {};
-  try {
-    const buffer = await downloadMediaMessage(message, 'buffer', {}, {
-      logger: pino ? pino({ level: 'silent' }) : console,
-      reuploadRequest: sock.updateMediaMessage,
-    });
-    if (!Buffer.isBuffer(buffer) || buffer.length === 0 || buffer.length > 16 * 1024 * 1024) {
-      console.warn(`[WhatsApp Inbox] Skipped ${mediaType}: file is empty or exceeds 16 MB.`);
-      return {};
-    }
-    const directory = join(getPersistentDataDirectory(), 'uploads', 'wa-inbox');
-    mkdirSync(directory, { recursive: true, mode: 0o700 });
-    const fileName = `${randomUUID()}.${media.ext}`;
-    writeFileSync(join(directory, fileName), buffer, { flag: 'wx', mode: 0o600 });
-    pruneWhatsAppInboxMedia();
-    return { mediaUrl: `/admin/whatsapp/inbox/media/${fileName}`, fileName: media.fileName, mimeType: media.mimeType };
-  } catch (error) {
-    console.warn(`[WhatsApp Inbox] Could not download ${mediaType}:`, error?.message || error);
-    return {};
   }
 }
 
@@ -304,8 +225,7 @@ export async function startWhatsAppSocket(forceNew = false) {
         consecutiveFailures++;
 
         const isLoggedOut = DisconnectReason && statusCode === DisconnectReason.loggedOut;
-        // 428 is a normal connection-closed signal in Baileys; don't erase a valid linked session for it.
-        const isCorruptSession = statusCode === 401 || statusCode === 403 || statusCode === 411 || statusCode === 405;
+        const isCorruptSession = statusCode === 428 || statusCode === 401 || statusCode === 403 || statusCode === 411 || statusCode === 405;
 
         if (isLoggedOut || (isCorruptSession && consecutiveFailures >= 2)) {
           console.warn(`[Baileys] Session invalidated by WhatsApp (code: ${statusCode}). Resetting session storage to allow fresh scan.`);
@@ -336,13 +256,6 @@ export async function startWhatsAppSocket(forceNew = false) {
           device: `WhatsApp Web (${sock?.user?.name || 'Linked Device'})`,
         });
 
-        try {
-          const normalized = normalizeWhatsAppInboxLidAliases();
-          if (normalized.contacts || normalized.messages) console.log(`[WhatsApp Inbox] Merged ${normalized.contacts} duplicate contact alias(es) and normalized ${normalized.messages} message(s).`);
-        } catch (error) {
-          console.warn('[WhatsApp Inbox] Contact alias normalization skipped:', error?.message || error);
-        }
-
         console.log(`[Baileys] WhatsApp Web connection OPEN! Authenticated phone: ${phone}`);
         // Asynchronously sync all historical session contacts to permanent storage
         try {
@@ -357,8 +270,6 @@ export async function startWhatsAppSocket(forceNew = false) {
       const messages = upsert?.messages || [];
       console.log(`[Baileys messages.upsert] Event received (type: ${upsert?.type}, count: ${messages.length})`);
       for (const m of messages) {
-        // Save sync/append messages into the Inbox, but only notify events may run customer automation.
-        const shouldRunAutomation = upsert?.type === 'notify';
         console.log('[Baileys raw msg]:', JSON.stringify({ fromMe: m?.key?.fromMe, jid: m?.key?.remoteJid, keys: m?.message ? Object.keys(m.message) : [], stub: m?.messageStubType }));
         if (m?.key?.id && m.message) {
           recentMessageMap.set(m.key.id, m.message);
@@ -367,19 +278,8 @@ export async function startWhatsAppSocket(forceNew = false) {
             recentMessageMap.delete(first);
           }
         }
-        if (shouldRunAutomation && !m?.key?.fromMe && m?.key?.id) {
-          const now = Date.now();
-          for (const [id, at] of processedIncomingMessageIds) {
-            if (now - at > 10 * 60 * 1000) processedIncomingMessageIds.delete(id);
-          }
-          if (processedIncomingMessageIds.has(m.key.id)) continue;
-          processedIncomingMessageIds.set(m.key.id, now);
-          if (processedIncomingMessageIds.size > 2000) {
-            processedIncomingMessageIds.delete(processedIncomingMessageIds.keys().next().value);
-          }
-        }
         try {
-          await handleIncomingWhatsAppBotMessage(m, { shouldRunAutomation });
+          await handleIncomingWhatsAppBotMessage(m);
         } catch (err) {
           console.error('[Baileys incoming msg error]:', err?.message || err);
         }
@@ -391,17 +291,17 @@ export async function startWhatsAppSocket(forceNew = false) {
       for (const u of updates) {
         if (u?.update?.message) {
           if (u.key?.id) recentMessageMap.set(u.key.id, u.update.message);
-        }
-        if (u?.key?.id && Number.isFinite(Number(u?.update?.status))) {
-          const statusCode = Number(u.update.status);
-          if (statusCode >= 4) updateWaMessageDeliveryStatus(u.key.id, 'read');
-          else if (statusCode >= 3) updateWaMessageDeliveryStatus(u.key.id, 'delivered');
+          try {
+            await handleIncomingWhatsAppBotMessage({ key: u.key, message: u.update.message });
+          } catch (err) {
+            console.error('[Baileys msg update error]:', err?.message || err);
+          }
         }
       }
     });
 
     // Capture & Sync All Historical Chats and Contacts from WhatsApp Multi-Device
-    sock.ev.on('messaging-history.set', async ({ chats, contacts, messages }) => {
+    sock.ev.on('messaging-history.set', ({ chats, contacts, messages }) => {
       console.log(`[Baileys History Sync] Syncing historical contacts: ${chats?.length || 0} chats, ${contacts?.length || 0} contacts, ${messages?.length || 0} messages`);
       try {
         if (Array.isArray(contacts)) {
@@ -409,7 +309,7 @@ export async function startWhatsAppSocket(forceNew = false) {
             if (c.id && c.id.endsWith('@s.whatsapp.net')) {
               const raw = c.id.split('@')[0];
               const name = c.name || c.notify || c.verifiedName || '';
-              upsertWaChatContact({ phone: raw, remoteJid: c.id, name, isIncoming: true });
+              upsertWaChatContact({ phone: raw, name, isIncoming: true });
             }
           }
         }
@@ -418,54 +318,20 @@ export async function startWhatsAppSocket(forceNew = false) {
             if (ch.id && ch.id.endsWith('@s.whatsapp.net')) {
               const raw = ch.id.split('@')[0];
               const name = ch.name || '';
-              upsertWaChatContact({ phone: raw, remoteJid: ch.id, name, isIncoming: true });
+              upsertWaChatContact({ phone: raw, name, isIncoming: true });
             }
           }
         }
         if (Array.isArray(messages)) {
-          const inboxMessages = [];
-          let recoveredMediaCount = 0;
-          const storedMediaById = new Map(getWaMessages().filter((item) => item.waMessageId && item.mediaUrl).map((item) => [item.waMessageId, item]));
           for (const m of messages) {
             const jid = m.key?.remoteJid || '';
-            if (jid && !jid.includes('@g.us') && !jid.includes('status@broadcast')) {
-              const raw = resolvePhoneFromJid(jid) || jid.split('@')[0].split(':')[0];
+            if (jid && jid.endsWith('@s.whatsapp.net')) {
+              const raw = jid.split('@')[0];
               const pushName = m.pushName || '';
-              const txt = extractMessageText(m.message || {});
-              upsertWaChatContact({ phone: raw, remoteJid: jid, name: pushName, lastMessage: txt, isIncoming: !m.key?.fromMe });
-              const body = m.message?.ephemeralMessage?.message || m.message?.viewOnceMessage?.message || m.message?.viewOnceMessageV2?.message || m.message?.documentWithCaptionMessage?.message || m.message || {};
-              const mediaType = isWhatsAppImageMessage(m) ? 'image'
-                : isWhatsAppAudioMessage(m) ? 'audio'
-                  : body.videoMessage ? 'video'
-                    : body.documentMessage || body.stickerMessage ? 'document'
-                      : 'text';
-              if (txt || mediaType !== 'text') {
-                let media = {};
-                const storedMessage = m.key?.id ? storedMediaById.get(m.key.id) : null;
-                if (mediaType !== 'text' && storedMessage) {
-                  media = { mediaUrl: storedMessage.mediaUrl, fileName: storedMessage.fileName, mimeType: storedMessage.mimeType };
-                } else if (mediaType !== 'text' && recoveredMediaCount < 20) {
-                  recoveredMediaCount += 1;
-                  media = await persistWhatsAppInboxMedia(m, mediaType);
-                }
-                const stamp = typeof m.messageTimestamp?.toNumber === 'function' ? m.messageTimestamp.toNumber() : Number(m.messageTimestamp || 0);
-                inboxMessages.push({
-                  phone: raw,
-                  remoteJid: jid,
-                  direction: m.key?.fromMe ? 'out' : 'in',
-                  text: txt || (mediaType === 'image' ? '[Photo]' : mediaType === 'video' ? '[Video]' : mediaType === 'audio' ? '[Voice Note]' : '[Attachment]'),
-                  mediaType,
-                  ...media,
-                  senderName: pushName,
-                  waMessageId: m.key?.id || '',
-                  deliveryStatus: m.key?.fromMe ? 'sent' : 'received',
-                  timestamp: stamp > 0 ? new Date(stamp * 1000).toISOString() : new Date().toISOString(),
-                });
-              }
+              const txt = extractTextMessage(m.message || {});
+              upsertWaChatContact({ phone: raw, name: pushName, lastMessage: txt, isIncoming: !m.key?.fromMe });
             }
           }
-          const imported = appendWaMessages(inboxMessages);
-          if (imported.added) console.log(`[Baileys History Sync] Imported ${imported.added} conversation message(s) into Inbox.`);
         }
       } catch (e) {
         console.warn('[Baileys History Sync Note]:', e?.message || e);
@@ -478,7 +344,7 @@ export async function startWhatsAppSocket(forceNew = false) {
         if (c.id && c.id.endsWith('@s.whatsapp.net')) {
           const raw = c.id.split('@')[0];
           const name = c.name || c.notify || c.verifiedName || '';
-          upsertWaChatContact({ phone: raw, remoteJid: c.id, name, isIncoming: true });
+          upsertWaChatContact({ phone: raw, name, isIncoming: true });
         }
       }
     });
@@ -489,40 +355,7 @@ export async function startWhatsAppSocket(forceNew = false) {
         if (ch.id && ch.id.endsWith('@s.whatsapp.net')) {
           const raw = ch.id.split('@')[0];
           const name = ch.name || '';
-          upsertWaChatContact({ phone: raw, remoteJid: ch.id, name, isIncoming: true });
-        }
-      }
-    });
-
-    // Keep incoming WhatsApp calls ringing on the user's linked WhatsApp Web/desktop devices.
-    sock.ev.on('call', async (calls) => {
-      if (!Array.isArray(calls)) return;
-      console.log(`[Baileys Call Event] Received ${calls.length} call signal(s)`);
-      for (const call of calls) {
-        try {
-          console.log(`[Baileys Call] id=${call.id}, from=${call.from}, status=${call.status}, isVideo=${call.isVideo}`);
-          // 'offer' indicates an incoming ringing call
-          if (call.status === 'offer') {
-            const callerJid = call.from;
-            if (!callerJid || callerJid.includes('@g.us')) continue; // Ignore group calls
-            const rawDigits = resolvePhoneFromJid(callerJid) || (callerJid.split('@')[0] || '').replace(/\D/g, '');
-            const callKind = call.isVideo ? 'video' : 'voice';
-            upsertWaChatContact({ phone: rawDigits, remoteJid: callerJid, name: '', lastMessage: `Incoming ${callKind} call`, isIncoming: true });
-            appendWaMessage({
-              phone: rawDigits,
-              remoteJid: callerJid,
-              direction: 'in',
-              text: call.isVideo
-                ? '📹 Incoming WhatsApp video call · Answer from WhatsApp Web on your PC'
-                : '📞 Incoming WhatsApp voice call · Answer from WhatsApp Web on your PC',
-              mediaType: 'call',
-              byStaff: 'customer_call',
-              waMessageId: call.id ? `call_${call.id}` : '',
-            });
-            console.log(`[Baileys Call] Leaving ${callKind} call from ${callerJid} ringing on linked WhatsApp devices.`);
-          }
-        } catch (callErr) {
-          console.error('[Baileys Call Processing Error]:', callErr?.message || callErr);
+          upsertWaChatContact({ phone: raw, name, isIncoming: true });
         }
       }
     });
@@ -602,66 +435,69 @@ function extractMessageText(msg) {
     ''
   ).trim();
 
+  if (!text && m.reactionMessage?.text) {
+    const rx = m.reactionMessage.text;
+    if (rx === '👍' || rx === '❤️' || rx === '🔥' || rx === '✅') {
+      text = '1';
+    } else if (rx === '👎' || rx === '❌') {
+      text = '2';
+    }
+  }
+
   return text;
 }
 
 function classifyCustomerReply(rawText) {
   const text = String(rawText || '').toLowerCase().trim();
   if (!text) return null;
-  // This flow explicitly asks customers to reply 1 or 2. Free-form yes/no or
-  // text containing a number must never change an order's status.
-  if (/^(?:1|১)(?:[.!।)\]|️⃣])?(?:\s+(?:#?DOT-[A-F0-9]+|#[A-F0-9]{6,}))?$/i.test(text)) return 'CONFIRM';
-  if (/^(?:2|২)(?:[.!।)\]|️⃣])?(?:\s+(?:#?DOT-[A-F0-9]+|#[A-F0-9]{6,}))?$/i.test(text)) return 'CANCEL';
+
+  // Single digit checks (English or Bengali)
+  if (text === '1' || text === '১' || text === '1.' || text === '১.' || text === '1️⃣' || text === '১)' || text === '১|' || text === '1|') return 'CONFIRM';
+  if (text === '2' || text === '২' || text === '2.' || text === '২.' || text === '2️⃣' || text === '২)' || text === '২|' || text === '2|') return 'CANCEL';
+
+  // Direct prefix match: e.g. "1 confirm" or "2 cancel"
+  if (/^1\b|^১\b/.test(text)) return 'CONFIRM';
+  if (/^2\b|^২\b/.test(text)) return 'CANCEL';
+
+  // Cancel keywords
+  const cancelKeywords = [
+    'cancel', 'cancle', 'cancelled', 'বাতিল', 'বাতিল করুন', 'ক্যানসেল',
+    'অর্ডার বাতিল', 'লাগবে না', 'নেব না', 'নিব না'
+  ];
+  for (const kw of cancelKeywords) {
+    if (text === kw || text.includes(kw)) return 'CANCEL';
+  }
+
+  // Confirm keywords
+  const confirmKeywords = [
+    'confirm', 'conferm', 'confirmed', 'approve', 'approved', 'yes', 'yep', 'yeah', 'okay', 'ok',
+    'কনফার্ম', 'কনফার্ম করুন', 'অর্ডার কনফার্ম', 'হ্যাঁ', 'হাঁ', 'হুম',
+    'পাঠিয়ে দিন', 'পাঠান', 'নিব', 'নেব', 'রাখব', 'ঠিক আছে'
+  ];
+  for (const kw of confirmKeywords) {
+    if (text === kw || text.includes(kw)) return 'CONFIRM';
+  }
+
   return null;
 }
 
-async function handleIncomingWhatsAppBotMessage(m, { shouldRunAutomation = true } = {}) {
+async function handleIncomingWhatsAppBotMessage(m) {
   if (!m || !m.key) return;
   const remoteJid = m.key.remoteJid || '';
   if (!remoteJid || remoteJid.includes('@g.us') || remoteJid.includes('status@broadcast')) return;
 
   // Automatically capture everyone who ever chats or messages
   try {
-    const raw = resolvePhoneFromJid(remoteJid) || remoteJid.split('@')[0];
+    const raw = remoteJid.split('@')[0];
     const pushName = m.pushName || '';
-    const txt = extractMessageText(m.message || {});
+    const txt = extractTextMessage(m.message || {});
     upsertWaChatContact({
       phone: raw,
-      remoteJid,
       name: pushName,
       lastMessage: txt,
       isIncoming: !m.key?.fromMe,
     });
-    const body = unwrapWhatsAppMessage(m);
-    const mediaType = isWhatsAppImageMessage(m) ? 'image'
-      : isWhatsAppAudioMessage(m) ? 'audio'
-        : body.videoMessage ? 'video'
-          : body.documentMessage || body.stickerMessage ? 'document'
-            : 'text';
-    if (txt || mediaType !== 'text') {
-      const storedMessage = m.key?.id ? getWaMessages().find((item) => item.waMessageId === m.key.id && item.mediaUrl) : null;
-      const media = storedMessage
-        ? { mediaUrl: storedMessage.mediaUrl, fileName: storedMessage.fileName, mimeType: storedMessage.mimeType }
-        : await persistWhatsAppInboxMedia(m, mediaType);
-      const savedMessage = appendWaMessage({
-        phone: raw,
-        remoteJid,
-        direction: m.key?.fromMe ? 'out' : 'in',
-        text: txt || (mediaType === 'image' ? '[Photo]' : mediaType === 'video' ? '[Video]' : mediaType === 'audio' ? '[Voice Note]' : '[Attachment]'),
-        mediaType,
-        ...media,
-        senderName: pushName,
-        waMessageId: m.key?.id || '',
-        deliveryStatus: m.key?.fromMe ? 'sent' : 'received',
-      });
-      if (savedMessage?.waMessageId && media.mediaUrl) updateWaMessageMedia(savedMessage.waMessageId, media);
-      if (savedMessage) console.log(`[WhatsApp Inbox] Captured ${m.key?.fromMe ? 'outgoing' : 'incoming'} ${mediaType} message.`);
-    }
-  } catch (captureError) {
-    console.error('[WhatsApp Inbox capture error]:', captureError?.message || captureError);
-  }
-
-  if (!shouldRunAutomation) return;
+  } catch (_) {}
 
   // Ignore messages sent by our own bot code
   if (m.key.id && botSentMessageIds.has(m.key.id)) {
@@ -680,8 +516,7 @@ async function handleIncomingWhatsAppBotMessage(m, { shouldRunAutomation = true 
       humanRepresentativeActiveChats.set(remoteJid, Date.now());
       const p = resolvePhoneFromJid(remoteJid);
       if (p) humanRepresentativeActiveChats.set(p, Date.now());
-      pauseAiForChat(remoteJid, p, 'human_whatsapp_reply');
-      console.log(`[Representative Active] Human staff spoke with ${remoteJid} (${p || 'no-phone'}). Automation paused for ${getWaAiConfig().pauseMinutes} minutes.`);
+      console.log(`[Representative Active] Human staff spoke with ${remoteJid} (${p || 'no-phone'}). Automated bot paused for 2 hours in this chat.`);
       return;
     }
   }
@@ -691,26 +526,9 @@ async function handleIncomingWhatsAppBotMessage(m, { shouldRunAutomation = true 
     phone = resolvePhoneFromJid(m.key.participant);
   }
 
-  const rawText = extractMessageText(m);
-  // Opt-out always takes precedence over staff takeover or any automation pause.
-  const cleanReplyText = (rawText || '').trim().toLowerCase();
-  if (['stop', 'unsubscribe', 'থামুন', 'বন্ধ', 'মেসেজ দিয়েন না', 'আর মেসেজ দিয়েন না', 'বন্ধ করুন'].includes(cleanReplyText)) {
-    markPhoneOptedOut(phone || remoteJid.split('@')[0]);
-    await simulateHumanTypingAndSend(remoteJid, 'আপনার অনুরোধ অনুযায়ী Secrate থেকে স্বয়ংক্রিয় আপডেট পাঠানো বন্ধ করা হয়েছে। যেকোনো প্রয়োজনে আমাদের জানাতে পারেন। ধন্যবাদ! 🌸');
-    return;
-  }
-
-  // Honor persisted human takeover and escalation pauses before any bot workflow runs.
-  const automationPause = isAiPausedForChat(remoteJid, phone);
-  if (automationPause) {
-    console.log(`[Bot Silenced] Automation paused for ${remoteJid} (${automationPause.reason}) until the handoff window expires.`);
-    return;
-  }
-
   // If human representative has spoken in this chat within the last 2 hours, STAY COMPLETELY SILENT!
   const lastStaffTime = humanRepresentativeActiveChats.get(remoteJid) || (phone ? humanRepresentativeActiveChats.get(phone) : 0);
-  const handoffPauseMs = Math.max(5, Math.min(240, Number(getWaAiConfig().pauseMinutes) || 45)) * 60 * 1000;
-  if (lastStaffTime && (Date.now() - lastStaffTime < handoffPauseMs)) {
+  if (lastStaffTime && (Date.now() - lastStaffTime < 2 * 60 * 60 * 1000)) {
     const elapsedMins = Math.round((Date.now() - lastStaffTime) / 60000);
     console.log(`[Bot Silenced] Human representative is actively talking with ${remoteJid} (${elapsedMins}m ago). Automated bot will NOT interfere.`);
     return;
@@ -721,15 +539,14 @@ async function handleIncomingWhatsAppBotMessage(m, { shouldRunAutomation = true 
   if (quotedParticipant && (quotedParticipant.includes(myJidNum) || quotedParticipant.includes('8801916691768'))) {
     humanRepresentativeActiveChats.set(remoteJid, Date.now());
     if (phone) humanRepresentativeActiveChats.set(phone, Date.now());
-    pauseAiForChat(remoteJid, phone, 'customer_replied_to_staff');
     console.log(`[Bot Silenced] Customer in ${remoteJid} is replying to representative's quoted message. Bot will NOT interfere.`);
     return;
   }
 
+  const rawText = extractMessageText(m);
   const isImage = isWhatsAppImageMessage(m);
-  const isAudio = isWhatsAppAudioMessage(m);
-  console.log(`[Baileys Bot Message] From JID: ${remoteJid}, isImage: ${isImage}, isAudio: ${isAudio}, Text: "${rawText}"`);
-  if (!rawText && !isImage && !isAudio) return;
+  console.log(`[Baileys Bot Message] From JID: ${remoteJid}, isImage: ${isImage}, Text: "${rawText}"`);
+  if (!rawText && !isImage) return;
 
   const intent = classifyCustomerReply(rawText);
 
@@ -764,25 +581,6 @@ async function handleIncomingWhatsAppBotMessage(m, { shouldRunAutomation = true 
     console.error('[WhatsApp Vision/Inquiry Bot Error]:', err?.message || err);
   }
 
-  // 3. Smart Gemini AI Sales & Support Agent (FAQ, Order Tracking, Chat-to-Order, Voice Notes, Escalation)
-  if (!intent || isAudio) {
-    try {
-      const handledBySmartAi = await handleSmartWhatsAppAI({
-        sock,
-        m,
-        rawText,
-        remoteJid,
-        senderPhone: phone,
-        pushName: m.pushName || '',
-        isAudio,
-        simulateHumanTypingAndSend,
-      });
-      if (handledBySmartAi) return;
-    } catch (err) {
-      console.error('[Smart WA AI Bot Error]:', err?.message || err);
-    }
-  }
-
   if (!intent) return; // Do not auto-respond to free-form chat to avoid interfering with manual staff chats
 
   console.log(`[Baileys Bot Message] Detected Intent: ${intent}, Resolved Phone: ${phone || 'NONE'}`);
@@ -794,33 +592,45 @@ async function handleIncomingWhatsAppBotMessage(m, { shouldRunAutomation = true 
   const orders = getOrders();
   let targetOrder = null;
 
-  const quoted = m.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-  const quotedText = quoted ? extractMessageText({ message: quoted }) : '';
-  const eligibleOrders = phone && phone.length >= 10
-    ? orders.filter((o) => {
-        if (!o.customer?.phone || String(o.status || '').toLowerCase() !== 'pending' || !o.nightConfirmationSent) return false;
-        const orderPhone = String(o.customer.phone).replace(/\D/g, '');
-        if (!orderPhone.endsWith(phone.slice(-10))) return false;
-        const sentAt = new Date(o.nightConfirmationSentAt || 0).getTime();
-        return Number.isFinite(sentAt) && Date.now() - sentAt >= 0 && Date.now() - sentAt <= 12 * 60 * 60 * 1000;
-      })
-    : [];
+  if (phone && phone.length >= 10) {
+    const last10 = phone.slice(-10);
+    const customerOrders = orders.filter((o) => {
+      if (!o.customer?.phone) return false;
+      const oPhone = String(o.customer.phone).replace(/\D/g, '');
+      return oPhone.endsWith(last10);
+    });
+    customerOrders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    targetOrder = customerOrders.find((o) => ['pending', 'hold'].includes(o.status)) || customerOrders[0];
+  }
 
-  const confirmationText = `${rawText}\n${quotedText}`;
-  const explicitOrder = eligibleOrders.find((o) => {
-    const id = String(o.id || '').trim();
-    if (!id) return false;
-    const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`(?:^|[^A-Za-z0-9])#?${escapedId}(?:$|[^A-Za-z0-9])`, 'i').test(confirmationText);
-  });
-  if (explicitOrder) {
-    targetOrder = explicitOrder;
-  } else if (eligibleOrders.length === 1) {
-    targetOrder = eligibleOrders[0];
-  } else if (eligibleOrders.length > 1) {
-    const clarification = `আপনার নম্বরে একাধিক pending order আছে। কোন orderটি বোঝাচ্ছেন তা নিশ্চিত করতে order ID লিখুন: ${eligibleOrders.slice(0, 5).map((o) => `#${o.id}`).join(', ')}। আপাতত কোনো order status বদলাইনি।`;
-    await simulateHumanTypingAndSend(remoteJid, clarification, phone, null, 'night_confirmation_ambiguous');
-    return;
+  // Fallback 1: Check quoted message context for Order ID
+  if (!targetOrder) {
+    const quoted = m.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+    if (quoted) {
+      const quotedText = extractMessageText({ message: quoted });
+      const orderMatch = quotedText.match(/#DOT-([A-Fa-f0-9]+)/i);
+      if (orderMatch) {
+        const matchedOrderId = 'DOT-' + orderMatch[1].toUpperCase();
+        targetOrder = orders.find((o) => o.id === matchedOrderId);
+        if (targetOrder) {
+          console.log(`[Baileys Bot] Matched order #${targetOrder.id} from quoted context!`);
+        }
+      }
+    }
+  }
+
+  // Fallback 2: Check most recent orders where night confirmation was sent
+  if (!targetOrder) {
+    const recentNightOrders = orders.filter((o) => {
+      if (!o.nightConfirmationSent) return false;
+      const ageHours = (Date.now() - new Date(o.nightConfirmationSentAt || o.createdAt || 0).getTime()) / (1000 * 3600);
+      return ageHours <= 12 && ['pending', 'hold'].includes(o.status);
+    });
+    recentNightOrders.sort((a, b) => new Date(b.nightConfirmationSentAt || b.createdAt || 0).getTime() - new Date(a.nightConfirmationSentAt || a.createdAt || 0).getTime());
+    if (recentNightOrders.length > 0) {
+      targetOrder = recentNightOrders[0];
+      console.log(`[Baileys Bot] Matched latest recent night order #${targetOrder.id} (${targetOrder.customer?.phone}) via nightConfirmationSent fallback!`);
+    }
   }
 
   // Auto-save LID reverse mapping when targetOrder is determined
@@ -857,27 +667,7 @@ async function handleIncomingWhatsAppBotMessage(m, { shouldRunAutomation = true 
     }
 
     if (targetOrder.status === 'cancelled') {
-      if (targetOrder.waWinbackSentAt) {
-        // Customer accepted the Win-back Free Delivery offer!
-        targetOrder.status = 'approved';
-        targetOrder.delivery = 0; // Free delivery
-        targetOrder.total = Math.max(0, (targetOrder.itemsTotal || targetOrder.total) - (targetOrder.discount || 0));
-        targetOrder.approvedAt = new Date().toISOString();
-        targetOrder.winbackAcceptedAt = new Date().toISOString();
-        targetOrder.confirmedBy = 'whatsapp_winback_bot';
-        targetOrder.history = targetOrder.history || [];
-        targetOrder.history.push({
-          status: 'approved',
-          note: `Auto-reactivated via WhatsApp Free Delivery Win-Back offer (customer replied: "${rawText}")`,
-          at: new Date().toISOString(),
-        });
-        saveOrders(orders);
-        const winbackReply = `ধন্যবাদ ${customerName}! 🎉 আপনার #${orderId} নম্বর অর্ডারটি সম্পূর্ণ ফ্রি ডেলিভারিতে (০৳ ডেলিভারি চার্জ) রি-অ্যাক্টিভেট করা হয়েছে। মোট বিল: ৳${targetOrder.total} (ক্যাশ অন ডেলিভারি)। দ্রুত পার্সেল পাঠানো হবে! 💖`;
-        await simulateHumanTypingAndSend(remoteJid, winbackReply, phone, orderId, 'winback_reactivated');
-        console.log(`[WhatsApp Bot] Order #${orderId} reactivated via Win-Back Free Delivery!`);
-        return;
-      }
-      const cancelledNotice = `প্রিয় ${customerName}, আপনার #${orderId} নম্বর অর্ডারটি বাতিল করা আছে। আপনি চাইলে আমাদের ওয়েবসাইটে নতুন করে অর্ডার করতে পারেন: https://secrate.shop`;
+      const cancelledNotice = `প্রিয় ${customerName}, আপনার #${orderId} নম্বর অর্ডারটি বাতিল করা আছে। আপনি চাইলে আমাদের ওয়েবসাইটে নতুন করে অর্ডার করতে পারেন: https://metrroma.com`;
       try { await safeSendMessage(remoteJid, { text: cancelledNotice }); } catch (_) {}
       return;
     }
@@ -944,34 +734,8 @@ async function handleIncomingWhatsAppBotMessage(m, { shouldRunAutomation = true 
 }
 
 // ---- Anti-Ban Human Typing Simulator ----
-async function simulateHumanTypingAndSend(targetJid, text, fallbackDigits = null, orderId = null, eventType = 'night_auto_reply', imageUrl = null) {
+async function simulateHumanTypingAndSend(targetJid, text, fallbackDigits = null, orderId = null, eventType = 'night_auto_reply') {
   if (!sock) return false;
-  const normalizedReply = String(text || '').normalize('NFKC').toLocaleLowerCase().replace(/\s+/g, ' ').trim();
-  const dedupeKey = `${targetJid}\0${normalizedReply}`;
-  const eventCooldowns = {
-    wa_welcome_greeting: 30 * 60 * 1000,
-    wa_womens_care_guide: 30 * 60 * 1000,
-    wa_mens_care_guide: 30 * 60 * 1000,
-    wa_ask_photo_or_name: 6 * 60 * 60 * 1000,
-    wa_vision_unclear: 10 * 60 * 1000,
-    wa_photo_ack: 10 * 60 * 1000,
-  };
-  const eventCooldown = eventCooldowns[eventType] || 0;
-  const eventKey = `${targetJid}\0${eventType}`;
-  const now = Date.now();
-  for (const [key, at] of recentAutomatedReplies) if (now - at > 2 * 60 * 1000) recentAutomatedReplies.delete(key);
-  for (const [key, at] of recentAutomatedReplyEvents) if (now - at > 6 * 60 * 60 * 1000) recentAutomatedReplyEvents.delete(key);
-  if (eventCooldown && recentAutomatedReplyEvents.has(eventKey) && now - recentAutomatedReplyEvents.get(eventKey) < eventCooldown) {
-    console.log(`[WhatsApp Auto Reply] Suppressed repeated ${eventType} for ${targetJid}.`);
-    return true;
-  }
-  if (recentAutomatedReplies.has(dedupeKey)) {
-    console.log(`[WhatsApp Auto Reply] Suppressed duplicate reply for ${targetJid}.`);
-    return true;
-  }
-  recentAutomatedReplies.set(dedupeKey, now);
-  if (eventCooldown) recentAutomatedReplyEvents.set(eventKey, now);
-  if (recentAutomatedReplies.size > 5000) recentAutomatedReplies.delete(recentAutomatedReplies.keys().next().value);
   try {
     // 1. Natural read delay: 1.0s - 1.8s (simulates human reading the customer message)
     const readDelay = 1000 + Math.floor(Math.random() * 800);
@@ -989,32 +753,8 @@ async function simulateHumanTypingAndSend(targetJid, text, fallbackDigits = null
     console.log(`[WhatsApp Anti-Ban] Simulating human typing for ${(typingDuration / 1000).toFixed(1)}s to ${targetJid}...`);
     await new Promise((r) => setTimeout(r, typingDuration));
 
-    // 4. Send a catalog product image with its verified details when available.
-    let content = { text };
-    if (typeof imageUrl === 'string' && imageUrl.trim()) {
-      const trimmedImage = imageUrl.trim();
-      try {
-        if (/^https?:\/\//i.test(trimmedImage)) {
-          content = { image: { url: trimmedImage }, caption: text };
-        } else if (trimmedImage.startsWith('/uploads/')) {
-          const fileName = trimmedImage.replace(/^\/uploads\//, '');
-          const candidates = [
-            join(getPersistentDataDirectory(), 'uploads', fileName),
-            join('/var/www/dot/uploads', fileName),
-            join(__dir, 'uploads', fileName),
-            join(__dir, '..', 'uploads', fileName),
-            join('/var/www/secrate_persistent_data/uploads', fileName),
-          ];
-          const localImage = candidates.find((path) => existsSync(path));
-          if (localImage) content = { image: readFileSync(localImage), caption: text };
-        } else if (existsSync(trimmedImage)) {
-          content = { image: readFileSync(trimmedImage), caption: text };
-        }
-      } catch (imageError) {
-        console.warn('[WhatsApp Product Image] Could not attach product image:', imageError?.message || imageError);
-      }
-    }
-    await safeSendMessage(targetJid, content);
+    // 4. Send message directly to conversational thread
+    await safeSendMessage(targetJid, { text });
 
     // 5. Reset presence
     try {
@@ -1022,21 +762,11 @@ async function simulateHumanTypingAndSend(targetJid, text, fallbackDigits = null
     } catch (_) {}
 
     lastMessageSentTimestamp = Date.now();
-    appendWaMessage({
-      phone: fallbackDigits || targetJid.split('@')[0],
-      remoteJid: targetJid,
-      direction: 'out',
-      text,
-      mediaType: content.image ? 'image' : 'text',
-      byStaff: eventType || 'ai_bot',
-    });
     return true;
   } catch (err) {
-    recentAutomatedReplies.delete(dedupeKey);
-    recentAutomatedReplyEvents.delete(eventKey);
     console.warn(`[WhatsApp Direct Send Error to ${targetJid}]:`, err?.message || err);
     if (fallbackDigits) {
-      await sendBaileysMessage(fallbackDigits, text, orderId, eventType, imageUrl);
+      await sendBaileysMessage(fallbackDigits, text, orderId, eventType);
     }
     return false;
   }
@@ -1104,58 +834,6 @@ export async function requestPairingCode(phone) {
   return code;
 }
 
-export async function getWhatsAppProfilePicture(phone) {
-  const input = String(phone || '').trim();
-  if (!input || !isConnected || !sock?.profilePictureUrl) return null;
-  const cacheKey = input;
-  const cached = profilePictureCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.url;
-  if (profilePictureInflight.has(cacheKey)) return profilePictureInflight.get(cacheKey);
-  const digits = input.replace(/\D/g, '');
-  let jid = '';
-  if (/@(?:s\.whatsapp\.net|lid|hosted\.lid)$/.test(input)) jid = input;
-  else if (digits.startsWith('8801') && digits.length === 13) jid = `${digits}@s.whatsapp.net`;
-  else if (digits.startsWith('01') && digits.length === 11) jid = `88${digits.slice(1)}@s.whatsapp.net`;
-  else if (digits.length >= 14 && digits.length <= 15 && !digits.startsWith('880')) jid = `${digits}@lid`;
-  else if (digits.length >= 10 && digits.length <= 13) jid = `${digits}@s.whatsapp.net`;
-  if (!jid) return null;
-  const pending = (async () => {
-  try {
-    let url = await sock.profilePictureUrl(jid, 'image', 8000).catch(() => null);
-    if (!url && /@(?:lid|hosted\.lid)$/.test(jid)) {
-      const pnJid = await mappedPnJidForLid(jid);
-      if (pnJid) url = await sock.profilePictureUrl(pnJid, 'image', 8000).catch(() => null);
-    }
-    profilePictureCache.set(cacheKey, { url: url || null, expiresAt: Date.now() + 15 * 60 * 1000 });
-    while (profilePictureCache.size > 500) profilePictureCache.delete(profilePictureCache.keys().next().value);
-    return url || null;
-  } catch (_) {
-    profilePictureCache.set(cacheKey, { url: null, expiresAt: Date.now() + 2 * 60 * 1000 });
-    return null;
-  } finally { profilePictureInflight.delete(cacheKey); }
-  })();
-  profilePictureInflight.set(cacheKey, pending);
-  return pending;
-}
-
-export async function resolveWhatsAppPhoneNumber(value) {
-  const input = String(value || '').trim();
-  if (!input) return '';
-  if (input.endsWith('@s.whatsapp.net') || input.endsWith('@hosted')) return input.split('@')[0].split(':')[0].replace(/\D/g, '');
-  if (input.endsWith('@lid') || input.endsWith('@hosted.lid')) {
-    try {
-      const pnJid = await mappedPnJidForLid(input);
-      return pnJid ? pnJid.split('@')[0].split(':')[0].replace(/\D/g, '') : '';
-    } catch (_) { return ''; }
-  }
-  const digits = input.replace(/\D/g, '');
-  if (digits.length >= 14 && digits.length <= 15 && !digits.startsWith('880')) {
-    const pnJid = await mappedPnJidForLid(`${digits}@lid`);
-    return pnJid ? pnJid.split('@')[0].split(':')[0].replace(/\D/g, '') : '';
-  }
-  return digits;
-}
-
 async function processWaQueue() {
   if (isProcessingQueue) return;
   isProcessingQueue = true;
@@ -1170,11 +848,10 @@ async function processWaQueue() {
       const item = waQueue.shift();
       if (!item) continue;
 
-      // Anti-Ban: Jittered randomized gap (Marketing offers safe human 28-36s pacing, manual admin 2-3s, triggers paced by MIN_GAP_MS)
+      // Anti-Ban: Jittered randomized gap (Marketing offers paced by frontend loop, system triggers use MIN_GAP_MS)
       const isMarketing = item.eventType === 'marketing_offer' || item.eventType === 'test_ping';
-      const isManualAdmin = item.eventType === 'manual_admin' || item.eventType === 'admin_quick_msg' || item.eventType === 'escalation_reply' || item.eventType === 'inbox_reply';
-      const configuredGap = isMarketing ? Math.max(28000, Number(item.delayMs) || 0) : isManualAdmin ? 2000 : (item.delayMs ? Math.max(10000, item.delayMs) : MIN_GAP_MS);
-      const randomGapMs = configuredGap + (isManualAdmin ? Math.floor(Math.random() * 1000) : Math.floor(Math.random() * 8000));
+      const configuredGap = isMarketing ? 800 : (item.delayMs ? Math.max(2000, item.delayMs) : MIN_GAP_MS);
+      const randomGapMs = configuredGap + (isMarketing ? 400 : Math.floor(Math.random() * 2000));
       const elapsed = Date.now() - lastMessageSentTimestamp;
       if (lastMessageSentTimestamp > 0 && elapsed < randomGapMs) {
         const waitMs = randomGapMs - elapsed;
@@ -1182,7 +859,7 @@ async function processWaQueue() {
         await new Promise((r) => setTimeout(r, waitMs));
       }
 
-      const jid = item.remoteJid || `${item.phone}@s.whatsapp.net`;
+      const jid = `${item.phone}@s.whatsapp.net`;
       let success = false;
       let errorMsg = null;
 
@@ -1190,21 +867,11 @@ async function processWaQueue() {
         // Anti-Ban: Show realistic human typing presence before releasing message
         try {
           await sock.sendPresenceUpdate('composing', jid);
-          const typingTime = isManualAdmin ? (1200 + Math.floor(Math.random() * 800)) : (2200 + Math.floor(Math.random() * 2000));
+          const typingTime = isMarketing ? (800 + Math.floor(Math.random() * 700)) : (1800 + Math.floor(Math.random() * 1500));
           await new Promise((r) => setTimeout(r, typingTime));
         } catch (_) {}
 
         let messageContent = { text: item.text || '' };
-
-        if (item.attachment?.path && existsSync(item.attachment.path)) {
-          const attachment = item.attachment;
-          const fileBuffer = readFileSync(attachment.path);
-          const caption = item.text || '';
-          if (attachment.mediaType === 'image') messageContent = { image: fileBuffer, caption };
-          else if (attachment.mediaType === 'video') messageContent = { video: fileBuffer, caption, mimetype: attachment.mimeType };
-          else if (attachment.mediaType === 'audio') messageContent = { audio: fileBuffer, mimetype: attachment.mimeType, ptt: attachment.isVoiceNote === true };
-          else messageContent = { document: fileBuffer, mimetype: attachment.mimeType || 'application/octet-stream', fileName: attachment.fileName || 'attachment', caption };
-        }
 
         if (item.imageUrl && typeof item.imageUrl === 'string') {
           try {
@@ -1252,23 +919,10 @@ async function processWaQueue() {
           }
         }
 
-        const waMessage = await safeSendMessage(jid, messageContent);
+        await safeSendMessage(jid, messageContent);
         try { await sock.sendPresenceUpdate('paused', jid); } catch (_) {}
         lastMessageSentTimestamp = Date.now();
         success = true;
-        appendWaMessage({
-          phone: item.phone,
-          remoteJid: jid,
-          direction: 'out',
-          text: item.text || '',
-          mediaType: item.attachment?.mediaType || (item.imageUrl ? 'image' : 'text'),
-          mediaUrl: item.attachment?.mediaUrl || '',
-          fileName: item.attachment?.fileName || '',
-          mimeType: item.attachment?.mimeType || '',
-          byStaff: item.eventType || 'bot',
-          waMessageId: waMessage?.key?.id || '',
-          deliveryStatus: 'sent',
-        });
         if (item.dedupeKey) {
           recentSentEvents.set(item.dedupeKey, Date.now());
         }
@@ -1306,34 +960,17 @@ async function processWaQueue() {
   }
 }
 
-export async function sendBaileysMessage(phone, text, orderId = null, eventType = 'manual_broadcast', imageUrl = null, delayMs = null, attachment = null, remoteJidOverride = '') {
+export async function sendBaileysMessage(phone, text, orderId = null, eventType = 'manual_broadcast', imageUrl = null, delayMs = null) {
   cleanupRecentEvents();
-
-  if (!isConnected || !sock) {
-    return { sent: false, connected: false, reason: 'Store WhatsApp is not connected on server. Please scan QR in WhatsApp Automation tab.' };
-  }
 
   const cleanPhone = String(phone || '').replace(/\D/g, '');
   if (!cleanPhone || cleanPhone.length < 10) {
     return { sent: false, reason: 'Invalid phone number' };
   }
-  const directJid = /^(?:\d{5,20}@(s\.whatsapp\.net|lid|hosted\.lid))$/.test(String(remoteJidOverride || '')) ? String(remoteJidOverride) : '';
-  const digits = directJid.endsWith('@lid') || directJid.endsWith('@hosted.lid')
-    ? cleanPhone
-    : cleanPhone.startsWith('88') ? cleanPhone : '88' + cleanPhone.slice(-11);
+  const digits = cleanPhone.startsWith('88') ? cleanPhone : '88' + cleanPhone.slice(-11);
 
-  // Anti-Ban: Verify customer hasn't opted out via STOP
-  if (isPhoneOptedOut(cleanPhone) || isPhoneOptedOut(digits)) {
-    console.log(`[WhatsApp Queue] Skipping message to ${digits}: customer opted out with STOP.`);
-    return { sent: false, reason: 'Customer opted out with STOP' };
-  }
-
-  // Deduplication for automated order triggers (prevent double sending within 15 mins; manual admin actions bypass dedupe)
-  const isManualAdmin = eventType === 'manual_admin' || eventType === 'admin_quick_msg' || eventType === 'escalation_reply' || eventType === 'inbox_reply';
-  if (isManualAdmin) {
-    pauseAiForChat(null, digits, 'admin_manual_reply');
-  }
-  const dedupeKey = (!isManualAdmin && orderId && eventType && eventType !== 'marketing_offer') ? `${orderId}_${eventType}` : null;
+  // Deduplication for order triggers (prevent double sending within 15 mins)
+  const dedupeKey = orderId && eventType && eventType !== 'marketing_offer' ? `${orderId}_${eventType}` : null;
   if (dedupeKey && recentSentEvents.has(dedupeKey)) {
     console.log(`[WhatsApp Queue] Skipping duplicate message for ${dedupeKey}`);
     return { sent: false, reason: 'Duplicate event already dispatched recently' };
@@ -1348,12 +985,10 @@ export async function sendBaileysMessage(phone, text, orderId = null, eventType 
     const queueItem = {
       id: 'wa_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6),
       phone: digits,
-      remoteJid: directJid,
       text,
       orderId,
       eventType,
       imageUrl,
-      attachment,
       delayMs,
       dedupeKey,
       queuedAt: Date.now(),

@@ -1,6 +1,6 @@
-import { getIntegrations, saveIntegrations, getSettings, getOrders } from './store.js';
+import { getIntegrations, saveIntegrations, getSettings } from './store.js';
 
-// Default templates for Bangladeshi e-commerce (Hardened Anti-Ban Configuration)
+// Default templates for Bangladeshi e-commerce
 export const DEFAULT_WA_SETTINGS = {
   enabled: true,
   connected: false,
@@ -8,36 +8,21 @@ export const DEFAULT_WA_SETTINGS = {
   device: 'WhatsApp Web',
   pairingCode: '',
   minGapSeconds: 30,
-  geminiApiKey: '',
+  geminiApiKey: 'AIzaSyCYfaZJHGLzBU9kOHYe2gANL63WVh-DmzE',
   visionMatcherEnabled: true,
-  optedOutPhones: [],
   triggers: {
     incomplete: {
-      enabled: false, // Disabled by default: sending unsolicited messages to abandoned carts triggers Meta spam reports
-      delayMinutes: 15,
-      template: 'আসসালামু আলাইকুম {name}! {store} থেকে লক্ষ্য করলাম আপনি {items} অর্ডার করার সময় চেকআউট সম্পন্ন করেননি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳{total}।\n(মেসেজ না চাইলে STOP লিখে পাঠান)',
+      enabled: true,
+      delayMinutes: 2,
+      template: 'আসসালামু আলাইকুম {name}! {store} থেকে লক্ষ্য করলাম আপনি {items} অর্ডার করার সময় চেকআউট সম্পন্ন করেননি। আপনি কি ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে চান? মোট মূল্য: ৳{total}।',
     },
     approved: {
       enabled: true,
-      template: `আসসালামু আলাইকুম {name}! 🌸
-{store}-এ আপনার অর্ডারটি (#{order_id}) সফলভাবে কনফার্ম হয়েছে।
-
-📦 পণ্য: {items}
-💰 প্রদেয় বিল: ৳{total} (ক্যাশ অন ডেলিভারি)
-📍 ডেলিভারি ঠিকানা: {address}
-
-আপনার দেওয়া ঠিকানা ও তথ্য কি ঠিক আছে? অনুগ্রহ করে "হ্যাঁ" লিখে জানান।
-(মেসেজ না চাইলে STOP লিখে পাঠান)`,
+      template: 'প্রিয় {name}, আপনার অর্ডার #{order_id} সফলভাবে কনফার্ম করা হয়েছে। আমরা দ্রুত পার্সেলটি প্রস্তুত করছি। মোট বিল: ৳{total}। ধন্যবাদ, {store}!',
     },
     shipped: {
       enabled: true,
-      template: `প্রিয় {name}, আপনার অর্ডারটি (#{order_id}) কুরিয়ারে ({courier}) হস্তান্তর করা হয়েছে। 🚚
-
-ট্র্যাকিং কোড: {consignment}
-লাইভ ট্র্যাকিং: {tracking_url}
-
-পার্সেলটি পৌঁছালে রাইডারের কল রিসিভ করার অনুরোধ রইল। যেকোনো প্রয়োজনে আমাদের রিপ্লাই দিন।
-— {store}`,
+      template: 'প্রিয় {name}, আপনার অর্ডার #{order_id} কুরিয়ারে ({courier}) বুকিং হয়েছে। ট্র্যাকিং কোড: {consignment}। লাইভ ট্র্যাকিং: {tracking_url}',
     },
     delivered: {
       enabled: true,
@@ -47,8 +32,10 @@ export const DEFAULT_WA_SETTINGS = {
 {store}-এর ওপর আস্থা রাখার জন্য আপনাকে আন্তরিক ধন্যবাদ ও কৃতজ্ঞতা জানাচ্ছি! 💖
 আশা করি আমাদের পণ্যটি আপনার শতভাগ মনমতো হয়েছে।
 
-যেকোনো প্রয়োজনে আমাদের সাথে যোগাযোগ করতে পারেন। আপনার দিনটি শুভ হোক! ✨
-(মেসেজ না চাইলে STOP লিখে পাঠান)
+আমাদের প্রিমিয়াম ও এক্সক্লুসিভ কালেকশন দেখতে ঘুরে আসুন আমাদের Wellness Corner-এ:
+👉 https://metrroma.com/shop/wellness-corner
+
+যেকোনো প্রয়োজনে আমাদের সাথে যোগাযোগ করতে পারেন। আপনার দিনটি শুভ ও আনন্দময় হোক! ✨
 — {store}`,
     },
     exchange: {
@@ -58,44 +45,6 @@ export const DEFAULT_WA_SETTINGS = {
     cancelled: {
       enabled: true,
       template: 'প্রিয় {name}, আপনার অর্ডার #{order_id} বাতিল করা হয়েছে। প্রয়োজনে আমাদের সাথে যোগাযোগ করুন। ধন্যবাদ, {store}!',
-    },
-    out_for_delivery: {
-      enabled: true,
-      template: `আসসালামু আলাইকুম {name}! 🚚
-{store} থেকে আপনার অর্ডার #{order_id}-এর পার্সেলটি আজ ডেলিভারি দেওয়ার জন্য কুরিয়ার রাইডার নিয়ে বের হয়েছে।
-
-💰 ক্যাশ অন ডেলিভারি বিল: ৳{total}
-📍 ডেলিভারি ঠিকানা: {address}
-
-রাইডারের কল রিসিভ করার জন্য অনুগ্রহ করে আপনার ফোনটি সচল রাখুন।
-— {store}`,
-    },
-    delivery_failed: {
-      enabled: true,
-      template: `প্রিয় {name},
-{store} থেকে আপনার পার্সেলটি (#{order_id}) নিয়ে কুরিয়ার রাইডার আপনার সাথে ফোনে যোগাযোগ করতে পারেনি। ⚠️
-
-আপনি কি আগামীকাল পার্সেলটি রিসিভ করতে চান, নাকি ডেলিভারির সময়/ঠিকানা পরিবর্তন করতে চান? অনুগ্রহ করে এখানে লিখে জানান, আমরা রাইডারকে নির্দেশ দেবো। ধন্যবাদ!
-— {store}`,
-    },
-    post_delivery_review: {
-      enabled: true,
-      delayHours: 24,
-      couponCode: 'VIP100',
-      template: `আসসালামু আলাইকুম {name}! 🌸
-{store} থেকে আপনার অর্ডার #{order_id} ডেলিভারি সম্পন্ন হয়েছে।
-
-আমাদের পণ্যটি ব্যবহার করে আপনার অভিজ্ঞতা কেমন হয়েছে? ৫-স্টার রেটিং অথবা আনবক্সিং ফটো পাঠালে আপনার পরবর্তী অর্ডারে পাবেন স্পেশাল ১০০৳ ছাড়! (কুপন কোড: {coupon_code}) 💖
-— {store}`,
-    },
-    cancelled_winback: {
-      enabled: true,
-      delayHours: 48,
-      template: `প্রিয় {name}! 🌸
-{store}-এ আপনার অর্ডার #{order_id} বাতিল হয়েছিল।
-
-আপনার জন্য আমাদের বিশেষ অফার: সম্পূর্ণ ফ্রি ডেলিভারিতে (০৳ ডেলিভারি চার্জ) পণ্যটি আবার কনফার্ম করতে চাইলে শুধু "1" লিখে রিপ্লাই দিন! 🎁
-— {store}`,
     },
     night_confirmation: {
       enabled: true,
@@ -112,7 +61,6 @@ export const DEFAULT_WA_SETTINGS = {
 
 💰 মোট প্রদেয় বিল: ৳{total} (ক্যাশ অন ডেলিভারি)
 📦 আপনার পার্সেলটি সম্পূর্ণ গোপনীয় ও সুরক্ষিত প্যাকেজিংয়ে পাঠানো হবে।
-(মেসেজ না চাইলে STOP লিখে পাঠান)
 — {store}`,
       replyConfirmTemplate: `ধন্যবাদ {name}! আপনার #{order_id} নম্বর অর্ডারটি সফলভাবে Approved (নিশ্চিত) করা হয়েছে। মোট বিল: ৳{total} (COD)। দ্রুত আপনার পার্সেলটি কুরিয়ারে হস্তান্তর করা হবে। 💖`,
       replyCancelTemplate: `আপনার অনুরোধ অনুযায়ী #{order_id} নম্বর অর্ডারটি বাতিল (Cancel) করা হয়েছে। ভবিষ্যতে আপনার সেবায় আবার সুযোগ পেলে আনন্দিত হব। ধন্যবাদ! 🌸`,
@@ -141,17 +89,12 @@ export function getWhatsAppSettings() {
 export function saveWhatsAppSettings(patch) {
   const ig = getIntegrations();
   const current = getWhatsAppSettings();
-  const cleanPatch = { ...(patch || {}) };
-  if (cleanPatch.geminiApiKey === '' && !cleanPatch.clearGeminiKey) {
-    delete cleanPatch.geminiApiKey;
-  }
-  delete cleanPatch.clearGeminiKey;
   const next = {
     ...current,
-    ...cleanPatch,
+    ...patch,
     triggers: {
       ...current.triggers,
-      ...(cleanPatch.triggers || {}),
+      ...(patch.triggers || {}),
     },
   };
   ig.whatsapp = next;
@@ -210,7 +153,7 @@ export function formatWhatsAppMessage(template, order) {
   const consignment = order?.courier?.consignment || '';
   const phone = order?.customer?.phone || '';
 
-  let trackingUrl = consignment ? (order?.courier?.url || '') : '';
+  let trackingUrl = order?.courier?.url || '';
   if (trackingUrl && trackingUrl.includes('pathao.com/courier/tracking/')) {
     const p = phone ? cleanBDPhone(phone) : '';
     trackingUrl = `https://merchant.pathao.com/tracking?consignment_id=${encodeURIComponent(consignment)}${p ? `&phone=${encodeURIComponent(p)}` : ''}`;
@@ -224,12 +167,8 @@ export function formatWhatsAppMessage(template, order) {
       trackingUrl = `https://steadfast.com.bd/track/${encodeURIComponent(consignment)}`;
     }
   }
-  const storeLow = String(store || '').toLowerCase();
-  const baseDomain = storeLow.includes('secrate') ? 'secrate.shop' : (storeLow.includes('metrroma') || storeLow.includes('metromaa')) ? 'metrroma.com' : 'timingboost.xyz';
-  // A tracking link is only valid after a courier consignment exists. In
-  // particular, do not turn an unbooked order into a fake store tracking URL.
-  const storeTrackingUrl = consignment && orderId ? `https://${baseDomain}/track?id=${encodeURIComponent(orderId)}` : '';
-  if (!trackingUrl && consignment) trackingUrl = storeTrackingUrl;
+  const storeTrackingUrl = `https://metrroma.com/track?id=${encodeURIComponent(orderId)}`;
+  if (!trackingUrl) trackingUrl = storeTrackingUrl;
 
   const address = order?.customer?.address || '';
   const items = (order?.items || []).map((i) => i.name || i.title || 'পণ্য').join(', ') || 'পণ্য';
@@ -246,8 +185,7 @@ export function formatWhatsAppMessage(template, order) {
     .replace(/{courier_tracking_url}/g, trackingUrl)
     .replace(/{store_tracking_url}/g, storeTrackingUrl)
     .replace(/{address}/g, address)
-    .replace(/{items}/g, items)
-    .replace(/{coupon_code}/g, 'VIP100');
+    .replace(/{items}/g, items);
 
   // Time-of-day contextualizer for 24/7 confirmation
   const bdHour = getBangladeshCurrentHour();
@@ -263,27 +201,6 @@ export function formatWhatsAppMessage(template, order) {
   return formatted + antiBanEntropy;
 }
 
-export function isPhoneOptedOut(phone) {
-  if (!phone) return false;
-  const digits = String(phone).replace(/\D/g, '');
-  const clean = digits.startsWith('880') ? digits.slice(2) : (digits.startsWith('0') ? digits : '0' + digits);
-  const wa = getWhatsAppSettings();
-  const list = Array.isArray(wa.optedOutPhones) ? wa.optedOutPhones : [];
-  return list.includes(clean) || list.includes(digits);
-}
-
-export function markPhoneOptedOut(phone) {
-  if (!phone) return;
-  const digits = String(phone).replace(/\D/g, '');
-  const clean = digits.startsWith('880') ? digits.slice(2) : (digits.startsWith('0') ? digits : '0' + digits);
-  const wa = getWhatsAppSettings();
-  const list = Array.isArray(wa.optedOutPhones) ? [...wa.optedOutPhones] : [];
-  if (!list.includes(clean)) list.push(clean);
-  if (!list.includes(digits)) list.push(digits);
-  saveWhatsAppSettings({ optedOutPhones: list });
-  console.log(`[WhatsApp Anti-Ban] Customer ${phone} successfully opted out with STOP.`);
-}
-
 let baileysSender = null;
 export function registerBaileysSender(fn) {
   baileysSender = fn;
@@ -293,39 +210,22 @@ export async function sendWhatsAppNotification(order, eventType) {
   const wa = getWhatsAppSettings();
   if (!wa.enabled) return { sent: false, reason: 'WhatsApp automation disabled' };
 
-  const orderId = String(order?.id || '');
-  if (!orderId) return { sent: false, reason: 'Order is unavailable' };
-  const currentOrder = getOrders().find((item) => String(item?.id || '') === orderId);
-  if (!currentOrder) return { sent: false, reason: 'Order no longer exists' };
-  if (['shipped', 'exchange'].includes(eventType) && !String(currentOrder?.courier?.consignment || '').trim()) {
-    console.log(`[WhatsApp Auto-Send] Skipped ${eventType}: order #${orderId} has no courier consignment.`);
-    return { sent: false, reason: 'Courier shipment has not been booked' };
-  }
-  if (eventType === 'night_confirmation' && ['cancelled', 'return', 'lost'].includes(String(currentOrder.status || '').toLowerCase())) {
-    return { sent: false, reason: 'Order is no longer active' };
-  }
-
   const trigger = wa.triggers?.[eventType];
   if (!trigger || !trigger.enabled) {
     return { sent: false, reason: `Trigger ${eventType} is disabled` };
   }
 
-  const phone = String(currentOrder?.customer?.phone || '').replace(/\D/g, '');
+  const phone = String(order?.customer?.phone || '').replace(/\D/g, '');
   if (!phone || phone.length < 10) {
     return { sent: false, reason: 'Invalid phone number' };
   }
 
-  if (isPhoneOptedOut(phone)) {
-    console.log(`[WhatsApp Auto-Send] Skipped: ${phone} has opted out with STOP.`);
-    return { sent: false, reason: 'Customer opted out via STOP' };
-  }
-
-  const formattedMsg = formatWhatsAppMessage(trigger.template, currentOrder);
+  const formattedMsg = formatWhatsAppMessage(trigger.template, order);
   let dispatchResult = { sent: true };
 
   if (baileysSender) {
     try {
-      dispatchResult = await baileysSender(phone, formattedMsg, currentOrder.id, eventType);
+      dispatchResult = await baileysSender(phone, formattedMsg, order?.id, eventType);
     } catch (e) {
       console.warn('[WhatsApp Auto-Send Error]:', e?.message || e);
       dispatchResult = { sent: false, error: e?.message };
