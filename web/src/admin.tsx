@@ -2540,18 +2540,19 @@ export function Admin() {
   const [adsSubTab, setAdsSubTab] = useState<'dashboard' | 'meta' | 'spend' | 'profit' | 'tiktok' | 'google'>('profit');
   const [financeSection, setFinanceSection] = useState<'dashboard' | 'accounts' | 'income' | 'courier' | 'cashflow' | 'assets'>('dashboard');
   const [reportSection, setReportSection] = useState('profit_loss');
+  const [settingsTab, setSettingsTab] = useState<'brand' | 'slider' | 'footer' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend'>('store');
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     const groupForNav: Record<string, string> = {
       orders: 'approved_orders', scanner: 'approved_orders', fraud: 'approved_orders',
       campaigns: 'ads', products: 'inventory', categories: 'inventory', colors: 'inventory', landings: 'inventory', media: 'inventory',
       whatsapp: 'messages', message_marketing: 'messages', emails: 'messages', push_popups: 'messages', finance: 'finance', reports: 'reports', payment_gateways: 'purchase', coupons: 'purchase',
-      customers: 'task_followup', reviews: 'task_followup', calls: 'call_center', staff: 'work_inbox', integrations: 'work_inbox', settings: 'work_inbox', backup: 'work_inbox',
+      customers: 'task_followup', reviews: 'task_followup', calls: 'call_center', staff: 'work_inbox', integrations: 'work_inbox', settings: 'store_settings', backup: 'work_inbox',
     };
     const currentGroup = cur === 'integrations' && activeSubItem === 'Courier API Setup'
       ? 'approved_orders'
       : cur === 'finance' && activeSubItem === 'Courier Invoice Upload' ? 'approved_orders' : groupForNav[cur];
-    const groups = ['approved_orders', 'ads', 'web_orders', 'inventory', 'messages', 'purchase', 'finance', 'reports', 'task_followup', 'call_center', 'work_inbox'];
+    const groups = ['approved_orders', 'ads', 'web_orders', 'inventory', 'messages', 'purchase', 'finance', 'reports', 'task_followup', 'call_center', 'store_settings', 'work_inbox'];
     let savedGroup = '';
     try {
       const saved = sessionStorage.getItem('sa_sidebar_open_groups');
@@ -2608,7 +2609,7 @@ export function Admin() {
       calls: 'call_center',
       staff: 'work_inbox',
       integrations: 'work_inbox',
-      settings: 'work_inbox',
+      settings: 'store_settings',
       backup: 'work_inbox',
     };
     const isWebOrderEntry = cur === 'orders' && (activeSubItem === 'Store Orders' || /^\d+ · /.test(activeSubItem));
@@ -2769,6 +2770,14 @@ export function Admin() {
     }
     setActiveSubItem('Courier Invoice Upload');
     setNav('finance');
+    setNavq('');
+    setMobileMenuOpen(false);
+  };
+
+  const navigateSettingsTab = (tab: 'brand' | 'slider' | 'footer' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend', label: string) => {
+    setSettingsTab(tab);
+    setActiveSubItem(label);
+    setNav('settings');
     setNavq('');
     setMobileMenuOpen(false);
   };
@@ -3223,7 +3232,25 @@ export function Admin() {
             ]
           )}
 
-          {/* 8. Work Inbox */}
+          {/* 8. Store Settings - Dedicated Group in Sidebar */}
+          {renderGroup(
+            'store_settings',
+            'Store Settings',
+            <svg className="sa-grp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ width: 18, height: 18, flexShrink: 0 }}>
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
+            </svg>,
+            [
+              { id: 'settings', label: 'Store & Delivery', action: () => navigateSettingsTab('store', 'Store & Delivery') },
+              { id: 'settings', label: 'Brand & Logos', action: () => navigateSettingsTab('brand', 'Brand & Logos') },
+              { id: 'settings', label: 'Footer Manager', action: () => navigateSettingsTab('footer', 'Footer Manager') },
+              { id: 'settings', label: 'Homepage Sliders', action: () => navigateSettingsTab('slider', 'Homepage Sliders') },
+              { id: 'settings', label: 'Storefront Design', action: () => navigateSettingsTab('appearance', 'Storefront Design') },
+              { id: 'settings', label: 'Fraud Shield', action: () => navigateSettingsTab('fraud', 'Fraud Shield') },
+            ]
+          )}
+
+          {/* 9. Work Inbox */}
           {renderGroup(
             'work_inbox',
             'Work Inbox',
@@ -3234,7 +3261,7 @@ export function Admin() {
             [
               { id: 'staff', label: 'Staff & Roles' },
               { id: 'integrations', label: 'Integrations (APIs)' },
-              { id: 'settings', label: 'Store Settings' },
+              { id: 'settings', label: 'All Store Settings', action: () => navigateSettingsTab('store', 'All Store Settings') },
               { id: 'backup', label: 'Backup & Restore' },
             ]
           )}
@@ -3375,7 +3402,7 @@ export function Admin() {
         {cur === 'fraud' && <FraudDetectorAdmin />}
         {cur === 'staff' && <StaffAdmin />}
         {cur === 'integrations' && <IntegrationsAdmin focusCourier={activeSubItem === 'Courier API Setup'} />}
-        {cur === 'settings' && <SettingsAdmin />}
+        {cur === 'settings' && <SettingsAdmin initialTab={settingsTab} />}
       </main>
       </div>
 
@@ -13732,13 +13759,19 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
   );
 }
 
-function SettingsAdmin() {
+function SettingsAdmin({ initialTab = 'store' }: { initialTab?: 'brand' | 'slider' | 'footer' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend' }) {
   const [f, setF] = useState<any>(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [settingsLoadError, setSettingsLoadError] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState<'brand' | 'slider' | 'footer' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend'>('brand');
+  const [tab, setTab] = useState<'brand' | 'slider' | 'footer' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend'>(initialTab || 'store');
+
+  useEffect(() => {
+    if (initialTab) {
+      setTab(initialTab);
+    }
+  }, [initialTab]);
   const [copySearch, setCopySearch] = useState('');
   const [copyKey, setCopyKey] = useState('');
   const [infoSlug, setInfoSlug] = useState('shipping');
