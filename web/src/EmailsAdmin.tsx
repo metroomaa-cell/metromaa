@@ -125,7 +125,7 @@ export function EmailsAdmin({ onUnreadChange }: EmailsAdminProps) {
   const [composeTo, setComposeTo] = useState('');
   const [composeSubject, setComposeSubject] = useState('');
   const [composeBody, setComposeBody] = useState('');
-  const [composeFrom, setComposeFrom] = useState('support@secrate.shop');
+  const [composeFrom, setComposeFrom] = useState('shakil@secrate.shop');
   const [showCc, setShowCc] = useState(false);
   const [composeCc, setComposeCc] = useState('');
   const [showBcc, setShowBcc] = useState(false);
@@ -146,8 +146,8 @@ export function EmailsAdmin({ onUnreadChange }: EmailsAdminProps) {
   const [bulkManualEmails, setBulkManualEmails] = useState('');
   const [bulkSubject, setBulkSubject] = useState('');
   const [bulkBody, setBulkBody] = useState('');
-  const [bulkFrom, setBulkFrom] = useState('support@secrate.shop');
-  const [bulkFromName, setBulkFromName] = useState('Secrate Official');
+  const [bulkFrom, setBulkFrom] = useState('shakil@secrate.shop');
+  const [bulkFromName, setBulkFromName] = useState('Shakil | SECRATE');
   const [bulkCc, setBulkCc] = useState('');
   const [bulkBcc, setBulkBcc] = useState('');
   const [bulkRecipientsCount, setBulkRecipientsCount] = useState(0);
