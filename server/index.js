@@ -2889,12 +2889,15 @@ async function sendEmail(to, subject, html, opts = {}) {
     const secure = port === 465 ? true : !!e.secure;
     const senderAddr = opts.from ? opts.from : ((isGmail || !e.fromEmail || e.fromEmail.includes('dot.metromaa.com')) ? user : e.fromEmail);
     try {
-      const tx = nodemailer.createTransport({
+      const txConfig = {
         host,
         port,
         secure,
-        auth: { user, pass },
-      });
+      };
+      if (user && pass) {
+        txConfig.auth = { user, pass };
+      }
+      const tx = nodemailer.createTransport(txConfig);
       const mailOptions = {
         from: `"${fromName}" <${senderAddr}>`,
         to,
@@ -2989,28 +2992,35 @@ async function sendEmail(to, subject, html, opts = {}) {
     }
   };
 
-  // Respect explicit SMTP selection first
-  if (e.provider === 'smtp') {
-    if (hasSmtp) {
-      const smtpRes = await trySmtp();
-      if (smtpRes.ok || !hasResend) return smtpRes;
+  // User Rule: Resend is ONLY used for admin panel verification/security/OTP codes.
+  // For all regular business emails, custom mailboxes, and customer orders: Resend is STRICTLY forbidden.
+  const isAdminSecurityCode = !!opts.forAdminCode || !!opts.isSecurityOtp ||
+    (typeof subject === 'string' && /verification code|password reset code|security code|login credentials|staff email verification/i.test(subject)) ||
+    (typeof html === 'string' && /security code|verification code|reset code/i.test(html));
+
+  if (!isAdminSecurityCode) {
+    // Regular business mail / customer mail: ONLY use custom SMTP server
+    if (hasSmtp || e.host) {
+      return await trySmtp();
     }
-    if (hasResend) return await tryResend();
-    return { ok: false, error: 'SMTP host, email, and App Password are required' };
+    return {
+      ok: false,
+      error: 'SMTP configuration required. Business emails and customer communications cannot be sent via Resend (Resend is reserved solely for Admin Security Codes).'
+    };
   }
 
-  // Otherwise try Resend first, and automatically fall back to SMTP if Resend is in sandbox/unverified mode
+  // Admin Security / OTP Codes ONLY: use Resend for high-speed delivery, with SMTP fallback
   if (hasResend) {
     const resendRes = await tryResend();
     if (resendRes.ok) return resendRes;
-    if (hasSmtp) {
+    if (hasSmtp || e.host) {
       const smtpFallback = await trySmtp();
       if (smtpFallback.ok) return smtpFallback;
     }
     return resendRes;
   }
 
-  if (hasSmtp) return await trySmtp();
+  if (hasSmtp || e.host) return await trySmtp();
   return { ok: false, error: 'Email provider not configured' };
 }
 
