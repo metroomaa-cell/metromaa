@@ -6512,6 +6512,7 @@ if (existsSync(dist)) {
     res.type('application/xml; charset=utf-8').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>`);
   });
   app.use(express.static(dist, {
+    index: false,
     setHeaders: (res, path) => {
       if (path.endsWith('sw.js')) {
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -6662,10 +6663,24 @@ if (existsSync(dist)) {
       }
 
       const activeGtmId = getSettings().gtmId;
-      if (activeGtmId && (!targetLanding || targetLanding.gtmId)) {
-        html = html.replace(/GTM-[A-Z0-9]+/g, targetLanding?.gtmId || activeGtmId);
-      } else if (targetLanding && !targetLanding.gtmId) {
-        html = html.replace(/GTM-[A-Z0-9]+/g, '');
+      if (activeGtmId && !targetLanding) {
+        const gtmSnippet = `<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','${activeGtmId}');</script>
+<!-- End Google Tag Manager -->`;
+        html = html.replace('<head>', `<head>\n    ${gtmSnippet}`);
+      } else if (targetLanding && targetLanding.gtmId) {
+        const gtmSnippet = `<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','${targetLanding.gtmId}');</script>
+<!-- End Google Tag Manager -->`;
+        html = html.replace('<head>', `<head>\n    ${gtmSnippet}`);
       }
       res.setHeader('Content-Type', 'text/html; charset=UTF-8');
       res.send(html);
