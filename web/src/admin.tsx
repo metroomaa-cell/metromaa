@@ -15518,7 +15518,7 @@ function SettingsAdmin() {
                           </div>
 
                           {/* URL / Phone Number Input */}
-                          <div style={{ width: '100%' }}>
+                          <div style={{ width: '100%', position: 'relative' }}>
                             <input
                               type="text"
                               value={item.url || ''}
@@ -15533,10 +15533,11 @@ function SettingsAdmin() {
                                 boxSizing: 'border-box',
                                 padding: '9px 14px',
                                 borderRadius: 7,
-                                background: '#17142b',
-                                border: '1px solid rgba(255,255,255,0.12)',
+                                background: '#16132b',
+                                border: '1px solid rgba(139, 92, 246, 0.3)',
                                 color: '#fff',
-                                fontSize: 13
+                                fontSize: 13,
+                                outline: 'none'
                               }}
                             />
                           </div>
@@ -15593,6 +15594,12 @@ function SettingsAdmin() {
                       );
                     });
                   })()}
+                </div>
+
+                {/* Helpful Tip Banner */}
+                <div style={{ marginTop: 14, padding: '12px 16px', background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.25)', borderRadius: 8, fontSize: 12.5, color: '#c4b5fd', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 16 }}>💡</span>
+                  <span><strong>টিপস:</strong> ড্রপডাউনে যে সোশ্যাল মিডিয়া সিলেক্ট করবেন, তার ডান পাশের বক্সে সেই পেজ লিঙ্ক (যেমন: <code>https://facebook.com/yourpage</code>) দিন। হোয়াটসঅ্যাপের ক্ষেত্রে সরাসরি ফোন নম্বর (যেমন: <code>01878374762</code>) লিখলেই ওয়েবসাইটে আসা কাস্টমার ক্লিক করে সরাসরি আপনার সাথে চ্যাট করতে পারবে।</span>
                 </div>
               </div>
 
@@ -15680,21 +15687,253 @@ function SettingsAdmin() {
         </div>
       )}
 
-      {/* TAB 3: STORE & DELIVERY */}
+      {/* TAB 3: STORE & DELIVERY - 3-COLUMN MODULAR CARDS */}
       {tab === 'store' && (
-        <div className="sa-card" style={{ padding: 24 }}>
-          <div className="sa-sgrid">
-            <label>Store name<input value={f.storeName || ''} onChange={set('storeName')} placeholder="TimeBoost" /></label>
-            <label>Site Title (Browser Tab &amp; Google SEO)<input value={f.siteTitle || ''} onChange={set('siteTitle')} placeholder="e.g. SECRATE — Luxury Watches in Bangladesh" /></label>
-            <label style={{ gridColumn: '1 / -1' }}>Announcement text<input value={f.announce || ''} onChange={set('announce')} placeholder="Free shipping on orders over ৳2000" /></label>
-            <label>WhatsApp number (with country code)<input value={f.whatsapp || ''} onChange={set('whatsapp')} placeholder="8801XXXXXXXXX" /></label>
-            <label>Store phone<input value={f.phone || ''} onChange={set('phone')} placeholder="8801XXXXXXXXX" /></label>
-            <label>Delivery — inside Dhaka (৳)<input value={f.deliveryInside ?? ''} onChange={set('deliveryInside')} /></label>
-            <label>Delivery — outside Dhaka (৳)<input value={f.deliveryOutside ?? ''} onChange={set('deliveryOutside')} /></label>
-            <label>Free delivery over (৳)<input value={f.freeShipThreshold ?? ''} onChange={set('freeShipThreshold')} /></label>
-            <label>Low-stock alert at<input value={f.lowStockAt ?? ''} onChange={set('lowStockAt')} placeholder="5" /></label>
-            <label style={{ gridColumn: '1 / -1' }}>Google Tag Manager ID <span className="dim">(all pixels — FB, TikTok, GA — live inside GTM)</span><input value={f.gtmId || ''} onChange={set('gtmId')} placeholder="GTM-XXXXXXX" /></label>
-            <label style={{ gridColumn: '1 / -1' }}>Meta (Facebook) Pixel ID <span className="dim">(direct browser pixel & custom event tracking)</span><input value={f.fbPixelId || ''} onChange={set('fbPixelId')} placeholder="123456789012345" /></label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: 20 }}>
+          {/* COLUMN 1: STORE IDENTITY & CONTACT */}
+          <div className="sa-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 14 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>🏪 Store Profile &amp; Contact</h3>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(139, 92, 246, 0.15)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
+                    Column 1
+                  </span>
+                </div>
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8' }}>
+                  স্টোরের নাম, ব্রাউজার টাইটেল এবং কাস্টমার হেল্পলাইন তথ্য
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
+                  Store Name (দোকানের নাম)
+                </label>
+                <input
+                  type="text"
+                  value={f.storeName || ''}
+                  onChange={set('storeName')}
+                  placeholder="e.g. SECRATE"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 8, background: '#16132b', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
+                  Site Title (ব্রাউজার ট্যাব ও গুগল SEO)
+                </label>
+                <input
+                  type="text"
+                  value={f.siteTitle || ''}
+                  onChange={set('siteTitle')}
+                  placeholder="e.g. SECRATE — Luxury Watches &amp; Lifestyle"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 8, background: '#16132b', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 13 }}
+                />
+                <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
+                  গুগল সার্চ ও ব্রাউজার ট্যাবে এই টাইটেলটি দেখাবে।
+                </span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
+                  Announcement Banner (হেডার অফার বার)
+                </label>
+                <input
+                  type="text"
+                  value={f.announce || ''}
+                  onChange={set('announce')}
+                  placeholder="e.g. সারা দেশে ফ্রি ডেলিভারি! সীমিত সময়ের অফার"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 8, background: '#16132b', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 13 }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
+                    📞 Helpline Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={f.phone || ''}
+                    onChange={set('phone')}
+                    placeholder="+880 1878-374762"
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 8, background: '#16132b', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
+                    💬 WhatsApp Number
+                  </label>
+                  <input
+                    type="text"
+                    value={f.whatsapp || ''}
+                    onChange={set('whatsapp')}
+                    placeholder="8801878374762"
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 8, background: '#16132b', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 13 }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* COLUMN 2: DELIVERY & INVENTORY RULES */}
+          <div className="sa-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 14 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>🚚 Delivery &amp; Inventory</h3>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                    Column 2
+                  </span>
+                </div>
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8' }}>
+                  ডেলিভারি চার্জ, ফ্রি শিপিং থ্রেশহোল্ড এবং স্টক অ্যালার্ট লিমিট
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
+                    🏙️ Inside Dhaka (৳)
+                  </label>
+                  <input
+                    type="number"
+                    value={f.deliveryInside ?? ''}
+                    onChange={set('deliveryInside')}
+                    placeholder="60"
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 8, background: '#16132b', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 13 }}
+                  />
+                  <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>ঢাকার ভিতরে ডেলিভারি ফি</span>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
+                    🗺️ Outside Dhaka (৳)
+                  </label>
+                  <input
+                    type="number"
+                    value={f.deliveryOutside ?? ''}
+                    onChange={set('deliveryOutside')}
+                    placeholder="120"
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 8, background: '#16132b', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 13 }}
+                  />
+                  <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>ঢাকার বাইরে ডেলিভারি ফি</span>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
+                  🎁 Free Delivery Over (৳) <span style={{ color: '#94a3b8', fontWeight: 400 }}>(0 দিলে অফ থাকবে)</span>
+                </label>
+                <input
+                  type="number"
+                  value={f.freeShipThreshold ?? ''}
+                  onChange={set('freeShipThreshold')}
+                  placeholder="2000"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 8, background: '#16132b', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 13 }}
+                />
+                <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
+                  কাস্টমার এই পরিমাণের বেশি অর্ডার করলে অটোমেটিক ডেলিভারি চার্জ ০৳ হয়ে যাবে।
+                </span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
+                  ⚠️ Low-Stock Alert Level (স্টক অ্যালার্ট)
+                </label>
+                <input
+                  type="number"
+                  value={f.lowStockAt ?? ''}
+                  onChange={set('lowStockAt')}
+                  placeholder="5"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 8, background: '#16132b', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 13 }}
+                />
+                <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
+                  কোনো ভ্যারিয়েন্টের স্টক এর নিচে নামলে ইনভেন্টরিতে লাল ব্যাজ দেখাবে।
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* COLUMN 3: MARKETING, TRACKING & PIXELS */}
+          <div className="sa-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 14 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>📊 Marketing &amp; Tracking</h3>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+                    Column 3
+                  </span>
+                </div>
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8' }}>
+                  ফেসবুক মেটা পিক্সেল এবং গুগল ট্যাগ ম্যানেজার ইন্টিগ্রেশন
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#cbd5e1' }}>
+                    🎯 Meta (Facebook) Pixel ID
+                  </label>
+                  <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: f.fbPixelId ? 'rgba(34, 197, 94, 0.2)' : 'rgba(148, 163, 184, 0.15)', color: f.fbPixelId ? '#4ade80' : '#94a3b8' }}>
+                    {f.fbPixelId ? 'Active' : 'Not Connected'}
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={f.fbPixelId || ''}
+                  onChange={set('fbPixelId')}
+                  placeholder="e.g. 123456789012345"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 8, background: '#16132b', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 13 }}
+                />
+                <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
+                  ব্রাউজার ও কনভার্সন এপিআই (PageView, ViewContent, AddToCart, InitiateCheckout, Purchase) অটো ট্র্যাক করে।
+                </span>
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#cbd5e1' }}>
+                    🏷️ Google Tag Manager (GTM) ID
+                  </label>
+                  <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: f.gtmId ? 'rgba(34, 197, 94, 0.2)' : 'rgba(148, 163, 184, 0.15)', color: f.gtmId ? '#4ade80' : '#94a3b8' }}>
+                    {f.gtmId ? 'Active' : 'Not Connected'}
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={f.gtmId || ''}
+                  onChange={set('gtmId')}
+                  placeholder="e.g. GTM-XXXXXXX"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 8, background: '#16132b', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 13 }}
+                />
+                <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
+                  Google Analytics 4, TikTok Pixel বা কাস্টম স্ক্রিপ্ট চালানোর জন্য GTM কন্টেইনার আইডি।
+                </span>
+              </div>
+
+              {/* Status Box */}
+              <div style={{ background: '#16132b', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, padding: '12px 14px', marginTop: 4 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: 6 }}>
+                  ⚡ Live Tracking Overview
+                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11.5, color: '#94a3b8' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ color: f.fbPixelId ? '#4ade80' : '#ef4444' }}>{f.fbPixelId ? '●' : '○'}</span>
+                    <span>Facebook Pixel: {f.fbPixelId ? <strong style={{ color: '#fff' }}>{f.fbPixelId}</strong> : 'অফ'}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ color: f.gtmId ? '#4ade80' : '#ef4444' }}>{f.gtmId ? '●' : '○'}</span>
+                    <span>GTM Container: {f.gtmId ? <strong style={{ color: '#fff' }}>{f.gtmId}</strong> : 'অফ'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
