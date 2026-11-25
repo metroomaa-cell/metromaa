@@ -1,3 +1,103 @@
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+export function renderBrandedEmailTemplate({
+  contentHtml = '',
+  subject = '',
+  storeName = 'SECRATE',
+  siteUrl = 'https://secrate.shop',
+  phone = '',
+  whatsapp = '',
+  logoUrl = 'cid:store_logo',
+  emblemUrl = 'cid:store_emblem',
+}) {
+  const brandName = escapeHtml(storeName || 'SECRATE');
+  const cleanSubject = escapeHtml(subject || brandName);
+  const cleanUrl = escapeHtml(siteUrl || 'https://secrate.shop');
+  const cleanPhone = escapeHtml(phone);
+  const cleanWa = escapeHtml(whatsapp);
+  const currentYear = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>${cleanSubject}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; -webkit-font-smoothing: antialiased;">
+  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all; font-size: 1px; line-height: 1px; color: #fff; opacity: 0;">
+    ${cleanSubject} — ${brandName}
+  </div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f1f5f9; width: 100%; margin: 0; padding: 24px 12px;">
+    <tr>
+      <td align="center">
+        <!-- Main Email Container -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; width: 100%; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+          <!-- Branded Header with Store Logo -->
+          <tr>
+            <td align="center" style="background: linear-gradient(135deg, #09090b 0%, #18181b 100%); padding: 26px 20px; border-bottom: 3px solid #d97706; text-align: center;">
+              <a href="${cleanUrl}" target="_blank" style="text-decoration: none; display: inline-block;">
+                <img src="${logoUrl}" alt="${brandName}" style="max-height: 48px; max-width: 220px; width: auto; height: auto; display: block; margin: 0 auto; border: 0; outline: none;" />
+              </a>
+            </td>
+          </tr>
+
+          <!-- Email Content Body -->
+          <tr>
+            <td style="padding: 32px 28px; line-height: 1.65; font-size: 15px; color: #334155;">
+              ${contentHtml}
+            </td>
+          </tr>
+
+          <!-- Branded Footer with Store Emblem & Details -->
+          <tr>
+            <td style="background-color: #f8fafc; padding: 24px 24px; border-top: 1px solid #e2e8f0; text-align: center;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="padding-bottom: 10px;">
+                    <a href="${cleanUrl}" target="_blank" style="text-decoration: none; display: inline-block;">
+                      <img src="${emblemUrl}" alt="${brandName} Icon" width="40" height="40" style="width: 40px; height: 40px; border-radius: 50%; display: inline-block; vertical-align: middle; border: 0;" />
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="font-size: 13.5px; font-weight: 700; color: #0f172a; padding-bottom: 6px;">
+                    ${brandName} — Premium Customer Experience
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="font-size: 12px; color: #64748b; padding-bottom: 14px; line-height: 1.6;">
+                    Official Store: <a href="${cleanUrl}" target="_blank" style="color: #4f46e5; text-decoration: underline; font-weight: 600;">${cleanUrl.replace(/^https?:\/\//, '')}</a>
+                    ${cleanPhone ? ` &bull; Helpline: <a href="tel:${cleanPhone}" style="color: #475569; text-decoration: none; font-weight: 600;">${cleanPhone}</a>` : ''}
+                    ${cleanWa ? ` &bull; WhatsApp: <a href="https://wa.me/${cleanWa.replace(/[^0-9]/g, '')}" style="color: #16a34a; text-decoration: none; font-weight: 600;">${cleanWa}</a>` : ''}
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="font-size: 11px; color: #94a3b8; padding-top: 10px; border-top: 1px dashed #e2e8f0; line-height: 1.5;">
+                    &copy; ${currentYear} ${brandName}. All Rights Reserved.<br/>
+                    Designed &amp; Developed BY <a href="https://shakil.metrroma.com" target="_blank" style="color: #d97706; text-decoration: none; font-weight: 700;">Shakil [ shakil.metrroma.com ]</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { getMailboxes, saveMailboxes, getMailItems, saveMailItems } from './store.js';

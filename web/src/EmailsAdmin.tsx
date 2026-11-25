@@ -19,6 +19,19 @@ async function adminApi(path: string, opts: RequestInit = {}) {
   return res;
 }
 
+async function safeJson(res: any) {
+  try {
+    const contentType = res?.headers?.get?.('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const txt = await res.text();
+      return { ok: false, error: txt.slice(0, 120) || `Server returned non-JSON response (${res?.status || 500})` };
+    }
+    return await res.json();
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'Invalid server response' };
+  }
+}
+
 export interface CustomMailAddress {
   email: string;
   label: string;
@@ -85,7 +98,7 @@ export function EmailsAdmin({ onUnreadChange }: EmailsAdminProps) {
 
   // Logo & Branding Customization State
   const [workspaceLogo, setWorkspaceLogo] = useState<string>(() => {
-    return localStorage.getItem('secrate_mail_workspace_logo') || '';
+    return localStorage.getItem('secrate_mail_workspace_logo') || '/uploads/logo_secrate_emblem.png';
   });
   const [workspaceTitle, setWorkspaceTitle] = useState<string>(() => {
     return localStorage.getItem('secrate_mail_workspace_title') || 'Secrate Workspace';
@@ -175,7 +188,7 @@ export function EmailsAdmin({ onUnreadChange }: EmailsAdminProps) {
   const loadCustomAddresses = async () => {
     try {
       const res = await adminApi('/mail/addresses');
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.ok && Array.isArray(data.addresses) && data.addresses.length > 0) {
         setCustomAddresses(data.addresses);
         if (!composeFrom || !data.addresses.some((a: CustomMailAddress) => a.email === composeFrom)) {
@@ -196,7 +209,7 @@ export function EmailsAdmin({ onUnreadChange }: EmailsAdminProps) {
     try {
       setLoading(true);
       const res = await adminApi(`/mail/list?folder=${currentFolder === 'drafts' ? 'draft' : currentFolder}&q=${encodeURIComponent(q)}`);
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.ok) {
         setEmails(data.emails || []);
         if (data.counts) {
@@ -546,7 +559,7 @@ export function EmailsAdmin({ onUnreadChange }: EmailsAdminProps) {
           label: newAddressLabel.trim() || newAddressEmail.split('@')[0],
         })
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.ok) {
         setCustomAddresses(data.list || []);
         setNewAddressEmail('');
@@ -1036,23 +1049,28 @@ export function EmailsAdmin({ onUnreadChange }: EmailsAdminProps) {
             <button
               onClick={() => setAccountMenuOpen(!accountMenuOpen)}
               style={{
-                width: 32,
-                height: 32,
+                width: 34,
+                height: 34,
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                background: '#181528',
                 color: '#fff',
-                border: '1px solid rgba(139, 92, 246, 0.4)',
-                fontWeight: 700,
-                fontSize: 13,
+                border: '1.5px solid rgba(139, 92, 246, 0.45)',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 2px 10px rgba(139, 92, 246, 0.35)'
+                boxShadow: '0 2px 10px rgba(139, 92, 246, 0.35)',
+                overflow: 'hidden',
+                padding: 0
               }}
               title="Secrate Account Info"
             >
-              S
+              <img
+                src={workspaceLogo || '/uploads/logo_secrate_emblem.png'}
+                alt="Secrate"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+              />
             </button>
 
             {accountMenuOpen && (
@@ -1071,8 +1089,8 @@ export function EmailsAdmin({ onUnreadChange }: EmailsAdminProps) {
                 }}
               >
                 <div style={{ textAlign: 'center', paddingBottom: 12, borderBottom: '1px solid rgba(139, 92, 246, 0.16)' }}>
-                  <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', fontSize: 20, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px', boxShadow: '0 4px 14px rgba(139, 92, 246, 0.4)' }}>
-                    S
+                  <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#181528', border: '1.5px solid rgba(139, 92, 246, 0.4)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px', boxShadow: '0 4px 14px rgba(139, 92, 246, 0.4)' }}>
+                    <img src={workspaceLogo || '/uploads/logo_secrate_emblem.png'} alt="Secrate" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                   </div>
                   <div style={{ fontWeight: 700, fontSize: 14, color: '#f8fafc' }}>Secrate Admin Mail</div>
                   <div style={{ fontSize: 12, color: '#a78bfa' }}>support@secrate.shop</div>
@@ -1323,8 +1341,12 @@ export function EmailsAdmin({ onUnreadChange }: EmailsAdminProps) {
               {/* Sender & Recipient Details Row */}
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '10px 24px 16px 24px', borderBottom: '1px solid rgba(139, 92, 246, 0.12)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 42, height: 42, borderRadius: '50%', background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 800, color: '#fff' }}>
-                    {(selectedEmail.fromName || selectedEmail.from || 'U').charAt(0).toUpperCase()}
+                  <div style={{ width: 42, height: 42, borderRadius: '50%', background: '#181528', border: '1.5px solid rgba(139, 92, 246, 0.35)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+                    {(selectedEmail.fromEmail?.includes('secrate.shop') || selectedEmail.from?.includes('secrate.shop') || folder === 'sent') ? (
+                      <img src={workspaceLogo || '/uploads/logo_secrate_emblem.png'} alt="Secrate" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      (selectedEmail.fromName || selectedEmail.from || 'U').charAt(0).toUpperCase()
+                    )}
                   </div>
                   <div>
                     <div style={{ fontSize: 14.5, fontWeight: 700, color: '#f9fafb' }}>

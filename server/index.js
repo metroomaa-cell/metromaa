@@ -14,7 +14,7 @@ import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, 
 import { getWhatsAppSettings, saveWhatsAppSettings, sendWhatsAppNotification, formatWhatsAppMessage, isNightConfirmationTime } from './whatsapp_engine.js';
 import { startWhatsAppSocket, getWhatsAppLiveStatus, requestPairingCode, sendBaileysMessage, waitForQrCode, clearWhatsAppSession } from './whatsapp_baileys.js';
 import { getVapidPublicKey, getPushPopupSettings, savePushPopupSettings, upsertPushSubscriber, linkSubscriberPhone, removePushSubscriber, getPushSubscriberStats, sendBroadcastPush, sendOrderPushNotifications } from './push_engine.js';
-import { registerMailRoutes } from './mail_engine.js';
+import { registerMailRoutes, renderBrandedEmailTemplate } from './mail_engine.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 initStorageProtection();
@@ -2859,8 +2859,23 @@ async function sendEmail(to, subject, html, opts = {}) {
   const e = getIntegrations().email;
   if (!e || !e.enabled) return { ok: false, error: 'email not configured or disabled' };
   const st = getSettings() || {};
-  const defaultBrand = (st.storeName && st.storeName !== 'dot.') ? st.storeName : 'TimeBoost';
+  const defaultBrand = (st.storeName && st.storeName !== 'dot.') ? st.storeName : 'SECRATE';
   const fromName = (opts.fromName && opts.fromName !== 'dot.') ? opts.fromName : ((e.fromName && e.fromName !== 'dot.') ? e.fromName : defaultBrand);
+
+  // Wrap with branded store email template if raw HTML is provided
+  let finalHtml = html;
+  if (typeof finalHtml === 'string' && !finalHtml.includes('<!DOCTYPE') && !finalHtml.includes('<html')) {
+    finalHtml = renderBrandedEmailTemplate({
+      contentHtml: finalHtml,
+      subject,
+      storeName: defaultBrand,
+      siteUrl: 'https://secrate.shop',
+      phone: st.phone || '',
+      whatsapp: st.whatsapp || '',
+      logoUrl: 'cid:store_logo',
+      emblemUrl: 'cid:store_emblem',
+    });
+  }
 
   const hasSmtp = !!(e.host && e.user && e.pass);
   const hasResend = !!(e.resendApiKey || process.env.RESEND_API_KEY);
@@ -2884,15 +2899,50 @@ async function sendEmail(to, subject, html, opts = {}) {
         from: `"${fromName}" <${senderAddr}>`,
         to,
         subject,
-        html,
+        html: finalHtml,
       };
       if (opts.cc) mailOptions.cc = opts.cc;
       if (opts.bcc) mailOptions.bcc = opts.bcc;
-      if (Array.isArray(opts.attachments) && opts.attachments.length > 0) {
-        mailOptions.attachments = opts.attachments.map((a) => ({
-          filename: a.filename || a.name || 'attachment',
-          path: a.url ? (a.url.startsWith('/') ? join(__dir, '..', a.url) : a.url) : a.path,
-        }));
+      const attachments = Array.isArray(opts.attachments) ? opts.attachments.map((a) => ({
+        filename: a.filename || a.name || 'attachment',
+        path: a.url ? (a.url.startsWith('/') ? join(__dir, '..', a.url) : a.url) : a.path,
+      })) : [];
+
+      // Helper to find logo files across data / uploads folders
+      const findAsset = (filename) => {
+        const candidates = [
+          join(UPLOADS, filename),
+          join(__dir, 'uploads', filename),
+          join(__dir, '..', 'uploads', filename),
+        ];
+        return candidates.find((p) => existsSync(p)) || null;
+      };
+
+      // Inline CID attachments for Gmail, Outlook, Apple Mail
+      if (finalHtml.includes('cid:store_logo')) {
+        const logoPath = findAsset('logo_secrate_rich.png');
+        if (logoPath) {
+          attachments.push({
+            filename: 'logo_secrate_rich.png',
+            path: logoPath,
+            cid: 'store_logo',
+            contentType: 'image/png',
+          });
+        }
+      }
+      if (finalHtml.includes('cid:store_emblem')) {
+        const emblemPath = findAsset('logo_secrate_emblem.png');
+        if (emblemPath) {
+          attachments.push({
+            filename: 'logo_secrate_emblem.png',
+            path: emblemPath,
+            cid: 'store_emblem',
+            contentType: 'image/png',
+          });
+        }
+      }
+      if (attachments.length > 0) {
+        mailOptions.attachments = attachments;
       }
       await tx.sendMail(mailOptions);
       return { ok: true, via: 'smtp' };
@@ -2906,7 +2956,14 @@ async function sendEmail(to, subject, html, opts = {}) {
     if (!key) return { ok: false, error: 'Resend API key missing' };
     let from = opts.from ? `"${fromName}" <${opts.from}>` : (e.fromEmail ? `"${fromName}" <${e.fromEmail}>` : `"${fromName}" <onboarding@resend.dev>`);
     try {
-      const payload = { from, to, subject, html };
+      let resendHtml = finalHtml;
+      if (resendHtml.includes('cid:store_logo')) {
+        resendHtml = resendHtml.replace(/cid:store_logo/g, 'https://secrate.shop/uploads/logo_secrate_rich.png');
+      }
+      if (resendHtml.includes('cid:store_emblem')) {
+        resendHtml = resendHtml.replace(/cid:store_emblem/g, 'https://secrate.shop/uploads/logo_secrate_emblem.png');
+      }
+      const payload = { from, to, subject, html: resendHtml };
       if (opts.cc) payload.cc = opts.cc;
       if (opts.bcc) payload.bcc = opts.bcc;
       let r = await fetch('https://api.resend.com/emails', {
@@ -2985,8 +3042,34 @@ async function notifyOrder(o, kind) {
       sendSMS(o.customer.phone, fillTpl(tpl, map)).catch(() => {});
     }
     if (ig.email.enabled && o.customer?.email) {
-      const subj = kind === 'placed' ? `TimeBoost — order ${o.id} received` : `TimeBoost — order ${o.id} is ${o.status}`;
-      sendEmail(o.customer.email, subj, `<p>Hi ${map.name},</p><p>Your order <b>${o.id}</b> is <b>${o.status}</b>.</p><p>Total: ${map.total} (cash on delivery)</p>${map.courier ? `<p>Courier: ${map.courier}</p>` : ''}<p>— dot.</p>`).catch(() => {});
+      const st = getSettings() || {};
+      const storeName = (st.storeName && st.storeName !== 'dot.') ? st.storeName : 'SECRATE';
+      const subj = kind === 'placed' ? `${storeName} — Order #${o.id} Confirmation` : `${storeName} — Order #${o.id} Status: ${o.status}`;
+      const itemsList = Array.isArray(o.items) && o.items.length > 0 ? `
+        <div style="margin: 16px 0; padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+          <div style="font-weight: 700; font-size: 13px; color: #475569; margin-bottom: 8px;">ORDER ITEMS:</div>
+          ${o.items.map((it) => `<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px;">
+            <span>${String(it.name || it.title || 'Product')} &times; ${it.qty || 1}</span>
+            <span style="font-weight: 600;">৳${it.price ? (it.price * (it.qty || 1)) : ''}</span>
+          </div>`).join('')}
+        </div>` : '';
+      const orderHtml = `
+        <h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">Hello ${map.name || 'Valued Customer'},</h2>
+        <p style="font-size: 15px; color: #334155; margin-bottom: 16px;">
+          ${kind === 'placed' ? 'Thank you for your order! We have received your order and are preparing it for shipment.' : `Your order status has been updated to <strong style="color: #2563eb; text-transform: uppercase;">${o.status}</strong>.`}
+        </p>
+        <div style="background: #f8fafc; border-radius: 10px; padding: 16px 20px; border-left: 4px solid #d97706; margin-bottom: 20px;">
+          <div style="font-size: 14px; margin-bottom: 6px;"><strong>Order ID:</strong> #${o.id}</div>
+          <div style="font-size: 14px; margin-bottom: 6px;"><strong>Status:</strong> <span style="text-transform: capitalize; font-weight: 600;">${o.status}</span></div>
+          <div style="font-size: 14px; margin-bottom: 6px;"><strong>Total Amount:</strong> <span style="color: #16a34a; font-weight: 700;">${map.total}</span> (Cash on Delivery)</div>
+          ${map.courier ? `<div style="font-size: 14px;"><strong>Courier Partner:</strong> ${map.courier}</div>` : ''}
+        </div>
+        ${itemsList}
+        <p style="font-size: 14px; color: #64748b; margin-top: 20px;">
+          If you have any questions or need to make changes, please contact our support helpline.
+        </p>
+      `;
+      sendEmail(o.customer.email, subj, orderHtml).catch(() => {});
     }
     // Automated WhatsApp message
     try {
