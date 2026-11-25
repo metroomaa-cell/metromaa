@@ -508,17 +508,35 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
         }
       );
 
-      // Dedicated in-page Order Confirmation
-      setOrderSuccess({
+      // Save order receipt into sessionStorage for /page/:slug/thankyou
+      const targetSlug = cfg?.slug || slug;
+      const orderReceipt = {
         id: res.id,
         total: res.total ?? total,
+        subtotal: subtotal,
+        shippingCost: shippingCost,
         name: name.trim(),
         phone: cleanPhone,
         address: address.trim(),
-        items: [{ title: currentItem.title, qty: currentQty, price: currentItem.price }]
-      });
+        color: selectedColor || '',
+        landingSlug: targetSlug,
+        items: [{
+          id: currentItem.id,
+          name: currentItem.title,
+          title: currentItem.title,
+          price: currentItem.price,
+          qty: currentQty,
+          color: selectedColor || '',
+          image: currentItem.image || cfg?.heroImage
+        }]
+      };
+      try {
+        sessionStorage.setItem('last_landing_order', JSON.stringify(orderReceipt));
+      } catch (_) {}
+
       setLoading(false);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Navigate to dedicated /page/<landing-slug>/thankyou
+      go(`page/${targetSlug}/thankyou?id=${res.id}`);
     } catch (err: any) {
       setError(err.message || 'অর্ডার সম্পন্ন হতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
       setLoading(false);
@@ -580,15 +598,24 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
         `landing_${cfg?.slug || slug}`,
         { name: cName, phone: phoneCheck.clean, address: cAddr, city: zone === 'inside' ? 'Dhaka' : 'Outside Dhaka' }
       );
-      setOrderSuccess({
+      const targetSlug = cfg?.slug || slug;
+      const orderReceipt = {
         id: res.id,
         total: res.total ?? (unitPrice * qty + shipCost),
+        subtotal: unitPrice * qty,
+        shippingCost: shipCost,
         name: cName,
         phone: phoneCheck.clean,
         address: cAddr,
+        landingSlug: targetSlug,
         items: finalItems
-      });
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+      try {
+        sessionStorage.setItem('last_landing_order', JSON.stringify(orderReceipt));
+      } catch (_) {}
+
+      // Navigate to dedicated /page/<landing-slug>/thankyou
+      go(`page/${targetSlug}/thankyou?id=${res.id}`);
       return res;
     };
 

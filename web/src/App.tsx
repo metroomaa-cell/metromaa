@@ -13,6 +13,7 @@ import { getTrafficAttribution } from './attribution';
 import { LiveAiCallClient } from './liveAiCall';
 const Admin = lazy(() => import('./admin').then((m) => ({ default: m.Admin })));
 const LoveLockLanding = lazy(() => import('./LoveLockLanding').then((m) => ({ default: m.LoveLockLanding })));
+const LandingThankYou = lazy(() => import('./LandingThankYou').then((m) => ({ default: m.LandingThankYou })));
 
 function getSiteBrandDefaults() {
   const h = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
@@ -2176,11 +2177,25 @@ function Shell() {
   }, []);
   if (route.name === 'admin') return <Suspense fallback={<StoreLoading admin />}><Admin /></Suspense>;
 
-  // Dedicated Landing Page Funnel — strictly ONLY /page/<slug>
+  // Dedicated Landing Page Funnel — strictly ONLY /page/<slug> or /page/<slug>/thankyou
   const infoSlugs = ['privacy', 'terms', 'about', 'shipping', 'returns', 'contact', 'journal'];
   const isLanding = route.name === 'page' && !!route.param && !infoSlugs.includes(route.param.toLowerCase());
 
   if (isLanding) {
+    const paramLower = (route.param || '').toLowerCase();
+    const isThankYou = paramLower.endsWith('/thankyou') || paramLower.includes('/thankyou');
+    const landingSlug = (route.param || '').replace(/\/thankyou\/?$/i, '').trim();
+
+    if (isThankYou) {
+      return (
+        <Suspense fallback={<StoreLoading />}>
+          <Effects />
+          <LandingThankYou slug={landingSlug} />
+          <Toast />
+        </Suspense>
+      );
+    }
+
     return (
       <Suspense fallback={<StoreLoading />}>
         <Effects />

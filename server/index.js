@@ -1212,6 +1212,32 @@ app.post('/api/orders', (req, res) => {
   res.status(201).json({ id: order.id, total: order.total, status: order.status });
 });
 
+// ---- public order details for landing thank you page ----
+app.get('/api/orders/public/:id', (req, res) => {
+  const reqId = String(req.params.id || '').trim();
+  if (!reqId) return res.status(400).json({ error: 'missing id' });
+  const all = getOrders() || [];
+  const found = all.find((o) => o.id === reqId || o.id === 'DOT-' + reqId || 'DOT-' + o.id === reqId || String(o.id).endsWith(reqId));
+  if (!found) return res.status(404).json({ error: 'order not found' });
+  res.json({
+    id: found.id,
+    total: found.total,
+    subtotal: found.subtotal || found.itemsTotal,
+    shippingCost: found.shippingCost || (found.shipping && found.shipping.cost) || 0,
+    status: found.status,
+    items: (found.items || []).map((it) => ({
+      id: it.id,
+      name: it.name || it.title,
+      price: it.price,
+      qty: it.qty,
+      color: it.color,
+      variantTitle: it.variantTitle,
+      image: it.image
+    })),
+    createdAt: found.createdAt
+  });
+});
+
 // ---- track order (public: supports Order ID, Phone, or ID+Phone) ----
 app.get('/api/track', async (req, res) => {
   const qId = String(req.query.id || req.query.order || '').trim().toUpperCase();
