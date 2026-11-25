@@ -109,6 +109,28 @@
 
         window.fbq = fbqStub;
         window._fbq = fbqStub;
+
+        // Auto GTM Shield: If a landing page sets a custom pixel, store GTM is automatically blocked!
+        try {
+          var gtmObserver = new MutationObserver(function(mutations) {
+            for (var i = 0; i < mutations.length; i++) {
+              var nodes = mutations[i].addedNodes;
+              for (var j = 0; j < nodes.length; j++) {
+                var el = nodes[j];
+                if (el && el.tagName === 'SCRIPT' && el.src && el.src.indexOf('googletagmanager.com/gtm.js') !== -1) {
+                  var isLand = (window.location.pathname || '').indexOf('/page') !== -1;
+                  var hasCustom = window.__ALLOWED_PIXELS__ && Array.isArray(window.__ALLOWED_PIXELS__) && window.__ALLOWED_PIXELS__.length > 0;
+                  if (isLand && hasCustom && !window.__ALLOWED_GTM__) {
+                    el.type = 'javascript/blocked';
+                    if (el.parentNode) el.parentNode.removeChild(el);
+                    console.warn('[GTM Guard] Blocked store GTM because this landing page has custom pixel active.');
+                  }
+                }
+              }
+            }
+          });
+          gtmObserver.observe(document.documentElement, { childList: true, subtree: true });
+        } catch(_) {}
       })();
     </script>
     

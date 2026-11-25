@@ -6642,7 +6642,7 @@ if (existsSync(dist)) {
           const allowed = targetLanding.pixelMode === 'both' && stNow.fbPixelId
             ? JSON.stringify([String(targetLanding.fbPixelId).trim(), String(stNow.fbPixelId).trim()])
             : JSON.stringify([String(targetLanding.fbPixelId).trim()]);
-          landingPreloadScript = `<script>window.__ALLOWED_PIXELS__ = ${allowed};</script>`;
+          landingPreloadScript = `<script>window.__ALLOWED_PIXELS__ = ${allowed};${targetLanding.gtmId ? ' window.__ALLOWED_GTM__ = true;' : ''}</script>`;
         }
         if (landingPreloadScript) {
           html = html.replace('<head>', `<head>\n    ${landingPreloadScript}`);
@@ -6667,7 +6667,9 @@ if (existsSync(dist)) {
         (req.path && /^\/(wp-admin|admin|staff)/i.test(req.path));
 
       const activeGtmId = getSettings().gtmId;
-      if (activeGtmId && !targetLanding && !isAdminPath) {
+      const landingHasCustomTracking = targetLanding && (targetLanding.fbPixelId || targetLanding.ttkPixelId || targetLanding.gtmId);
+
+      if (activeGtmId && !landingHasCustomTracking && !isAdminPath) {
         const gtmSnippet = `<!-- Google Tag Manager -->
 <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
