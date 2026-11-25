@@ -69,16 +69,26 @@ export function ttkTrack(event: string, params?: Record<string, any>, eventId?: 
   } catch {}
 }
 
+export function setAllowedLandingPixels(pixels: string[]) {
+  if (typeof window !== 'undefined') {
+    (window as any).__ALLOWED_PIXELS__ = pixels && pixels.length > 0 ? pixels.map(p => String(p).trim()) : null;
+  }
+}
+
 export function initFB(id: string) {
   try {
     if (import.meta.env.DEV || isAdminContext()) return;
     if (!id || !/^\d+$/.test(id.trim())) return;
     const pid = id.trim();
+    const w = window as any;
+    if (typeof w.__isPixelAllowed === 'function' && !w.__isPixelAllowed(pid)) {
+      console.warn(`[analytics] initFB prevented for disallowed pixel ${pid}`);
+      return;
+    }
     if (initializedFbPixels.has(pid)) return;
     fbLoaded = true;
     initializedFbPixels.add(pid);
 
-    const w = window as any;
     if (!w.fbq) {
       const n: any = function () {
         n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);

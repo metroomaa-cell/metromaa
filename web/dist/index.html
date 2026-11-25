@@ -1,45 +1,106 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <!-- Google Tag Manager -->
-    <script>(function(w,d,s,l,i){
-      try {
-        var p = (w.location.pathname || '').toLowerCase();
-        var h = (w.location.hash || '').toLowerCase();
-        var isAdm = p.indexOf('/admin') !== -1 || p.indexOf('/wp-admin') !== -1 || p.indexOf('/staff') !== -1 ||
-                    h.indexOf('admin') !== -1 || h.indexOf('staff') !== -1 || h.indexOf('orders') !== -1 ||
-                    h.indexOf('catalog') !== -1 || h.indexOf('inventory') !== -1 || h.indexOf('finance') !== -1 ||
-                    h.indexOf('settings') !== -1 || h.indexOf('integrations') !== -1 || h.indexOf('campaigns') !== -1 ||
-                    (w.sessionStorage && w.sessionStorage.getItem('sa_admin_nav')) ||
-                    (w.localStorage && w.localStorage.getItem('dot_admin_token'));
-        var isLanding = p.indexOf('/page/') !== -1;
-        if (isAdm || isLanding) return;
-      } catch(e) {}
-      w[l]=w[l]||[];w[l].push({'gtm.start':
-      new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-      j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-      'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-    })(window,document,'script','dataLayer','GTM-5T7XBB49');</script>
-    <!-- End Google Tag Manager -->
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#17120E" />
-    <title>TimeBoost — Premium Wellness &amp; Timing</title>
+    <title>Store</title>
+
+    <!-- Strict Domain & Landing Pixel Isolation Shield -->
+    <script>
+      (function() {
+        var h = (window.location.hostname || '').toLowerCase();
+        var p = (window.location.pathname || '').toLowerCase();
+
+        function isPixelAllowed(pid) {
+          if (!pid) return false;
+          pid = String(pid).trim();
+          
+          // 1. Landing Page Strict Isolation:
+          if (window.__ALLOWED_PIXELS__ && Array.isArray(window.__ALLOWED_PIXELS__)) {
+            return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
+          }
+
+          // 2. VPS 1: secrate.shop -> ONLY VPS 1 Secrate pixel permitted (848875214954132)
+          if (h.indexOf('secrate') !== -1) {
+            if (pid === '1076190345020163' || pid === '1859139138606140') {
+              console.warn('[Pixel Guard] Blocked VPS 2 Pixel ' + pid + ' on VPS 1 (secrate.shop)');
+              return false;
+            }
+            return true;
+          }
+
+          // 3. VPS 2: timingboost.xyz -> ONLY VPS 2 TimeBoost pixel permitted (1076190345020163, 1859139138606140)
+          if (h.indexOf('timingboost') !== -1 || h.indexOf('timeboost') !== -1) {
+            if (pid === '848875214954132') {
+              console.warn('[Pixel Guard] Blocked VPS 1 Pixel ' + pid + ' on VPS 2 (timingboost.xyz)');
+              return false;
+            }
+            return true;
+          }
+
+          // 4. VPS 2: metrroma.com -> ONLY Metrroma pixel permitted (1122829254194671)
+          if (h.indexOf('metrroma') !== -1 || h.indexOf('metromaa') !== -1) {
+            if (pid === '848875214954132' || pid === '1076190345020163' || pid === '1859139138606140') {
+              return false;
+            }
+            return true;
+          }
+
+          return true;
+        }
+        window.__isPixelAllowed = isPixelAllowed;
+
+        var rawFbq = window.fbq;
+        function wrap(fn) {
+          var guarded = function() {
+            var cmd = arguments[0];
+            var id = arguments[1];
+            if (cmd === 'init' || cmd === 'trackSingle' || cmd === 'trackSingleCustom') {
+              if (!isPixelAllowed(id)) {
+                return;
+              }
+            }
+            return fn ? fn.apply(this, arguments) : undefined;
+          };
+          if (fn) {
+            for (var k in fn) {
+              if (Object.prototype.hasOwnProperty.call(fn, k)) guarded[k] = fn[k];
+            }
+          }
+          return guarded;
+        }
+
+        var currentFbq = rawFbq ? wrap(rawFbq) : null;
+        try {
+          Object.defineProperty(window, 'fbq', {
+            configurable: true,
+            enumerable: true,
+            get: function() { return currentFbq; },
+            set: function(val) {
+              if (typeof val === 'function' && val !== currentFbq) {
+                currentFbq = wrap(val);
+              } else {
+                currentFbq = val;
+              }
+            }
+          });
+        } catch (_) {
+          if (rawFbq) window.fbq = wrap(rawFbq);
+        }
+      })();
+    </script>
     
-    <meta name="description" content="TimeBoost — 100% authentic wellness, timing and lifestyle solutions in Bangladesh. Fast Cash on Delivery across Bangladesh." />
-    <!-- Open Graph for Facebook & Social Ads Sharing -->
-    <meta property="og:site_name" content="TimeBoost — Premium Wellness &amp; Timing" />
+    <meta name="description" content="100% authentic premium products with fast Cash on Delivery across Bangladesh." />
+    <!-- Open Graph for Social Ads Sharing -->
+    <meta property="og:site_name" content="Store" />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://timingboost.xyz/" />
-    <meta property="og:title" content="TimeBoost — Premium Wellness &amp; Timing" />
-    <meta property="og:description" content="TimeBoost — 100% authentic wellness, timing and lifestyle solutions in Bangladesh. Fast Cash on Delivery across Bangladesh." />
-    <meta property="og:image" content="https://timingboost.xyz/uploads/logo_timeboost.png" />
-    <meta property="og:image:secure_url" content="https://timingboost.xyz/uploads/logo_timeboost.png" />
+    <meta property="og:title" content="Store" />
+    <meta property="og:description" content="100% authentic premium products with fast Cash on Delivery across Bangladesh." />
     <!-- Twitter Cards -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="TimeBoost — Premium Wellness &amp; Timing" />
-    <meta name="twitter:description" content="TimeBoost — 100% authentic wellness, timing and lifestyle solutions in Bangladesh. Fast Cash on Delivery across Bangladesh." />
-    <meta name="twitter:image" content="https://timingboost.xyz/uploads/logo_timeboost.png" />
+    <meta name="twitter:title" content="Store" />
+    <meta name="twitter:description" content="100% authentic premium products with fast Cash on Delivery across Bangladesh." />
     <!-- Google Identity Services (Sign In with Google) -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <!-- Preload Mobile LCP Hero Banner for Instant Speed -->
@@ -49,15 +110,11 @@
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" /></noscript>
     <style>#root{color:#1f3147;background:#f3f0ec;min-height:100vh}</style>
-    <script type="module" crossorigin src="/assets/index-DGBdBvJI.js"></script>
+    <script type="module" crossorigin src="/assets/index-BjCyfSBt.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-BWaJ3C7D.js">
     <link rel="stylesheet" crossorigin href="/assets/index-CKXQ5xsR.css">
   </head>
   <body>
-    <!-- Google Tag Manager (noscript) -->
-    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-5T7XBB49"
-    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-    <!-- End Google Tag Manager (noscript) -->
     <div id="root"></div>
   </body>
 </html>

@@ -6534,13 +6534,23 @@ if (existsSync(dist)) {
 
     try {
       let html = readFileSync(indexPath, 'utf8');
-      const baseUrl = 'https://timingboost.xyz';
+      const stNow = getSettings();
+      const host = req.get('host') || (stNow.storeUrl ? new URL(stNow.storeUrl).host : (req.hostname && req.hostname.includes('secrate') ? 'secrate.shop' : 'timingboost.xyz'));
+      const proto = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+      const baseUrl = `${proto}://${host}`;
       const path = req.path || '/';
 
       const cleanPath = path.replace(/^\/+|\/+$/g, '');
       const parts = cleanPath.split('/').filter(Boolean);
       let targetProduct = null;
       let targetCategory = null;
+      let targetLanding = null;
+
+      if (parts[0] === 'page' && parts[1]) {
+        try {
+          targetLanding = getLandingBySlug(parts[1]);
+        } catch (_) {}
+      }
 
       const catalog = getCatalog().products || [];
       if (parts[0] === 'product' && parts[1]) {
@@ -6611,6 +6621,31 @@ if (existsSync(dist)) {
           .replace(/<meta property="og:image:secure_url" content="[^"]*"/i, `<meta property="og:image:secure_url" content="${htmlEscape(absoluteUrl(targetCategory.image))}"`)
           .replace(/<link rel="canonical" href="[^"]*"\s*\/?\s*>/i, `<link rel="canonical" href="${htmlEscape(url)}" />`)
           .replace('</head>', `\n    <meta property="og:url" content="${htmlEscape(url)}" /><meta property="og:type" content="website" /><script type="application/ld+json">${JSON.stringify(listJsonLd).replace(/</g, '\\u003c')}</script>\n</head>`);
+      } else if (targetLanding) {
+        const landTitle = String(targetLanding.headline || targetLanding.title || 'Special Offer').trim();
+        const landDesc = String(targetLanding.subheadline || targetLanding.title || 'Special Offer Cash on Delivery across Bangladesh.').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+        const landImg = targetLanding.mainImage ? absoluteUrl(targetLanding.mainImage) : '';
+        const landUrl = `${baseUrl}/page/${encodeURIComponent(parts[1])}`;
+
+        html = html
+          .replace(/<title>[\s\S]*?<\/title>/i, `<title>${htmlEscape(landTitle)}</title>`)
+          .replace(/<meta name="description" content="[^"]*"/i, `<meta name="description" content="${htmlEscape(landDesc)}"`)
+          .replace(/<meta property="og:title" content="[^"]*"/i, `<meta property="og:title" content="${htmlEscape(landTitle)}"`)
+          .replace(/<meta property="og:description" content="[^"]*"/i, `<meta property="og:description" content="${htmlEscape(landDesc)}"`);
+        if (landImg) {
+          html = html.replace(/<meta property="og:image" content="[^"]*"/i, `<meta property="og:image" content="${htmlEscape(landImg)}"`);
+        }
+
+        let landingPreloadScript = '';
+        if (targetLanding.fbPixelId) {
+          const allowed = targetLanding.pixelMode === 'both' && stNow.fbPixelId
+            ? JSON.stringify([String(targetLanding.fbPixelId).trim(), String(stNow.fbPixelId).trim()])
+            : JSON.stringify([String(targetLanding.fbPixelId).trim()]);
+          landingPreloadScript = `<script>window.__ALLOWED_PIXELS__ = ${allowed};</script>`;
+        }
+        if (landingPreloadScript) {
+          html = html.replace('</head>', `\n    ${landingPreloadScript}\n</head>`);
+        }
       } else {
         const s = getSettings();
         const brand = (s.storeName && s.storeName !== 'dot.' && s.storeName !== 'Dot Store')
@@ -6627,8 +6662,10 @@ if (existsSync(dist)) {
       }
 
       const activeGtmId = getSettings().gtmId;
-      if (activeGtmId) {
-        html = html.replace(/GTM-[A-Z0-9]+/g, activeGtmId);
+      if (activeGtmId && (!targetLanding || targetLanding.gtmId)) {
+        html = html.replace(/GTM-[A-Z0-9]+/g, targetLanding?.gtmId || activeGtmId);
+      } else if (targetLanding && !targetLanding.gtmId) {
+        html = html.replace(/GTM-[A-Z0-9]+/g, '');
       }
       res.setHeader('Content-Type', 'text/html; charset=UTF-8');
       res.send(html);

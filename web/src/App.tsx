@@ -61,7 +61,7 @@ function Effects() {
     getSettings().then((s) => {
       setStoreCopyOverrides(s.siteContent?.textOverrides);
       if (!isAdmin && !isLocalPreview) {
-        const isLandingPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/page/');
+        const isLandingPage = route.name === 'page' || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/page/') || window.location.pathname.startsWith('/page')));
         if (!isLandingPage) {
           if (s.gtmId) initGTM(s.gtmId);
           if (s.fbPixelId) initFB(s.fbPixelId);

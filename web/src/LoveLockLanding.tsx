@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { placeOrder, getSettings, taka, getDeviceId, isSkincareSite, getTrafficAttribution } from './api';
-import { dl, ecView, ecAdd, ecBeginCheckout, ecPurchase, pushUserData, initFB, initTikTok, initGTM, initGA4 } from './analytics';
+import { dl, ecView, ecAdd, ecBeginCheckout, ecPurchase, pushUserData, initFB, initTikTok, initGTM, initGA4, setAllowedLandingPixels } from './analytics';
 import { go } from './cart';
 import { WhatsAppIcon } from './icons';
 
@@ -205,6 +205,10 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
       // 1. Meta Facebook Pixel
       if (cfg.fbPixelId) {
+        const allowed = cfg.pixelMode === 'both' && storeSettings.fbPixelId
+          ? [String(cfg.fbPixelId).trim(), String(storeSettings.fbPixelId).trim()]
+          : [String(cfg.fbPixelId).trim()];
+        setAllowedLandingPixels(allowed);
         initFB(cfg.fbPixelId);
         if (cfg.pixelMode === 'both' && storeSettings.fbPixelId && storeSettings.fbPixelId !== cfg.fbPixelId) {
           initFB(storeSettings.fbPixelId);
