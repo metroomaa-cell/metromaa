@@ -21,8 +21,10 @@ export function renderBrandedEmailTemplate({
   const brandName = escapeHtml(storeName || 'SECRATE');
   const cleanSubject = escapeHtml(subject || brandName);
   const cleanUrl = escapeHtml(siteUrl || 'https://secrate.shop');
-  const cleanPhone = escapeHtml(phone);
-  const cleanWa = escapeHtml(whatsapp);
+  const cleanPhone = phone ? escapeHtml(String(phone).trim()) : '';
+  let rawWa = whatsapp ? String(whatsapp).replace(/[^0-9]/g, '') : '';
+  if (rawWa.length === 11 && rawWa.startsWith('01')) rawWa = '88' + rawWa;
+  const cleanWa = escapeHtml(rawWa);
   const currentYear = new Date().getFullYear();
 
   return `<!DOCTYPE html>
@@ -78,7 +80,7 @@ export function renderBrandedEmailTemplate({
                   <td align="center" style="font-size: 12px; color: #64748b; padding-bottom: 14px; line-height: 1.6;">
                     Official Store: <a href="${cleanUrl}" target="_blank" style="color: #4f46e5; text-decoration: underline; font-weight: 600;">${cleanUrl.replace(/^https?:\/\//, '')}</a>
                     ${cleanPhone ? ` &bull; Helpline: <a href="tel:${cleanPhone}" style="color: #475569; text-decoration: none; font-weight: 600;">${cleanPhone}</a>` : ''}
-                    ${cleanWa ? ` &bull; WhatsApp: <a href="https://wa.me/${cleanWa.replace(/[^0-9]/g, '')}" style="color: #16a34a; text-decoration: none; font-weight: 600;">${cleanWa}</a>` : ''}
+                    ${cleanWa ? ` &bull; WhatsApp: <a href="https://wa.me/${cleanWa}" style="color: #16a34a; text-decoration: none; font-weight: 600;">+${cleanWa}</a>` : ''}
                   </td>
                 </tr>
                 <tr>
@@ -106,6 +108,60 @@ let activeBulkCampaign = null;
 let bulkStopRequested = false;
 
 export function registerMailRoutes(app, { adminAuth, sendEmail, getCustomers, getOrders, uploadsDir }) {
+  // Public/Secure Inbound Webhook for receiving emails into Webmail Inbox
+  app.post('/api/mail/inbound', async (req, res) => {
+    try {
+      const b = req.body || {};
+      let from = b.from || b.sender || '';
+      let fromName = b.fromName || (from.includes('<') ? from.split('<')[0].replace(/"/g, '').trim() : (from.split('@')[0] || 'Unknown'));
+      let fromEmail = b.fromEmail || (from.includes('<') ? from.match(/<([^>]+)>/)?.[1] : from);
+      let to = b.to || b.recipient || 'shakil@secrate.shop';
+      let toName = b.toName || (to.includes('<') ? to.split('<')[0].replace(/"/g, '').trim() : (to.split('@')[0] || 'Shakil'));
+      let toEmail = b.toEmail || (to.includes('<') ? to.match(/<([^>]+)>/)?.[1] : to);
+      let subject = b.subject || '(No Subject)';
+      let text = b.text || b.body || '';
+      let html = b.html || (text ? `<pre>${text}</pre>` : '');
+      let attachments = Array.isArray(b.attachments) ? b.attachments : [];
+
+      let category = 'primary';
+      if (/order|invoice|receipt|ডেলিভারি|অর্ডার/i.test(subject) || /order|invoice/i.test(text.slice(0, 300))) {
+        category = 'orders';
+      }
+
+      const allMails = getMailItems();
+      const newMail = {
+        id: 'mail_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+        folder: 'inbox',
+        category,
+        from: `"${fromName}" <${fromEmail}>`,
+        fromName,
+        fromEmail,
+        to: `"${toName}" <${toEmail}>`,
+        toName,
+        toEmail,
+        cc: b.cc || null,
+        bcc: null,
+        subject,
+        snippet: text.trim().slice(0, 140).replace(/\s+/g, ' '),
+        body: text,
+        html,
+        text,
+        date: b.date || new Date().toISOString(),
+        isRead: false,
+        isStarred: false,
+        attachments
+      };
+
+      allMails.unshift(newMail);
+      saveMailItems(allMails);
+
+      console.log(`[Webmail Inbound API] Received email from ${fromEmail} (Subject: "${subject}")`);
+      res.json({ ok: true, id: newMail.id });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
   // 1. Get custom mailboxes / addresses
   app.get('/api/mail/addresses', adminAuth, (_req, res) => {
     try {

@@ -1,6 +1,10 @@
-// Google Tag Manager + Meta Pixel + dataLayer tracking
+// Google Tag Manager + Meta Pixel + TikTok Pixel + GA4 + dataLayer tracking
 let gtmLoaded = false;
 let fbLoaded = false;
+const initializedFbPixels = new Set<string>();
+const initializedTtkPixels = new Set<string>();
+const initializedGtm = new Set<string>();
+const initializedGa = new Set<string>();
 
 export function isAdminContext(): boolean {
   if (typeof window === 'undefined') return false;
@@ -54,12 +58,26 @@ export function fbTrack(name: string, data?: Record<string, any>, isCustom = tru
   } catch {}
 }
 
+export function ttkTrack(event: string, params?: Record<string, any>, eventId?: string) {
+  try {
+    if (import.meta.env.DEV || isAdminContext()) return;
+    const w = window as any;
+    if (w.ttq && typeof w.ttq.track === 'function') {
+      const opts = eventId ? { event_id: String(eventId) } : undefined;
+      w.ttq.track(event, params || {}, opts);
+    }
+  } catch {}
+}
+
 export function initFB(id: string) {
   try {
     if (import.meta.env.DEV || isAdminContext()) return;
-    if (fbLoaded || !id || !/^\d+$/.test(id.trim())) return;
-    fbLoaded = true;
+    if (!id || !/^\d+$/.test(id.trim())) return;
     const pid = id.trim();
+    if (initializedFbPixels.has(pid)) return;
+    fbLoaded = true;
+    initializedFbPixels.add(pid);
+
     const w = window as any;
     if (!w.fbq) {
       const n: any = function () {
@@ -83,18 +101,93 @@ export function initFB(id: string) {
   } catch {}
 }
 
+export function initTikTok(id: string) {
+  try {
+    if (import.meta.env.DEV || isAdminContext()) return;
+    if (!id || !id.trim()) return;
+    const tid = id.trim();
+    if (initializedTtkPixels.has(tid)) return;
+    initializedTtkPixels.add(tid);
+
+    const w = window as any;
+    if (!w.ttq) {
+      w.TiktokAnalyticsObject = 'ttq';
+      const ttq: any = [];
+      ttq.methods = ['page', 'track', 'identify', 'instances', 'load', 'on', 'off', 'once', 'ready', 'alias', 'group', 'enableCookie', 'disableCookie', 'holdConsent', 'revokeConsent', 'grantConsent'];
+      ttq.setAndDefer = function (t: any, e: any) {
+        t[e] = function () {
+          t.push([e].concat(Array.prototype.slice.call(arguments, 0)));
+        };
+      };
+      for (let i = 0; i < ttq.methods.length; i++) {
+        ttq.setAndDefer(ttq, ttq.methods[i]);
+      }
+      ttq.instance = function (t: any) {
+        const e = ttq._i[t] || [];
+        for (let n = 0; n < ttq.methods.length; n++) {
+          ttq.setAndDefer(e, ttq.methods[n]);
+        }
+        return e;
+      };
+      ttq.load = function (e: any, n: any) {
+        const i = 'https://analytics.tiktok.com/i18n/pixel/events.js';
+        ttq._i = ttq._i || {};
+        ttq._i[e] = [];
+        ttq._i[e]._u = i;
+        ttq._t = ttq._t || {};
+        ttq._t[e] = +new Date();
+        ttq._o = ttq._o || {};
+        ttq._o[e] = n || {};
+        const o = document.createElement('script');
+        o.type = 'text/javascript';
+        o.async = true;
+        o.src = i + '?sdkid=' + e + '&lib=ttq';
+        const a = document.getElementsByTagName('script')[0];
+        if (a && a.parentNode) a.parentNode.insertBefore(o, a);
+        else document.head.appendChild(o);
+      };
+      w.ttq = ttq;
+    }
+    w.ttq.load(tid);
+    w.ttq.page();
+  } catch {}
+}
+
+export function initGA4(id: string) {
+  try {
+    if (import.meta.env.DEV || isAdminContext()) return;
+    if (!id || !/^G-[A-Z0-9]+$/i.test(id.trim())) return;
+    const gaId = id.trim().toUpperCase();
+    if (initializedGa.has(gaId)) return;
+    initializedGa.add(gaId);
+
+    const w = window as any;
+    w.dataLayer = w.dataLayer || [];
+    function gtag() { (w.dataLayer as any).push(arguments); }
+    w.gtag = w.gtag || gtag;
+    (w.gtag as any)('js', new Date());
+    (w.gtag as any)('config', gaId);
+    const s = document.createElement('script');
+    s.async = true;
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
+    document.head.appendChild(s);
+  } catch {}
+}
+
 export function initGTM(id: string) {
   try {
     if (import.meta.env.DEV || isAdminContext()) return;
-    const w = window as any;
-    if (gtmLoaded || !id || !/^GTM-[A-Z0-9]+$/i.test(id.trim())) return;
-    const gid = id.trim();
+    if (!id || !/^GTM-[A-Z0-9]+$/i.test(id.trim())) return;
+    const gid = id.trim().toUpperCase();
+    if (initializedGtm.has(gid)) return;
+    initializedGtm.add(gid);
+    gtmLoaded = true;
+
     // If GTM is already present in HTML, do not reinject
+    const w = window as any;
     if (document.querySelector(`script[src*="${gid}"]`) || (w.google_tag_manager && w.google_tag_manager[gid])) {
-      gtmLoaded = true;
       return;
     }
-    gtmLoaded = true;
     w.dataLayer = w.dataLayer || [];
     w.dataLayer.push({ 'gtm.start': Date.now(), event: 'gtm.js' });
     const s = document.createElement('script');
@@ -118,6 +211,7 @@ export function ecView(p: { id: string; name: string; price: number }) {
     dl({ event: 'view_item', event_id: eventId, eventID: eventId, content_id: String(p.id), content_ids: [String(p.id)], content_name: p.name, content_type: 'product', contents: [{ content_id: String(p.id), content_name: p.name, content_type: 'product', quantity: 1, price: p.price }], ecommerce: { currency: CUR, value: p.price, items: [{ item_id: p.id, item_name: p.name, price: p.price, quantity: 1 }] } });
     dl({ event: 'ViewContent', event_id: eventId, eventID: eventId, content_id: String(p.id), content_name: p.name, content_ids: [String(p.id)], content_type: 'product', contents: [{ content_id: String(p.id), content_name: p.name, content_type: 'product', quantity: 1, price: p.price }], value: p.price, currency: CUR });
     fbTrack('ViewContent', { content_name: p.name, content_ids: [p.id], content_type: 'product', value: p.price, currency: CUR }, false, eventId);
+    ttkTrack('ViewContent', { content_id: String(p.id), content_type: 'product', content_name: p.name, price: p.price, currency: CUR }, eventId);
   } catch {}
 }
 
@@ -248,6 +342,7 @@ export function ecBeginCheckout(
       customer: uData,
     });
     fbTrack('InitiateCheckout', { value, currency: CUR, num_items: items.length }, false, eventId);
+    ttkTrack('InitiateCheckout', { contents: ttContents, value, currency: CUR }, eventId);
   } catch {}
 }
 
@@ -319,6 +414,7 @@ export function ecPurchase(
       false,
       String(id)
     );
+    ttkTrack('CompletePayment', { contents: ttContents, value: numValue, currency: CUR }, String(id));
   } catch {}
 }
 

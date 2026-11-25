@@ -2622,7 +2622,8 @@ app.get('/api/landings', (_req, res) => {
 app.get('/api/landings/:slug', (req, res) => {
   const landing = getLandingBySlug(req.params.slug);
   if (!landing) return res.status(404).json({ error: 'landing page not found' });
-  res.json(landing);
+  const { fbToken, ttkToken, ...safeLanding } = landing;
+  res.json(safeLanding);
 });
 
 app.post('/api/landings', adminAuth, requireRole('owner', 'manager'), (req, res) => {
@@ -2881,18 +2882,19 @@ async function sendEmail(to, subject, html, opts = {}) {
   const hasResend = !!(e.resendApiKey || process.env.RESEND_API_KEY);
 
   const trySmtp = async () => {
-    const host = String(e.host || '').trim();
+    const host = String(e.host || '').trim() || '127.0.0.1';
     const user = String(e.user || '').trim();
     const isGmail = host.toLowerCase().includes('gmail.com');
     const pass = isGmail ? String(e.pass || '').replace(/\s+/g, '') : String(e.pass || '');
-    const port = Number(e.port) || (isGmail ? 465 : 587);
+    const port = Number(e.port) || (isGmail ? 465 : (host === '127.0.0.1' || host === 'localhost' ? 25 : 587));
     const secure = port === 465 ? true : !!e.secure;
-    const senderAddr = opts.from ? opts.from : ((isGmail || !e.fromEmail || e.fromEmail.includes('dot.metromaa.com')) ? user : e.fromEmail);
+    const senderAddr = opts.from ? opts.from : ((isGmail || !e.fromEmail || e.fromEmail.includes('dot.metromaa.com')) ? (user || 'shakil@secrate.shop') : e.fromEmail);
     try {
       const txConfig = {
         host,
         port,
         secure,
+        tls: { rejectUnauthorized: false }
       };
       if (user && pass) {
         txConfig.auth = { user, pass };
@@ -3000,13 +3002,7 @@ async function sendEmail(to, subject, html, opts = {}) {
 
   if (!isAdminSecurityCode) {
     // Regular business mail / customer mail: ONLY use custom SMTP server
-    if (hasSmtp || e.host) {
-      return await trySmtp();
-    }
-    return {
-      ok: false,
-      error: 'SMTP configuration required. Business emails and customer communications cannot be sent via Resend (Resend is reserved solely for Admin Security Codes).'
-    };
+    return await trySmtp();
   }
 
   // Admin Security / OTP Codes ONLY: use Resend for high-speed delivery, with SMTP fallback
@@ -3783,7 +3779,11 @@ async function trackPurchase(order) {
   const ids = (order.items || []).map((i) => String(i.id));
   const numItems = (order.items || []).reduce((s, i) => s + (Number(i.qty) || 1), 0);
   const ts = Math.floor(Date.now() / 1000);
-  const sourceUrl = order.landing ? `https://timingboost.xyz/page/${order.landing}` : 'https://timingboost.xyz/';
+
+  // Check if order originated from a custom landing page
+  const landing = order.landing ? getLandingBySlug(order.landing) : null;
+  const domain = (process.env.PRIMARY_DOMAIN || 'secrate.shop').replace(/^https?:\/\//, '');
+  const sourceUrl = order.landing ? `https://${domain}/page/${order.landing}` : `https://${domain}/`;
 
   const userData = {
     ph: [ph],
@@ -3798,8 +3798,30 @@ async function trackPurchase(order) {
   if (order.fbp) userData.fbp = order.fbp;
   if (order.fbc) userData.fbc = order.fbc;
 
-  try {
-    if (tr.fbEnabled && tr.fbPixelId && tr.fbToken) {
+  // 1. Meta (Facebook) CAPI Targets
+  const fbTargets = [];
+  if (landing?.fbPixelId && landing?.fbToken) {
+    fbTargets.push({
+      pixelId: String(landing.fbPixelId).trim(),
+      token: String(landing.fbToken).trim(),
+      testCode: landing.fbTestCode ? String(landing.fbTestCode).trim() : (tr.fbTestCode || '')
+    });
+  }
+  // If landing has NO custom pixel, OR if landing explicitly selected dual tracking ('both'):
+  const allowGlobalFb = !landing?.fbPixelId || landing?.pixelMode === 'both';
+  if (allowGlobalFb && tr.fbEnabled && tr.fbPixelId && tr.fbToken) {
+    const globalPid = String(tr.fbPixelId).trim();
+    if (!fbTargets.some((t) => t.pixelId === globalPid)) {
+      fbTargets.push({
+        pixelId: globalPid,
+        token: String(tr.fbToken).trim(),
+        testCode: tr.fbTestCode || ''
+      });
+    }
+  }
+
+  for (const target of fbTargets) {
+    try {
       const body = {
         data: [{
           event_name: 'Purchase',
@@ -3822,18 +3844,42 @@ async function trackPurchase(order) {
           },
         }],
       };
-      if (tr.fbTestCode) body.test_event_code = tr.fbTestCode;
-      const r = await fetch(`https://graph.facebook.com/v19.0/${tr.fbPixelId}/events?access_token=${encodeURIComponent(tr.fbToken)}`, {
+      if (target.testCode) body.test_event_code = target.testCode;
+      const r = await fetch(`https://graph.facebook.com/v19.0/${target.pixelId}/events?access_token=${encodeURIComponent(target.token)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       out.fb = { status: r.status, body: (await r.text()).slice(0, 300) };
+    } catch (e) {
+      out.fb = { error: String(e.message || e) };
     }
-    if (tr.ttkEnabled && tr.ttkPixelId && tr.ttkToken) {
+  }
+
+  // 2. TikTok Events API Targets
+  const ttkTargets = [];
+  if (landing?.ttkPixelId && landing?.ttkToken) {
+    ttkTargets.push({
+      pixelId: String(landing.ttkPixelId).trim(),
+      token: String(landing.ttkToken).trim()
+    });
+  }
+  const allowGlobalTtk = !landing?.ttkPixelId || landing?.pixelMode === 'both';
+  if (allowGlobalTtk && tr.ttkEnabled && tr.ttkPixelId && tr.ttkToken) {
+    const globalTtk = String(tr.ttkPixelId).trim();
+    if (!ttkTargets.some((t) => t.pixelId === globalTtk)) {
+      ttkTargets.push({
+        pixelId: globalTtk,
+        token: String(tr.ttkToken).trim()
+      });
+    }
+  }
+
+  for (const target of ttkTargets) {
+    try {
       const body = {
         event_source: 'web',
-        event_source_id: tr.ttkPixelId,
+        event_source_id: target.pixelId,
         data: [{
           event: 'CompletePayment',
           event_time: ts,
@@ -3852,13 +3898,14 @@ async function trackPurchase(order) {
       };
       const r = await fetch('https://business-api.tiktok.com/open_api/v1.3/event/track/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Access-Token': tr.ttkToken },
+        headers: { 'Content-Type': 'application/json', 'Access-Token': target.token },
         body: JSON.stringify(body),
       });
       out.ttk = { status: r.status, body: (await r.text()).slice(0, 300) };
+    } catch (e) {
+      out.ttk = { error: String(e.message || e) };
     }
-  } catch (e) { out.error = String(e.message || e); }
-  return out;
+  }  return out;
 }
 function dig(obj, path) { if (!path) return undefined; try { return path.split('.').reduce((v, k) => (v == null ? v : v[k]), obj); } catch { return undefined; } }
 

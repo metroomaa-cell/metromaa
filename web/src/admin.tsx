@@ -22668,7 +22668,9 @@ function LandingsAdmin() {
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editItem, setEditItem] = useState<any | null>(null);
-  const [tab, setTab] = useState<'general' | 'hero' | 'video' | 'packages' | 'benefits' | 'usage' | 'reviews' | 'guarantee' | 'code'>('general');
+  const [tab, setTab] = useState<'general' | 'hero' | 'video' | 'packages' | 'benefits' | 'usage' | 'reviews' | 'guarantee' | 'code' | 'tracking'>('general');
+  const [showFbToken, setShowFbToken] = useState(false);
+  const [showTtkToken, setShowTtkToken] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
@@ -22805,6 +22807,9 @@ function LandingsAdmin() {
       badgeTop: '১০০% অরিজিনাল প্রিমিয়াম কোয়ালিটি নিশ্চিত',
       badgeGuarantee: 'একমাত্র আমরাই দিচ্ছি ৩ দিনের রিপ্লেসমেন্ট গ্যারান্টি',
       headline: '',
+      headlineFontSize: '',
+      headlineMobileFontSize: '',
+      subtitleFontSize: '',
       subtitle: '',
       videoUrl: '',
       videoBadge: '',
@@ -22827,6 +22832,13 @@ function LandingsAdmin() {
       guaranteeText: 'আমাদের প্রদর্শিত পণ্যের সাথে প্রাপ্ত পণ্যের মিল না থাকলে সরাসরি পার্সেল রিটার্ন করতে পারবেন।',
       phone: '',
       whatsapp: '',
+      fbPixelId: '',
+      fbToken: '',
+      fbTestCode: '',
+      ttkPixelId: '',
+      ttkToken: '',
+      gtmId: '',
+      gaId: '',
       packages: [
         {
           id: 'pkg_1',
@@ -23196,7 +23208,8 @@ function LandingsAdmin() {
             ? [
                 { id: 'general', label: '⚙️ General & Status' },
                 { id: 'code', label: '⚡ Custom HTML Code' },
-                { id: 'packages', label: '📦 Packages & Delivery' }
+                { id: 'packages', label: '📦 Packages & Delivery' },
+                { id: 'tracking', label: '🎯 Pixel & Tracking' }
               ]
             : [
                 { id: 'general', label: '⚙️ General & Status' },
@@ -23207,7 +23220,8 @@ function LandingsAdmin() {
                 { id: 'usage', label: 'Usage Guide' },
                 { id: 'reviews', label: 'Reviews' },
                 { id: 'guarantee', label: 'Policy & Contact' },
-                { id: 'code', label: '⚡ Custom HTML Code' }
+                { id: 'code', label: '⚡ Custom HTML Code' },
+                { id: 'tracking', label: '🎯 Pixel & Tracking' }
               ]
           ).map((t) => (
             <button
@@ -23564,6 +23578,225 @@ function LandingsAdmin() {
                   placeholder="Briefly describe the product and its key benefit."
                   style={{ width: '100%', padding: '10px 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, lineHeight: 1.5 }}
                 />
+              </div>
+
+              {/* Typography & Font Size Controls */}
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, rgba(30, 27, 75, 0.45) 0%, rgba(15, 23, 42, 0.65) 100%)',
+                  border: '1px solid rgba(139, 92, 246, 0.25)',
+                  borderRadius: 10,
+                  padding: '16px 18px',
+                  boxShadow: '0 4px 18px rgba(0,0,0,0.2)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 17 }}>🔤</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9' }}>Headline Font Size &amp; Typography Control</span>
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(139,92,246,0.2)', color: '#c4b5fd', border: '1px solid rgba(139,92,246,0.3)' }}>
+                      রিসপন্সিভ ও ম্যানুয়াল কন্ট্রোল
+                    </span>
+                  </div>
+                  {/* Quick Preset Buttons */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, color: '#94a3b8' }}>কুইক প্রিসেট:</span>
+                    <button
+                      type="button"
+                      onClick={() => setF((s: any) => ({ ...s, headlineFontSize: '', headlineMobileFontSize: '', subtitleFontSize: '' }))}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: 11,
+                        borderRadius: 6,
+                        border: (!f.headlineFontSize && !f.headlineMobileFontSize) ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.12)',
+                        background: (!f.headlineFontSize && !f.headlineMobileFontSize) ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.05)',
+                        color: (!f.headlineFontSize && !f.headlineMobileFontSize) ? '#c4b5fd' : '#cbd5e1',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ✨ Auto (অটো রিসপন্সিভ)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setF((s: any) => ({ ...s, headlineFontSize: 32, headlineMobileFontSize: 22 }))}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: 11,
+                        borderRadius: 6,
+                        border: (f.headlineFontSize === 32) ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.12)',
+                        background: (f.headlineFontSize === 32) ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.05)',
+                        color: (f.headlineFontSize === 32) ? '#c4b5fd' : '#cbd5e1',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ছোট (32px)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setF((s: any) => ({ ...s, headlineFontSize: 42, headlineMobileFontSize: 26 }))}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: 11,
+                        borderRadius: 6,
+                        border: (f.headlineFontSize === 42) ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.12)',
+                        background: (f.headlineFontSize === 42) ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.05)',
+                        color: (f.headlineFontSize === 42) ? '#c4b5fd' : '#cbd5e1',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      মিডিয়াম (42px)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setF((s: any) => ({ ...s, headlineFontSize: 52, headlineMobileFontSize: 30 }))}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: 11,
+                        borderRadius: 6,
+                        border: (f.headlineFontSize === 52) ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.12)',
+                        background: (f.headlineFontSize === 52) ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.05)',
+                        color: (f.headlineFontSize === 52) ? '#c4b5fd' : '#cbd5e1',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      বড় (52px)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setF((s: any) => ({ ...s, headlineFontSize: 64, headlineMobileFontSize: 36 }))}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: 11,
+                        borderRadius: 6,
+                        border: (f.headlineFontSize === 64) ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.12)',
+                        background: (f.headlineFontSize === 64) ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.05)',
+                        color: (f.headlineFontSize === 64) ? '#c4b5fd' : '#cbd5e1',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      খুব বড় (64px)
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14 }}>
+                  {/* Desktop Font Size */}
+                  <div style={{ background: 'rgba(0,0,0,0.28)', padding: '10px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.07)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: '#cbd5e1' }}>💻 Desktop Font Size</label>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8' }}>
+                        {f.headlineFontSize ? `${f.headlineFontSize}px` : 'Auto (24-52px)'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input
+                        type="range"
+                        min={20}
+                        max={80}
+                        step={1}
+                        value={Number(f.headlineFontSize) || 42}
+                        onChange={(e) => setF((s: any) => ({ ...s, headlineFontSize: Number(e.target.value) }))}
+                        style={{ flex: 1, accentColor: '#8b5cf6', cursor: 'pointer' }}
+                      />
+                      <input
+                        type="number"
+                        placeholder="Auto"
+                        value={f.headlineFontSize ?? ''}
+                        onChange={(e) => setF((s: any) => ({ ...s, headlineFontSize: e.target.value ? Number(e.target.value) : '' }))}
+                        style={{ width: 62, padding: '4px 6px', fontSize: 12, background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 4, textAlign: 'center' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Mobile Font Size */}
+                  <div style={{ background: 'rgba(0,0,0,0.28)', padding: '10px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.07)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: '#cbd5e1' }}>📱 Mobile Font Size</label>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#a78bfa' }}>
+                        {f.headlineMobileFontSize ? `${f.headlineMobileFontSize}px` : 'Auto (21-29px)'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input
+                        type="range"
+                        min={16}
+                        max={54}
+                        step={1}
+                        value={Number(f.headlineMobileFontSize) || 26}
+                        onChange={(e) => setF((s: any) => ({ ...s, headlineMobileFontSize: Number(e.target.value) }))}
+                        style={{ flex: 1, accentColor: '#8b5cf6', cursor: 'pointer' }}
+                      />
+                      <input
+                        type="number"
+                        placeholder="Auto"
+                        value={f.headlineMobileFontSize ?? ''}
+                        onChange={(e) => setF((s: any) => ({ ...s, headlineMobileFontSize: e.target.value ? Number(e.target.value) : '' }))}
+                        style={{ width: 62, padding: '4px 6px', fontSize: 12, background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 4, textAlign: 'center' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Subtitle Font Size */}
+                  <div style={{ background: 'rgba(0,0,0,0.28)', padding: '10px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.07)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: '#cbd5e1' }}>📝 Subtitle Size</label>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#34d399' }}>
+                        {f.subtitleFontSize ? `${f.subtitleFontSize}px` : 'Auto (16-18px)'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input
+                        type="range"
+                        min={12}
+                        max={32}
+                        step={1}
+                        value={Number(f.subtitleFontSize) || 18}
+                        onChange={(e) => setF((s: any) => ({ ...s, subtitleFontSize: Number(e.target.value) }))}
+                        style={{ flex: 1, accentColor: '#10b981', cursor: 'pointer' }}
+                      />
+                      <input
+                        type="number"
+                        placeholder="Auto"
+                        value={f.subtitleFontSize ?? ''}
+                        onChange={(e) => setF((s: any) => ({ ...s, subtitleFontSize: e.target.value ? Number(e.target.value) : '' }))}
+                        style={{ width: 62, padding: '4px 6px', fontSize: 12, background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 4, textAlign: 'center' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live Mini Preview */}
+                {f.headline && (
+                  <div style={{ marginTop: 12, padding: '12px 14px', background: '#090812', borderRadius: 8, border: '1px dashed rgba(255,255,255,0.12)' }}>
+                    <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, color: '#64748b', marginBottom: 6 }}>লাইভ প্রিভিউ (Live Preview):</div>
+                    <div
+                      style={{
+                        fontSize: f.headlineFontSize ? `${f.headlineFontSize}px` : '28px',
+                        fontWeight: 800,
+                        lineHeight: 1.38,
+                        color: '#f8fafc',
+                        textWrap: 'balance' as any,
+                        textAlign: 'center',
+                        letterSpacing: 'normal'
+                      }}
+                    >
+                      {f.headline}
+                    </div>
+                    {f.subtitle && (
+                      <div
+                        style={{
+                          fontSize: f.subtitleFontSize ? `${f.subtitleFontSize}px` : '15px',
+                          color: '#94a3b8',
+                          lineHeight: 1.5,
+                          marginTop: 8,
+                          textAlign: 'center'
+                        }}
+                      >
+                        {f.subtitle}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
@@ -24815,6 +25048,160 @@ function LandingsAdmin() {
                   overflowX: 'auto'
                 }}
               />
+            </div>
+          </div>
+        )}
+
+        {/* TAB: CUSTOM PIXEL & TRACKING */}
+        {tab === 'tracking' && (
+          <div className="sa-card" style={{ padding: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Server-side tracking (Conversions API) &amp; Custom Pixel</h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span className="dim" style={{ fontSize: 12 }}>
+                  {!(f.fbPixelId || f.ttkPixelId || f.gtmId || f.gaId)
+                    ? '🌐 Using Store Global Pixel (Auto)'
+                    : (f.pixelMode === 'both' ? '⚡ Dual Active (Custom + Store)' : '🎯 Custom Pixel Active (Store OFF)')}
+                </span>
+              </div>
+            </div>
+            <p className="dim" style={{ fontSize: 13, marginBottom: 14 }}>
+              Only customer storefront checkouts on this landing page send purchase events to Meta &amp; TikTok. Admin page views, admin activity, and admin-created orders are excluded.
+            </p>
+
+            {/* Firing Strategy Selector */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 18, marginBottom: 18, padding: '10px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: 6, border: '1px solid rgba(255,255,255,0.06)' }}>
+              <label className="sa-chk" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                <input
+                  type="radio"
+                  name="lpPixelMode"
+                  checked={f.pixelMode !== 'both'}
+                  onChange={() => setF((s: any) => ({ ...s, pixelMode: 'custom_only' }))}
+                />
+                <span>🎯 <b>Custom Only</b> <span className="dim">(Store default pixel OFF on this page)</span></span>
+              </label>
+              <label className="sa-chk" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                <input
+                  type="radio"
+                  name="lpPixelMode"
+                  checked={f.pixelMode === 'both'}
+                  onChange={() => setF((s: any) => ({ ...s, pixelMode: 'both' }))}
+                />
+                <span>⚡ <b>Dual Tracking</b> <span className="dim">(Custom + Store global pixel both fire)</span></span>
+              </label>
+              <span className="dim" style={{ fontSize: 12, marginLeft: 'auto' }}>
+                💡 ফাঁকা রাখলে স্টোরের ডিফল্ট পিক্সেল স্বয়ংক্রিয়ভাবে কাজ করবে
+              </span>
+            </div>
+
+            {/* Facebook (Meta) CAPI */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <b style={{ fontSize: 14 }}>Facebook (Meta) CAPI</b>
+              <label className="sa-chk">
+                <input
+                  type="checkbox"
+                  checked={f.fbEnabled ?? !!f.fbPixelId}
+                  onChange={(e) => setF((s: any) => ({ ...s, fbEnabled: e.target.checked }))}
+                />
+                {adminTranslate("Enabled")}
+              </label>
+            </div>
+            <div className="sa-sgrid">
+              <label>
+                Pixel ID
+                <input
+                  value={f.fbPixelId || ''}
+                  onChange={(e) => setF((s: any) => ({ ...s, fbPixelId: e.target.value.trim(), fbEnabled: true }))}
+                  placeholder="123456789012345"
+                  autoComplete="off"
+                />
+              </label>
+              <label>
+                Conversions API token
+                <input
+                  type="text"
+                  value={f.fbToken || ''}
+                  onChange={(e) => setF((s: any) => ({ ...s, fbToken: e.target.value.trim(), fbEnabled: true }))}
+                  placeholder="EAAG…"
+                  autoComplete="off"
+                />
+              </label>
+              <label>
+                Test event code <span className="dim">(optional, for Events Manager → Test Events)</span>
+                <input
+                  value={f.fbTestCode || ''}
+                  onChange={(e) => setF((s: any) => ({ ...s, fbTestCode: e.target.value.trim(), fbEnabled: true }))}
+                  placeholder="TEST12345"
+                  autoComplete="off"
+                />
+              </label>
+            </div>
+
+            {/* TikTok Events API */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 0 10px' }}>
+              <b style={{ fontSize: 14 }}>TikTok Events API</b>
+              <label className="sa-chk">
+                <input
+                  type="checkbox"
+                  checked={f.ttkEnabled ?? !!f.ttkPixelId}
+                  onChange={(e) => setF((s: any) => ({ ...s, ttkEnabled: e.target.checked }))}
+                />
+                {adminTranslate("Enabled")}
+              </label>
+            </div>
+            <div className="sa-sgrid">
+              <label>
+                Pixel ID (code)
+                <input
+                  value={f.ttkPixelId || ''}
+                  onChange={(e) => setF((s: any) => ({ ...s, ttkPixelId: e.target.value.trim(), ttkEnabled: true }))}
+                  placeholder="CXXXXXXXXXXXXXXXXX"
+                  autoComplete="off"
+                />
+              </label>
+              <label>
+                Access token
+                <input
+                  type="text"
+                  value={f.ttkToken || ''}
+                  onChange={(e) => setF((s: any) => ({ ...s, ttkToken: e.target.value.trim(), ttkEnabled: true }))}
+                  placeholder="TikTok access token…"
+                  autoComplete="off"
+                />
+              </label>
+            </div>
+
+            {/* Google Tag Manager & GA4 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 0 10px' }}>
+              <b style={{ fontSize: 14 }}>Google Tag Manager &amp; GA4</b>
+              <label className="sa-chk">
+                <input
+                  type="checkbox"
+                  checked={f.gtmEnabled ?? (!!f.gtmId || !!f.gaId)}
+                  onChange={(e) => setF((s: any) => ({ ...s, gtmEnabled: e.target.checked }))}
+                />
+                {adminTranslate("Enabled")}
+              </label>
+            </div>
+            <div className="sa-sgrid">
+              <label>
+                Google Tag Manager ID
+                <input
+                  value={f.gtmId || ''}
+                  onChange={(e) => setF((s: any) => ({ ...s, gtmId: e.target.value.trim(), gtmEnabled: true }))}
+                  placeholder="GTM-XXXXXXX"
+                  autoComplete="off"
+                />
+              </label>
+              <label>
+                Google Analytics 4 Measurement ID
+                <input
+                  value={f.gaId || ''}
+                  onChange={(e) => setF((s: any) => ({ ...s, gaId: e.target.value.trim(), gtmEnabled: true }))}
+                  placeholder="G-XXXXXXXXXX"
+                  autoComplete="off"
+                />
+              </label>
             </div>
           </div>
         )}

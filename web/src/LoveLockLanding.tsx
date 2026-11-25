@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { placeOrder, getSettings, taka, getDeviceId, isSkincareSite, getTrafficAttribution } from './api';
-import { dl, ecView, ecAdd, ecBeginCheckout, ecPurchase, pushUserData } from './analytics';
+import { dl, ecView, ecAdd, ecBeginCheckout, ecPurchase, pushUserData, initFB, initTikTok, initGTM, initGA4 } from './analytics';
 import { go } from './cart';
 import { WhatsAppIcon } from './icons';
 
@@ -198,6 +198,49 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
   useEffect(() => {
     if (!cfg) return;
+
+    // Tracking Strategy: Custom Landing Tracking vs Global Fallback
+    getSettings().then((storeSettings: any) => {
+      // 1. Meta Facebook Pixel
+      if (cfg.fbPixelId) {
+        initFB(cfg.fbPixelId);
+        if (cfg.pixelMode === 'both' && storeSettings.fbPixelId && storeSettings.fbPixelId !== cfg.fbPixelId) {
+          initFB(storeSettings.fbPixelId);
+        }
+      } else if (storeSettings.fbPixelId) {
+        initFB(storeSettings.fbPixelId);
+      }
+
+      // 2. TikTok Pixel
+      if (cfg.ttkPixelId) {
+        initTikTok(cfg.ttkPixelId);
+        if (cfg.pixelMode === 'both' && storeSettings.ttkPixelId && storeSettings.ttkPixelId !== cfg.ttkPixelId) {
+          initTikTok(storeSettings.ttkPixelId);
+        }
+      } else if (storeSettings.ttkPixelId) {
+        initTikTok(storeSettings.ttkPixelId);
+      }
+
+      // 3. Google Tag Manager
+      if (cfg.gtmId) {
+        initGTM(cfg.gtmId);
+      } else if (storeSettings.gtmId) {
+        initGTM(storeSettings.gtmId);
+      }
+
+      // 4. Google Analytics 4
+      if (cfg.gaId) {
+        initGA4(cfg.gaId);
+      } else if (storeSettings.gaId) {
+        initGA4(storeSettings.gaId);
+      }
+    }).catch(() => {
+      if (cfg.fbPixelId) initFB(cfg.fbPixelId);
+      if (cfg.ttkPixelId) initTikTok(cfg.ttkPixelId);
+      if (cfg.gtmId) initGTM(cfg.gtmId);
+      if (cfg.gaId) initGA4(cfg.gaId);
+    });
+
     const brand = typeof window !== 'undefined' && window.location.hostname.includes('secrate') ? 'Secrate' : 'TimeBoost';
     const rawTitle = cfg.mode === 'html' ? (cfg.title || cfg.headline) : (cfg.headline || cfg.title);
     const lTitle = `${rawTitle} — ${brand}`;
@@ -1180,11 +1223,12 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
           .custom-html-landing { overflow-x: hidden; width: 100%; max-width: 100vw; }
           .custom-html-landing header, .custom-html-landing section, .custom-html-landing footer { position: static; width: auto; height: auto; }
           .custom-html-landing img, .custom-html-landing video { max-width: 100%; }
+          ${cfg.headlineFontSize ? `@media (min-width: 641px) { .custom-html-landing h1 { font-size: ${cfg.headlineFontSize}px !important; } }` : ''}
           @media (max-width: 640px) {
             .custom-html-landing { font-size: 14.5px; }
-            .custom-html-landing h1 { font-size: 1.55rem !important; line-height: 1.32 !important; }
-            .custom-html-landing h2 { font-size: 1.28rem !important; line-height: 1.35 !important; }
-            .custom-html-landing h3 { font-size: 1.1rem !important; line-height: 1.38 !important; }
+            .custom-html-landing h1 { font-size: ${cfg.headlineMobileFontSize ? `${cfg.headlineMobileFontSize}px` : 'clamp(1.4rem, 5.8vw, 2.2rem)'} !important; line-height: 1.4 !important; text-wrap: balance !important; letter-spacing: normal !important; }
+            .custom-html-landing h2 { font-size: clamp(1.2rem, 4.8vw, 1.8rem) !important; line-height: 1.4 !important; text-wrap: balance !important; }
+            .custom-html-landing h3 { font-size: clamp(1.05rem, 4vw, 1.4rem) !important; line-height: 1.42 !important; }
             .custom-html-landing input, .custom-html-landing select, .custom-html-landing textarea { font-size: 16px !important; }
           }
         `}</style>
@@ -1210,6 +1254,15 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
   return (
     <div className="lovelock-landing" style={themeVars}>
+      {/* Dynamic Manual Font Size overrides if configured */}
+      {(cfg.headlineFontSize || cfg.headlineMobileFontSize || cfg.subtitleFontSize) && (
+        <style>{`
+          ${cfg.headlineFontSize ? `@media (min-width: 769px) { .lovelock-landing .ll-title-main { font-size: ${cfg.headlineFontSize}px !important; } }` : ''}
+          ${cfg.headlineMobileFontSize ? `@media (max-width: 768px) { .lovelock-landing .ll-title-main { font-size: ${cfg.headlineMobileFontSize}px !important; } }` : ''}
+          ${cfg.subtitleFontSize ? `.lovelock-landing .ll-subtitle { font-size: ${cfg.subtitleFontSize}px !important; }` : ''}
+        `}</style>
+      )}
+
       {/* iOS Ambient Glow Orbs for Glass Refraction */}
       <div className="ll-ambient-mesh" aria-hidden="true">
         <span className="ll-orb ll-orb-1" />

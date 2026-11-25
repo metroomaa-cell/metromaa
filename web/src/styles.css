@@ -3892,14 +3892,18 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
 
 /* Typography */
 .ll-title-main {
-  font-family: 'Anek Bangla', sans-serif;
-  font-size: 58px;
+  font-family: 'Anek Bangla', 'Hind Siliguri', sans-serif;
+  font-size: clamp(24px, 5.5vw, 52px);
   font-weight: 800;
-  line-height: 1.15;
+  line-height: 1.38;
   color: var(--ll-primary, #CB202D);
-  margin: 18px 0;
+  margin: 16px auto;
+  max-width: 880px;
   text-align: center;
-  letter-spacing: -0.5px;
+  letter-spacing: normal;
+  text-wrap: balance;
+  word-break: normal;
+  padding: 0 12px;
   text-shadow: 0 2px 10px rgba(var(--ll-primary-rgb), 0.08);
 }
 
@@ -5068,7 +5072,11 @@ select.field:disabled{opacity:.5;cursor:not-allowed}
 /* RESPONSIVE MEDIA QUERIES */
 @media (max-width: 768px) {
   .ll-title-main {
-    font-size: 35px;
+    font-size: clamp(21px, 5.8vw, 29px);
+    line-height: 1.38;
+    margin: 12px auto;
+    letter-spacing: normal;
+    text-wrap: balance;
   }
   .ll-subtitle {
     font-size: 16px;
