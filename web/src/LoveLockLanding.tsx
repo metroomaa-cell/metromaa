@@ -201,13 +201,15 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
     // Tracking Strategy: Custom Landing Tracking vs Global Fallback
     getSettings().then((storeSettings: any) => {
+      const hasCustomTracking = !!(cfg.fbPixelId || cfg.ttkPixelId || cfg.gtmId || cfg.gaId);
+
       // 1. Meta Facebook Pixel
       if (cfg.fbPixelId) {
         initFB(cfg.fbPixelId);
         if (cfg.pixelMode === 'both' && storeSettings.fbPixelId && storeSettings.fbPixelId !== cfg.fbPixelId) {
           initFB(storeSettings.fbPixelId);
         }
-      } else if (storeSettings.fbPixelId) {
+      } else if (!hasCustomTracking && storeSettings.fbPixelId) {
         initFB(storeSettings.fbPixelId);
       }
 
@@ -217,21 +219,21 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
         if (cfg.pixelMode === 'both' && storeSettings.ttkPixelId && storeSettings.ttkPixelId !== cfg.ttkPixelId) {
           initTikTok(storeSettings.ttkPixelId);
         }
-      } else if (storeSettings.ttkPixelId) {
+      } else if (!hasCustomTracking && storeSettings.ttkPixelId) {
         initTikTok(storeSettings.ttkPixelId);
       }
 
-      // 3. Google Tag Manager
+      // 3. Google Tag Manager (Only load store GTM if landing page does not have custom tracking)
       if (cfg.gtmId) {
         initGTM(cfg.gtmId);
-      } else if (storeSettings.gtmId) {
+      } else if (!hasCustomTracking && storeSettings.gtmId) {
         initGTM(storeSettings.gtmId);
       }
 
       // 4. Google Analytics 4
       if (cfg.gaId) {
         initGA4(cfg.gaId);
-      } else if (storeSettings.gaId) {
+      } else if (!hasCustomTracking && storeSettings.gaId) {
         initGA4(storeSettings.gaId);
       }
     }).catch(() => {
