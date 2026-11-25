@@ -6662,8 +6662,12 @@ if (existsSync(dist)) {
           .replace(/<meta property="og:image" content="(\/[^"]+)"/i, `<meta property="og:image" content="${baseUrl}$1"`);
       }
 
+      const isAdminPath = parts[0] === 'wp-admin' || parts[0] === 'admin' || parts[0] === 'staff' ||
+        cleanPath.toLowerCase().startsWith('wp-admin') || cleanPath.toLowerCase().startsWith('admin') || cleanPath.toLowerCase().startsWith('staff') ||
+        (req.path && /^\/(wp-admin|admin|staff)/i.test(req.path));
+
       const activeGtmId = getSettings().gtmId;
-      if (activeGtmId && !targetLanding) {
+      if (activeGtmId && !targetLanding && !isAdminPath) {
         const gtmSnippet = `<!-- Google Tag Manager -->
 <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -6672,7 +6676,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 })(window,document,'script','dataLayer','${activeGtmId}');</script>
 <!-- End Google Tag Manager -->`;
         html = html.replace('<head>', `<head>\n    ${gtmSnippet}`);
-      } else if (targetLanding && targetLanding.gtmId) {
+      } else if (targetLanding && targetLanding.gtmId && !isAdminPath) {
         const gtmSnippet = `<!-- Google Tag Manager -->
 <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -6681,6 +6685,10 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 })(window,document,'script','dataLayer','${targetLanding.gtmId}');</script>
 <!-- End Google Tag Manager -->`;
         html = html.replace('<head>', `<head>\n    ${gtmSnippet}`);
+      }
+
+      if (isAdminPath) {
+        html = html.replace('<head>', '<head>\n    <script>window.__IS_ADMIN__ = true; window.dataLayer = [];</script>');
       }
       res.setHeader('Content-Type', 'text/html; charset=UTF-8');
       res.send(html);

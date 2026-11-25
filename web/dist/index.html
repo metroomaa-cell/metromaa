@@ -12,7 +12,25 @@
         var h = (window.location.hostname || '').toLowerCase();
         var p = (window.location.pathname || '').toLowerCase();
 
+        function isAdmin() {
+          try {
+            if (window.__IS_ADMIN__) return true;
+            var pathname = (window.location.pathname || '').toLowerCase();
+            var hash = (window.location.hash || '').toLowerCase();
+            if (pathname.indexOf('/wp-admin') !== -1 || pathname.indexOf('/admin') !== -1 || pathname.indexOf('/staff') !== -1) return true;
+            if (hash.indexOf('admin') !== -1 || hash.indexOf('staff') !== -1 || hash.indexOf('orders') !== -1 || hash.indexOf('catalog') !== -1 || hash.indexOf('settings') !== -1 || hash.indexOf('campaigns') !== -1 || hash.indexOf('marketing') !== -1) return true;
+            if (typeof localStorage !== 'undefined' && localStorage.getItem('dot_admin_token')) return true;
+            if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('sa_admin_nav')) return true;
+          } catch(e) {}
+          return false;
+        }
+
         function isPixelAllowed(pid) {
+          // Admin panel: 100% blocked! Zero pixel activity allowed!
+          if (isAdmin()) {
+            return false;
+          }
+
           if (!pid) return false;
           pid = String(pid).trim();
           
@@ -54,12 +72,15 @@
         var rawFbq = window.fbq;
         function wrap(fn) {
           var guarded = function() {
+            if (isAdmin()) return;
             var cmd = arguments[0];
             var id = arguments[1];
             if (cmd === 'init' || cmd === 'trackSingle' || cmd === 'trackSingleCustom') {
               if (!isPixelAllowed(id)) {
                 return;
               }
+            } else if (cmd === 'track' || cmd === 'trackCustom') {
+              if (isAdmin()) return;
             }
             return fn ? fn.apply(this, arguments) : undefined;
           };
@@ -76,8 +97,15 @@
           Object.defineProperty(window, 'fbq', {
             configurable: true,
             enumerable: true,
-            get: function() { return currentFbq; },
+            get: function() {
+              if (isAdmin()) return function() {};
+              return currentFbq;
+            },
             set: function(val) {
+              if (isAdmin()) {
+                currentFbq = function() {};
+                return;
+              }
               if (typeof val === 'function' && val !== currentFbq) {
                 currentFbq = wrap(val);
               } else {
