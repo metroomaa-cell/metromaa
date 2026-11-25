@@ -6641,6 +6641,7 @@ if (existsSync(dist)) {
           isLanding: true,
           slug: parts[1],
           fbPixelId: targetLanding.fbPixelId ? String(targetLanding.fbPixelId).trim() : null,
+          fbTestCode: targetLanding.fbTestCode ? String(targetLanding.fbTestCode).trim() : null,
           pixelMode: targetLanding.pixelMode || 'custom',
           ttkPixelId: targetLanding.ttkPixelId ? String(targetLanding.ttkPixelId).trim() : null,
           hasCustomTracking: Boolean(targetLanding.fbPixelId || targetLanding.ttkPixelId || targetLanding.gtmId)

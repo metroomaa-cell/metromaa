@@ -45,12 +45,17 @@ export function fbTrack(name: string, data?: Record<string, any>, isCustom = tru
     if (import.meta.env.DEV || isAdminContext()) return;
     const w = window as any;
     if (typeof w.fbq === 'function') {
-      const options = eventId ? { eventID: String(eventId) } : undefined;
+      const options: Record<string, any> = {};
+      if (eventId) options.eventID = String(eventId);
+      const lt = w.__LANDING_TRACKING__;
+      const testCode = lt?.fbTestCode || w.__FB_TEST_CODE__;
+      if (testCode) options.test_event_code = String(testCode).trim();
+      const hasOpts = Object.keys(options).length > 0;
       if (isCustom) {
-        if (options) w.fbq('trackCustom', name, data, options);
+        if (hasOpts) w.fbq('trackCustom', name, data, options);
         else w.fbq('trackCustom', name, data);
       } else {
-        if (options) w.fbq('track', name, data, options);
+        if (hasOpts) w.fbq('track', name, data, options);
         else w.fbq('track', name, data);
       }
     }

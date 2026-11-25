@@ -109,7 +109,9 @@
               return;
             }
           }
-          if (internalFbq && internalFbq.callMethod) {
+          if (guardedFbq.callMethod && typeof guardedFbq.callMethod === 'function') {
+            return guardedFbq.callMethod.apply(guardedFbq, arguments);
+          } else if (internalFbq && internalFbq.callMethod && typeof internalFbq.callMethod === 'function') {
             return internalFbq.callMethod.apply(internalFbq, arguments);
           } else if (internalFbq && typeof internalFbq === 'function') {
             return internalFbq.apply(this, arguments);

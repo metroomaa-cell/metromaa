@@ -109,7 +109,9 @@
               return;
             }
           }
-          if (internalFbq && internalFbq.callMethod) {
+          if (guardedFbq.callMethod && typeof guardedFbq.callMethod === 'function') {
+            return guardedFbq.callMethod.apply(guardedFbq, arguments);
+          } else if (internalFbq && internalFbq.callMethod && typeof internalFbq.callMethod === 'function') {
             return internalFbq.callMethod.apply(internalFbq, arguments);
           } else if (internalFbq && typeof internalFbq === 'function') {
             return internalFbq.apply(this, arguments);
@@ -236,7 +238,7 @@
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" /></noscript>
     <style>#root{color:#1f3147;background:#f3f0ec;min-height:100vh}</style>
-    <script type="module" crossorigin src="/assets/index-mlNt7gXE.js"></script>
+    <script type="module" crossorigin src="/assets/index-BKW5uFM5.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-BWaJ3C7D.js">
     <link rel="stylesheet" crossorigin href="/assets/index-CKXQ5xsR.css">
   </head>
