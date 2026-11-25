@@ -126,6 +126,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
   const [cfg, setCfg] = useState<any>(null);
   const [pageLoading, setPageLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [orderSuccess, setOrderSuccess] = useState<any>(null);
 
   const [selectedProduct, setSelectedProduct] = useState('');
   const [selectedColor, setSelectedColor] = useState('');
@@ -507,8 +508,17 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
         }
       );
 
-      // Navigate to order confirmation
-      go('confirm/' + res.id);
+      // Dedicated in-page Order Confirmation
+      setOrderSuccess({
+        id: res.id,
+        total: res.total ?? total,
+        name: name.trim(),
+        phone: cleanPhone,
+        address: address.trim(),
+        items: [{ title: currentItem.title, qty: currentQty, price: currentItem.price }]
+      });
+      setLoading(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
       setError(err.message || 'অর্ডার সম্পন্ন হতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
       setLoading(false);
@@ -570,7 +580,15 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
         `landing_${cfg?.slug || slug}`,
         { name: cName, phone: phoneCheck.clean, address: cAddr, city: zone === 'inside' ? 'Dhaka' : 'Outside Dhaka' }
       );
-      go('confirm/' + res.id);
+      setOrderSuccess({
+        id: res.id,
+        total: res.total ?? (unitPrice * qty + shipCost),
+        name: cName,
+        phone: phoneCheck.clean,
+        address: cAddr,
+        items: finalItems
+      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return res;
     };
 
@@ -852,6 +870,169 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
     (isFreeDelivery
       ? '🚚 আজকের অর্ডারে সারা বাংলাদেশে ডেলিভারি সম্পূর্ণ ফ্রি!'
       : `🚚 সারা বাংলাদেশে দ্রুত ক্যাশ অন হোম ডেলিভারি! (ঢাকায় ৳${delInside}, ঢাকার বাইরে ৳${delOutside})`);
+
+  const renderOrderSuccessModal = () => {
+    if (!orderSuccess) return null;
+    const supportPhone = cfg?.phone || '09638752122';
+    const rawWa = String(cfg?.whatsapp || '8801351107157').replace(/[^0-9]/g, '');
+    const waUrl = `https://wa.me/${rawWa}?text=${encodeURIComponent(`আসসালামু আলাইকুম, আমি অর্ডার #${orderSuccess.id} করেছি।`)}`;
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 9999999,
+          background: 'rgba(15, 12, 24, 0.88)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 16,
+          fontFamily: "'Hind Siliguri', sans-serif"
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 520,
+            width: '100%',
+            background: '#ffffff',
+            borderRadius: 24,
+            padding: '36px 28px',
+            textAlign: 'center',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.35)',
+            border: '1px solid #e5e7eb',
+            color: '#1f2937',
+            maxHeight: '92vh',
+            overflowY: 'auto'
+          }}
+        >
+          {/* Success Check Icon */}
+          <div
+            style={{
+              width: 76,
+              height: 76,
+              borderRadius: '50%',
+              background: '#ecfdf5',
+              border: '2px solid #10b981',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 18px',
+              color: '#059669',
+              fontSize: 38
+            }}
+          >
+            ✓
+          </div>
+
+          <h2 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 8px', color: '#065f46' }}>
+            আলহামদুলিল্লাহ, আপনার অর্ডার সফল হয়েছে!
+          </h2>
+          <p style={{ fontSize: 15, color: '#4b5563', margin: '0 0 20px', lineHeight: 1.6 }}>
+            আমাদের কাস্টমার কেয়ার প্রতিনিধি খুব শীঘ্রই আপনার নম্বরে কল করে অর্ডারটি কনফার্ম করবেন।
+          </p>
+
+          {/* Order Info Badge */}
+          <div style={{ background: '#f8fafc', borderRadius: 14, padding: '16px 18px', border: '1px solid #e2e8f0', marginBottom: 20, textAlign: 'left' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>অর্ডার নম্বর:</span>
+              <span style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', background: '#e2e8f0', padding: '3px 8px', borderRadius: 6, letterSpacing: 0.5 }}>
+                #{orderSuccess.id}
+              </span>
+            </div>
+            {orderSuccess.name && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#475569', marginBottom: 6 }}>
+                <span>নাম:</span>
+                <span style={{ fontWeight: 600, color: '#0f172a' }}>{orderSuccess.name}</span>
+              </div>
+            )}
+            {orderSuccess.phone && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#475569', marginBottom: 6 }}>
+                <span>মোবাইল:</span>
+                <span style={{ fontWeight: 600, color: '#0f172a' }}>{orderSuccess.phone}</span>
+              </div>
+            )}
+            {orderSuccess.address && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#475569', marginBottom: 6 }}>
+                <span>ঠিকানা:</span>
+                <span style={{ fontWeight: 600, color: '#0f172a', textAlign: 'right', maxWidth: '65%' }}>{orderSuccess.address}</span>
+              </div>
+            )}
+            <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: 10, marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#334155' }}>মোট প্রদেয় (ক্যাশ অন ডেলিভারি):</span>
+              <span style={{ fontSize: 18, fontWeight: 900, color: '#b91c1c' }}>
+                {taka(orderSuccess.total)}
+              </span>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {rawWa && (
+              <a
+                href={waUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  background: '#25D366',
+                  color: '#ffffff',
+                  textDecoration: 'none',
+                  padding: '13px 20px',
+                  borderRadius: 12,
+                  fontSize: 15,
+                  fontWeight: 700,
+                  boxShadow: '0 4px 12px rgba(37, 211, 102, 0.3)'
+                }}
+              >
+                <WhatsAppIcon size={18} />
+                হোয়াটসঅ্যাপে যোগাযোগ করুন
+              </a>
+            )}
+            {supportPhone && (
+              <a
+                href={`tel:${supportPhone}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  background: '#f1f5f9',
+                  color: '#1e293b',
+                  textDecoration: 'none',
+                  padding: '12px 20px',
+                  borderRadius: 12,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  border: '1px solid #cbd5e1'
+                }}
+              >
+                📞 প্রয়োজনে কল করুন: {supportPhone}
+              </a>
+            )}
+            <button
+              onClick={() => setOrderSuccess(null)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#64748b',
+                padding: '10px 16px',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                marginTop: 4
+              }}
+            >
+              উইন্ডো বন্ধ করুন ✕
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const renderCheckoutForm = () => (
     <section className="ll-sec ll-sec-light ll-sec-order" id="order">
@@ -1213,6 +1394,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
             style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
             allow="autoplay; fullscreen; microphone"
           />
+          {renderOrderSuccessModal()}
         </div>
       );
     }
@@ -1254,6 +1436,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
             {renderCheckoutForm()}
           </>
         )}
+        {renderOrderSuccessModal()}
       </div>
     );
   }
@@ -1645,6 +1828,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
           <WhatsAppIcon size={34} variant="official" />
         </a>
       )}
+      {renderOrderSuccessModal()}
     </div>
   );
 }
