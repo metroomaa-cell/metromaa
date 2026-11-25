@@ -532,6 +532,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
       };
       try {
         sessionStorage.setItem('last_landing_order', JSON.stringify(orderReceipt));
+        sessionStorage.setItem(`ty_purchase_fired_${res.id}`, '1');
       } catch (_) {}
 
       setLoading(false);
@@ -612,6 +613,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
       };
       try {
         sessionStorage.setItem('last_landing_order', JSON.stringify(orderReceipt));
+        sessionStorage.setItem(`ty_purchase_fired_${res.id}`, '1');
       } catch (_) {}
 
       // Navigate to dedicated /page/<landing-slug>/thankyou

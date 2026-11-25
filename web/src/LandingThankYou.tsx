@@ -1,6 +1,7 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { getSettings } from './api';
 import { go } from './cart';
+import { ecPurchase, initFB, initTikTok, initGTM, initGA4, setAllowedLandingPixels } from './analytics';
 
 type OrderItem = {
   id?: string;
@@ -81,7 +82,9 @@ export function LandingThankYou({ slug }: { slug: string }) {
     }
   }, [orderIdFromUrl]);
 
-  // 2. Fetch landing page details & store settings
+  const purchaseTrackedRef = useRef(false);
+
+  // 2. Fetch landing page details, initialize isolated tracking & store settings
   useEffect(() => {
     if (cleanSlug) {
       fetch(`/api/landings/${encodeURIComponent(cleanSlug)}`)
@@ -93,6 +96,18 @@ export function LandingThankYou({ slug }: { slug: string }) {
             setLandingTitle(data.headline || data.title || data.productTitle || '');
             setLandingImage(data.heroImage || data.mainImage || (data.packages && data.packages[0]?.image) || '');
             if (data.offerPrice) setLandingPrice(Number(data.offerPrice) || 690);
+
+            // Auto Code Brain: Ensure landing page custom pixel is active on Thank You page
+            if (data.fbPixelId) {
+              const pid = String(data.fbPixelId).trim();
+              if (data.pixelMode !== 'both') {
+                setAllowedLandingPixels([pid]);
+              }
+              initFB(pid);
+            }
+            if (data.ttkPixelId) initTikTok(String(data.ttkPixelId).trim());
+            if (data.gtmId) initGTM(String(data.gtmId).trim());
+            if (data.gaId) initGA4(String(data.gaId).trim());
           }
         })
         .catch(() => {});
@@ -182,6 +197,41 @@ export function LandingThankYou({ slug }: { slug: string }) {
   const subtotal = order?.subtotal != null ? order.subtotal : itemsList.reduce((acc, it) => acc + (Number(it.price) || 0) * (Number(it.qty) || 1), 0);
   const shippingCharge = order?.shippingCost != null ? order.shippingCost : (order?.total ? Math.max(0, order.total - subtotal) : 80);
   const totalAmount = order?.total != null ? order.total : (subtotal + shippingCharge);
+
+  // 3. Auto Code Brain: Guaranteed Deduplicated Purchase Event on Thank You Page
+  useEffect(() => {
+    const activeOrderId = order?.id || orderIdFromUrl;
+    if (!activeOrderId || purchaseTrackedRef.current) return;
+
+    const storageKey = `ty_purchase_fired_${activeOrderId}`;
+    try {
+      if (sessionStorage.getItem(storageKey) === '1') {
+        purchaseTrackedRef.current = true;
+        return;
+      }
+      sessionStorage.setItem(storageKey, '1');
+    } catch (_) {}
+
+    purchaseTrackedRef.current = true;
+    const mappedItems = itemsList.map((it, i) => ({
+      id: String(it.id || cleanSlug || `item_${i + 1}`),
+      name: String(it.name || it.title || landingTitle || 'Product'),
+      price: Number(it.price) || landingPrice,
+      qty: Number(it.qty) || 1,
+    }));
+
+    ecPurchase(
+      activeOrderId,
+      totalAmount,
+      mappedItems,
+      `landing_${cleanSlug}`,
+      {
+        name: order?.name,
+        phone: order?.phone,
+        address: order?.address,
+      }
+    );
+  }, [order, orderIdFromUrl, totalAmount, itemsList, cleanSlug, landingTitle, landingPrice]);
 
   const cleanWaNumber = storeWa.replace(/[^0-9]/g, '') || '8801700000000';
   const displayPhone = storePhone || '+880 1700-000000';

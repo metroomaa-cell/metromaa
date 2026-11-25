@@ -160,9 +160,19 @@ export const go = (path: string) => {
   const isCurrentLanding = currentPath.includes('/page/') || currentPath.includes('/page');
   const isTargetLanding = targetPath.includes('/page/') || targetPath.includes('/page');
 
-  // Hard reload across security & tracking boundaries: Admin <-> Storefront <-> Landing Page
-  // This guarantees complete session isolation, zero pixel/GTM leakage, and pristine tracking state.
-  if (isCurrentAdmin !== isTargetAdmin || isCurrentLanding || isTargetLanding) {
+  const getLandingSlug = (p: string) => {
+    const cleanP = p.split('?')[0].replace(/^\/+|\/+$/g, '');
+    const segs = cleanP.split('/');
+    if ((segs[0] === 'page' || segs[0] === 'l') && segs[1]) return segs[1].toLowerCase();
+    return '';
+  };
+  const curLandSlug = getLandingSlug(currentPath);
+  const tarLandSlug = getLandingSlug(targetPath);
+  const isSameLandingFunnel = isCurrentLanding && isTargetLanding && curLandSlug && curLandSlug === tarLandSlug;
+
+  // Hard reload across security & tracking boundaries: Admin <-> Storefront <-> Different Landing Page
+  // When moving inside the SAME landing funnel (/page/slug -> /page/slug/thankyou), keep the live pixel session intact!
+  if (isCurrentAdmin !== isTargetAdmin || (!isSameLandingFunnel && (isCurrentLanding || isTargetLanding))) {
     window.location.href = target;
     return;
   }

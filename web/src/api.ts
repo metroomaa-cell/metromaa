@@ -223,7 +223,12 @@ export function getCachedProduct(slug: string): Product | null {
 
 export const getSettings = (): Promise<Settings> =>
   getJsonOnce<Settings>('/api/settings').then((data) => {
-    try { localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(data)); } catch {}
+    try {
+      const p = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+      if (!p.startsWith('/page') && !p.startsWith('/l/')) {
+        localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(data));
+      }
+    } catch {}
     return data;
   });
 

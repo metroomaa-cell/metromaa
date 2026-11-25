@@ -502,9 +502,33 @@ app.delete('/api/colors/:id', (req, res) => {
   res.json({ success: true, colors: next });
 });
 
-app.get('/api/settings', (_req, res) => {
+app.get('/api/settings', (req, res) => {
   const publicSettings = { ...getSettings() };
   delete publicSettings.ownerPassword;
+
+  // Auto Code Brain: When called from a custom-tracked landing page (/page/:slug or /l/:slug),
+  // automatically isolate the response so main store GTM & main store Pixel never leak into the landing page.
+  try {
+    const ref = String(req.headers['referer'] || '');
+    const ctxSlug = String(req.query?.landing || '').trim();
+    let landingSlug = ctxSlug;
+    if (!landingSlug && ref) {
+      const refUrl = new URL(ref, 'http://localhost');
+      const refParts = refUrl.pathname.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+      if ((refParts[0] === 'page' || refParts[0] === 'l') && refParts[1]) {
+        landingSlug = refParts[1];
+      }
+    }
+    if (landingSlug) {
+      const land = getLandingBySlug(landingSlug);
+      const hasCustom = land && (land.fbPixelId || land.ttkPixelId || land.gtmId || land.gaId);
+      if (hasCustom && land.pixelMode !== 'both') {
+        publicSettings.gtmId = land.gtmId ? String(land.gtmId).trim() : '';
+        publicSettings.fbPixelId = land.fbPixelId ? String(land.fbPixelId).trim() : '';
+      }
+    }
+  } catch (_) {}
+
   res.json(publicSettings);
 });
 app.put('/api/settings', adminAuth, requireRole('owner', 'manager'), (req, res) => {
@@ -593,7 +617,7 @@ app.put('/api/settings', adminAuth, requireRole('owner', 'manager'), (req, res) 
     lowStockAt: num(b.lowStockAt, cur.lowStockAt),
     whatsapp: typeof b.whatsapp === 'string' ? b.whatsapp.replace(/[^0-9]/g, '') : cur.whatsapp,
     phone: typeof b.phone === 'string' ? b.phone.trim() : cur.phone,
-    gtmId: typeof b.gtmId === 'string' ? b.gtmId.trim().slice(0, 20) : cur.gtmId,
+    gtmId: typeof b.gtmId === 'string' && b.gtmId.trim() ? b.gtmId.trim().slice(0, 20) : (b.clearGtm === true ? '' : cur.gtmId),
     fbPixelId: typeof b.fbPixelId === 'string' ? b.fbPixelId.trim().slice(0, 30) : cur.fbPixelId,
     logo: typeof b.logo === 'string' ? b.logo.trim() : (cur.logo || ''),
     favicon: typeof b.favicon === 'string' ? b.favicon.trim() : (cur.favicon || ''),
@@ -6667,18 +6691,44 @@ if (existsSync(dist)) {
           html = html.replace(/<meta property="og:image" content="[^"]*"/i, `<meta property="og:image" content="${htmlEscape(landImg)}"`);
         }
 
+        const stForLanding = getSettings();
+        const hasCustom = Boolean(targetLanding.fbPixelId || targetLanding.ttkPixelId || targetLanding.gtmId || targetLanding.gaId);
+        const isDual = targetLanding.pixelMode === 'both';
+        const customPid = targetLanding.fbPixelId ? String(targetLanding.fbPixelId).trim() : null;
+        const storePid = stForLanding.fbPixelId ? String(stForLanding.fbPixelId).trim() : null;
+        const allowedPixels = hasCustom
+          ? (isDual ? [customPid, storePid].filter(Boolean) : (customPid ? [customPid] : []))
+          : (storePid ? [storePid] : []);
+        const activeLandingGtm = hasCustom
+          ? (targetLanding.gtmId ? String(targetLanding.gtmId).trim() : (isDual ? (stForLanding.gtmId || null) : null))
+          : (stForLanding.gtmId || null);
+
         const trackingPayload = {
           isLanding: true,
           slug: targetLanding.slug || parts[1] || parts[0],
-          fbPixelId: targetLanding.fbPixelId ? String(targetLanding.fbPixelId).trim() : null,
+          fbPixelId: customPid || (!hasCustom ? storePid : null),
           fbTestCode: targetLanding.fbTestCode ? String(targetLanding.fbTestCode).trim() : null,
           pixelMode: targetLanding.pixelMode || 'custom',
           ttkPixelId: targetLanding.ttkPixelId ? String(targetLanding.ttkPixelId).trim() : null,
-          gtmId: targetLanding.gtmId ? String(targetLanding.gtmId).trim() : null,
+          gtmId: activeLandingGtm,
           gaId: targetLanding.gaId ? String(targetLanding.gaId).trim() : null,
-          hasCustomTracking: Boolean(targetLanding.fbPixelId || targetLanding.ttkPixelId || targetLanding.gtmId || targetLanding.gaId)
+          hasCustomTracking: hasCustom,
+          strictIsolation: hasCustom && !isDual,
+          allowedPixels
         };
-        const landingPreloadScript = `<script>window.__LANDING_TRACKING__ = ${JSON.stringify(trackingPayload)};${targetLanding.gtmId ? ' window.__ALLOWED_GTM__ = true;' : ' window.__BLOCKED_GTM__ = true;'}</script>`;
+        const autoBrainPayload = {
+          mode: 'landing',
+          slug: trackingPayload.slug,
+          strictIsolation: hasCustom && !isDual,
+          allowedPixels,
+          primaryPixelId: trackingPayload.fbPixelId,
+          fbTestCode: trackingPayload.fbTestCode,
+          ttkPixelId: trackingPayload.ttkPixelId,
+          gtmId: activeLandingGtm,
+          gaId: trackingPayload.gaId,
+          blockGtm: !activeLandingGtm
+        };
+        const landingPreloadScript = `<script>window.__AUTO_BRAIN__ = ${JSON.stringify(autoBrainPayload)}; window.__LANDING_TRACKING__ = ${JSON.stringify(trackingPayload)}; window.__ALLOWED_PIXELS__ = ${JSON.stringify(allowedPixels)};${activeLandingGtm ? ' window.__ALLOWED_GTM__ = true;' : ' window.__BLOCKED_GTM__ = true;'}</script>`;
         html = html.replace('<head>', `<head>\n    ${landingPreloadScript}`);
       } else {
         const s = getSettings();
@@ -6699,8 +6749,22 @@ if (existsSync(dist)) {
         cleanPath.toLowerCase().startsWith('wp-admin') || cleanPath.toLowerCase().startsWith('admin') || cleanPath.toLowerCase().startsWith('staff') ||
         (req.path && /^\/(wp-admin|admin|staff)/i.test(req.path));
 
-      const activeGtmId = getSettings().gtmId;
+      const storeSettingsNow = getSettings();
+      const activeGtmId = storeSettingsNow.gtmId;
       const landingHasCustomTracking = targetLanding && (targetLanding.fbPixelId || targetLanding.ttkPixelId || targetLanding.gtmId || targetLanding.gaId);
+
+      if (!targetLanding && !isAdminPath) {
+        const storePid = storeSettingsNow.fbPixelId ? String(storeSettingsNow.fbPixelId).trim() : null;
+        const storeBrain = {
+          mode: 'store',
+          strictIsolation: false,
+          allowedPixels: storePid ? [storePid] : [],
+          primaryPixelId: storePid,
+          gtmId: activeGtmId || null,
+          blockGtm: false
+        };
+        html = html.replace('<head>', `<head>\n    <script>window.__AUTO_BRAIN__ = ${JSON.stringify(storeBrain)};</script>`);
+      }
 
       if (activeGtmId && !landingHasCustomTracking && !isAdminPath) {
         const gtmSnippet = `<!-- Google Tag Manager -->
@@ -6723,7 +6787,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
       }
 
       if (isAdminPath) {
-        html = html.replace('<head>', '<head>\n    <script>window.__IS_ADMIN__ = true; window.dataLayer = []; try { var noop = function(){}; Object.defineProperty(window, "fbq", { get: function(){ return noop; }, set: function(){}, configurable: false }); Object.defineProperty(window, "_fbq", { get: function(){ return noop; }, set: function(){}, configurable: false }); Object.defineProperty(window, "ttq", { get: function(){ return { track: noop, page: noop, identify: noop }; }, set: function(){}, configurable: false }); Object.defineProperty(window, "gtag", { get: function(){ return noop; }, set: function(){}, configurable: false }); } catch(_){} </script>');
+        html = html.replace('<head>', '<head>\n    <script>window.__IS_ADMIN__ = true; window.__AUTO_BRAIN__ = {"mode":"admin","strictIsolation":true,"allowedPixels":[],"gtmId":null,"blockGtm":true}; window.dataLayer = []; try { var noop = function(){}; Object.defineProperty(window, "fbq", { get: function(){ return noop; }, set: function(){}, configurable: false }); Object.defineProperty(window, "_fbq", { get: function(){ return noop; }, set: function(){}, configurable: false }); Object.defineProperty(window, "ttq", { get: function(){ return { track: noop, page: noop, identify: noop }; }, set: function(){}, configurable: false }); Object.defineProperty(window, "gtag", { get: function(){ return noop; }, set: function(){}, configurable: false }); } catch(_){} </script>');
       }
       res.setHeader('Content-Type', 'text/html; charset=UTF-8');
       res.send(html);

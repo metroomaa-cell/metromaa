@@ -37,13 +37,23 @@
           return;
         }
 
-        // 2. Pixel Validator
+        // 2. Auto Code Brain — Dynamic Pixel Validator (Zero Hardcoded IDs)
         function isPixelAllowed(pid) {
           if (!pid) return false;
           pid = String(pid).trim();
           if (window.__IS_ADMIN__) return false;
 
-          // A. Landing Page Rules: ABSOLUTE ISOLATION
+          var brain = window.__AUTO_BRAIN__;
+          if (brain) {
+            if (brain.mode === 'admin') return false;
+            if (brain.strictIsolation) {
+              return Array.isArray(brain.allowedPixels) && brain.allowedPixels.indexOf(pid) !== -1;
+            }
+            if (Array.isArray(brain.allowedPixels) && brain.allowedPixels.length > 0) {
+              return brain.allowedPixels.indexOf(pid) !== -1;
+            }
+          }
+
           var lt = window.__LANDING_TRACKING__;
           var curPath = (window.location.pathname || '').toLowerCase();
           var isLand = (lt && lt.isLanding) || curPath.indexOf('/page/') !== -1 || curPath.indexOf('/page') !== -1 || curPath.indexOf('/l/') !== -1;
@@ -51,47 +61,13 @@
           if (isLand) {
             if (lt && lt.fbPixelId) {
               var customPid = String(lt.fbPixelId).trim();
-              if (lt.pixelMode === 'both') {
-                if (pid === customPid) return true;
-              } else {
-                // Custom Only: ONLY this custom pixel is permitted, NEVER store default pixel!
+              if (lt.pixelMode !== 'both') {
                 return pid === customPid;
               }
             }
             if (Array.isArray(window.__ALLOWED_PIXELS__) && window.__ALLOWED_PIXELS__.length > 0) {
               return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
             }
-          }
-
-          // B. Cross-Domain Isolation & Storefront Defaults (Non-landing or dual mode only)
-          if (host.indexOf('secrate') !== -1) {
-            if (pid === '1076190345020163' || pid === '1859139138606140' || pid === '1122829254194671') {
-              return false;
-            }
-            if (isLand && ((lt && lt.fbPixelId && lt.pixelMode !== 'both') || (window.__ALLOWED_PIXELS__ && window.__ALLOWED_PIXELS__.indexOf(pid) === -1))) {
-              return false;
-            }
-            return pid === '848875214954132' || (lt && pid === String(lt.fbPixelId).trim());
-          }
-
-          if (host.indexOf('timingboost') !== -1 || host.indexOf('timeboost') !== -1) {
-            if (pid === '848875214954132' || pid === '1122829254194671') {
-              return false;
-            }
-            if (isLand && ((lt && lt.fbPixelId && lt.pixelMode !== 'both') || (window.__ALLOWED_PIXELS__ && window.__ALLOWED_PIXELS__.indexOf(pid) === -1))) {
-              return false;
-            }
-            return pid === '1076190345020163' || pid === '1859139138606140' || (lt && pid === String(lt.fbPixelId).trim());
-          }
-
-          if (host.indexOf('metrroma') !== -1 || host.indexOf('metromaa') !== -1) {
-            if (pid === '848875214954132' || pid === '1076190345020163' || pid === '1859139138606140') {
-              return false;
-            }
-            if (isLand && ((lt && lt.fbPixelId && lt.pixelMode !== 'both') || (window.__ALLOWED_PIXELS__ && window.__ALLOWED_PIXELS__.indexOf(pid) === -1))) {
-              return false;
-            }
-            return pid === '1122829254194671' || (lt && pid === String(lt.fbPixelId).trim());
           }
 
           return true;
@@ -257,7 +233,7 @@
           }
         } catch (_) {}
 
-        // 5. Auto-initialize custom landing pixel immediately
+        // 5. Auto-initialize custom landing pixel immediately via Auto Code Brain
         var lt = window.__LANDING_TRACKING__;
         if (lt && lt.fbPixelId) {
           var s = document.createElement('script');
@@ -267,8 +243,16 @@
           if (f && f.parentNode) f.parentNode.insertBefore(s, f);
           else document.head.appendChild(s);
 
-          window.fbq('init', String(lt.fbPixelId).trim());
-          window.fbq('track', 'PageView');
+          var initPid = String(lt.fbPixelId).trim();
+          window.fbq('init', initPid);
+          var pvOpts = lt.fbTestCode ? { test_event_code: String(lt.fbTestCode).trim() } : undefined;
+          if (lt.pixelMode !== 'both') {
+            if (pvOpts) window.fbq('trackSingle', initPid, 'PageView', {}, pvOpts);
+            else window.fbq('trackSingle', initPid, 'PageView');
+          } else {
+            if (pvOpts) window.fbq('track', 'PageView', {}, pvOpts);
+            else window.fbq('track', 'PageView');
+          }
         }
       })();
     </script>

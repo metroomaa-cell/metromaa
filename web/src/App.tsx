@@ -2189,7 +2189,6 @@ function Shell() {
     if (isThankYou) {
       return (
         <Suspense fallback={<StoreLoading />}>
-          <Effects />
           <LandingThankYou slug={landingSlug} />
           <Toast />
         </Suspense>
@@ -2198,7 +2197,6 @@ function Shell() {
 
     return (
       <Suspense fallback={<StoreLoading />}>
-        <Effects />
         <LoveLockLanding slug={route.param} />
         <SmartWhatsAppChat />
         <Toast />
