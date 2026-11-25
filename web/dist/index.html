@@ -13,7 +13,7 @@
         var pathname = (window.location.pathname || '').toLowerCase();
         var hash = (window.location.hash || '').toLowerCase();
 
-        // 1. Admin Panel Strict Shield: 100% blocked!
+        // 1. Admin Panel Strict Shield: 100% blocked inside admin routes
         var isAdmin = window.__IS_ADMIN__ ||
           pathname.indexOf('/wp-admin') !== -1 ||
           pathname.indexOf('/admin') !== -1 ||
@@ -23,10 +23,17 @@
 
         if (isAdmin) {
           window.__IS_ADMIN__ = true;
-          window.fbq = function() {};
-          window._fbq = window.fbq;
-          window.ttq = { track: function() {}, page: function() {}, identify: function() {} };
           window.dataLayer = [];
+          var dummyNoop = function() {};
+          try {
+            Object.defineProperty(window, 'fbq', { get: function() { return dummyNoop; }, set: function() {}, configurable: false });
+            Object.defineProperty(window, '_fbq', { get: function() { return dummyNoop; }, set: function() {}, configurable: false });
+            Object.defineProperty(window, 'ttq', { get: function() { return { track: dummyNoop, page: dummyNoop, identify: dummyNoop }; }, set: function() {}, configurable: false });
+            Object.defineProperty(window, 'gtag', { get: function() { return dummyNoop; }, set: function() {}, configurable: false });
+          } catch (_) {
+            window.fbq = dummyNoop;
+            window._fbq = dummyNoop;
+          }
           return;
         }
 
@@ -34,10 +41,13 @@
         function isPixelAllowed(pid) {
           if (!pid) return false;
           pid = String(pid).trim();
+          if (window.__IS_ADMIN__) return false;
 
           // A. Landing Page Rules
           var lt = window.__LANDING_TRACKING__;
-          var isLand = lt ? lt.isLanding : (pathname.indexOf('/page/') !== -1 || pathname.indexOf('/page') !== -1);
+          var curPath = (window.location.pathname || '').toLowerCase();
+          var isLand = (lt && lt.isLanding) || curPath.indexOf('/page/') !== -1 || curPath.indexOf('/page') !== -1;
+
           if (isLand && lt && lt.fbPixelId) {
             var customPid = String(lt.fbPixelId).trim();
             if (lt.pixelMode === 'both') {
@@ -48,25 +58,27 @@
             }
           }
 
-          // B. Cross-Domain Isolation
+          if (isLand && Array.isArray(window.__ALLOWED_PIXELS__) && window.__ALLOWED_PIXELS__.length > 0) {
+            return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
+          }
+
+          // B. Cross-Domain Isolation & Storefront Defaults
           if (host.indexOf('secrate') !== -1) {
             if (pid === '1076190345020163' || pid === '1859139138606140' || pid === '1122829254194671') {
-              console.warn('[Shield] Dropped foreign pixel:', pid);
               return false;
             }
-            if (isLand && lt && lt.fbPixelId && lt.pixelMode !== 'both') {
-              return pid === String(lt.fbPixelId).trim();
+            if (isLand && ((lt && lt.fbPixelId && lt.pixelMode !== 'both') || (window.__ALLOWED_PIXELS__ && window.__ALLOWED_PIXELS__.indexOf(pid) === -1))) {
+              return false;
             }
             return pid === '848875214954132' || (lt && pid === String(lt.fbPixelId).trim());
           }
 
           if (host.indexOf('timingboost') !== -1 || host.indexOf('timeboost') !== -1) {
             if (pid === '848875214954132' || pid === '1122829254194671') {
-              console.warn('[Shield] Dropped foreign pixel:', pid);
               return false;
             }
-            if (isLand && lt && lt.fbPixelId && lt.pixelMode !== 'both') {
-              return pid === String(lt.fbPixelId).trim();
+            if (isLand && ((lt && lt.fbPixelId && lt.pixelMode !== 'both') || (window.__ALLOWED_PIXELS__ && window.__ALLOWED_PIXELS__.indexOf(pid) === -1))) {
+              return false;
             }
             return pid === '1076190345020163' || pid === '1859139138606140' || (lt && pid === String(lt.fbPixelId).trim());
           }
@@ -75,8 +87,8 @@
             if (pid === '848875214954132' || pid === '1076190345020163' || pid === '1859139138606140') {
               return false;
             }
-            if (isLand && lt && lt.fbPixelId && lt.pixelMode !== 'both') {
-              return pid === String(lt.fbPixelId).trim();
+            if (isLand && ((lt && lt.fbPixelId && lt.pixelMode !== 'both') || (window.__ALLOWED_PIXELS__ && window.__ALLOWED_PIXELS__.indexOf(pid) === -1))) {
+              return false;
             }
             return pid === '1122829254194671' || (lt && pid === String(lt.fbPixelId).trim());
           }
@@ -85,31 +97,111 @@
         }
         window.__isPixelAllowed = isPixelAllowed;
 
-        // 3. Official FBQ Stub with filtering
-        var fbqStub = function() {
+        // 3. Permanent FBQ & _FBQ Shield
+        var internalFbq = null;
+
+        var guardedFbq = function() {
           var cmd = arguments[0];
           var pid = arguments[1];
           if (cmd === 'init' || cmd === 'trackSingle' || cmd === 'trackSingleCustom') {
             if (!isPixelAllowed(pid)) {
-              console.warn('[Shield] Blocked pixel initialization for ' + pid);
+              console.warn('[Shield] Blocked pixel call for ' + pid);
               return;
             }
           }
-          if (fbqStub.callMethod) {
-            fbqStub.callMethod.apply(fbqStub, arguments);
+          if (internalFbq && internalFbq.callMethod) {
+            return internalFbq.callMethod.apply(internalFbq, arguments);
+          } else if (internalFbq && typeof internalFbq === 'function') {
+            return internalFbq.apply(this, arguments);
           } else {
-            fbqStub.queue.push(arguments);
+            guardedFbq.queue.push(arguments);
           }
         };
-        fbqStub.push = fbqStub;
-        fbqStub.loaded = true;
-        fbqStub.version = '2.0';
-        fbqStub.queue = [];
+        guardedFbq.push = guardedFbq;
+        guardedFbq.loaded = true;
+        guardedFbq.version = '2.0';
+        guardedFbq.queue = [];
 
-        window.fbq = fbqStub;
-        window._fbq = fbqStub;
+        var fbqDescriptor = {
+          configurable: true,
+          enumerable: true,
+          get: function() {
+            return guardedFbq;
+          },
+          set: function(val) {
+            if (val && val !== guardedFbq) {
+              internalFbq = val;
+              if (val.callMethod) guardedFbq.callMethod = val.callMethod;
+              if (guardedFbq.queue && guardedFbq.queue.length > 0) {
+                while (guardedFbq.queue.length > 0) {
+                  var item = guardedFbq.queue.shift();
+                  try {
+                    if (item[0] === 'init' && !isPixelAllowed(item[1])) continue;
+                    if (val.callMethod) val.callMethod.apply(val, item);
+                    else if (typeof val === 'function') val.apply(window, item);
+                  } catch (_) {}
+                }
+              }
+            }
+          }
+        };
 
-        // 4. Auto-initialize custom landing pixel immediately
+        try { Object.defineProperty(window, 'fbq', fbqDescriptor); } catch (_) { window.fbq = guardedFbq; }
+        try { Object.defineProperty(window, '_fbq', fbqDescriptor); } catch (_) { window._fbq = guardedFbq; }
+
+        // 4. Network-level Beacon Shield: Intercept outgoing requests to facebook.com/tr
+        function shouldBlockPixelUrl(url) {
+          if (!url || typeof url !== 'string') return false;
+          if (url.indexOf('facebook.com/tr') === -1) return false;
+          var match = url.match(/[?&]id=([0-9]+)/);
+          if (match && match[1]) {
+            return !isPixelAllowed(match[1]);
+          }
+          return false;
+        }
+
+        if (typeof window.fetch === 'function') {
+          var origFetch = window.fetch;
+          window.fetch = function(input, init) {
+            var u = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+            if (shouldBlockPixelUrl(u)) {
+              return Promise.resolve(new Response('', { status: 200 }));
+            }
+            return origFetch.apply(this, arguments);
+          };
+        }
+
+        if (navigator && typeof navigator.sendBeacon === 'function') {
+          var origBeacon = navigator.sendBeacon.bind(navigator);
+          navigator.sendBeacon = function(url, data) {
+            if (shouldBlockPixelUrl(url)) {
+              return true;
+            }
+            return origBeacon(url, data);
+          };
+        }
+
+        try {
+          var imgProto = HTMLImageElement.prototype;
+          var origImgSrcDescriptor = Object.getOwnPropertyDescriptor(imgProto, 'src');
+          if (origImgSrcDescriptor && origImgSrcDescriptor.set) {
+            Object.defineProperty(imgProto, 'src', {
+              configurable: true,
+              enumerable: true,
+              get: function() {
+                return origImgSrcDescriptor.get.call(this);
+              },
+              set: function(val) {
+                if (shouldBlockPixelUrl(val)) {
+                  return;
+                }
+                return origImgSrcDescriptor.set.call(this, val);
+              }
+            });
+          }
+        } catch (_) {}
+
+        // 5. Auto-initialize custom landing pixel immediately
         var lt = window.__LANDING_TRACKING__;
         if (lt && lt.fbPixelId) {
           var s = document.createElement('script');
@@ -122,27 +214,6 @@
           window.fbq('init', String(lt.fbPixelId).trim());
           window.fbq('track', 'PageView');
         }
-
-        // 5. Auto GTM Shield: If a landing page sets a custom pixel, store GTM is killed!
-        try {
-          var observer = new MutationObserver(function(mutations) {
-            for (var i = 0; i < mutations.length; i++) {
-              var nodes = mutations[i].addedNodes;
-              for (var j = 0; j < nodes.length; j++) {
-                var el = nodes[j];
-                if (el && el.tagName === 'SCRIPT' && el.src && el.src.indexOf('googletagmanager.com/gtm.js') !== -1) {
-                  var curLt = window.__LANDING_TRACKING__;
-                  if (curLt && curLt.hasCustomTracking && !window.__ALLOWED_GTM__) {
-                    el.type = 'javascript/blocked';
-                    if (el.parentNode) el.parentNode.removeChild(el);
-                    console.warn('[GTM Guard] Store GTM blocked because custom tracking is active.');
-                  }
-                }
-              }
-            }
-          });
-          observer.observe(document.documentElement, { childList: true, subtree: true });
-        } catch(_) {}
       })();
     </script>
     
@@ -165,7 +236,7 @@
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" /></noscript>
     <style>#root{color:#1f3147;background:#f3f0ec;min-height:100vh}</style>
-    <script type="module" crossorigin src="/assets/index-CANjHJMz.js"></script>
+    <script type="module" crossorigin src="/assets/index-BrKgyDQd.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-BWaJ3C7D.js">
     <link rel="stylesheet" crossorigin href="/assets/index-CKXQ5xsR.css">
   </head>

@@ -6690,7 +6690,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
       }
 
       if (isAdminPath) {
-        html = html.replace('<head>', '<head>\n    <script>window.__IS_ADMIN__ = true; window.dataLayer = [];</script>');
+        html = html.replace('<head>', '<head>\n    <script>window.__IS_ADMIN__ = true; window.dataLayer = []; try { var noop = function(){}; Object.defineProperty(window, "fbq", { get: function(){ return noop; }, set: function(){}, configurable: false }); Object.defineProperty(window, "_fbq", { get: function(){ return noop; }, set: function(){}, configurable: false }); Object.defineProperty(window, "ttq", { get: function(){ return { track: noop, page: noop, identify: noop }; }, set: function(){}, configurable: false }); Object.defineProperty(window, "gtag", { get: function(){ return noop; }, set: function(){}, configurable: false }); } catch(_){} </script>');
       }
       res.setHeader('Content-Type', 'text/html; charset=UTF-8');
       res.send(html);

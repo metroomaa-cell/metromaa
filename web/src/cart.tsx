@@ -150,6 +150,23 @@ export const go = (path: string) => {
     parts[0] = 'categories';
   }
   const target = parts.length > 0 ? '/' + parts.join('/') : '/';
+
+  const currentPath = (location.pathname || '').toLowerCase();
+  const targetPath = target.toLowerCase();
+
+  const isCurrentAdmin = currentPath.includes('/wp-admin') || currentPath.includes('/admin') || currentPath.includes('/staff') || (location.hash || '').includes('admin');
+  const isTargetAdmin = targetPath.includes('/wp-admin') || targetPath.includes('/admin') || targetPath.includes('/staff');
+
+  const isCurrentLanding = currentPath.includes('/page/') || currentPath.includes('/page');
+  const isTargetLanding = targetPath.includes('/page/') || targetPath.includes('/page');
+
+  // Hard reload across security & tracking boundaries: Admin <-> Storefront <-> Landing Page
+  // This guarantees complete session isolation, zero pixel/GTM leakage, and pristine tracking state.
+  if (isCurrentAdmin !== isTargetAdmin || isCurrentLanding || isTargetLanding) {
+    window.location.href = target;
+    return;
+  }
+
   if (location.pathname !== target || location.hash) {
     window.history.pushState(null, '', target);
     window.dispatchEvent(new PopStateEvent('popstate'));
