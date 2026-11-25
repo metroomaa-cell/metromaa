@@ -6637,16 +6637,16 @@ if (existsSync(dist)) {
           html = html.replace(/<meta property="og:image" content="[^"]*"/i, `<meta property="og:image" content="${htmlEscape(landImg)}"`);
         }
 
-        let landingPreloadScript = '';
-        if (targetLanding.fbPixelId) {
-          const allowed = targetLanding.pixelMode === 'both' && stNow.fbPixelId
-            ? JSON.stringify([String(targetLanding.fbPixelId).trim(), String(stNow.fbPixelId).trim()])
-            : JSON.stringify([String(targetLanding.fbPixelId).trim()]);
-          landingPreloadScript = `<script>window.__ALLOWED_PIXELS__ = ${allowed};${targetLanding.gtmId ? ' window.__ALLOWED_GTM__ = true;' : ''}</script>`;
-        }
-        if (landingPreloadScript) {
-          html = html.replace('<head>', `<head>\n    ${landingPreloadScript}`);
-        }
+        const trackingPayload = {
+          isLanding: true,
+          slug: parts[1],
+          fbPixelId: targetLanding.fbPixelId ? String(targetLanding.fbPixelId).trim() : null,
+          pixelMode: targetLanding.pixelMode || 'custom',
+          ttkPixelId: targetLanding.ttkPixelId ? String(targetLanding.ttkPixelId).trim() : null,
+          hasCustomTracking: Boolean(targetLanding.fbPixelId || targetLanding.ttkPixelId || targetLanding.gtmId)
+        };
+        const landingPreloadScript = `<script>window.__LANDING_TRACKING__ = ${JSON.stringify(trackingPayload)};${targetLanding.gtmId ? ' window.__ALLOWED_GTM__ = true;' : ''}</script>`;
+        html = html.replace('<head>', `<head>\n    ${landingPreloadScript}`);
       } else {
         const s = getSettings();
         const brand = (s.storeName && s.storeName !== 'dot.' && s.storeName !== 'Dot Store')

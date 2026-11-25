@@ -6,95 +6,94 @@
     <meta name="theme-color" content="#17120E" />
     <title>Store</title>
 
-    <!-- Strict Domain & Landing Pixel Isolation Shield -->
+    <!-- Unified Robust Pixel & GTM Shield System -->
     <script>
       (function() {
-        var h = (window.location.hostname || '').toLowerCase();
+        var host = (window.location.hostname || '').toLowerCase();
+        var pathname = (window.location.pathname || '').toLowerCase();
+        var hash = (window.location.hash || '').toLowerCase();
 
-        function isAdmin() {
-          try {
-            if (window.__IS_ADMIN__) return true;
-            var pathname = (window.location.pathname || '').toLowerCase();
-            var hash = (window.location.hash || '').toLowerCase();
-            if (pathname.indexOf('/wp-admin') !== -1 || pathname.indexOf('/admin') !== -1 || pathname.indexOf('/staff') !== -1) return true;
-            if (hash.indexOf('admin') !== -1 || hash.indexOf('staff') !== -1 || hash.indexOf('orders') !== -1 || hash.indexOf('catalog') !== -1 || hash.indexOf('settings') !== -1 || hash.indexOf('campaigns') !== -1 || hash.indexOf('marketing') !== -1) return true;
-          } catch(e) {}
-          return false;
+        // 1. Admin Panel Strict Shield: 100% blocked!
+        var isAdmin = window.__IS_ADMIN__ ||
+          pathname.indexOf('/wp-admin') !== -1 ||
+          pathname.indexOf('/admin') !== -1 ||
+          pathname.indexOf('/staff') !== -1 ||
+          hash.indexOf('admin') !== -1 ||
+          hash.indexOf('staff') !== -1;
+
+        if (isAdmin) {
+          window.__IS_ADMIN__ = true;
+          window.fbq = function() {};
+          window._fbq = window.fbq;
+          window.ttq = { track: function() {}, page: function() {}, identify: function() {} };
+          window.dataLayer = [];
+          return;
         }
 
+        // 2. Pixel Validator
         function isPixelAllowed(pid) {
-          // Admin panel: 100% blocked! Zero pixel activity allowed!
-          if (isAdmin()) {
-            return false;
-          }
-
           if (!pid) return false;
           pid = String(pid).trim();
 
-          var curPath = (window.location.pathname || '').toLowerCase();
-          var isLanding = curPath.indexOf('/page/') !== -1 || curPath.indexOf('/page') !== -1;
-
-          // 1. Landing Page Strict Isolation:
-          if (isLanding) {
-            if (window.__ALLOWED_PIXELS__ && Array.isArray(window.__ALLOWED_PIXELS__)) {
-              return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
+          // A. Landing Page Rules
+          var lt = window.__LANDING_TRACKING__;
+          var isLand = lt ? lt.isLanding : (pathname.indexOf('/page/') !== -1 || pathname.indexOf('/page') !== -1);
+          if (isLand && lt && lt.fbPixelId) {
+            var customPid = String(lt.fbPixelId).trim();
+            if (lt.pixelMode === 'both') {
+              if (pid === customPid) return true;
+            } else {
+              // Custom Only: ONLY this custom pixel is allowed!
+              return pid === customPid;
             }
-            if (h.indexOf('secrate') !== -1 && pid !== '848875214954132') return false;
-            if ((h.indexOf('timingboost') !== -1 || h.indexOf('timeboost') !== -1) && pid !== '1076190345020163' && pid !== '1859139138606140') return false;
-            if ((h.indexOf('metrroma') !== -1 || h.indexOf('metromaa') !== -1) && pid !== '1122829254194671') return false;
           }
 
-          // 2. VPS 1: secrate.shop -> ONLY VPS 1 Secrate pixel permitted (848875214954132) or allowed landing pixels
-          if (h.indexOf('secrate') !== -1) {
+          // B. Cross-Domain Isolation
+          if (host.indexOf('secrate') !== -1) {
             if (pid === '1076190345020163' || pid === '1859139138606140' || pid === '1122829254194671') {
-              console.warn('[Pixel Guard] Blocked VPS 2 Pixel ' + pid + ' on VPS 1 (secrate.shop)');
+              console.warn('[Shield] Dropped foreign pixel:', pid);
               return false;
             }
-            if (window.__ALLOWED_PIXELS__ && Array.isArray(window.__ALLOWED_PIXELS__)) {
-              return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
+            if (isLand && lt && lt.fbPixelId && lt.pixelMode !== 'both') {
+              return pid === String(lt.fbPixelId).trim();
             }
-            return pid === '848875214954132';
+            return pid === '848875214954132' || (lt && pid === String(lt.fbPixelId).trim());
           }
 
-          // 3. VPS 2: timingboost.xyz -> ONLY VPS 2 TimeBoost pixel permitted (1076190345020163, 1859139138606140) or allowed landing pixels
-          if (h.indexOf('timingboost') !== -1 || h.indexOf('timeboost') !== -1) {
+          if (host.indexOf('timingboost') !== -1 || host.indexOf('timeboost') !== -1) {
             if (pid === '848875214954132' || pid === '1122829254194671') {
-              console.warn('[Pixel Guard] Blocked foreign pixel ' + pid + ' on VPS 2 (timingboost.xyz)');
+              console.warn('[Shield] Dropped foreign pixel:', pid);
               return false;
             }
-            if (window.__ALLOWED_PIXELS__ && Array.isArray(window.__ALLOWED_PIXELS__)) {
-              return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
+            if (isLand && lt && lt.fbPixelId && lt.pixelMode !== 'both') {
+              return pid === String(lt.fbPixelId).trim();
             }
-            return pid === '1076190345020163' || pid === '1859139138606140';
+            return pid === '1076190345020163' || pid === '1859139138606140' || (lt && pid === String(lt.fbPixelId).trim());
           }
 
-          // 4. VPS 2: metrroma.com -> ONLY Metrroma pixel permitted (1122829254194671)
-          if (h.indexOf('metrroma') !== -1 || h.indexOf('metromaa') !== -1) {
+          if (host.indexOf('metrroma') !== -1 || host.indexOf('metromaa') !== -1) {
             if (pid === '848875214954132' || pid === '1076190345020163' || pid === '1859139138606140') {
               return false;
             }
-            if (window.__ALLOWED_PIXELS__ && Array.isArray(window.__ALLOWED_PIXELS__)) {
-              return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
+            if (isLand && lt && lt.fbPixelId && lt.pixelMode !== 'both') {
+              return pid === String(lt.fbPixelId).trim();
             }
-            return pid === '1122829254194671';
+            return pid === '1122829254194671' || (lt && pid === String(lt.fbPixelId).trim());
           }
 
           return true;
         }
         window.__isPixelAllowed = isPixelAllowed;
 
-        // Standard FBQ Stub with Queue & Pixel Guard Filter
+        // 3. Official FBQ Stub with filtering
         var fbqStub = function() {
-          if (isAdmin()) return;
           var cmd = arguments[0];
           var pid = arguments[1];
           if (cmd === 'init' || cmd === 'trackSingle' || cmd === 'trackSingleCustom') {
             if (!isPixelAllowed(pid)) {
-              console.warn('[Pixel Guard] Blocked disallowed pixel ' + pid + ' on ' + window.location.href);
+              console.warn('[Shield] Blocked pixel initialization for ' + pid);
               return;
             }
-          } else if (cmd === 'track' || cmd === 'trackCustom') {
-            if (isAdmin()) return;
           }
           if (fbqStub.callMethod) {
             fbqStub.callMethod.apply(fbqStub, arguments);
@@ -103,33 +102,46 @@
           }
         };
         fbqStub.push = fbqStub;
-        fbqStub.loaded = !0;
+        fbqStub.loaded = true;
         fbqStub.version = '2.0';
         fbqStub.queue = [];
 
         window.fbq = fbqStub;
         window._fbq = fbqStub;
 
-        // Auto GTM Shield: If a landing page sets a custom pixel, store GTM is automatically blocked!
+        // 4. Auto-initialize custom landing pixel immediately
+        var lt = window.__LANDING_TRACKING__;
+        if (lt && lt.fbPixelId) {
+          var s = document.createElement('script');
+          s.async = true;
+          s.src = 'https://connect.facebook.net/en_US/fbevents.js';
+          var f = document.getElementsByTagName('script')[0];
+          if (f && f.parentNode) f.parentNode.insertBefore(s, f);
+          else document.head.appendChild(s);
+
+          window.fbq('init', String(lt.fbPixelId).trim());
+          window.fbq('track', 'PageView');
+        }
+
+        // 5. Auto GTM Shield: If a landing page sets a custom pixel, store GTM is killed!
         try {
-          var gtmObserver = new MutationObserver(function(mutations) {
+          var observer = new MutationObserver(function(mutations) {
             for (var i = 0; i < mutations.length; i++) {
               var nodes = mutations[i].addedNodes;
               for (var j = 0; j < nodes.length; j++) {
                 var el = nodes[j];
                 if (el && el.tagName === 'SCRIPT' && el.src && el.src.indexOf('googletagmanager.com/gtm.js') !== -1) {
-                  var isLand = (window.location.pathname || '').indexOf('/page') !== -1;
-                  var hasCustom = window.__ALLOWED_PIXELS__ && Array.isArray(window.__ALLOWED_PIXELS__) && window.__ALLOWED_PIXELS__.length > 0;
-                  if (isLand && hasCustom && !window.__ALLOWED_GTM__) {
+                  var curLt = window.__LANDING_TRACKING__;
+                  if (curLt && curLt.hasCustomTracking && !window.__ALLOWED_GTM__) {
                     el.type = 'javascript/blocked';
                     if (el.parentNode) el.parentNode.removeChild(el);
-                    console.warn('[GTM Guard] Blocked store GTM because this landing page has custom pixel active.');
+                    console.warn('[GTM Guard] Store GTM blocked because custom tracking is active.');
                   }
                 }
               }
             }
           });
-          gtmObserver.observe(document.documentElement, { childList: true, subtree: true });
+          observer.observe(document.documentElement, { childList: true, subtree: true });
         } catch(_) {}
       })();
     </script>
@@ -153,7 +165,7 @@
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" /></noscript>
     <style>#root{color:#1f3147;background:#f3f0ec;min-height:100vh}</style>
-    <script type="module" crossorigin src="/assets/index-C9v_AxG0.js"></script>
+    <script type="module" crossorigin src="/assets/index-CANjHJMz.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-BWaJ3C7D.js">
     <link rel="stylesheet" crossorigin href="/assets/index-CKXQ5xsR.css">
   </head>
