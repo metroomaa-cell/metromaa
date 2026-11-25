@@ -2676,24 +2676,46 @@ app.get('/api/landings/:slug', (req, res) => {
   res.json(safeLanding);
 });
 
+function sanitizeLandingSeo(b) {
+  if (!b || typeof b !== 'object') return b;
+  const out = { ...b };
+  const slug = String(out.slug || '').toLowerCase();
+  if (slug !== 'lovelock') {
+    if (out.headline === 'ম্যাজিক লাভ লক কনডম') {
+      out.headline = out.title || '';
+    }
+    if (String(out.subtitle || '').includes('পুরুষাঙ্গ')) {
+      out.subtitle = '';
+    }
+  }
+  if (out.mode === 'html' && out.customHtml) {
+    const htmlTitleMatch = String(out.customHtml).match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const extracted = htmlTitleMatch && htmlTitleMatch[1] ? htmlTitleMatch[1].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : '';
+    if (!out.headline || out.headline === 'ম্যাজিক লাভ লক কনডম') {
+      out.headline = extracted || out.title || '';
+    }
+  }
+  return out;
+}
+
 app.post('/api/landings', adminAuth, requireRole('owner', 'manager'), (req, res) => {
-  const b = req.body || {};
+  const b = sanitizeLandingSeo(req.body || {});
   const title = String(b.title || '').trim();
   if (!title) return res.status(400).json({ error: 'Landing title is required' });
   const slug = slugify(b.slug || title);
-  const landing = {
+  const landing = sanitizeLandingSeo({
     ...b,
     id: b.id || 'landing_' + Date.now().toString(36),
     title,
     slug,
     status: b.status === 'draft' ? 'draft' : 'live',
-  };
+  });
   addLanding(landing);
   res.status(201).json(landing);
 });
 
 app.put('/api/landings/:id', adminAuth, requireRole('owner', 'manager'), (req, res) => {
-  const updated = updateLanding(req.params.id, req.body || {});
+  const updated = updateLanding(req.params.id, sanitizeLandingSeo(req.body || {}));
   if (!updated) return res.status(404).json({ error: 'Landing page not found' });
   res.json(updated);
 });
@@ -6677,16 +6699,41 @@ if (existsSync(dist)) {
           .replace(/<link rel="canonical" href="[^"]*"\s*\/?\s*>/i, `<link rel="canonical" href="${htmlEscape(url)}" />`)
           .replace('</head>', `\n    <meta property="og:url" content="${htmlEscape(url)}" /><meta property="og:type" content="website" /><script type="application/ld+json">${JSON.stringify(listJsonLd).replace(/</g, '\\u003c')}</script>\n</head>`);
       } else if (targetLanding) {
-        const landTitle = String(targetLanding.headline || targetLanding.title || 'Special Offer').trim();
-        const landDesc = String(targetLanding.subheadline || targetLanding.title || 'Special Offer Cash on Delivery across Bangladesh.').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
-        const landImg = targetLanding.mainImage ? absoluteUrl(targetLanding.mainImage) : '';
-        const landUrl = `${baseUrl}/page/${encodeURIComponent(parts[1])}`;
+        const isHtmlMode = targetLanding.mode === 'html' && targetLanding.customHtml;
+        const rawCustomHtml = isHtmlMode ? String(targetLanding.customHtml) : '';
+        const htmlTitleMatch = rawCustomHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+        const htmlH1Match = rawCustomHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+        const htmlDescMatch = rawCustomHtml.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)
+          || rawCustomHtml.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/i);
+        const htmlImgMatch = rawCustomHtml.match(/<img[^>]+src=["'](https?:\/\/[^"']+|\/uploads\/[^"']+)["']/i);
+
+        const extractedHtmlTitle = (htmlTitleMatch && htmlTitleMatch[1] ? htmlTitleMatch[1] : (htmlH1Match && htmlH1Match[1] ? htmlH1Match[1] : ''))
+          .replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        const isDefaultLovelockHeadline = targetLanding.headline === 'ম্যাজিক লাভ লক কনডম' && targetLanding.slug !== 'lovelock';
+
+        const landTitle = String(
+          isHtmlMode
+            ? (extractedHtmlTitle || targetLanding.title || (!isDefaultLovelockHeadline && targetLanding.headline) || 'Special Offer')
+            : ((!isDefaultLovelockHeadline && targetLanding.headline) || targetLanding.title || 'Special Offer')
+        ).trim();
+
+        const isDefaultLovelockSub = String(targetLanding.subtitle || targetLanding.subheadline || '').includes('পুরুষাঙ্গ') && targetLanding.slug !== 'lovelock';
+        const rawSub = !isHtmlMode && !isDefaultLovelockSub ? (targetLanding.subheadline || targetLanding.subtitle) : '';
+        const landDesc = String(
+          (htmlDescMatch && htmlDescMatch[1]) || rawSub || targetLanding.title || landTitle || 'Special Offer — Cash on Delivery across Bangladesh.'
+        ).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+
+        const rawLandingImg = targetLanding.mainImage || targetLanding.heroImage || (htmlImgMatch && htmlImgMatch[1]) || '';
+        const landImg = rawLandingImg ? absoluteUrl(rawLandingImg) : '';
+        const landUrl = `${baseUrl}/page/${encodeURIComponent(parts[1] || parts[0])}`;
 
         html = html
           .replace(/<title>[\s\S]*?<\/title>/i, `<title>${htmlEscape(landTitle)}</title>`)
           .replace(/<meta name="description" content="[^"]*"/i, `<meta name="description" content="${htmlEscape(landDesc)}"`)
           .replace(/<meta property="og:title" content="[^"]*"/i, `<meta property="og:title" content="${htmlEscape(landTitle)}"`)
-          .replace(/<meta property="og:description" content="[^"]*"/i, `<meta property="og:description" content="${htmlEscape(landDesc)}"`);
+          .replace(/<meta property="og:description" content="[^"]*"/i, `<meta property="og:description" content="${htmlEscape(landDesc)}"`)
+          .replace(/<meta name="twitter:title" content="[^"]*"/i, `<meta name="twitter:title" content="${htmlEscape(landTitle)}"`)
+          .replace(/<meta name="twitter:description" content="[^"]*"/i, `<meta name="twitter:description" content="${htmlEscape(landDesc)}"`);
         if (landImg) {
           html = html.replace(/<meta property="og:image" content="[^"]*"/i, `<meta property="og:image" content="${htmlEscape(landImg)}"`);
         }
