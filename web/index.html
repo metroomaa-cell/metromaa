@@ -1,58 +1,139 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <!-- Google Tag Manager -->
-    <script>(function(w,d,s,l,i){
-      try {
-        var p = (window.location.pathname || '').toLowerCase();
-        var h = (window.location.hash || '').toLowerCase();
-        if (p.indexOf('/admin') !== -1 || p.indexOf('/wp-admin') !== -1 || h.indexOf('admin') !== -1) return;
-      } catch(e) {}
-      w[l]=w[l]||[];w[l].push({'gtm.start':
-      new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-      j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-      'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-    })(window,document,'script','dataLayer','GTM-WM964FQV');</script>
-    <!-- End Google Tag Manager -->
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#17120E" />
-    <title>METROMAA | Embrace the metro lifestyle</title>
-    <meta name="description" content="Explore watches, sunglasses, and gift collections delivered across Bangladesh with cash on delivery." />
-    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
-    <link rel="canonical" href="https://metrroma.com/" />
-    <!-- Open Graph for Facebook & Social Ads Sharing -->
-    <meta property="og:site_name" content="METRROMA" />
+    <title>Store</title>
+
+    <!-- Strict Domain & Landing Pixel Isolation Shield -->
+    <script>
+      (function() {
+        var h = (window.location.hostname || '').toLowerCase();
+
+        function isAdmin() {
+          try {
+            if (window.__IS_ADMIN__) return true;
+            var pathname = (window.location.pathname || '').toLowerCase();
+            var hash = (window.location.hash || '').toLowerCase();
+            if (pathname.indexOf('/wp-admin') !== -1 || pathname.indexOf('/admin') !== -1 || pathname.indexOf('/staff') !== -1) return true;
+            if (hash.indexOf('admin') !== -1 || hash.indexOf('staff') !== -1 || hash.indexOf('orders') !== -1 || hash.indexOf('catalog') !== -1 || hash.indexOf('settings') !== -1 || hash.indexOf('campaigns') !== -1 || hash.indexOf('marketing') !== -1) return true;
+          } catch(e) {}
+          return false;
+        }
+
+        function isPixelAllowed(pid) {
+          // Admin panel: 100% blocked! Zero pixel activity allowed!
+          if (isAdmin()) {
+            return false;
+          }
+
+          if (!pid) return false;
+          pid = String(pid).trim();
+
+          var curPath = (window.location.pathname || '').toLowerCase();
+          var isLanding = curPath.indexOf('/page/') !== -1 || curPath.indexOf('/page') !== -1;
+
+          // 1. Landing Page Strict Isolation:
+          if (isLanding) {
+            if (window.__ALLOWED_PIXELS__ && Array.isArray(window.__ALLOWED_PIXELS__)) {
+              return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
+            }
+            if (h.indexOf('secrate') !== -1 && pid !== '848875214954132') return false;
+            if ((h.indexOf('timingboost') !== -1 || h.indexOf('timeboost') !== -1) && pid !== '1076190345020163' && pid !== '1859139138606140') return false;
+            if ((h.indexOf('metrroma') !== -1 || h.indexOf('metromaa') !== -1) && pid !== '1122829254194671') return false;
+          }
+
+          // 2. VPS 1: secrate.shop -> ONLY VPS 1 Secrate pixel permitted (848875214954132) or allowed landing pixels
+          if (h.indexOf('secrate') !== -1) {
+            if (pid === '1076190345020163' || pid === '1859139138606140' || pid === '1122829254194671') {
+              console.warn('[Pixel Guard] Blocked VPS 2 Pixel ' + pid + ' on VPS 1 (secrate.shop)');
+              return false;
+            }
+            if (window.__ALLOWED_PIXELS__ && Array.isArray(window.__ALLOWED_PIXELS__)) {
+              return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
+            }
+            return pid === '848875214954132';
+          }
+
+          // 3. VPS 2: timingboost.xyz -> ONLY VPS 2 TimeBoost pixel permitted (1076190345020163, 1859139138606140) or allowed landing pixels
+          if (h.indexOf('timingboost') !== -1 || h.indexOf('timeboost') !== -1) {
+            if (pid === '848875214954132' || pid === '1122829254194671') {
+              console.warn('[Pixel Guard] Blocked foreign pixel ' + pid + ' on VPS 2 (timingboost.xyz)');
+              return false;
+            }
+            if (window.__ALLOWED_PIXELS__ && Array.isArray(window.__ALLOWED_PIXELS__)) {
+              return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
+            }
+            return pid === '1076190345020163' || pid === '1859139138606140';
+          }
+
+          // 4. VPS 2: metrroma.com -> ONLY Metrroma pixel permitted (1122829254194671)
+          if (h.indexOf('metrroma') !== -1 || h.indexOf('metromaa') !== -1) {
+            if (pid === '848875214954132' || pid === '1076190345020163' || pid === '1859139138606140') {
+              return false;
+            }
+            if (window.__ALLOWED_PIXELS__ && Array.isArray(window.__ALLOWED_PIXELS__)) {
+              return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
+            }
+            return pid === '1122829254194671';
+          }
+
+          return true;
+        }
+        window.__isPixelAllowed = isPixelAllowed;
+
+        // Standard FBQ Stub with Queue & Pixel Guard Filter
+        var fbqStub = function() {
+          if (isAdmin()) return;
+          var cmd = arguments[0];
+          var pid = arguments[1];
+          if (cmd === 'init' || cmd === 'trackSingle' || cmd === 'trackSingleCustom') {
+            if (!isPixelAllowed(pid)) {
+              console.warn('[Pixel Guard] Blocked disallowed pixel ' + pid + ' on ' + window.location.href);
+              return;
+            }
+          } else if (cmd === 'track' || cmd === 'trackCustom') {
+            if (isAdmin()) return;
+          }
+          if (fbqStub.callMethod) {
+            fbqStub.callMethod.apply(fbqStub, arguments);
+          } else {
+            fbqStub.queue.push(arguments);
+          }
+        };
+        fbqStub.push = fbqStub;
+        fbqStub.loaded = !0;
+        fbqStub.version = '2.0';
+        fbqStub.queue = [];
+
+        window.fbq = fbqStub;
+        window._fbq = fbqStub;
+      })();
+    </script>
+    
+    <meta name="description" content="100% authentic premium products with fast Cash on Delivery across Bangladesh." />
+    <!-- Open Graph for Social Ads Sharing -->
+    <meta property="og:site_name" content="Store" />
     <meta property="og:type" content="website" />
-    <meta property="og:locale" content="en_BD" />
-    <meta property="og:url" content="https://metrroma.com/" />
-    <meta property="og:title" content="METROMAA | Embrace the metro lifestyle" />
-    <meta property="og:description" content="Explore watches, sunglasses, and gift collections delivered across Bangladesh with cash on delivery." />
-    <meta property="og:image" content="https://metrroma.com/uploads/img_mvdpqsl1t81m6.webp" />
-    <meta property="og:image:secure_url" content="https://metrroma.com/uploads/img_mvdpqsl1t81m6.webp" />
+    <meta property="og:title" content="Store" />
+    <meta property="og:description" content="100% authentic premium products with fast Cash on Delivery across Bangladesh." />
     <!-- Twitter Cards -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="METROMAA | Embrace the metro lifestyle" />
-    <meta name="twitter:description" content="Explore watches, sunglasses, and gift collections delivered across Bangladesh with cash on delivery." />
-    <meta name="twitter:image" content="https://metrroma.com/uploads/img_mvdpqsl1t81m6.webp" />
-    <script type="application/ld+json">
-      {"@context":"https://schema.org","@type":"Organization","name":"METRROMA","url":"https://metrroma.com/","logo":"https://metrroma.com/uploads/logo_metrroma.png","areaServed":{"@type":"Country","name":"Bangladesh"},"contactPoint":{"@type":"ContactPoint","telephone":"+8801878374762","contactType":"customer service","areaServed":"BD","availableLanguage":["English","Bengali"]}}
-    </script>
-    <link rel="icon" type="image/webp" href="/uploads/img_mvddqn154or1h.webp" />
-    <link rel="apple-touch-icon" href="/uploads/img_mvddqn154or1h.webp" />
+    <meta name="twitter:title" content="Store" />
+    <meta name="twitter:description" content="100% authentic premium products with fast Cash on Delivery across Bangladesh." />
+    <!-- Google Identity Services (Sign In with Google) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Preload Mobile LCP Hero Banner for Instant Speed -->
+    <link rel="preload" as="image" href="/uploads/banner_secrate_mobile.webp" media="(max-width: 640px)" fetchpriority="high" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@400;500;600;700;800;900&family=Hind+Siliguri:wght@400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@400;500;600;700;800;900&family=Hind+Siliguri:wght@400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap" /></noscript>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" /></noscript>
     <style>#root{min-height:100vh;background:#f3f0ec;color:#1f3147;}</style>
   </head>
   <body>
-    <!-- Google Tag Manager (noscript) -->
-    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WM964FQV"
-    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-    <!-- End Google Tag Manager (noscript) -->
     <div id="root"></div>
-    
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

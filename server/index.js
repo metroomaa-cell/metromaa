@@ -6645,7 +6645,7 @@ if (existsSync(dist)) {
           landingPreloadScript = `<script>window.__ALLOWED_PIXELS__ = ${allowed};</script>`;
         }
         if (landingPreloadScript) {
-          html = html.replace('</head>', `\n    ${landingPreloadScript}\n</head>`);
+          html = html.replace('<head>', `<head>\n    ${landingPreloadScript}`);
         }
       } else {
         const s = getSettings();

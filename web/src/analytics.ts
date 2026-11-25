@@ -9,14 +9,13 @@ const initializedGa = new Set<string>();
 export function isAdminContext(): boolean {
   if (typeof window === 'undefined') return false;
   try {
+    if ((window as any).__IS_ADMIN__) return true;
     const p = (window.location.pathname || '').toLowerCase();
     const h = (window.location.hash || '').toLowerCase();
     const hasAdminPath = p.includes('/admin') || p.includes('/wp-admin') || p.includes('/staff');
     const adminHashes = ['admin', 'staff', 'orders', 'catalog', 'inventory', 'finance', 'settings', 'integrations', 'campaigns', 'marketing', 'customers', 'telephony', 'scanner', 'push_popups'];
     const hasAdminHash = adminHashes.some((k) => h.includes(k));
-    const isToken = typeof localStorage !== 'undefined' && !!localStorage.getItem('dot_admin_token');
-    const isNav = typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('sa_admin_nav');
-    const isAdm = hasAdminPath || hasAdminHash || isNav || isToken;
+    const isAdm = hasAdminPath || hasAdminHash;
     if (isAdm) {
       const w = window as any;
       if (w.fbq) {
@@ -89,25 +88,18 @@ export function initFB(id: string) {
     fbLoaded = true;
     initializedFbPixels.add(pid);
 
-    if (!w.fbq) {
-      const n: any = function () {
-        n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
-      };
-      if (!w._fbq) w._fbq = n;
-      n.push = n;
-      n.loaded = true;
-      n.version = '2.0';
-      n.queue = [];
+    if (!document.querySelector('script[src*="fbevents.js"]')) {
       const t = document.createElement('script');
       t.async = true;
       t.src = 'https://connect.facebook.net/en_US/fbevents.js';
       const s = document.getElementsByTagName('script')[0];
       if (s && s.parentNode) s.parentNode.insertBefore(t, s);
       else document.head.appendChild(t);
-      w.fbq = n;
     }
-    w.fbq('init', pid);
-    w.fbq('track', 'PageView');
+    if (typeof w.fbq === 'function') {
+      w.fbq('init', pid);
+      w.fbq('track', 'PageView');
+    }
   } catch {}
 }
 

@@ -10,7 +10,6 @@
     <script>
       (function() {
         var h = (window.location.hostname || '').toLowerCase();
-        var p = (window.location.pathname || '').toLowerCase();
 
         function isAdmin() {
           try {
@@ -19,8 +18,6 @@
             var hash = (window.location.hash || '').toLowerCase();
             if (pathname.indexOf('/wp-admin') !== -1 || pathname.indexOf('/admin') !== -1 || pathname.indexOf('/staff') !== -1) return true;
             if (hash.indexOf('admin') !== -1 || hash.indexOf('staff') !== -1 || hash.indexOf('orders') !== -1 || hash.indexOf('catalog') !== -1 || hash.indexOf('settings') !== -1 || hash.indexOf('campaigns') !== -1 || hash.indexOf('marketing') !== -1) return true;
-            if (typeof localStorage !== 'undefined' && localStorage.getItem('dot_admin_token')) return true;
-            if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('sa_admin_nav')) return true;
           } catch(e) {}
           return false;
         }
@@ -33,28 +30,42 @@
 
           if (!pid) return false;
           pid = String(pid).trim();
-          
+
+          var curPath = (window.location.pathname || '').toLowerCase();
+          var isLanding = curPath.indexOf('/page/') !== -1 || curPath.indexOf('/page') !== -1;
+
           // 1. Landing Page Strict Isolation:
-          if (window.__ALLOWED_PIXELS__ && Array.isArray(window.__ALLOWED_PIXELS__)) {
-            return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
+          if (isLanding) {
+            if (window.__ALLOWED_PIXELS__ && Array.isArray(window.__ALLOWED_PIXELS__)) {
+              return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
+            }
+            if (h.indexOf('secrate') !== -1 && pid !== '848875214954132') return false;
+            if ((h.indexOf('timingboost') !== -1 || h.indexOf('timeboost') !== -1) && pid !== '1076190345020163' && pid !== '1859139138606140') return false;
+            if ((h.indexOf('metrroma') !== -1 || h.indexOf('metromaa') !== -1) && pid !== '1122829254194671') return false;
           }
 
-          // 2. VPS 1: secrate.shop -> ONLY VPS 1 Secrate pixel permitted (848875214954132)
+          // 2. VPS 1: secrate.shop -> ONLY VPS 1 Secrate pixel permitted (848875214954132) or allowed landing pixels
           if (h.indexOf('secrate') !== -1) {
-            if (pid === '1076190345020163' || pid === '1859139138606140') {
+            if (pid === '1076190345020163' || pid === '1859139138606140' || pid === '1122829254194671') {
               console.warn('[Pixel Guard] Blocked VPS 2 Pixel ' + pid + ' on VPS 1 (secrate.shop)');
               return false;
             }
-            return true;
+            if (window.__ALLOWED_PIXELS__ && Array.isArray(window.__ALLOWED_PIXELS__)) {
+              return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
+            }
+            return pid === '848875214954132';
           }
 
-          // 3. VPS 2: timingboost.xyz -> ONLY VPS 2 TimeBoost pixel permitted (1076190345020163, 1859139138606140)
+          // 3. VPS 2: timingboost.xyz -> ONLY VPS 2 TimeBoost pixel permitted (1076190345020163, 1859139138606140) or allowed landing pixels
           if (h.indexOf('timingboost') !== -1 || h.indexOf('timeboost') !== -1) {
-            if (pid === '848875214954132') {
-              console.warn('[Pixel Guard] Blocked VPS 1 Pixel ' + pid + ' on VPS 2 (timingboost.xyz)');
+            if (pid === '848875214954132' || pid === '1122829254194671') {
+              console.warn('[Pixel Guard] Blocked foreign pixel ' + pid + ' on VPS 2 (timingboost.xyz)');
               return false;
             }
-            return true;
+            if (window.__ALLOWED_PIXELS__ && Array.isArray(window.__ALLOWED_PIXELS__)) {
+              return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
+            }
+            return pid === '1076190345020163' || pid === '1859139138606140';
           }
 
           // 4. VPS 2: metrroma.com -> ONLY Metrroma pixel permitted (1122829254194671)
@@ -62,60 +73,42 @@
             if (pid === '848875214954132' || pid === '1076190345020163' || pid === '1859139138606140') {
               return false;
             }
-            return true;
+            if (window.__ALLOWED_PIXELS__ && Array.isArray(window.__ALLOWED_PIXELS__)) {
+              return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
+            }
+            return pid === '1122829254194671';
           }
 
           return true;
         }
         window.__isPixelAllowed = isPixelAllowed;
 
-        var rawFbq = window.fbq;
-        function wrap(fn) {
-          var guarded = function() {
+        // Standard FBQ Stub with Queue & Pixel Guard Filter
+        var fbqStub = function() {
+          if (isAdmin()) return;
+          var cmd = arguments[0];
+          var pid = arguments[1];
+          if (cmd === 'init' || cmd === 'trackSingle' || cmd === 'trackSingleCustom') {
+            if (!isPixelAllowed(pid)) {
+              console.warn('[Pixel Guard] Blocked disallowed pixel ' + pid + ' on ' + window.location.href);
+              return;
+            }
+          } else if (cmd === 'track' || cmd === 'trackCustom') {
             if (isAdmin()) return;
-            var cmd = arguments[0];
-            var id = arguments[1];
-            if (cmd === 'init' || cmd === 'trackSingle' || cmd === 'trackSingleCustom') {
-              if (!isPixelAllowed(id)) {
-                return;
-              }
-            } else if (cmd === 'track' || cmd === 'trackCustom') {
-              if (isAdmin()) return;
-            }
-            return fn ? fn.apply(this, arguments) : undefined;
-          };
-          if (fn) {
-            for (var k in fn) {
-              if (Object.prototype.hasOwnProperty.call(fn, k)) guarded[k] = fn[k];
-            }
           }
-          return guarded;
-        }
+          if (fbqStub.callMethod) {
+            fbqStub.callMethod.apply(fbqStub, arguments);
+          } else {
+            fbqStub.queue.push(arguments);
+          }
+        };
+        fbqStub.push = fbqStub;
+        fbqStub.loaded = !0;
+        fbqStub.version = '2.0';
+        fbqStub.queue = [];
 
-        var currentFbq = rawFbq ? wrap(rawFbq) : null;
-        try {
-          Object.defineProperty(window, 'fbq', {
-            configurable: true,
-            enumerable: true,
-            get: function() {
-              if (isAdmin()) return function() {};
-              return currentFbq;
-            },
-            set: function(val) {
-              if (isAdmin()) {
-                currentFbq = function() {};
-                return;
-              }
-              if (typeof val === 'function' && val !== currentFbq) {
-                currentFbq = wrap(val);
-              } else {
-                currentFbq = val;
-              }
-            }
-          });
-        } catch (_) {
-          if (rawFbq) window.fbq = wrap(rawFbq);
-        }
+        window.fbq = fbqStub;
+        window._fbq = fbqStub;
       })();
     </script>
     
@@ -138,7 +131,7 @@
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" /></noscript>
     <style>#root{color:#1f3147;background:#f3f0ec;min-height:100vh}</style>
-    <script type="module" crossorigin src="/assets/index-BjCyfSBt.js"></script>
+    <script type="module" crossorigin src="/assets/index-C9v_AxG0.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-BWaJ3C7D.js">
     <link rel="stylesheet" crossorigin href="/assets/index-CKXQ5xsR.css">
   </head>

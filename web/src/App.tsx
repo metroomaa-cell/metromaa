@@ -51,7 +51,7 @@ function StoreLoading({ admin = false }: { admin?: boolean }) {
 function Effects() {
   const route = useRoute();
   const isLocalPreview = import.meta.env.DEV;
-  const isAdmin = route.name === 'admin' || (typeof window !== 'undefined' && (/(\/|^)(admin|wp-admin|staff)(\/|$)/i.test(window.location.pathname) || window.location.hash.includes('admin') || window.location.hash.includes('staff') || !!localStorage.getItem('dot_admin_token') || !!sessionStorage.getItem('sa_admin_nav')));
+  const isAdmin = route.name === 'admin' || (typeof window !== 'undefined' && (/(\/|^)(admin|wp-admin|staff)(\/|$)/i.test(window.location.pathname) || window.location.hash.includes('admin') || window.location.hash.includes('staff')));
 
   useEffect(() => {
     getTrafficAttribution();
