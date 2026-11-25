@@ -206,10 +206,10 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
       // 1. Meta Facebook Pixel
       if (cfg.fbPixelId) {
-        const allowed = cfg.pixelMode === 'both' && storeSettings.fbPixelId
+        const allowedPixelsList = cfg.pixelMode === 'both' && storeSettings.fbPixelId
           ? [String(cfg.fbPixelId).trim(), String(storeSettings.fbPixelId).trim()]
           : [String(cfg.fbPixelId).trim()];
-        setAllowedLandingPixels(allowed);
+        setAllowedLandingPixels(allowedPixelsList);
         initFB(cfg.fbPixelId);
         if (cfg.pixelMode === 'both' && storeSettings.fbPixelId && storeSettings.fbPixelId !== cfg.fbPixelId) {
           initFB(storeSettings.fbPixelId);

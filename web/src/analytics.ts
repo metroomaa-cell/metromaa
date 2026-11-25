@@ -51,12 +51,25 @@ export function fbTrack(name: string, data?: Record<string, any>, isCustom = tru
       const testCode = lt?.fbTestCode || w.__FB_TEST_CODE__;
       if (testCode) options.test_event_code = String(testCode).trim();
       const hasOpts = Object.keys(options).length > 0;
+      const customPid = lt?.fbPixelId ? String(lt.fbPixelId).trim() : null;
+      const isCustomOnly = Boolean(lt && customPid && lt.pixelMode !== 'both');
+
       if (isCustom) {
-        if (hasOpts) w.fbq('trackCustom', name, data, options);
-        else w.fbq('trackCustom', name, data);
+        if (isCustomOnly && customPid) {
+          if (hasOpts) w.fbq('trackSingleCustom', customPid, name, data, options);
+          else w.fbq('trackSingleCustom', customPid, name, data);
+        } else {
+          if (hasOpts) w.fbq('trackCustom', name, data, options);
+          else w.fbq('trackCustom', name, data);
+        }
       } else {
-        if (hasOpts) w.fbq('track', name, data, options);
-        else w.fbq('track', name, data);
+        if (isCustomOnly && customPid) {
+          if (hasOpts) w.fbq('trackSingle', customPid, name, data, options);
+          else w.fbq('trackSingle', customPid, name, data);
+        } else {
+          if (hasOpts) w.fbq('track', name, data, options);
+          else w.fbq('track', name, data);
+        }
       }
     }
   } catch {}
@@ -85,6 +98,19 @@ export function initFB(id: string) {
     if (!id || !/^\d+$/.test(id.trim())) return;
     const pid = id.trim();
     const w = window as any;
+
+    // Strict Landing Page Shield: NEVER load store default pixel if landing has custom tracking
+    const lt = w.__LANDING_TRACKING__;
+    const curPath = (typeof window !== 'undefined' ? window.location.pathname : '').toLowerCase();
+    const isLand = (lt && lt.isLanding) || curPath.includes('/page/') || curPath.includes('/page') || curPath.includes('/l/');
+    if (isLand && lt && lt.fbPixelId) {
+      const customPid = String(lt.fbPixelId).trim();
+      if (lt.pixelMode !== 'both' && pid !== customPid) {
+        console.warn(`[analytics] initFB prevented store default pixel ${pid} on custom landing page`);
+        return;
+      }
+    }
+
     if (typeof w.__isPixelAllowed === 'function' && !w.__isPixelAllowed(pid)) {
       console.warn(`[analytics] initFB prevented for disallowed pixel ${pid}`);
       return;
@@ -103,7 +129,11 @@ export function initFB(id: string) {
     }
     if (typeof w.fbq === 'function') {
       w.fbq('init', pid);
-      w.fbq('track', 'PageView');
+      if (lt && lt.fbPixelId && lt.pixelMode !== 'both') {
+        w.fbq('trackSingle', pid, 'PageView');
+      } else {
+        w.fbq('track', 'PageView');
+      }
     }
   } catch {}
 }
@@ -186,12 +216,24 @@ export function initGTM(id: string) {
     if (import.meta.env.DEV || isAdminContext()) return;
     if (!id || !/^GTM-[A-Z0-9]+$/i.test(id.trim())) return;
     const gid = id.trim().toUpperCase();
+    const w = window as any;
+
+    // Strict Landing Page Shield: NEVER load store GTM if landing page has custom tracking
+    const lt = w.__LANDING_TRACKING__;
+    const curPath = (typeof window !== 'undefined' ? window.location.pathname : '').toLowerCase();
+    const isLand = (lt && lt.isLanding) || curPath.includes('/page/') || curPath.includes('/page') || curPath.includes('/l/');
+    if (isLand) {
+      if (lt && lt.hasCustomTracking && lt.gtmId !== gid && !w.__ALLOWED_GTM__) {
+        console.warn(`[analytics] initGTM prevented store GTM ${gid} on custom landing page`);
+        return;
+      }
+    }
+
     if (initializedGtm.has(gid)) return;
     initializedGtm.add(gid);
     gtmLoaded = true;
 
     // If GTM is already present in HTML, do not reinject
-    const w = window as any;
     if (document.querySelector(`script[src*="${gid}"]`) || (w.google_tag_manager && w.google_tag_manager[gid])) {
       return;
     }

@@ -43,26 +43,27 @@
           pid = String(pid).trim();
           if (window.__IS_ADMIN__) return false;
 
-          // A. Landing Page Rules
+          // A. Landing Page Rules: ABSOLUTE ISOLATION
           var lt = window.__LANDING_TRACKING__;
           var curPath = (window.location.pathname || '').toLowerCase();
-          var isLand = (lt && lt.isLanding) || curPath.indexOf('/page/') !== -1 || curPath.indexOf('/page') !== -1;
+          var isLand = (lt && lt.isLanding) || curPath.indexOf('/page/') !== -1 || curPath.indexOf('/page') !== -1 || curPath.indexOf('/l/') !== -1;
 
-          if (isLand && lt && lt.fbPixelId) {
-            var customPid = String(lt.fbPixelId).trim();
-            if (lt.pixelMode === 'both') {
-              if (pid === customPid) return true;
-            } else {
-              // Custom Only: ONLY this custom pixel is allowed!
-              return pid === customPid;
+          if (isLand) {
+            if (lt && lt.fbPixelId) {
+              var customPid = String(lt.fbPixelId).trim();
+              if (lt.pixelMode === 'both') {
+                if (pid === customPid) return true;
+              } else {
+                // Custom Only: ONLY this custom pixel is permitted, NEVER store default pixel!
+                return pid === customPid;
+              }
+            }
+            if (Array.isArray(window.__ALLOWED_PIXELS__) && window.__ALLOWED_PIXELS__.length > 0) {
+              return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
             }
           }
 
-          if (isLand && Array.isArray(window.__ALLOWED_PIXELS__) && window.__ALLOWED_PIXELS__.length > 0) {
-            return window.__ALLOWED_PIXELS__.indexOf(pid) !== -1;
-          }
-
-          // B. Cross-Domain Isolation & Storefront Defaults
+          // B. Cross-Domain Isolation & Storefront Defaults (Non-landing or dual mode only)
           if (host.indexOf('secrate') !== -1) {
             if (pid === '1076190345020163' || pid === '1859139138606140' || pid === '1122829254194671') {
               return false;
@@ -138,7 +139,9 @@
                 while (guardedFbq.queue.length > 0) {
                   var item = guardedFbq.queue.shift();
                   try {
-                    if (item[0] === 'init' && !isPixelAllowed(item[1])) continue;
+                    if ((item[0] === 'init' || item[0] === 'trackSingle' || item[0] === 'trackSingleCustom') && !isPixelAllowed(item[1])) {
+                      continue;
+                    }
                     if (val.callMethod) val.callMethod.apply(val, item);
                     else if (typeof val === 'function') val.apply(window, item);
                   } catch (_) {}
@@ -151,7 +154,22 @@
         try { Object.defineProperty(window, 'fbq', fbqDescriptor); } catch (_) { window.fbq = guardedFbq; }
         try { Object.defineProperty(window, '_fbq', fbqDescriptor); } catch (_) { window._fbq = guardedFbq; }
 
-        // 4. Network-level Beacon Shield: Intercept outgoing requests to facebook.com/tr
+        // 4. Network & DOM Level Shield
+        function shouldBlockGtmUrl(url) {
+          if (!url || typeof url !== 'string') return false;
+          if (url.indexOf('googletagmanager.com') === -1) return false;
+          if (window.__IS_ADMIN__) return true;
+          var curPath = (window.location.pathname || '').toLowerCase();
+          var lt = window.__LANDING_TRACKING__;
+          var isLand = (lt && lt.isLanding) || curPath.indexOf('/page/') !== -1 || curPath.indexOf('/page') !== -1 || curPath.indexOf('/l/') !== -1;
+          if (isLand) {
+            if (lt && lt.hasCustomTracking && !lt.gtmId && !window.__ALLOWED_GTM__) {
+              return true;
+            }
+          }
+          return false;
+        }
+
         function shouldBlockPixelUrl(url) {
           if (!url || typeof url !== 'string') return false;
           if (url.indexOf('facebook.com/tr') === -1) return false;
@@ -166,7 +184,7 @@
           var origFetch = window.fetch;
           window.fetch = function(input, init) {
             var u = typeof input === 'string' ? input : (input && input.url ? input.url : '');
-            if (shouldBlockPixelUrl(u)) {
+            if (shouldBlockPixelUrl(u) || shouldBlockGtmUrl(u)) {
               return Promise.resolve(new Response('', { status: 200 }));
             }
             return origFetch.apply(this, arguments);
@@ -176,10 +194,25 @@
         if (navigator && typeof navigator.sendBeacon === 'function') {
           var origBeacon = navigator.sendBeacon.bind(navigator);
           navigator.sendBeacon = function(url, data) {
-            if (shouldBlockPixelUrl(url)) {
+            if (shouldBlockPixelUrl(url) || shouldBlockGtmUrl(url)) {
               return true;
             }
             return origBeacon(url, data);
+          };
+        }
+
+        if (typeof window.XMLHttpRequest === 'function') {
+          var origXhrOpen = XMLHttpRequest.prototype.open;
+          var origXhrSend = XMLHttpRequest.prototype.send;
+          XMLHttpRequest.prototype.open = function(method, url) {
+            this.__blockedByShield = shouldBlockPixelUrl(url) || shouldBlockGtmUrl(url);
+            return origXhrOpen.apply(this, arguments);
+          };
+          XMLHttpRequest.prototype.send = function() {
+            if (this.__blockedByShield) {
+              return;
+            }
+            return origXhrSend.apply(this, arguments);
           };
         }
 
@@ -194,10 +227,31 @@
                 return origImgSrcDescriptor.get.call(this);
               },
               set: function(val) {
-                if (shouldBlockPixelUrl(val)) {
+                if (shouldBlockPixelUrl(val) || shouldBlockGtmUrl(val)) {
                   return;
                 }
                 return origImgSrcDescriptor.set.call(this, val);
+              }
+            });
+          }
+        } catch (_) {}
+
+        try {
+          var scriptProto = HTMLScriptElement.prototype;
+          var origScriptSrcDescriptor = Object.getOwnPropertyDescriptor(scriptProto, 'src');
+          if (origScriptSrcDescriptor && origScriptSrcDescriptor.set) {
+            Object.defineProperty(scriptProto, 'src', {
+              configurable: true,
+              enumerable: true,
+              get: function() {
+                return origScriptSrcDescriptor.get.call(this);
+              },
+              set: function(val) {
+                if (shouldBlockGtmUrl(val) || shouldBlockPixelUrl(val)) {
+                  console.warn('[Shield] Blocked script injection for ' + val);
+                  return;
+                }
+                return origScriptSrcDescriptor.set.call(this, val);
               }
             });
           }

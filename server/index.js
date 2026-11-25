@@ -6547,9 +6547,13 @@ if (existsSync(dist)) {
       let targetCategory = null;
       let targetLanding = null;
 
-      if (parts[0] === 'page' && parts[1]) {
+      if ((parts[0] === 'page' || parts[0] === 'l') && parts[1]) {
         try {
           targetLanding = getLandingBySlug(parts[1]);
+        } catch (_) {}
+      } else if (parts.length === 1 && !['shop', 'categories', 'category', 'checkout', 'confirm', 'track', 'wp-admin', 'account', 'admin', 'terms', 'privacy', 'refund', 'contact'].includes(parts[0])) {
+        try {
+          targetLanding = getLandingBySlug(parts[0]);
         } catch (_) {}
       }
 
@@ -6639,14 +6643,16 @@ if (existsSync(dist)) {
 
         const trackingPayload = {
           isLanding: true,
-          slug: parts[1],
+          slug: targetLanding.slug || parts[1] || parts[0],
           fbPixelId: targetLanding.fbPixelId ? String(targetLanding.fbPixelId).trim() : null,
           fbTestCode: targetLanding.fbTestCode ? String(targetLanding.fbTestCode).trim() : null,
           pixelMode: targetLanding.pixelMode || 'custom',
           ttkPixelId: targetLanding.ttkPixelId ? String(targetLanding.ttkPixelId).trim() : null,
-          hasCustomTracking: Boolean(targetLanding.fbPixelId || targetLanding.ttkPixelId || targetLanding.gtmId)
+          gtmId: targetLanding.gtmId ? String(targetLanding.gtmId).trim() : null,
+          gaId: targetLanding.gaId ? String(targetLanding.gaId).trim() : null,
+          hasCustomTracking: Boolean(targetLanding.fbPixelId || targetLanding.ttkPixelId || targetLanding.gtmId || targetLanding.gaId)
         };
-        const landingPreloadScript = `<script>window.__LANDING_TRACKING__ = ${JSON.stringify(trackingPayload)};${targetLanding.gtmId ? ' window.__ALLOWED_GTM__ = true;' : ''}</script>`;
+        const landingPreloadScript = `<script>window.__LANDING_TRACKING__ = ${JSON.stringify(trackingPayload)};${targetLanding.gtmId ? ' window.__ALLOWED_GTM__ = true;' : ' window.__BLOCKED_GTM__ = true;'}</script>`;
         html = html.replace('<head>', `<head>\n    ${landingPreloadScript}`);
       } else {
         const s = getSettings();
@@ -6668,7 +6674,7 @@ if (existsSync(dist)) {
         (req.path && /^\/(wp-admin|admin|staff)/i.test(req.path));
 
       const activeGtmId = getSettings().gtmId;
-      const landingHasCustomTracking = targetLanding && (targetLanding.fbPixelId || targetLanding.ttkPixelId || targetLanding.gtmId);
+      const landingHasCustomTracking = targetLanding && (targetLanding.fbPixelId || targetLanding.ttkPixelId || targetLanding.gtmId || targetLanding.gaId);
 
       if (activeGtmId && !landingHasCustomTracking && !isAdminPath) {
         const gtmSnippet = `<!-- Google Tag Manager -->

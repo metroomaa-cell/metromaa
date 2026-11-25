@@ -61,8 +61,11 @@ function Effects() {
     getSettings().then((s) => {
       setStoreCopyOverrides(s.siteContent?.textOverrides);
       if (!isAdmin && !isLocalPreview) {
-        const isLandingPage = route.name === 'page' || (typeof window !== 'undefined' && (window.location.pathname.startsWith('/page/') || window.location.pathname.startsWith('/page')));
-        if (!isLandingPage) {
+        const curPath = (typeof window !== 'undefined' ? window.location.pathname : '').toLowerCase();
+        const isLandingPage = route.name === 'page' || curPath.startsWith('/page/') || curPath.startsWith('/page') || curPath.startsWith('/l/');
+        const lt = (window as any)?.__LANDING_TRACKING__;
+        const landingHasCustom = isLandingPage && (lt?.hasCustomTracking || lt?.fbPixelId || lt?.gtmId);
+        if (!isLandingPage && !landingHasCustom) {
           if (s.gtmId) initGTM(s.gtmId);
           if (s.fbPixelId) initFB(s.fbPixelId);
         }
