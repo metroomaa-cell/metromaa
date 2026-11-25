@@ -2920,7 +2920,7 @@ async function sendEmail(to, subject, html, opts = {}) {
 
       // Inline CID attachments for Gmail, Outlook, Apple Mail
       if (finalHtml.includes('cid:store_logo')) {
-        const logoPath = findAsset('logo_secrate_rich.png');
+        const logoPath = findAsset('secrate_mail_logo.png') || findAsset('logo_secrate_rich.png');
         if (logoPath) {
           attachments.push({
             filename: 'logo_secrate_rich.png',
@@ -2931,7 +2931,7 @@ async function sendEmail(to, subject, html, opts = {}) {
         }
       }
       if (finalHtml.includes('cid:store_emblem')) {
-        const emblemPath = findAsset('logo_secrate_emblem.png');
+        const emblemPath = findAsset('secrate_mail_emblem.png') || findAsset('logo_secrate_emblem.png');
         if (emblemPath) {
           attachments.push({
             filename: 'logo_secrate_emblem.png',
@@ -2958,10 +2958,10 @@ async function sendEmail(to, subject, html, opts = {}) {
     try {
       let resendHtml = finalHtml;
       if (resendHtml.includes('cid:store_logo')) {
-        resendHtml = resendHtml.replace(/cid:store_logo/g, 'https://secrate.shop/uploads/logo_secrate_rich.png');
+        resendHtml = resendHtml.replace(/cid:store_logo/g, 'https://secrate.shop/uploads/secrate_mail_logo.png');
       }
       if (resendHtml.includes('cid:store_emblem')) {
-        resendHtml = resendHtml.replace(/cid:store_emblem/g, 'https://secrate.shop/uploads/logo_secrate_emblem.png');
+        resendHtml = resendHtml.replace(/cid:store_emblem/g, 'https://secrate.shop/uploads/secrate_mail_emblem.png');
       }
       const payload = { from, to, subject, html: resendHtml };
       if (opts.cc) payload.cc = opts.cc;

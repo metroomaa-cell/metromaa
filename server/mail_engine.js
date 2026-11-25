@@ -46,7 +46,7 @@ export function renderBrandedEmailTemplate({
           <tr>
             <td align="center" style="background: linear-gradient(135deg, #09090b 0%, #18181b 100%); padding: 26px 20px; border-bottom: 3px solid #d97706; text-align: center;">
               <a href="${cleanUrl}" target="_blank" style="text-decoration: none; display: inline-block;">
-                <img src="${logoUrl}" alt="${brandName}" style="max-height: 48px; max-width: 220px; width: auto; height: auto; display: block; margin: 0 auto; border: 0; outline: none;" />
+                <img src="${logoUrl}" alt="${brandName}" width="190" border="0" style="display: block; margin: 0 auto; width: 190px; max-width: 100%; height: auto; border: 0; outline: none; text-decoration: none;" />
               </a>
             </td>
           </tr>
@@ -65,7 +65,7 @@ export function renderBrandedEmailTemplate({
                 <tr>
                   <td align="center" style="padding-bottom: 10px;">
                     <a href="${cleanUrl}" target="_blank" style="text-decoration: none; display: inline-block;">
-                      <img src="${emblemUrl}" alt="${brandName} Icon" width="40" height="40" style="width: 40px; height: 40px; border-radius: 50%; display: inline-block; vertical-align: middle; border: 0;" />
+                      <img src="${emblemUrl}" alt="${brandName} Icon" width="42" height="42" border="0" style="display: block; margin: 0 auto; width: 42px; height: 42px; border-radius: 50%; border: 0; outline: none;" />
                     </a>
                   </td>
                 </tr>
