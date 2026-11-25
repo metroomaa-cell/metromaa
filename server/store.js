@@ -162,6 +162,16 @@ const PERSISTENT_WA_CONTACTS = join(PERSISTENT_DIR, 'wa_chat_contacts.json');
 const BACKUP_WA_CONTACTS = join(DATA_DIR, 'wa_chat_contacts.metrroma.backup.json');
 const EXT_WA_CONTACTS = join(EXTERNAL_DIR, 'wa_chat_contacts.json');
 
+const MAILBOXES = join(DATA_DIR, 'mailboxes.json');
+const PERSISTENT_MAILBOXES = join(PERSISTENT_DIR, 'mailboxes.json');
+const BACKUP_MAILBOXES = join(DATA_DIR, 'mailboxes.metrroma.backup.json');
+const EXT_MAILBOXES = join(EXTERNAL_DIR, 'mailboxes.json');
+
+const MAIL_ITEMS = join(DATA_DIR, 'mail_items.json');
+const PERSISTENT_MAIL_ITEMS = join(PERSISTENT_DIR, 'mail_items.json');
+const BACKUP_MAIL_ITEMS = join(DATA_DIR, 'mail_items.metrroma.backup.json');
+const EXT_MAIL_ITEMS = join(EXTERNAL_DIR, 'mail_items.json');
+
 export const getPersistentDataDirectory = () => EXTERNAL_DIR;
 
 export const DEFAULT_SETTINGS = {
@@ -1385,6 +1395,35 @@ export function syncWhatsAppSessionContacts(authDirOverride = null) {
     console.error('[syncWhatsAppSessionContacts error]:', err);
     return { ok: false, error: err.message, synced: 0 };
   }
+}
+
+// ---- Business Webmail: Custom Mailboxes & Emails ----
+export const DEFAULT_MAILBOXES = [
+  { email: 'support@secrate.shop', label: 'Customer Support', isDefault: true },
+  { email: 'info@secrate.shop', label: 'General Information' },
+  { email: 'billing@secrate.shop', label: 'Accounts & Billing' },
+];
+
+export function getMailboxes() {
+  const list = readSafe(EXT_MAILBOXES, PERSISTENT_MAILBOXES, MAILBOXES, DEFAULT_MAILBOXES, BACKUP_MAILBOXES);
+  return Array.isArray(list) && list.length > 0 ? list : DEFAULT_MAILBOXES;
+}
+
+export function saveMailboxes(list) {
+  const safeList = Array.isArray(list) ? list : [];
+  writeSafe(EXT_MAILBOXES, PERSISTENT_MAILBOXES, MAILBOXES, safeList, 'mailboxes', BACKUP_MAILBOXES);
+  return safeList;
+}
+
+export function getMailItems() {
+  const list = readSafe(EXT_MAIL_ITEMS, PERSISTENT_MAIL_ITEMS, MAIL_ITEMS, [], BACKUP_MAIL_ITEMS);
+  return Array.isArray(list) ? list : [];
+}
+
+export function saveMailItems(list) {
+  const safeList = Array.isArray(list) ? list : [];
+  writeSafe(EXT_MAIL_ITEMS, PERSISTENT_MAIL_ITEMS, MAIL_ITEMS, safeList, 'mail_items', BACKUP_MAIL_ITEMS);
+  return safeList;
 }
 
 // In-Memory Presence Tracker (real-time live ping)

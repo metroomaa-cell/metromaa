@@ -14,6 +14,7 @@ import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, 
 import { getWhatsAppSettings, saveWhatsAppSettings, sendWhatsAppNotification, formatWhatsAppMessage, isNightConfirmationTime } from './whatsapp_engine.js';
 import { startWhatsAppSocket, getWhatsAppLiveStatus, requestPairingCode, sendBaileysMessage, waitForQrCode, clearWhatsAppSession } from './whatsapp_baileys.js';
 import { getVapidPublicKey, getPushPopupSettings, savePushPopupSettings, upsertPushSubscriber, linkSubscriberPhone, removePushSubscriber, getPushSubscriberStats, sendBroadcastPush, sendOrderPushNotifications } from './push_engine.js';
+import { registerMailRoutes } from './mail_engine.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 initStorageProtection();
@@ -2854,12 +2855,12 @@ app.post('/api/admin/push/broadcast', adminAuth, requireRole('owner', 'manager')
 
 // ---- integrations: email (SMTP), bulk SMS (generic HTTP), couriers (generic templated API) ----
 function fillTpl(tpl, map) { return String(tpl || '').replace(/\{(\w+)\}/g, (_, k) => (map[k] != null ? String(map[k]) : '')); }
-async function sendEmail(to, subject, html) {
+async function sendEmail(to, subject, html, opts = {}) {
   const e = getIntegrations().email;
   if (!e || !e.enabled) return { ok: false, error: 'email not configured or disabled' };
   const st = getSettings() || {};
   const defaultBrand = (st.storeName && st.storeName !== 'dot.') ? st.storeName : 'TimeBoost';
-  const fromName = (e.fromName && e.fromName !== 'dot.') ? e.fromName : defaultBrand;
+  const fromName = (opts.fromName && opts.fromName !== 'dot.') ? opts.fromName : ((e.fromName && e.fromName !== 'dot.') ? e.fromName : defaultBrand);
 
   const hasSmtp = !!(e.host && e.user && e.pass);
   const hasResend = !!(e.resendApiKey || process.env.RESEND_API_KEY);
@@ -2871,7 +2872,7 @@ async function sendEmail(to, subject, html) {
     const pass = isGmail ? String(e.pass || '').replace(/\s+/g, '') : String(e.pass || '');
     const port = Number(e.port) || (isGmail ? 465 : 587);
     const secure = port === 465 ? true : !!e.secure;
-    const senderAddr = (isGmail || !e.fromEmail || e.fromEmail.includes('dot.metromaa.com')) ? user : e.fromEmail;
+    const senderAddr = opts.from ? opts.from : ((isGmail || !e.fromEmail || e.fromEmail.includes('dot.metromaa.com')) ? user : e.fromEmail);
     try {
       const tx = nodemailer.createTransport({
         host,
@@ -2879,12 +2880,21 @@ async function sendEmail(to, subject, html) {
         secure,
         auth: { user, pass },
       });
-      await tx.sendMail({
+      const mailOptions = {
         from: `"${fromName}" <${senderAddr}>`,
         to,
         subject,
         html,
-      });
+      };
+      if (opts.cc) mailOptions.cc = opts.cc;
+      if (opts.bcc) mailOptions.bcc = opts.bcc;
+      if (Array.isArray(opts.attachments) && opts.attachments.length > 0) {
+        mailOptions.attachments = opts.attachments.map((a) => ({
+          filename: a.filename || a.name || 'attachment',
+          path: a.url ? (a.url.startsWith('/') ? join(__dir, '..', a.url) : a.url) : a.path,
+        }));
+      }
+      await tx.sendMail(mailOptions);
       return { ok: true, via: 'smtp' };
     } catch (err) {
       return { ok: false, error: String(err?.message || err) };
@@ -2894,20 +2904,24 @@ async function sendEmail(to, subject, html) {
   const tryResend = async () => {
     const key = e.resendApiKey || process.env.RESEND_API_KEY;
     if (!key) return { ok: false, error: 'Resend API key missing' };
-    let from = e.fromEmail ? `"${fromName}" <${e.fromEmail}>` : `"${fromName}" <onboarding@resend.dev>`;
+    let from = opts.from ? `"${fromName}" <${opts.from}>` : (e.fromEmail ? `"${fromName}" <${e.fromEmail}>` : `"${fromName}" <onboarding@resend.dev>`);
     try {
+      const payload = { from, to, subject, html };
+      if (opts.cc) payload.cc = opts.cc;
+      if (opts.bcc) payload.bcc = opts.bcc;
       let r = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to, subject, html }),
+        body: JSON.stringify(payload),
       });
       let d = await r.json();
       if (!r.ok && d?.message && (d.message.includes('domain is not verified') || d.message.includes('not verified') || d.message.includes('validation_error'))) {
         from = `"${fromName}" <onboarding@resend.dev>`;
+        payload.from = from;
         r = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from, to, subject, html }),
+          body: JSON.stringify(payload),
         });
         d = await r.json();
       }
@@ -2942,6 +2956,16 @@ async function sendEmail(to, subject, html) {
   if (hasSmtp) return await trySmtp();
   return { ok: false, error: 'Email provider not configured' };
 }
+
+// Register Business Webmail & Custom Mailboxes API routes
+registerMailRoutes(app, {
+  adminAuth,
+  sendEmail,
+  getCustomers,
+  getOrders,
+  uploadsDir: UPLOADS,
+});
+
 async function sendSMS(phone, message) {
   const s = getIntegrations().sms;
   if (!s.enabled || !s.url) return { ok: false, error: 'sms not configured' };
