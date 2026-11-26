@@ -74,9 +74,55 @@
         }
         window.__isPixelAllowed = isPixelAllowed;
 
-        // 3. Permanent FBQ & _FBQ Shield
+        // 3. Permanent FBQ & _FBQ Shield + Auto-Enricher & Deduplicator
         var internalFbq = null;
         var fbeventsInjected = false;
+        window.__FBQ_SEEN_EVENTS__ = {};
+        window.__FBQ_LAST_TIME__ = {};
+
+        function getFallbackPayload() {
+          var last = window.__LAST_TTK_PAYLOAD__ || {};
+          var lt = window.__LANDING_TRACKING__ || {};
+          var slugPart = (window.location.pathname || '').replace(/^\/+|\/+$/g, '').replace(/\//g, '_') || 'store_home';
+          var cid = String(last.content_id || lt.slug || slugPart || 'product').trim();
+          var cname = String(last.content_name || document.title || 'Product').trim();
+          var cval = (last.value !== undefined && last.value !== null && Number(last.value) > 0)
+            ? Number(last.value)
+            : (last.price !== undefined && last.price !== null && Number(last.price) > 0 ? Number(last.price) : 690);
+          var cqty = Number(last.quantity) > 0 ? Number(last.quantity) : 1;
+          var cprice = Number(last.price) > 0 ? Number(last.price) : cval;
+          var ccur = String(last.currency || 'BDT').trim() || 'BDT';
+          var ccontents = (Array.isArray(last.contents) && last.contents.length > 0)
+            ? last.contents.map(function(item) {
+                return {
+                  content_id: String((item && (item.content_id || item.id)) || cid),
+                  content_type: 'product',
+                  content_name: String((item && (item.content_name || item.name)) || cname),
+                  quantity: Number((item && item.quantity) || cqty) || 1,
+                  price: Number((item && (item.price || item.item_price)) || cprice) || 0
+                };
+              })
+            : [{
+                content_id: cid,
+                content_type: 'product',
+                content_name: cname,
+                quantity: cqty,
+                price: cprice
+              }];
+          return {
+            content_id: cid,
+            content_ids: Array.isArray(last.content_ids) && last.content_ids.length > 0 ? last.content_ids.map(String) : [cid],
+            content_type: 'product',
+            content_name: cname,
+            contents: ccontents,
+            value: cval,
+            price: cprice,
+            quantity: cqty,
+            currency: ccur,
+            event_id: last.event_id ? String(last.event_id) : ''
+          };
+        }
+        window.__getFallbackPayload = getFallbackPayload;
 
         function ensureFbeventsScript() {
           if (fbeventsInjected) return;
@@ -93,26 +139,86 @@
           else if (document.head) document.head.appendChild(s);
         }
 
-        var guardedFbq = function() {
-          var cmd = arguments[0];
-          var pid = arguments[1];
+        function sanitizeAndDedupFbqArgs(args) {
+          var arr = Array.prototype.slice.call(args);
+          var cmd = arr[0];
+          var pid = arr[1];
           if (cmd === 'init' || cmd === 'trackSingle' || cmd === 'trackSingleCustom') {
             if (!isPixelAllowed(pid)) {
               console.warn('[Shield] Blocked pixel call for ' + pid);
-              return;
+              return null;
             }
             if (cmd === 'init') {
               ensureFbeventsScript();
+              return arr;
             }
           }
+          if (cmd === 'track' || cmd === 'trackSingle') {
+            var isSingle = cmd === 'trackSingle';
+            var evIdx = isSingle ? 2 : 1;
+            var paramIdx = isSingle ? 3 : 2;
+            var optIdx = isSingle ? 4 : 3;
+            var evName = arr[evIdx];
+            if (evName === 'PageView') {
+              var nowPv = Date.now();
+              if (window.__FBQ_LAST_TIME__['GLOBAL_PAGEVIEW'] && (nowPv - window.__FBQ_LAST_TIME__['GLOBAL_PAGEVIEW'] < 2000)) {
+                return null;
+              }
+              window.__FBQ_LAST_TIME__['GLOBAL_PAGEVIEW'] = nowPv;
+              return arr;
+            }
+            var fbCommerce = ['ViewContent', 'AddToCart', 'InitiateCheckout', 'Purchase'];
+            if (fbCommerce.indexOf(evName) !== -1) {
+              var fb = getFallbackPayload();
+              var p = (arr[paramIdx] && typeof arr[paramIdx] === 'object') ? Object.assign({}, arr[paramIdx]) : {};
+              var o = (arr[optIdx] && typeof arr[optIdx] === 'object') ? Object.assign({}, arr[optIdx]) : {};
+              if (!p.content_type) p.content_type = 'product';
+              if (!Array.isArray(p.content_ids) || p.content_ids.length === 0) p.content_ids = fb.content_ids;
+              if (!p.content_name) p.content_name = fb.content_name;
+              if (!p.currency) p.currency = fb.currency;
+              if (p.value === undefined || p.value === null || Number(p.value) <= 0) {
+                p.value = fb.value;
+              } else {
+                p.value = Number(p.value);
+              }
+              if (!Array.isArray(p.contents) || p.contents.length === 0) {
+                p.contents = fb.contents.map(function(c) {
+                  return { id: String(c.content_id), quantity: Number(c.quantity) || 1, item_price: Number(c.price) || 0 };
+                });
+              }
+              var evId = o.eventID || o.event_id || p.eventID || p.event_id || fb.event_id || '';
+              if (evId) o.eventID = String(evId);
+
+              var now = Date.now();
+              var dedupKey = evName + ':' + (evId || (p.content_ids[0] + ':' + p.value));
+              var timeKey = 'GLOBAL:' + evName;
+              if (window.__FBQ_SEEN_EVENTS__[dedupKey] && (now - window.__FBQ_SEEN_EVENTS__[dedupKey] < 4000)) {
+                return null;
+              }
+              if (window.__FBQ_LAST_TIME__[timeKey] && (now - window.__FBQ_LAST_TIME__[timeKey] < 1200)) {
+                return null;
+              }
+              window.__FBQ_SEEN_EVENTS__[dedupKey] = now;
+              window.__FBQ_LAST_TIME__[timeKey] = now;
+
+              arr[paramIdx] = p;
+              if (Object.keys(o).length > 0) arr[optIdx] = o;
+            }
+          }
+          return arr;
+        }
+
+        var guardedFbq = function() {
+          var cleanArgs = sanitizeAndDedupFbqArgs(arguments);
+          if (!cleanArgs) return;
           if (guardedFbq.callMethod && typeof guardedFbq.callMethod === 'function') {
-            return guardedFbq.callMethod.apply(guardedFbq, arguments);
+            return guardedFbq.callMethod.apply(guardedFbq, cleanArgs);
           } else if (internalFbq && internalFbq.callMethod && typeof internalFbq.callMethod === 'function') {
-            return internalFbq.callMethod.apply(internalFbq, arguments);
+            return internalFbq.callMethod.apply(internalFbq, cleanArgs);
           } else if (internalFbq && typeof internalFbq === 'function') {
-            return internalFbq.apply(this, arguments);
+            return internalFbq.apply(this, cleanArgs);
           } else {
-            guardedFbq.queue.push(arguments);
+            guardedFbq.queue.push(cleanArgs);
           }
         };
         guardedFbq.push = guardedFbq;
@@ -149,89 +255,147 @@
         try { Object.defineProperty(window, 'fbq', fbqDescriptor); } catch (_) { window.fbq = guardedFbq; }
         try { Object.defineProperty(window, '_fbq', fbqDescriptor); } catch (_) { window._fbq = guardedFbq; }
 
-        // 3B. Auto Code Brain — TikTok Pixel (ttq.track) Auto-Enricher & Deduplicator
-        // Automatically injects missing content_id/contents into GTM TikTok tags and blocks duplicate events!
+        // 3B. Auto Code Brain — TikTok Pixel (ttq) Permanent Trap, Enricher & Deduplicator
+        // Works whether event is pushed to ttq array queue before events.js loads OR called via ttq.track after main.js freezeAPI!
         window.__TTK_SEEN_EVENTS__ = {};
         window.__TTK_LAST_TIME__ = {};
-        function patchTtqInstance(ttqObj) {
-          if (!ttqObj || typeof ttqObj.track !== 'function') return ttqObj;
-          if (ttqObj.track.__isBrainWrapper) return ttqObj;
-          var origTrack = ttqObj.track;
-          var wrappedTrack = function(evName, params, opts) {
-            try {
-              // If this call is TikTok's events.js replaying an already-enriched item from the pre-load queue, let it straight through!
-              if (params && typeof params === 'object' && params.__ttq_queued) {
-                var cleanP = Object.assign({}, params);
-                delete cleanP.__ttq_queued;
-                return origTrack.call(this, evName, cleanP, opts);
-              }
 
-              var p = (params && typeof params === 'object') ? Object.assign({}, params) : {};
-              var o = (opts && typeof opts === 'object') ? Object.assign({}, opts) : {};
-              var last = window.__LAST_TTK_PAYLOAD__ || {};
-              var evId = o.event_id || o.eventID || p.event_id || p.eventID || last.event_id || '';
-              if (evId) o.event_id = String(evId);
+        function enrichAndDedupTtqTrack(evName, params, opts) {
+          var fb = getFallbackPayload();
+          var p = (params && typeof params === 'object') ? Object.assign({}, params) : {};
+          var o = (opts && typeof opts === 'object') ? Object.assign({}, opts) : {};
+          var evId = o.event_id || o.eventID || p.event_id || p.eventID || fb.event_id || '';
+          if (evId) o.event_id = String(evId);
 
-              var commerceEvents = ['ViewContent', 'AddToCart', 'InitiateCheckout', 'CompletePayment', 'PlaceAnOrder'];
-              if (commerceEvents.indexOf(evName) !== -1) {
-                if (!p.content_id) p.content_id = String(last.content_id || 'product');
-                if (!p.content_type) p.content_type = String(last.content_type || 'product');
-                if (!p.content_name) p.content_name = String(last.content_name || document.title || 'Product');
-                if (!p.currency) p.currency = String(last.currency || 'BDT');
-                if (p.value === undefined || p.value === null || p.value === 0) {
-                  p.value = Number(last.value || last.price || 690);
-                } else {
-                  p.value = Number(p.value);
-                }
-                if (!p.price) p.price = Number(last.price || p.value || 690);
-                if (!p.quantity) p.quantity = Number(last.quantity || 1);
-                if (!Array.isArray(p.contents) || p.contents.length === 0) {
-                  p.contents = Array.isArray(last.contents) && last.contents.length > 0
-                    ? last.contents
-                    : [{
-                        content_id: String(p.content_id),
-                        content_type: 'product',
-                        content_name: String(p.content_name),
-                        quantity: Number(p.quantity) || 1,
-                        price: Number(p.price || p.value) || 0
-                      }];
-                }
-              }
-
-              var now = Date.now();
-              var dedupKey = evName + ':' + (evId || (p.content_id + ':' + p.value));
-              if (window.__TTK_SEEN_EVENTS__[dedupKey] && (now - window.__TTK_SEEN_EVENTS__[dedupKey] < 4000)) {
-                return;
-              }
-              if (commerceEvents.indexOf(evName) !== -1 && window.__TTK_LAST_TIME__[evName] && (now - window.__TTK_LAST_TIME__[evName] < 1200)) {
-                return;
-              }
-              window.__TTK_SEEN_EVENTS__[dedupKey] = now;
-              window.__TTK_LAST_TIME__[evName] = now;
-
-              // If ttq is still an array queue (events.js hasn't replaced ttq.track yet), tag p so events.js queue replay is allowed
-              if (Array.isArray(this)) {
-                p.__ttq_queued = true;
-              }
-              return origTrack.call(this, evName, p, o);
-            } catch (_) {
-              return origTrack.apply(this, arguments);
+          var commerceEvents = ['ViewContent', 'AddToCart', 'InitiateCheckout', 'CompletePayment', 'PlaceAnOrder'];
+          if (commerceEvents.indexOf(evName) !== -1) {
+            if (!p.content_id || /^\s*$/.test(String(p.content_id))) p.content_id = fb.content_id;
+            else p.content_id = String(p.content_id).trim();
+            if (!p.content_type || (p.content_type !== 'product' && p.content_type !== 'product_group')) p.content_type = 'product';
+            if (!p.content_name || /^\s*$/.test(String(p.content_name))) p.content_name = fb.content_name;
+            if (!p.currency) p.currency = fb.currency;
+            if (p.value === undefined || p.value === null || Number(p.value) <= 0 || isNaN(Number(p.value))) {
+              p.value = fb.value;
+            } else {
+              p.value = Number(p.value);
             }
+            if (!p.price || isNaN(Number(p.price))) p.price = Number(fb.price || p.value || 690);
+            if (!p.quantity || isNaN(Number(p.quantity))) p.quantity = Number(fb.quantity || 1);
+            if (!Array.isArray(p.contents) || p.contents.length === 0) {
+              p.contents = [{
+                content_id: String(p.content_id),
+                content_type: 'product',
+                content_name: String(p.content_name),
+                quantity: Number(p.quantity) || 1,
+                price: Number(p.price || p.value) || 0
+              }];
+            } else {
+              p.contents = p.contents.map(function(item) {
+                return {
+                  content_id: String((item && (item.content_id || item.id)) || p.content_id),
+                  content_type: 'product',
+                  content_name: String((item && (item.content_name || item.name)) || p.content_name),
+                  quantity: Number((item && item.quantity) || p.quantity) || 1,
+                  price: Number((item && (item.price || item.item_price)) || p.price || p.value) || 0
+                };
+              });
+            }
+          }
+
+          var now = Date.now();
+          var dedupKey = evName + ':' + (evId || ((p.content_id || '') + ':' + (p.value || '')));
+          if (window.__TTK_SEEN_EVENTS__[dedupKey] && (now - window.__TTK_SEEN_EVENTS__[dedupKey] < 4000)) {
+            return null;
+          }
+          if (commerceEvents.indexOf(evName) !== -1 && window.__TTK_LAST_TIME__[evName] && (now - window.__TTK_LAST_TIME__[evName] < 1200)) {
+            return null;
+          }
+          window.__TTK_SEEN_EVENTS__[dedupKey] = now;
+          window.__TTK_LAST_TIME__[evName] = now;
+          return { evName: evName, params: p, opts: o };
+        }
+
+        // Intercept Object.defineProperty so when TikTok's main.js runs freezeAPI (ef), its track getter stays wrapped!
+        var origDefProp = Object.defineProperty;
+        Object.defineProperty = function(target, prop, desc) {
+          try {
+            if (prop === 'track' && target && (target === window.ttq || target === internalTtq || Array.isArray(target)) && desc && typeof desc.get === 'function' && !desc.get.__isBrainGetter) {
+              var realGetter = desc.get;
+              var wrappedGetter = function() {
+                var realFn = realGetter.call(this);
+                if (typeof realFn !== 'function') return realFn;
+                var boundTrack = function(evName, params, opts) {
+                  var res = enrichAndDedupTtqTrack(evName, params, opts);
+                  if (!res) return Promise.resolve(null);
+                  return realFn.call(this, res.evName, res.params, res.opts);
+                };
+                boundTrack.__isBrainWrapper = true;
+                return boundTrack;
+              };
+              wrappedGetter.__isBrainGetter = true;
+              return origDefProp.call(Object, target, prop, {
+                configurable: true,
+                enumerable: desc.enumerable !== false,
+                get: wrappedGetter,
+                set: desc.set || function() {}
+              });
+            }
+          } catch (_) {}
+          return origDefProp.apply(Object, arguments);
+        };
+
+        function patchTtqArrayPush(arr) {
+          if (!arr || !Array.isArray(arr) || arr.push.__isBrainPush) return;
+          var origPush = Array.prototype.push;
+          var wrappedPush = function(item) {
+            try {
+              if (Array.isArray(item) && item[0] === 'track') {
+                var res = enrichAndDedupTtqTrack(item[1], item[2], item[3]);
+                if (!res) return arr.length;
+                item[1] = res.evName;
+                item[2] = res.params;
+                item[3] = res.opts;
+              }
+            } catch (_) {}
+            return origPush.apply(this, arguments);
           };
-          wrappedTrack.__isBrainWrapper = true;
-          ttqObj.track = wrappedTrack;
+          wrappedPush.__isBrainPush = true;
+          try { arr.push = wrappedPush; } catch (_) {}
+        }
+
+        function patchTtqInstance(ttqObj) {
+          if (!ttqObj) return ttqObj;
+          patchTtqArrayPush(ttqObj);
+          if (ttqObj._i && typeof ttqObj._i === 'object') {
+            Object.keys(ttqObj._i).forEach(function(k) {
+              patchTtqArrayPush(ttqObj._i[k]);
+            });
+          }
+          if (typeof ttqObj.track === 'function' && !ttqObj.track.__isBrainWrapper) {
+            var origTrack = ttqObj.track;
+            var wrappedTrack = function(evName, params, opts) {
+              if (Array.isArray(this) && !this._mounted) {
+                // Pre-load array stub: push directly so patchTtqArrayPush enriches & deduplicates once
+                return this.push(['track', evName, params, opts]);
+              }
+              var res = enrichAndDedupTtqTrack(evName, params, opts);
+              if (!res) return;
+              return origTrack.call(this, res.evName, res.params, res.opts);
+            };
+            wrappedTrack.__isBrainWrapper = true;
+            try { ttqObj.track = wrappedTrack; } catch (_) {}
+          }
           return ttqObj;
         }
         window.__patchTtqInstance = patchTtqInstance;
+
         var internalTtq = null;
         try {
-          Object.defineProperty(window, 'ttq', {
+          origDefProp.call(Object, window, 'ttq', {
             configurable: true,
             enumerable: true,
             get: function() {
-              if (internalTtq && typeof internalTtq.track === 'function' && !internalTtq.track.__isBrainWrapper) {
-                patchTtqInstance(internalTtq);
-              }
+              if (internalTtq) patchTtqInstance(internalTtq);
               return internalTtq;
             },
             set: function(val) {
@@ -239,6 +403,52 @@
             }
           });
         } catch (_) {}
+
+        // Pre-initialize window.ttq queue stub only on storefront or when landing has ttkPixelId
+        var initLt = window.__LANDING_TRACKING__;
+        var initPath = (window.location.pathname || '').toLowerCase();
+        var isIsolatedLandWithoutTtk = ((initLt && initLt.isLanding) || initPath.indexOf('/page/') !== -1 || initPath.indexOf('/page') !== -1 || initPath.indexOf('/l/') !== -1) && initLt && initLt.hasCustomTracking && initLt.pixelMode !== 'both' && !initLt.ttkPixelId;
+        if (!window.ttq && !isIsolatedLandWithoutTtk) {
+          window.TiktokAnalyticsObject = 'ttq';
+          var initTtq = [];
+          initTtq.methods = ['page', 'track', 'identify', 'instances', 'load', 'on', 'off', 'once', 'ready', 'alias', 'group', 'enableCookie', 'disableCookie', 'holdConsent', 'revokeConsent', 'grantConsent'];
+          initTtq.setAndDefer = function(t, e) {
+            t[e] = function() {
+              t.push([e].concat(Array.prototype.slice.call(arguments, 0)));
+            };
+          };
+          for (var mIdx = 0; mIdx < initTtq.methods.length; mIdx++) {
+            initTtq.setAndDefer(initTtq, initTtq.methods[mIdx]);
+          }
+          initTtq.instance = function(t) {
+            initTtq._i = initTtq._i || {};
+            var e = initTtq._i[t] || [];
+            for (var n = 0; n < initTtq.methods.length; n++) {
+              initTtq.setAndDefer(e, initTtq.methods[n]);
+            }
+            patchTtqArrayPush(e);
+            return e;
+          };
+          initTtq.load = function(e, n) {
+            var r = 'https://analytics.tiktok.com/i18n/pixel/events.js';
+            initTtq._i = initTtq._i || {};
+            initTtq._i[e] = initTtq._i[e] || [];
+            initTtq._i[e]._u = r;
+            patchTtqArrayPush(initTtq._i[e]);
+            initTtq._t = initTtq._t || {};
+            initTtq._t[e] = +new Date();
+            initTtq._o = initTtq._o || {};
+            initTtq._o[e] = n || {};
+            var o = document.createElement('script');
+            o.type = 'text/javascript';
+            o.async = true;
+            o.src = r + '?sdkid=' + e + '&lib=ttq';
+            var a = document.getElementsByTagName('script')[0];
+            if (a && a.parentNode) a.parentNode.insertBefore(o, a);
+            else if (document.head) document.head.appendChild(o);
+          };
+          window.ttq = initTtq;
+        }
 
         // 4. Network & DOM Level Shield
         function shouldBlockGtmUrl(url) {
@@ -343,16 +553,11 @@
           }
         } catch (_) {}
 
-        // 5. Auto-initialize custom landing pixel immediately via Auto Code Brain
+        // 5. Auto-initialize custom landing pixel OR main store pixel immediately via Auto Code Brain
         var lt = window.__LANDING_TRACKING__;
+        var ab = window.__AUTO_BRAIN__;
         if (lt && lt.fbPixelId) {
-          var s = document.createElement('script');
-          s.async = true;
-          s.src = 'https://connect.facebook.net/en_US/fbevents.js';
-          var f = document.getElementsByTagName('script')[0];
-          if (f && f.parentNode) f.parentNode.insertBefore(s, f);
-          else document.head.appendChild(s);
-
+          ensureFbeventsScript();
           var initPid = String(lt.fbPixelId).trim();
           window.fbq('init', initPid);
           var pvOpts = lt.fbTestCode ? { test_event_code: String(lt.fbTestCode).trim() } : undefined;
@@ -363,6 +568,11 @@
             if (pvOpts) window.fbq('track', 'PageView', {}, pvOpts);
             else window.fbq('track', 'PageView');
           }
+        } else if (!lt && ab && ab.mode === 'store' && ab.primaryPixelId) {
+          ensureFbeventsScript();
+          var storeInitPid = String(ab.primaryPixelId).trim();
+          window.fbq('init', storeInitPid);
+          window.fbq('track', 'PageView');
         }
         if (lt && lt.ttkPixelId) {
           var tid = String(lt.ttkPixelId).trim();

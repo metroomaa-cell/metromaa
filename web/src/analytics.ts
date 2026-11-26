@@ -82,14 +82,20 @@ export function ttkTrack(event: string, params?: Record<string, any>, eventId?: 
     if (import.meta.env.DEV || isAdminContext()) return;
     const w = window as any;
     if (params && typeof params === 'object') {
-      w.__LAST_TTK_PAYLOAD__ = { ...params, event_id: eventId ? String(eventId) : undefined };
+      w.__LAST_TTK_PAYLOAD__ = {
+        ...w.__LAST_TTK_PAYLOAD__,
+        ...params,
+        event_id: eventId ? String(eventId) : w.__LAST_TTK_PAYLOAD__?.event_id,
+      };
     }
     if (w.ttq && typeof w.__patchTtqInstance === 'function') {
       w.__patchTtqInstance(w.ttq);
     }
+    const opts = eventId ? { event_id: String(eventId) } : undefined;
     if (w.ttq && typeof w.ttq.track === 'function') {
-      const opts = eventId ? { event_id: String(eventId) } : undefined;
       w.ttq.track(event, params || {}, opts);
+    } else if (Array.isArray(w.ttq)) {
+      w.ttq.push(['track', event, params || {}, opts]);
     }
   } catch {}
 }
@@ -304,6 +310,7 @@ export function ecView(p: { id: string; name: string; price: number }) {
     if (typeof window !== 'undefined') {
       (window as any).__LAST_TTK_PAYLOAD__ = {
         content_id: cleanId,
+        content_ids: [cleanId],
         content_type: 'product',
         content_name: cleanName,
         contents: ttContents,
@@ -317,7 +324,7 @@ export function ecView(p: { id: string; name: string; price: number }) {
     dl({ ecommerce: null });
     dl({ event: 'view_item', event_id: eventId, eventID: eventId, content_id: cleanId, content_ids: [cleanId], content_name: cleanName, content_type: 'product', contents: ttContents, ecommerce: { currency: CUR, value: numPrice, items: [{ item_id: cleanId, item_name: cleanName, price: numPrice, quantity: 1 }] } });
     dl({ event: 'ViewContent', event_id: eventId, eventID: eventId, content_id: cleanId, content_name: cleanName, content_ids: [cleanId], content_type: 'product', contents: ttContents, value: numPrice, price: numPrice, quantity: 1, currency: CUR });
-    fbTrack('ViewContent', { content_name: cleanName, content_ids: [cleanId], content_type: 'product', value: numPrice, currency: CUR }, false, eventId);
+    fbTrack('ViewContent', { content_name: cleanName, content_ids: [cleanId], content_type: 'product', contents: [{ id: cleanId, quantity: 1, item_price: numPrice }], value: numPrice, currency: CUR }, false, eventId);
     ttkTrack(
       'ViewContent',
       {
@@ -356,6 +363,7 @@ export function ecAdd(p: { id: string; name: string; price: number }, qty = 1) {
     if (typeof window !== 'undefined') {
       (window as any).__LAST_TTK_PAYLOAD__ = {
         content_id: cleanId,
+        content_ids: [cleanId],
         content_type: 'product',
         content_name: cleanName,
         contents: ttContents,
@@ -369,7 +377,7 @@ export function ecAdd(p: { id: string; name: string; price: number }, qty = 1) {
     dl({ ecommerce: null });
     dl({ event: 'add_to_cart', event_id: eventId, eventID: eventId, content_id: cleanId, content_ids: [cleanId], content_name: cleanName, content_type: 'product', contents: ttContents, ecommerce: { currency: CUR, value: totalVal, items: [{ item_id: cleanId, item_name: cleanName, price: numPrice, quantity: numQty }] } });
     dl({ event: 'AddToCart', event_id: eventId, eventID: eventId, content_id: cleanId, content_name: cleanName, content_ids: [cleanId], content_type: 'product', contents: ttContents, value: totalVal, currency: CUR });
-    fbTrack('AddToCart', { content_name: cleanName, content_ids: [cleanId], content_type: 'product', value: totalVal, currency: CUR }, false, eventId);
+    fbTrack('AddToCart', { content_name: cleanName, content_ids: [cleanId], content_type: 'product', contents: [{ id: cleanId, quantity: numQty, item_price: numPrice }], value: totalVal, currency: CUR }, false, eventId);
     ttkTrack(
       'AddToCart',
       {
@@ -500,6 +508,7 @@ export function ecBeginCheckout(
     if (typeof window !== 'undefined') {
       (window as any).__LAST_TTK_PAYLOAD__ = {
         content_id: firstId,
+        content_ids: allIds,
         content_type: 'product',
         content_name: firstName,
         contents: ttContents,
@@ -540,7 +549,20 @@ export function ecBeginCheckout(
       user_data: uData,
       customer: uData,
     });
-    fbTrack('InitiateCheckout', { value: numValue, currency: CUR, num_items: items.length }, false, eventId);
+    fbTrack(
+      'InitiateCheckout',
+      {
+        content_name: firstName,
+        content_ids: allIds,
+        content_type: 'product',
+        contents: items.map((l) => ({ id: String(l.id || 'product'), quantity: Number(l.qty) || 1, item_price: Number(l.price) || 0 })),
+        value: numValue,
+        currency: CUR,
+        num_items: totalQty,
+      },
+      false,
+      eventId
+    );
     ttkTrack(
       'InitiateCheckout',
       {
@@ -589,6 +611,7 @@ export function ecPurchase(
     if (typeof window !== 'undefined') {
       (window as any).__LAST_TTK_PAYLOAD__ = {
         content_id: firstId,
+        content_ids: contentIds,
         content_type: 'product',
         content_name: firstName,
         contents: ttContents,
@@ -630,6 +653,7 @@ export function ecPurchase(
     fbTrack(
       'Purchase',
       {
+        content_name: firstName,
         value: numValue,
         currency: CUR,
         content_type: 'product',
