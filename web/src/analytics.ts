@@ -353,6 +353,19 @@ export function ecAdd(p: { id: string; name: string; price: number }, qty = 1) {
         price: numPrice,
       },
     ];
+    if (typeof window !== 'undefined') {
+      (window as any).__LAST_TTK_PAYLOAD__ = {
+        content_id: cleanId,
+        content_type: 'product',
+        content_name: cleanName,
+        contents: ttContents,
+        value: totalVal,
+        price: numPrice,
+        quantity: numQty,
+        currency: CUR,
+        event_id: eventId,
+      };
+    }
     dl({ ecommerce: null });
     dl({ event: 'add_to_cart', event_id: eventId, eventID: eventId, content_id: cleanId, content_ids: [cleanId], content_name: cleanName, content_type: 'product', contents: ttContents, ecommerce: { currency: CUR, value: totalVal, items: [{ item_id: cleanId, item_name: cleanName, price: numPrice, quantity: numQty }] } });
     dl({ event: 'AddToCart', event_id: eventId, eventID: eventId, content_id: cleanId, content_name: cleanName, content_ids: [cleanId], content_type: 'product', contents: ttContents, value: totalVal, currency: CUR });
@@ -484,6 +497,18 @@ export function ecBeginCheckout(
       quantity: Number(l.qty) || 1,
       price: Number(l.price) || 0,
     }));
+    if (typeof window !== 'undefined') {
+      (window as any).__LAST_TTK_PAYLOAD__ = {
+        content_id: firstId,
+        content_type: 'product',
+        content_name: firstName,
+        contents: ttContents,
+        value: numValue,
+        quantity: totalQty,
+        currency: CUR,
+        event_id: eventId,
+      };
+    }
     dl({ ecommerce: null });
     dl({
       event: 'begin_checkout',
@@ -561,6 +586,18 @@ export function ecPurchase(
     }));
     const firstId = ttContents[0]?.content_id || 'product';
     const firstName = ttContents[0]?.content_name || 'Product';
+    if (typeof window !== 'undefined') {
+      (window as any).__LAST_TTK_PAYLOAD__ = {
+        content_id: firstId,
+        content_type: 'product',
+        content_name: firstName,
+        contents: ttContents,
+        value: numValue,
+        quantity: numItems,
+        currency: CUR,
+        event_id: String(id),
+      };
+    }
 
     dl({ ecommerce: null });
     dl({

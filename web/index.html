@@ -76,6 +76,22 @@
 
         // 3. Permanent FBQ & _FBQ Shield
         var internalFbq = null;
+        var fbeventsInjected = false;
+
+        function ensureFbeventsScript() {
+          if (fbeventsInjected) return;
+          if (document.querySelector && document.querySelector('script[src*="fbevents.js"]')) {
+            fbeventsInjected = true;
+            return;
+          }
+          fbeventsInjected = true;
+          var s = document.createElement('script');
+          s.async = true;
+          s.src = 'https://connect.facebook.net/en_US/fbevents.js';
+          var f = document.getElementsByTagName('script')[0];
+          if (f && f.parentNode) f.parentNode.insertBefore(s, f);
+          else if (document.head) document.head.appendChild(s);
+        }
 
         var guardedFbq = function() {
           var cmd = arguments[0];
@@ -84,6 +100,9 @@
             if (!isPixelAllowed(pid)) {
               console.warn('[Shield] Blocked pixel call for ' + pid);
               return;
+            }
+            if (cmd === 'init') {
+              ensureFbeventsScript();
             }
           }
           if (guardedFbq.callMethod && typeof guardedFbq.callMethod === 'function') {
@@ -135,12 +154,18 @@
         window.__TTK_SEEN_EVENTS__ = {};
         window.__TTK_LAST_TIME__ = {};
         function patchTtqInstance(ttqObj) {
-          if (!ttqObj || ttqObj.__brainPatched) return ttqObj;
+          if (!ttqObj || typeof ttqObj.track !== 'function') return ttqObj;
+          if (ttqObj.track.__isBrainWrapper) return ttqObj;
           var origTrack = ttqObj.track;
-          if (typeof origTrack !== 'function') return ttqObj;
-          ttqObj.__brainPatched = true;
-          ttqObj.track = function(evName, params, opts) {
+          var wrappedTrack = function(evName, params, opts) {
             try {
+              // If this call is TikTok's events.js replaying an already-enriched item from the pre-load queue, let it straight through!
+              if (params && typeof params === 'object' && params.__ttq_queued) {
+                var cleanP = Object.assign({}, params);
+                delete cleanP.__ttq_queued;
+                return origTrack.call(this, evName, cleanP, opts);
+              }
+
               var p = (params && typeof params === 'object') ? Object.assign({}, params) : {};
               var o = (opts && typeof opts === 'object') ? Object.assign({}, opts) : {};
               var last = window.__LAST_TTK_PAYLOAD__ || {};
@@ -178,16 +203,23 @@
               if (window.__TTK_SEEN_EVENTS__[dedupKey] && (now - window.__TTK_SEEN_EVENTS__[dedupKey] < 4000)) {
                 return;
               }
-              if (commerceEvents.indexOf(evName) !== -1 && window.__TTK_LAST_TIME__[evName] && (now - window.__TTK_LAST_TIME__[evName] < 1500)) {
+              if (commerceEvents.indexOf(evName) !== -1 && window.__TTK_LAST_TIME__[evName] && (now - window.__TTK_LAST_TIME__[evName] < 1200)) {
                 return;
               }
               window.__TTK_SEEN_EVENTS__[dedupKey] = now;
               window.__TTK_LAST_TIME__[evName] = now;
+
+              // If ttq is still an array queue (events.js hasn't replaced ttq.track yet), tag p so events.js queue replay is allowed
+              if (Array.isArray(this)) {
+                p.__ttq_queued = true;
+              }
               return origTrack.call(this, evName, p, o);
             } catch (_) {
               return origTrack.apply(this, arguments);
             }
           };
+          wrappedTrack.__isBrainWrapper = true;
+          ttqObj.track = wrappedTrack;
           return ttqObj;
         }
         window.__patchTtqInstance = patchTtqInstance;
@@ -197,7 +229,7 @@
             configurable: true,
             enumerable: true,
             get: function() {
-              if (internalTtq && !internalTtq.__brainPatched && typeof internalTtq.track === 'function') {
+              if (internalTtq && typeof internalTtq.track === 'function' && !internalTtq.track.__isBrainWrapper) {
                 patchTtqInstance(internalTtq);
               }
               return internalTtq;
