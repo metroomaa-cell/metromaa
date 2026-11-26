@@ -404,6 +404,36 @@ export function deleteCategory(slug) {
   return true;
 }
 
+function normalizeOrdersArray(list) {
+  if (!Array.isArray(list)) return { list: [], healed: false };
+  let healed = false;
+  const usedIds = new Set();
+  const normalized = list.map((o, idx) => {
+    if (!o || typeof o !== 'object') return o;
+    let changed = false;
+    let id = typeof o.id === 'string' && o.id.trim() ? o.id.trim() : '';
+    if (!id || usedIds.has(id)) {
+      id = 'DOT-' + Math.random().toString(36).slice(2, 10).toUpperCase();
+      changed = true;
+    }
+    usedIds.add(id);
+    let createdAt = o.createdAt;
+    if (!createdAt || isNaN(new Date(createdAt).getTime())) {
+      const histDate = Array.isArray(o.history) && o.history[0]?.at && !isNaN(new Date(o.history[0].at).getTime())
+        ? o.history[0].at
+        : new Date(Date.now() - idx * 1000).toISOString();
+      createdAt = histDate;
+      changed = true;
+    }
+    if (changed) {
+      healed = true;
+      return { ...o, id, createdAt };
+    }
+    return o;
+  });
+  return { list: normalized, healed };
+}
+
 export function getOrders() {
   // EXCLUSIVE SHIELD: If external safe storage exists, it is the 100% SINGLE SOURCE OF TRUTH.
   // NEVER read BACKUP_ORDERS or ORDERS from inside the Git repo, because Git pulls overwrite them!
@@ -411,14 +441,20 @@ export function getOrders() {
     if (existsSync(EXT_ORDERS)) {
       const extList = JSON.parse(readFileSync(EXT_ORDERS, 'utf8'));
       if (Array.isArray(extList)) {
-        return extList.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        const { list, healed } = normalizeOrdersArray(extList);
+        if (healed) writeSafe(EXT_ORDERS, PERSISTENT_ORDERS, ORDERS, list, 'orders', BACKUP_ORDERS);
+        return list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
       }
     }
   } catch (_) {}
   try {
     if (existsSync(PERSISTENT_ORDERS)) {
       const persistentList = JSON.parse(readFileSync(PERSISTENT_ORDERS, 'utf8'));
-      if (Array.isArray(persistentList)) return persistentList.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      if (Array.isArray(persistentList)) {
+        const { list, healed } = normalizeOrdersArray(persistentList);
+        if (healed) writeSafe(EXT_ORDERS, PERSISTENT_ORDERS, ORDERS, list, 'orders', BACKUP_ORDERS);
+        return list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      }
     }
   } catch (_) {}
 
