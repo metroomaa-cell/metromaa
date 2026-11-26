@@ -3541,26 +3541,7 @@ function GlobalCommandSearch({ onNav, onOrderSelect }: { onNav: (tab: string) =>
   }, [q, open]);
 
   if (!open) {
-    return (
-      <button
-        type="button"
-        className="sa-quick-search-fab"
-        onClick={() => setOpen(true)}
-        title="Quick Search (Ctrl + K)"
-        style={{
-          position: 'fixed', bottom: 18, right: 104, zIndex: 9989,
-          height: 40, display: 'inline-flex', alignItems: 'center', gap: 7,
-          padding: '0 15px', borderRadius: 999,
-          background: 'rgba(15, 23, 42, 0.88)', backdropFilter: 'blur(12px)',
-          border: '1px solid rgba(148, 163, 184, 0.28)',
-          color: '#f1f5f9', fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.45)', whiteSpace: 'nowrap'
-        }}
-      >
-        <span>🔍</span>
-        <span>Ctrl+K</span>
-      </button>
-    );
+    return null;
   }
 
   return (
@@ -26428,51 +26409,7 @@ function WebCallDialer() {
   }, [agentDnd]);
 
   if (!target || status === 'idle') {
-    const isLive = sipStatus === 'registered';
-    const isConn = sipStatus === 'connecting';
-    return (
-      <>
-        <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
-        <div
-          className={`sa-phone-status ${isLive ? 'is-live' : isConn ? 'is-connecting' : 'is-offline'}`}
-          role={isLive ? 'status' : 'button'}
-          tabIndex={isLive ? undefined : 0}
-          title={isLive ? 'WebPhone অনলাইন — ইনকামিং কল রিসিভ করার জন্য প্রস্তুত' : 'WebPhone স্ট্যাটাস (ক্লিক করে রিকানেক্ট করুন)'}
-          onClick={() => { if (!isLive && !isConn) window.dispatchEvent(new CustomEvent('reload-sip-ua')); }}
-          onKeyDown={(event) => {
-            if (!isLive && !isConn && (event.key === 'Enter' || event.key === ' ')) {
-              event.preventDefault();
-              window.dispatchEvent(new CustomEvent('reload-sip-ua'));
-            }
-          }}
-          style={{
-            position: 'fixed',
-            bottom: 18,
-            right: 194,
-            zIndex: 9990,
-            height: 40,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '0 15px',
-            borderRadius: 999,
-            background: 'rgba(19, 17, 31, 0.9)',
-            backdropFilter: 'blur(12px)',
-            border: `1px solid ${isLive ? 'rgba(16,185,129,0.45)' : isConn ? 'rgba(245,158,11,0.45)' : 'rgba(239,68,68,0.45)'}`,
-            color: isLive ? '#34d399' : isConn ? '#fbbf24' : '#f87171',
-            fontSize: 12.5,
-            fontWeight: 700,
-            cursor: isLive ? 'default' : 'pointer',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
-            whiteSpace: 'nowrap'
-          }}
-        >
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: isLive ? '#10b981' : isConn ? '#f59e0b' : '#ef4444' }} />
-          <span>{isLive ? 'Phone Live' : isConn ? 'Phone Connecting...' : 'Phone Offline'}</span>
-          {audioBlocked && <span className="sa-phone-status-audio" style={{ fontSize: 10.5, color: '#fbbf24' }}>🔇 Audio</span>}
-        </div>
-      </>
-    );
+    return <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />;
   }
 
   const mins = Math.floor(seconds / 60);
