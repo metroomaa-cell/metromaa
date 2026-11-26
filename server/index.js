@@ -10,9 +10,10 @@ import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns';
 try { dns.setDefaultResultOrder('ipv4first'); } catch {}
-import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, saveColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, getCustomerByEmail, saveCustomer, syncCustomersFromOrders, initStorageProtection, getPersistentDataDirectory, getAuditLogs, addAuditLog, getStaffActivity, updateStaffPresence, recordStaffKpiAction, getStaffMonitoringData, getBangladeshDate, getWaChatContacts, upsertWaChatContact, syncWhatsAppSessionContacts, getCalls, saveCall, deleteCall, getCallStats, getTelephonySettings, saveTelephonySettings, cleanupOldRecordings } from './store.js';
+import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, saveColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, getCustomerByEmail, saveCustomer, syncCustomersFromOrders, initStorageProtection, getPersistentDataDirectory, getAuditLogs, addAuditLog, getStaffActivity, updateStaffPresence, recordStaffKpiAction, getStaffMonitoringData, getBangladeshDate, getWaChatContacts, upsertWaChatContact, syncWhatsAppSessionContacts, getWaMessages, getWaInboxThreads, pruneWhatsAppInboxMedia, getWaAutoLogs, recordWaAutoLog, canSendAutoWa, markStaffNotificationsRead, getCalls, saveCall, deleteCall, getCallStats, getTelephonySettings, saveTelephonySettings, cleanupOldRecordings } from './store.js';
 import { getWhatsAppSettings, saveWhatsAppSettings, sendWhatsAppNotification, formatWhatsAppMessage, isNightConfirmationTime } from './whatsapp_engine.js';
-import { startWhatsAppSocket, getWhatsAppLiveStatus, requestPairingCode, sendBaileysMessage, waitForQrCode, clearWhatsAppSession } from './whatsapp_baileys.js';
+import { startWhatsAppSocket, getWhatsAppLiveStatus, requestPairingCode, sendBaileysMessage, waitForQrCode, clearWhatsAppSession, getWhatsAppProfilePicture, resolveWhatsAppPhoneNumber } from './whatsapp_baileys.js';
+import { getWaAiConfig, saveWaAiConfig, getWaAiFaqs, addWaAiFaq, deleteWaAiFaq } from './whatsapp_ai_agent.js';
 import { getVapidPublicKey, getPushPopupSettings, savePushPopupSettings, upsertPushSubscriber, linkSubscriberPhone, removePushSubscriber, getPushSubscriberStats, sendBroadcastPush, sendOrderPushNotifications } from './push_engine.js';
 import { registerMailRoutes, renderBrandedEmailTemplate } from './mail_engine.js';
 
@@ -1459,6 +1460,13 @@ function adminAuth(req, res, next) {
 loadAdminSessions();
 function requireRole(...roles) {
   return (req, res, next) => { if (!req.admin || !roles.includes(req.admin.role)) return res.status(403).json({ error: 'your role cannot do this' }); next(); };
+}
+function requirePerm(permKey) {
+  return (req, res, next) => {
+    if (!req.admin) return res.status(401).json({ error: 'unauthorized' });
+    if (req.admin.role === 'owner' || req.admin.role === 'manager' || req.admin.permissions?.[permKey] !== false) return next();
+    return res.status(403).json({ error: 'Permission denied by Owner' });
+  };
 }
 
 function renderSecurityOtpHtml({ storeName, title, subtitle, otp, userName, userEmail, expiresMin = 10, note }) {
@@ -5242,13 +5250,295 @@ app.post('/api/admin/finance/toggle-payout', adminAuth, requireRole('owner', 'ma
 // ==========================================
 // REAL BAILEYS WHATSAPP ENGINE ROUTES
 // ==========================================
-app.get('/api/admin/whatsapp/status', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+app.get('/api/admin/whatsapp/status', adminAuth, requirePerm('canViewWhatsApp'), (req, res) => {
   try {
     const live = getWhatsAppLiveStatus();
     res.json(live);
   } catch (err) {
     res.json(getWhatsAppSettings());
   }
+});
+
+app.get(['/api/admin/whatsapp/inbox/threads', '/admin/whatsapp/inbox/threads'], adminAuth, requirePerm('canViewWhatsApp'), (req, res) => {
+  try {
+    const threads = getWaInboxThreads();
+    const orders = getOrders();
+    const enriched = threads.map((t) => {
+      const last10 = String(t.phone || '').replace(/\D/g, '').slice(-10);
+      const custOrders = last10 ? orders.filter((o) => String(o.customer?.phone || '').replace(/\D/g, '').endsWith(last10)) : [];
+      const cancelled = custOrders.filter((o) => ['cancelled', 'return', 'returned'].includes(String(o.status || '').toLowerCase())).length;
+      const delivered = custOrders.filter((o) => String(o.status || '').toLowerCase() === 'delivered').length;
+      return { ...t, orderCount: custOrders.length, deliveredCount: delivered, cancelCount: cancelled };
+    });
+    res.json({ threads: enriched });
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Failed to load threads', threads: [] });
+  }
+});
+
+app.get(['/api/admin/whatsapp/inbox/messages/:phone', '/admin/whatsapp/inbox/messages/:phone'], adminAuth, requirePerm('canViewWhatsApp'), (req, res) => {
+  try {
+    const phone = decodeURIComponent(req.params.phone || '');
+    const remoteJid = String(req.query.remoteJid || '').trim();
+    const messages = getWaMessages(phone, remoteJid);
+    const last10 = phone.replace(/\D/g, '').slice(-10);
+    const orders = last10
+      ? getOrders()
+          .filter((o) => String(o.customer?.phone || '').replace(/\D/g, '').endsWith(last10))
+          .slice(0, 10)
+          .map((o) => ({ id: o.id, status: o.status, total: o.total, createdAt: o.createdAt, items: (o.items || []).map((i) => `${i.name} x${i.qty || 1}`).join(', ') }))
+      : [];
+    res.json({ messages, orders });
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Failed to load messages', messages: [], orders: [] });
+  }
+});
+
+app.get(['/api/admin/whatsapp/inbox/profile/:phone', '/admin/whatsapp/inbox/profile/:phone'], adminAuth, requirePerm('canViewWhatsApp'), async (req, res) => {
+  try {
+    const phone = decodeURIComponent(req.params.phone || '');
+    const [url, resolvedPhone] = await Promise.all([
+      getWhatsAppProfilePicture(phone),
+      req.query.resolve === '1' ? resolveWhatsAppPhoneNumber(phone) : Promise.resolve(''),
+    ]);
+    res.json({ url, phone: resolvedPhone });
+  } catch (_) {
+    res.json({ url: null, phone: '' });
+  }
+});
+
+app.get(['/api/admin/whatsapp/inbox/media/:file', '/admin/whatsapp/inbox/media/:file'], adminAuth, requirePerm('canViewWhatsApp'), (req, res) => {
+  const file = String(req.params.file || '');
+  if (!/^[a-f0-9-]{36}\.(?:jpg|png|webp|gif|mp4|3gp|mov|mp3|ogg|webm|wav|amr|pdf|txt|docx|xlsx|apk)$/i.test(file)) return res.sendStatus(404);
+  const filePath = join(getPersistentDataDirectory(), 'uploads', 'wa-inbox', file);
+  if (!existsSync(filePath)) return res.sendStatus(404);
+  res.setHeader('Cache-Control', 'private, max-age=300');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.sendFile(filePath);
+});
+
+// Short-lived one-to-one browser call rooms
+const webCallRooms = new Map();
+const webCallEvents = new Map();
+const WEB_CALL_TTL_MS = 10 * 60 * 1000;
+function getWebCallRoom(id) {
+  const room = webCallRooms.get(String(id || ''));
+  if (!room || room.expiresAt < Date.now()) {
+    if (room) { webCallRooms.delete(room.id); webCallEvents.delete(room.id); }
+    return null;
+  }
+  return room;
+}
+function webCallGuestAuth(req, res, next) {
+  const room = getWebCallRoom(req.params.roomId);
+  const token = String(req.body?.token || req.query?.token || req.headers['x-call-token'] || '');
+  if (!room || token.length !== room.guestToken.length || !timingSafeEqual(Buffer.from(token), Buffer.from(room.guestToken))) {
+    return res.status(404).json({ error: 'Call link expired or invalid' });
+  }
+  req.webCallRoom = room;
+  next();
+}
+app.post('/api/admin/call-rooms', adminAuth, requirePerm('canViewWhatsApp'), (req, res) => {
+  for (const [id, room] of webCallRooms) {
+    if (room.expiresAt < Date.now()) { webCallRooms.delete(id); webCallEvents.delete(id); }
+  }
+  if (webCallRooms.size >= 100) return res.status(429).json({ error: 'Too many active call links. Try again shortly.' });
+  const id = randomBytes(16).toString('hex');
+  const guestToken = randomBytes(32).toString('base64url');
+  const room = {
+    id,
+    guestToken,
+    mode: req.body?.mode === 'video' ? 'video' : 'audio',
+    name: String(req.body?.name || '').slice(0, 100),
+    phone: String(req.body?.phone || '').replace(/[^0-9+]/g, '').slice(0, 24),
+    createdAt: Date.now(),
+    expiresAt: Date.now() + WEB_CALL_TTL_MS,
+    guestActiveAt: 0
+  };
+  webCallRooms.set(id, room);
+  webCallEvents.set(id, []);
+  res.json({ roomId: id, guestToken, mode: room.mode, expiresAt: room.expiresAt });
+});
+app.post('/api/admin/call-rooms/:roomId/events', adminAuth, requirePerm('canViewWhatsApp'), (req, res) => {
+  const room = getWebCallRoom(req.params.roomId);
+  if (!room) return res.status(404).json({ error: 'Call room expired' });
+  const events = webCallEvents.get(room.id) || [];
+  const after = Math.max(0, Number(req.query.after) || 0);
+  const pending = events.filter((e) => e.seq > after && e.from === 'guest').slice(0, 100);
+  if (req.body?.event) {
+    const e = req.body.event;
+    if (!['offer', 'answer', 'candidate', 'hangup', 'ready'].includes(e.type) || JSON.stringify(e).length > 256000) {
+      return res.status(400).json({ error: 'Invalid call signal' });
+    }
+    events.push({ seq: events.length ? events[events.length - 1].seq + 1 : 1, from: 'admin', type: e.type, data: e.data || null, at: Date.now() });
+    while (events.length > 500) events.shift();
+  }
+  res.json({ events: pending, next: pending.length ? pending[pending.length - 1].seq : after, guestActive: Date.now() - room.guestActiveAt < 20000, expiresAt: room.expiresAt });
+});
+app.post('/api/call-rooms/:roomId/join', webCallGuestAuth, (req, res) => {
+  const room = req.webCallRoom;
+  if (room.guestActiveAt && Date.now() - room.guestActiveAt < 20000) {
+    return res.status(409).json({ error: 'Someone has already joined this call link.' });
+  }
+  room.guestActiveAt = Date.now();
+  res.json({ roomId: room.id, mode: room.mode, name: room.name, expiresAt: room.expiresAt });
+});
+app.post('/api/call-rooms/:roomId/events', webCallGuestAuth, (req, res) => {
+  const room = req.webCallRoom;
+  room.guestActiveAt = Date.now();
+  const events = webCallEvents.get(room.id) || [];
+  const after = Math.max(0, Number(req.query.after) || 0);
+  const pending = events.filter((e) => e.seq > after && e.from === 'admin').slice(0, 100);
+  if (req.body?.event) {
+    const e = req.body.event;
+    if (!['offer', 'answer', 'candidate', 'hangup', 'ready'].includes(e.type) || JSON.stringify(e).length > 256000) {
+      return res.status(400).json({ error: 'Invalid call signal' });
+    }
+    events.push({ seq: events.length ? events[events.length - 1].seq + 1 : 1, from: 'guest', type: e.type, data: e.data || null, at: Date.now() });
+    while (events.length > 500) events.shift();
+  }
+  res.json({ events: pending, next: pending.length ? pending[pending.length - 1].seq : after, expiresAt: room.expiresAt });
+});
+
+app.post(['/api/admin/whatsapp/inbox/send', '/admin/whatsapp/inbox/send'], adminAuth, requirePerm('canViewWhatsApp'), async (req, res) => {
+  let savedPath = '';
+  try {
+    const { phone, remoteJid, text, attachment: incomingAttachment } = req.body || {};
+    const msg = String(text || '').trim();
+    if (!phone || (!msg && !incomingAttachment)) return res.status(400).json({ error: 'Phone and a message or attachment are required' });
+    let attachment = null;
+    if (incomingAttachment) {
+      const mimeType = String(incomingAttachment.mimeType || '').toLowerCase().split(';')[0];
+      const allowed = {
+        'image/jpeg': ['image', 'jpg'], 'image/png': ['image', 'png'], 'image/webp': ['image', 'webp'], 'image/gif': ['image', 'gif'],
+        'video/mp4': ['video', 'mp4'], 'video/3gpp': ['video', '3gp'], 'video/quicktime': ['video', 'mov'],
+        'audio/mpeg': ['audio', 'mp3'], 'audio/ogg': ['audio', 'ogg'], 'audio/webm': ['audio', 'webm'], 'audio/wav': ['audio', 'wav'], 'audio/amr': ['audio', 'amr'], 'audio/mp4': ['audio', 'mp4'],
+        'application/vnd.android.package-archive': ['document', 'apk'],
+        'application/pdf': ['document', 'pdf'], 'text/plain': ['document', 'txt'],
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['document', 'docx'],
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['document', 'xlsx'],
+      };
+      const isApk = /\.apk$/i.test(String(incomingAttachment.name || ''));
+      const spec = isApk ? ['document', 'apk'] : allowed[mimeType];
+      const maxAttachmentBytes = isApk ? 35 * 1024 * 1024 : 16 * 1024 * 1024;
+      const encoded = String(incomingAttachment.data || '').replace(/^data:[^,]*;base64,/, '');
+      if (!spec || !encoded || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) return res.status(400).json({ error: 'This file type is not supported by WhatsApp.' });
+      const buffer = Buffer.from(encoded, 'base64');
+      if (!buffer.length || buffer.length > maxAttachmentBytes) return res.status(413).json({ error: `Attachments must be smaller than ${isApk ? '35' : '16'} MB.` });
+      const dir = join(getPersistentDataDirectory(), 'uploads', 'wa-inbox');
+      mkdirSync(dir, { recursive: true });
+      const fileName = `${randomUUID()}.${spec[1]}`;
+      savedPath = join(dir, fileName);
+      writeFileSync(savedPath, buffer, { flag: 'wx' });
+      attachment = {
+        path: savedPath,
+        fileName: String(incomingAttachment.name || fileName).replace(/[\\/\0-\x1f]/g, '').slice(0, 120) || fileName,
+        mimeType: isApk ? 'application/vnd.android.package-archive' : mimeType,
+        mediaType: spec[0],
+        isVoiceNote: incomingAttachment.isVoiceNote === true && spec[0] === 'audio',
+        mediaUrl: `/admin/whatsapp/inbox/media/${fileName}`
+      };
+    }
+    const result = await sendBaileysMessage(phone, msg, null, 'inbox_reply', null, null, attachment, remoteJid || '');
+    if (!result?.sent) {
+      if (savedPath) { try { unlinkSync(savedPath); } catch (_) {} }
+      return res.status(500).json({ error: result?.reason || 'Failed to send' });
+    }
+    pruneWhatsAppInboxMedia();
+    res.json({ ok: true, sent: true });
+  } catch (err) {
+    if (savedPath) { try { unlinkSync(savedPath); } catch (_) {} }
+    res.status(500).json({ error: err?.message || 'Send failed' });
+  }
+});
+
+app.get('/api/admin/whatsapp/ai-config', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  res.json({ config: getWaAiConfig(), faqs: getWaAiFaqs() });
+});
+
+app.put('/api/admin/whatsapp/ai-config', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  const config = saveWaAiConfig(req.body || {});
+  res.json({ ok: true, config });
+});
+
+app.post('/api/admin/whatsapp/ai-faq', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  const { question, answer } = req.body || {};
+  const entry = addWaAiFaq({ question, answer, createdBy: req.admin?.username || 'admin' });
+  if (!entry) return res.status(400).json({ error: 'Question and answer are required' });
+  res.json({ ok: true, entry, faqs: getWaAiFaqs() });
+});
+
+app.delete('/api/admin/whatsapp/ai-faq/:id', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  const faqs = deleteWaAiFaq(req.params.id);
+  res.json({ ok: true, faqs });
+});
+
+app.post('/api/admin/whatsapp/escalation-reply', adminAuth, async (req, res) => {
+  try {
+    const { notificationId, phone, replyText, saveToFaq, customerQuestion } = req.body || {};
+    const text = String(replyText || '').trim();
+    if (!phone || !text) {
+      return res.status(400).json({ error: 'Phone and reply message are required' });
+    }
+    const result = await sendBaileysMessage(phone, text, null, 'escalation_reply');
+    if (!result?.sent) {
+      return res.status(500).json({ error: result?.reason || 'Failed to send WhatsApp message' });
+    }
+    if (notificationId) {
+      markStaffNotificationsRead(req.admin?.username, [notificationId]);
+    }
+    let savedFaq = null;
+    if (saveToFaq && customerQuestion) {
+      savedFaq = addWaAiFaq({
+        question: String(customerQuestion).trim(),
+        answer: text,
+        createdBy: req.admin?.username || 'staff',
+      });
+    }
+    res.json({ ok: true, sent: true, savedFaq });
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Failed to send escalation reply' });
+  }
+});
+
+function getLifecycleConfig() {
+  const s = getSettings();
+  return {
+    abandonedRecoveryEnabled: !!s.lifecycle?.abandonedRecoveryEnabled,
+    abandonedDelayMins: Math.max(15, Number(s.lifecycle?.abandonedDelayMins || 25)),
+    abandonedOfferText: s.lifecycle?.abandonedOfferText || 'অর্ডারটি সম্পূর্ণ করলে স্পেশাল ফ্রি ডেলিভারি / ডিসকাউন্ট সুবিধা পাবেন!',
+    abandonedDailyCap: Math.min(30, Math.max(1, Number(s.lifecycle?.abandonedDailyCap || 15))),
+    refillAutoSendEnabled: !!s.lifecycle?.refillAutoSendEnabled,
+    refillDailyCap: Math.min(30, Math.max(1, Number(s.lifecycle?.refillDailyCap || 15))),
+    ceoReportEnabled: !!s.lifecycle?.ceoReportEnabled,
+    ceoReportPhone: String(s.lifecycle?.ceoReportPhone || s.whatsapp || s.phone || '').trim(),
+    ceoReportHour: Math.min(23, Math.max(0, Number(s.lifecycle?.ceoReportHour ?? 23))),
+    lastCeoReportDate: s.lifecycle?.lastCeoReportDate || '',
+  };
+}
+
+app.get('/api/admin/automation/lifecycle', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  res.json({ config: getLifecycleConfig(), recentLogs: getWaAutoLogs().slice(0, 40) });
+});
+
+app.put('/api/admin/automation/lifecycle', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  const s = getSettings();
+  const prev = getLifecycleConfig();
+  const b = req.body || {};
+  const next = {
+    ...prev,
+    ...(typeof b.abandonedRecoveryEnabled === 'boolean' ? { abandonedRecoveryEnabled: b.abandonedRecoveryEnabled } : {}),
+    ...(b.abandonedDelayMins !== undefined ? { abandonedDelayMins: Math.max(15, Number(b.abandonedDelayMins) || 25) } : {}),
+    ...(typeof b.abandonedOfferText === 'string' ? { abandonedOfferText: b.abandonedOfferText } : {}),
+    ...(b.abandonedDailyCap !== undefined ? { abandonedDailyCap: Math.min(30, Math.max(1, Number(b.abandonedDailyCap) || 15)) } : {}),
+    ...(typeof b.refillAutoSendEnabled === 'boolean' ? { refillAutoSendEnabled: b.refillAutoSendEnabled } : {}),
+    ...(b.refillDailyCap !== undefined ? { refillDailyCap: Math.min(30, Math.max(1, Number(b.refillDailyCap) || 15)) } : {}),
+    ...(typeof b.ceoReportEnabled === 'boolean' ? { ceoReportEnabled: b.ceoReportEnabled } : {}),
+    ...(typeof b.ceoReportPhone === 'string' ? { ceoReportPhone: b.ceoReportPhone.trim() } : {}),
+    ...(b.ceoReportHour !== undefined ? { ceoReportHour: Math.min(23, Math.max(0, Number(b.ceoReportHour) || 23)) } : {}),
+  };
+  saveSettings({ ...s, lifecycle: next });
+  res.json({ ok: true, config: next });
 });
 
 app.post('/api/admin/whatsapp/start-session', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
