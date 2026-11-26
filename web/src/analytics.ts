@@ -5,6 +5,8 @@ const initializedFbPixels = new Set<string>();
 const initializedTtkPixels = new Set<string>();
 const initializedGtm = new Set<string>();
 const initializedGa = new Set<string>();
+let lastEcViewKey = '';
+let lastEcViewTime = 0;
 
 export function isAdminContext(): boolean {
   if (typeof window === 'undefined') return false;
@@ -143,10 +145,26 @@ export function initTikTok(id: string) {
     if (import.meta.env.DEV || isAdminContext()) return;
     if (!id || !id.trim()) return;
     const tid = id.trim();
-    if (initializedTtkPixels.has(tid)) return;
+    const w = window as any;
+
+    // Auto Code Brain: Block unauthorized TikTok pixel on custom-isolated landing page
+    const lt = w.__LANDING_TRACKING__;
+    const curPath = (typeof window !== 'undefined' ? window.location.pathname : '').toLowerCase();
+    const isLand = (lt && lt.isLanding) || curPath.includes('/page/') || curPath.includes('/page') || curPath.includes('/l/');
+    if (isLand && lt && lt.hasCustomTracking && lt.pixelMode !== 'both') {
+      const customTtk = lt.ttkPixelId ? String(lt.ttkPixelId).trim() : '';
+      if (tid !== customTtk) {
+        console.warn(`[analytics] initTikTok prevented store pixel ${tid} on custom landing page`);
+        return;
+      }
+    }
+
+    if (initializedTtkPixels.has(tid) || (w.ttq && w.ttq._i && w.ttq._i[tid])) {
+      initializedTtkPixels.add(tid);
+      return;
+    }
     initializedTtkPixels.add(tid);
 
-    const w = window as any;
     if (!w.ttq) {
       w.TiktokAnalyticsObject = 'ttq';
       const ttq: any = [];
@@ -252,26 +270,88 @@ function uid(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// View content / View item
+// View content / View item (Deduplicated & TikTok Pixel 2.0 100% Compliant)
 export function ecView(p: { id: string; name: string; price: number }) {
   try {
-    const eventId = uid(`vc_${p.id}`);
+    const cleanId = String(p.id || 'product').trim();
+    const cleanName = String(p.name || 'Product').trim();
+    const numPrice = Math.round((Number(p.price) || 0) * 100) / 100;
+    const curPath = typeof window !== 'undefined' ? window.location.pathname : '';
+    const viewKey = `${curPath}:${cleanId}:${numPrice}`;
+    const now = Date.now();
+    if (lastEcViewKey === viewKey && now - lastEcViewTime < 2500) {
+      return;
+    }
+    lastEcViewKey = viewKey;
+    lastEcViewTime = now;
+
+    const eventId = uid(`vc_${cleanId}`);
+    const ttContents = [
+      {
+        content_id: cleanId,
+        content_type: 'product',
+        content_name: cleanName,
+        quantity: 1,
+        price: numPrice,
+      },
+    ];
     dl({ ecommerce: null });
-    dl({ event: 'view_item', event_id: eventId, eventID: eventId, content_id: String(p.id), content_ids: [String(p.id)], content_name: p.name, content_type: 'product', contents: [{ content_id: String(p.id), content_name: p.name, content_type: 'product', quantity: 1, price: p.price }], ecommerce: { currency: CUR, value: p.price, items: [{ item_id: p.id, item_name: p.name, price: p.price, quantity: 1 }] } });
-    dl({ event: 'ViewContent', event_id: eventId, eventID: eventId, content_id: String(p.id), content_name: p.name, content_ids: [String(p.id)], content_type: 'product', contents: [{ content_id: String(p.id), content_name: p.name, content_type: 'product', quantity: 1, price: p.price }], value: p.price, currency: CUR });
-    fbTrack('ViewContent', { content_name: p.name, content_ids: [p.id], content_type: 'product', value: p.price, currency: CUR }, false, eventId);
-    ttkTrack('ViewContent', { content_id: String(p.id), content_type: 'product', content_name: p.name, price: p.price, currency: CUR }, eventId);
+    dl({ event: 'view_item', event_id: eventId, eventID: eventId, content_id: cleanId, content_ids: [cleanId], content_name: cleanName, content_type: 'product', contents: ttContents, ecommerce: { currency: CUR, value: numPrice, items: [{ item_id: cleanId, item_name: cleanName, price: numPrice, quantity: 1 }] } });
+    dl({ event: 'ViewContent', event_id: eventId, eventID: eventId, content_id: cleanId, content_name: cleanName, content_ids: [cleanId], content_type: 'product', contents: ttContents, value: numPrice, price: numPrice, quantity: 1, currency: CUR });
+    fbTrack('ViewContent', { content_name: cleanName, content_ids: [cleanId], content_type: 'product', value: numPrice, currency: CUR }, false, eventId);
+    ttkTrack(
+      'ViewContent',
+      {
+        content_id: cleanId,
+        content_type: 'product',
+        content_name: cleanName,
+        contents: ttContents,
+        value: numPrice,
+        price: numPrice,
+        quantity: 1,
+        currency: CUR,
+      },
+      eventId
+    );
   } catch {}
 }
 
-// Add to cart
+// Add to cart (TikTok Pixel 2.0 + Meta Pixel + dataLayer)
 export function ecAdd(p: { id: string; name: string; price: number }, qty = 1) {
   try {
-    const eventId = uid(`atc_${p.id}`);
+    const cleanId = String(p.id || 'product').trim();
+    const cleanName = String(p.name || 'Product').trim();
+    const numPrice = Math.round((Number(p.price) || 0) * 100) / 100;
+    const numQty = Math.max(1, Number(qty) || 1);
+    const totalVal = Math.round(numPrice * numQty * 100) / 100;
+    const eventId = uid(`atc_${cleanId}`);
+    const ttContents = [
+      {
+        content_id: cleanId,
+        content_type: 'product',
+        content_name: cleanName,
+        quantity: numQty,
+        price: numPrice,
+      },
+    ];
     dl({ ecommerce: null });
-    dl({ event: 'add_to_cart', event_id: eventId, eventID: eventId, content_id: String(p.id), content_ids: [String(p.id)], content_name: p.name, content_type: 'product', contents: [{ content_id: String(p.id), content_name: p.name, content_type: 'product', quantity: qty, price: p.price }], ecommerce: { currency: CUR, value: p.price * qty, items: [{ item_id: p.id, item_name: p.name, price: p.price, quantity: qty }] } });
-    dl({ event: 'AddToCart', event_id: eventId, eventID: eventId, content_id: String(p.id), content_name: p.name, content_ids: [String(p.id)], content_type: 'product', contents: [{ content_id: String(p.id), content_name: p.name, content_type: 'product', quantity: qty, price: p.price }], value: p.price * qty, currency: CUR });
-    fbTrack('AddToCart', { content_name: p.name, content_ids: [p.id], content_type: 'product', value: p.price * qty, currency: CUR }, false, eventId);
+    dl({ event: 'add_to_cart', event_id: eventId, eventID: eventId, content_id: cleanId, content_ids: [cleanId], content_name: cleanName, content_type: 'product', contents: ttContents, ecommerce: { currency: CUR, value: totalVal, items: [{ item_id: cleanId, item_name: cleanName, price: numPrice, quantity: numQty }] } });
+    dl({ event: 'AddToCart', event_id: eventId, eventID: eventId, content_id: cleanId, content_name: cleanName, content_ids: [cleanId], content_type: 'product', contents: ttContents, value: totalVal, currency: CUR });
+    fbTrack('AddToCart', { content_name: cleanName, content_ids: [cleanId], content_type: 'product', value: totalVal, currency: CUR }, false, eventId);
+    ttkTrack(
+      'AddToCart',
+      {
+        content_id: cleanId,
+        content_type: 'product',
+        content_name: cleanName,
+        contents: ttContents,
+        value: totalVal,
+        price: numPrice,
+        quantity: numQty,
+        currency: CUR,
+      },
+      eventId
+    );
   } catch {}
 }
 
@@ -335,10 +415,26 @@ export function buildUserData(c?: CustomerTrackingData) {
   return uData;
 }
 
+export function ttkIdentify(c?: CustomerTrackingData) {
+  try {
+    if (import.meta.env.DEV || isAdminContext() || !c) return;
+    const w = window as any;
+    if (!w.ttq || typeof w.ttq.identify !== 'function') return;
+    const e164 = formatE164Phone(c.phone);
+    const payload: Record<string, string> = {};
+    if (e164) payload.phone_number = e164;
+    if (c.email && c.email.trim()) payload.email = c.email.trim().toLowerCase();
+    if (Object.keys(payload).length > 0) {
+      w.ttq.identify(payload);
+    }
+  } catch {}
+}
+
 export function pushUserData(c: CustomerTrackingData) {
   try {
     if (isAdminContext()) return;
     const uData = buildUserData(c);
+    ttkIdentify(c);
     dl({
       event: 'user_data_update',
       user_data: uData,
@@ -356,9 +452,19 @@ export function ecBeginCheckout(
   try {
     const eventId = uid('ic');
     const uData = buildUserData(customer);
-    const firstId = items[0]?.id ? String(items[0].id) : '';
+    ttkIdentify(customer);
+    const numValue = Math.round((Number(value) || 0) * 100) / 100;
+    const firstId = items[0]?.id ? String(items[0].id) : 'product';
+    const firstName = items[0]?.name ? String(items[0].name) : 'Product';
     const allIds = items.map((l) => String(l.id));
-    const ttContents = items.map((l) => ({ content_id: String(l.id), content_name: l.name, content_type: 'product', quantity: l.qty, price: l.price }));
+    const totalQty = items.reduce((s, l) => s + (Number(l.qty) || 1), 0);
+    const ttContents = items.map((l) => ({
+      content_id: String(l.id || 'product'),
+      content_name: String(l.name || 'Product'),
+      content_type: 'product',
+      quantity: Number(l.qty) || 1,
+      price: Number(l.price) || 0,
+    }));
     dl({ ecommerce: null });
     dl({
       event: 'begin_checkout',
@@ -372,7 +478,7 @@ export function ecBeginCheckout(
       customer: uData,
       ecommerce: {
         currency: CUR,
-        value,
+        value: numValue,
         items: items.map((l) => ({ item_id: l.id, item_name: l.name, price: l.price, quantity: l.qty })),
       },
     });
@@ -384,14 +490,26 @@ export function ecBeginCheckout(
       content_ids: allIds,
       content_type: 'product',
       contents: ttContents,
-      value,
+      value: numValue,
       currency: CUR,
       num_items: items.length,
       user_data: uData,
       customer: uData,
     });
-    fbTrack('InitiateCheckout', { value, currency: CUR, num_items: items.length }, false, eventId);
-    ttkTrack('InitiateCheckout', { contents: ttContents, value, currency: CUR }, eventId);
+    fbTrack('InitiateCheckout', { value: numValue, currency: CUR, num_items: items.length }, false, eventId);
+    ttkTrack(
+      'InitiateCheckout',
+      {
+        content_id: firstId,
+        content_type: 'product',
+        content_name: firstName,
+        contents: ttContents,
+        value: numValue,
+        quantity: totalQty,
+        currency: CUR,
+      },
+      eventId
+    );
   } catch {}
 }
 
@@ -413,21 +531,24 @@ export function ecPurchase(
     const contentIds = (items || []).map((i) => String(i.id));
     const numItems = (items || []).reduce((sum, i) => sum + (Number(i.qty) || 1), 0);
     const uData = buildUserData(customer);
+    ttkIdentify(customer);
 
     const ttContents = (items || []).map((l) => ({
-      content_id: String(l.id),
-      content_name: l.name,
+      content_id: String(l.id || 'product'),
+      content_name: String(l.name || 'Product'),
       content_type: 'product',
       quantity: Number(l.qty) || 1,
       price: Number(l.price) || 0,
     }));
+    const firstId = ttContents[0]?.content_id || 'product';
+    const firstName = ttContents[0]?.content_name || 'Product';
 
     dl({ ecommerce: null });
     dl({
       event: 'purchase',
       event_id: String(id),
       eventID: String(id),
-      content_id: contentIds[0] || '',
+      content_id: firstId,
       content_ids: contentIds,
       content_type: 'product',
       contents: ttContents,
@@ -463,7 +584,19 @@ export function ecPurchase(
       false,
       String(id)
     );
-    ttkTrack('CompletePayment', { contents: ttContents, value: numValue, currency: CUR }, String(id));
+    ttkTrack(
+      'CompletePayment',
+      {
+        content_id: firstId,
+        content_type: 'product',
+        content_name: firstName,
+        contents: ttContents,
+        value: numValue,
+        quantity: numItems,
+        currency: CUR,
+      },
+      String(id)
+    );
   } catch {}
 }
 

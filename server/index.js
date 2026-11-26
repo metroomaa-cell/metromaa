@@ -3949,6 +3949,19 @@ async function trackPurchase(order) {
 
   for (const target of ttkTargets) {
     try {
+      const ttContents = (order.items || []).map((i) => ({
+        content_id: String(i.id || 'product'),
+        content_type: 'product',
+        content_name: String(i.name || i.title || 'Product'),
+        quantity: Number(i.qty) || 1,
+        price: Number(i.price) || 0,
+      }));
+      const firstContent = ttContents[0] || { content_id: 'product', content_name: 'Product', price: value, quantity: 1 };
+      const ttkUser = { phone_number: ph, phone: ph };
+      if (em) ttkUser.email = em;
+      if (order.ip) ttkUser.ip = order.ip;
+      if (order.userAgent) ttkUser.user_agent = order.userAgent;
+
       const body = {
         event_source: 'web',
         event_source_id: target.pixelId,
@@ -3956,15 +3969,15 @@ async function trackPurchase(order) {
           event: 'CompletePayment',
           event_time: ts,
           event_id: eventId,
-          user: { phone: ph },
+          user: ttkUser,
+          page: { url: sourceUrl },
           properties: {
             currency: 'BDT',
             value,
-            contents: (order.items || []).map((i) => ({
-              content_id: String(i.id),
-              quantity: Number(i.qty) || 1,
-              price: Number(i.price) || 0,
-            })),
+            content_type: 'product',
+            content_id: firstContent.content_id,
+            content_name: firstContent.content_name,
+            contents: ttContents,
           },
         }],
       };

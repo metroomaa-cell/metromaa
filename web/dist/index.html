@@ -254,6 +254,28 @@
             else window.fbq('track', 'PageView');
           }
         }
+        if (lt && lt.ttkPixelId) {
+          var tid = String(lt.ttkPixelId).trim();
+          if (!window.ttq) {
+            window.TiktokAnalyticsObject = 'ttq';
+            var ttq = (window.ttq = []);
+            ttq.methods = ['page', 'track', 'identify', 'instances', 'load', 'on', 'off', 'once', 'ready', 'alias', 'group', 'enableCookie', 'disableCookie', 'holdConsent', 'revokeConsent', 'grantConsent'];
+            ttq.setAndDefer = function(t, e) { t[e] = function() { t.push([e].concat(Array.prototype.slice.call(arguments, 0))); }; };
+            for (var i = 0; i < ttq.methods.length; i++) ttq.setAndDefer(ttq, ttq.methods[i]);
+            ttq.instance = function(t) { var e = ttq._i[t] || []; for (var n = 0; n < ttq.methods.length; n++) ttq.setAndDefer(e, ttq.methods[n]); return e; };
+            ttq.load = function(e, n) {
+              var u = 'https://analytics.tiktok.com/i18n/pixel/events.js';
+              ttq._i = ttq._i || {}; ttq._i[e] = []; ttq._i[e]._u = u;
+              ttq._t = ttq._t || {}; ttq._t[e] = +new Date();
+              ttq._o = ttq._o || {}; ttq._o[e] = n || {};
+              var o = document.createElement('script'); o.type = 'text/javascript'; o.async = true; o.src = u + '?sdkid=' + e + '&lib=ttq';
+              var a = document.getElementsByTagName('script')[0];
+              if (a && a.parentNode) a.parentNode.insertBefore(o, a); else document.head.appendChild(o);
+            };
+          }
+          window.ttq.load(tid);
+          window.ttq.page();
+        }
       })();
     </script>
     
@@ -276,7 +298,7 @@
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@500;600;700&family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" /></noscript>
     <style>#root{color:#1f3147;background:#f3f0ec;min-height:100vh}</style>
-    <script type="module" crossorigin src="/assets/index-yLtLJUd3.js"></script>
+    <script type="module" crossorigin src="/assets/index-DG_XbYTq.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-BWaJ3C7D.js">
     <link rel="stylesheet" crossorigin href="/assets/index-CKXQ5xsR.css">
   </head>

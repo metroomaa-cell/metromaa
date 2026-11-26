@@ -274,21 +274,34 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
     return () => clearInterval(timer);
   }, [reviewsList.length]);
 
-  const packagesList =
-    Array.isArray(cfg?.packages) && cfg.packages.length > 0
-      ? cfg.packages
-      : [
-          {
-            id: cfg?.id || 'pkg_default',
-            title: cfg?.productTitle || cfg?.headline || cfg?.title || 'Product Package',
-            price: Number(cfg?.offerPrice) || 999,
-            originalPrice: 1500,
-            image: cfg?.heroImage || '',
-            popular: true,
-          },
-        ];
+  const packagesList = useMemo(() => {
+    if (Array.isArray(cfg?.packages) && cfg.packages.length > 0) return cfg.packages;
+    if (Array.isArray(cfg?.variants) && cfg.variants.length > 0) {
+      return cfg.variants.map((v: any, idx: number) => ({
+        id: v.id || `var_${idx + 1}`,
+        title: v.title || v.name || cfg?.title || 'Product Package',
+        price: Number(v.price) || Number(cfg?.offerPrice) || 690,
+        originalPrice: Number(v.originalPrice) || 1090,
+        image: v.image || cfg?.heroImage || '',
+        popular: idx === 0,
+      }));
+    }
+    return [
+      {
+        id: cfg?.slug || cfg?.id || 'pkg_default',
+        title: cfg?.productTitle || cfg?.title || cfg?.headline || 'Product Package',
+        price: Number(cfg?.offerPrice) || 690,
+        originalPrice: 1090,
+        image: cfg?.heroImage || '',
+        popular: true,
+      },
+    ];
+  }, [cfg]);
 
-  const currentItem = packagesList.find((p: any) => p.id === selectedProduct) || packagesList[0];
+  const currentItem = useMemo(
+    () => packagesList.find((p: any) => p.id === selectedProduct) || packagesList[0],
+    [packagesList, selectedProduct]
+  );
   const currentQty = qty[currentItem.id] || 1;
   const subtotal = Number(currentItem.price || 0) * currentQty;
 
@@ -299,19 +312,23 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
   const shippingCost = isFreeDelivery ? 0 : shippingZone === 'inside' ? delInside : delOutside;
   const total = subtotal + shippingCost;
 
-  // Ref to ensure InitiateCheckout is fired smoothly
+  // Ref to ensure InitiateCheckout and ViewContent fire cleanly without duplicates
   const checkoutTrackedRef = useRef(false);
+  const lastViewedItemIdRef = useRef<string>('');
 
-  // 1. Pixel: Track ViewContent on load and package change
+  // 1. Pixel: Track ViewContent once on load and when selected package ID actually changes
   useEffect(() => {
-    if (cfg && currentItem && currentItem.price) {
-      ecView({
-        id: currentItem.id,
-        name: `${cfg.headline || cfg.title} - ${currentItem.title}`,
-        price: currentItem.price,
-      });
-    }
-  }, [cfg, selectedProduct, currentItem]);
+    if (!cfg || !currentItem || !currentItem.price) return;
+    const viewKey = `${cfg.slug || cfg.id}:${currentItem.id}`;
+    if (lastViewedItemIdRef.current === viewKey) return;
+    lastViewedItemIdRef.current = viewKey;
+    const cleanMainTitle = cfg.mode === 'html' ? (cfg.title || cfg.headline) : (cfg.headline || cfg.title);
+    ecView({
+      id: String(currentItem.id),
+      name: cleanMainTitle && cleanMainTitle !== currentItem.title ? `${cleanMainTitle} - ${currentItem.title}` : String(currentItem.title || cleanMainTitle || 'Product'),
+      price: Number(currentItem.price) || 690,
+    });
+  }, [cfg?.id, cfg?.slug, currentItem?.id, currentItem?.price]);
 
   // 2. Pixel: Track InitiateCheckout when user scrolls or focuses on checkout
   const triggerInitiateCheckout = () => {
