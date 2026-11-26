@@ -819,7 +819,9 @@ export function EmailsAdmin({ onUnreadChange }: EmailsAdminProps) {
 
   const formatMailDate = (dateStr: string) => {
     try {
+      if (!dateStr) return '';
       const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '';
       const now = new Date();
       if (d.toDateString() === now.toDateString()) {
         return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1834,7 +1836,7 @@ export function EmailsAdmin({ onUnreadChange }: EmailsAdminProps) {
 
                         {/* Date */}
                         <div style={{ fontSize: 12, color: em.isRead ? '#9ca3af' : '#a78bfa', fontWeight: em.isRead ? 400 : 700, width: 75, textAlign: 'right', flexShrink: 0 }}>
-                          {formatMailDate(em.createdAt)}
+                          {formatMailDate(em.createdAt || (em as any).date)}
                         </div>
 
                         {/* Hover Quick Delete / Restore */}

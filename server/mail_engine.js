@@ -123,12 +123,23 @@ export function registerMailRoutes(app, { adminAuth, sendEmail, getCustomers, ge
       let html = b.html || (text ? `<pre>${text}</pre>` : '');
       let attachments = Array.isArray(b.attachments) ? b.attachments : [];
 
+      // Filter out foreign local user bounces (e.g. nextimee@secrate.shop MAILER-DAEMON bounces)
+      const lowerTo = String(toEmail || to || '').toLowerCase();
+      const lowerFrom = String(fromEmail || from || '').toLowerCase();
+      if (
+        lowerTo.includes('nextimee@') ||
+        (lowerFrom.includes('mailer-daemon') && (text.includes('nextimee@') || text.includes('sakilroky@gmail.com')))
+      ) {
+        return res.json({ ok: true, ignored: true });
+      }
+
       let category = 'primary';
       if (/order|invoice|receipt|ডেলিভারি|অর্ডার/i.test(subject) || /order|invoice/i.test(text.slice(0, 300))) {
         category = 'orders';
       }
 
       const allMails = getMailItems();
+      const nowIso = b.date || b.createdAt || new Date().toISOString();
       const newMail = {
         id: 'mail_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
         folder: 'inbox',
@@ -144,9 +155,12 @@ export function registerMailRoutes(app, { adminAuth, sendEmail, getCustomers, ge
         subject,
         snippet: text.trim().slice(0, 140).replace(/\s+/g, ' '),
         body: text,
+        bodyText: text,
+        bodyHtml: html,
         html,
         text,
-        date: b.date || new Date().toISOString(),
+        date: nowIso,
+        createdAt: nowIso,
         isRead: false,
         isStarred: false,
         attachments
@@ -238,8 +252,15 @@ export function registerMailRoutes(app, { adminAuth, sendEmail, getCustomers, ge
           (m.body && m.body.toLowerCase().includes(q))
         );
       }
-      filtered.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-      res.json({ ok: true, emails: filtered, counts });
+      filtered.sort((a, b) => new Date(b.date || b.createdAt || 0).getTime() - new Date(a.date || a.createdAt || 0).getTime());
+      const normalized = filtered.map((m) => ({
+        ...m,
+        createdAt: m.createdAt || m.date || new Date().toISOString(),
+        date: m.date || m.createdAt || new Date().toISOString(),
+        bodyText: m.bodyText || m.text || m.body || '',
+        bodyHtml: m.bodyHtml || m.html || '',
+      }));
+      res.json({ ok: true, emails: normalized, counts });
     } catch (err) {
       res.status(500).json({ ok: false, error: err.message });
     }

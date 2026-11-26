@@ -807,7 +807,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
   if (pageLoading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FAF7F8', fontFamily: "'Hind Siliguri', sans-serif" }}>
+      <div key="ll-loading" translate="no" className="notranslate" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FAF7F8', fontFamily: "'Hind Siliguri', sans-serif" }}>
         <div style={{ textAlign: 'center', padding: 32 }}>
           <div style={{ width: 42, height: 42, border: '3px solid #e5e7eb', borderTopColor: '#CB202D', borderRadius: '50%', margin: '0 auto 14px', animation: 'spin 0.8s linear infinite' }} />
           <div style={{ fontSize: 16, fontWeight: 600, color: '#374151' }}>পেজ লোড হচ্ছে...</div>
@@ -818,7 +818,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
   if (notFound || !cfg) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FAF7F8', fontFamily: "'Hind Siliguri', sans-serif", padding: 20 }}>
+      <div key="ll-notfound" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FAF7F8', fontFamily: "'Hind Siliguri', sans-serif", padding: 20 }}>
         <div style={{ maxWidth: 440, width: '100%', background: '#fff', borderRadius: 20, padding: '36px 28px', textAlign: 'center', boxShadow: '0 16px 40px rgba(0,0,0,0.06)', border: '1px solid #f1f5f9' }}>
           <div style={{ fontSize: 44, marginBottom: 12 }}>🔍</div>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: '#111827', margin: '0 0 8px' }}>এই ল্যান্ডিং পেইজটি পাওয়া যায়নি</h1>
@@ -1416,7 +1416,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
       const bridgeScript = `<script>(function(){window.fbq=function(){if(window.parent&&typeof window.parent.fbq==='function'){window.parent.fbq.apply(window.parent,arguments);}};window._fbq=window.fbq;document.addEventListener('click',function(e){var hashLink=e.target&&e.target.closest?e.target.closest('a[href^="#"]'):null;if(hashLink){var hid=(hashLink.getAttribute('href')||'').slice(1);if(hid){var targetEl=document.getElementById(hid);if(targetEl){e.preventDefault();targetEl.scrollIntoView({behavior:'smooth'});return;}}}var el=e.target&&e.target.closest?e.target.closest('a[href^="tel:"],[data-saika-call]'):null;if(el&&!el.hasAttribute('data-direct-tel')){e.preventDefault();try{window.parent.dispatchEvent(new CustomEvent('open-saika-ai-call'));}catch(_){}}},true);window.secrateSubmitOrder=function(p){if(window.parent&&typeof window.parent.secrateSubmitOrder==='function'){return window.parent.secrateSubmitOrder(p);}return Promise.reject(new Error('অর্ডার সিস্টেম প্রস্তুত নয়, পেজটি রিফ্রেশ করে আবার চেষ্টা করুন।'));};document.addEventListener('submit',function(e){var f=e.target;if(!f||f.tagName!=='FORM'||f.hasAttribute('data-no-intercept'))return;var pick=function(){for(var i=0;i<arguments.length;i++){var k=arguments[i];var els=f.querySelectorAll('input,textarea,select');for(var j=0;j<els.length;j++){var el=els[j];var h=(el.name+' '+el.id+' '+el.placeholder).toLowerCase();if(h.indexOf(k)!==-1&&el.value&&el.value.trim())return el.value.trim();}}return '';};var ph=pick('phone','mobile','tel','number','ফোন','মোবাইল');var nm=pick('name','customername','fullname','নাম');var ad=pick('address','location','thikana','ঠিকানা');var actCol=f.querySelector('[data-color].active,[data-color].selected,input[type="radio"][name*="color" i]:checked')||document.querySelector('[data-color].active,[data-color].selected,input[type="radio"][name*="color" i]:checked');var col=pick('color','colour','রং','কালার','variant')||(actCol?(actCol.getAttribute('data-color')||actCol.value||actCol.textContent||'').trim():'');var img=(actCol&&(actCol.getAttribute('data-image')||actCol.getAttribute('data-img')||(actCol.querySelector('img')&&actCol.querySelector('img').getAttribute('src'))))||'';if(ph&&nm&&ad&&window.secrateSubmitOrder){try{window.secrateSubmitOrder({name:nm,phone:ph,address:ad,area:pick('area','zone','delivery','shipping'),qty:pick('qty','quantity')||'1',color:col,size:pick('size','সাইজ'),price:pick('price','amount','total')||undefined,productName:pick('product','package','item')||undefined,image:img||undefined});}catch(_){}}});})();<\/script>`;
       const docWithBridge = /<\/body>/i.test(rawHtml) ? rawHtml.replace(/<\/body>/i, `${bridgeScript}</body>`) : `${rawHtml}${bridgeScript}`;
       return (
-        <div className="custom-html-landing" style={{ width: '100%', height: '100vh', overflow: 'hidden', margin: 0, padding: 0 }}>
+        <div key="ll-iframe" className="custom-html-landing" style={{ width: '100%', height: '100vh', overflow: 'hidden', margin: 0, padding: 0 }}>
           <iframe
             title={cfg.title || 'Landing Page'}
             srcDoc={docWithBridge}
@@ -1433,6 +1433,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
     const cleanCustomHtml = rawHtml.replaceAll('[CUSTOM_CHECKOUT]', '');
     return (
       <div
+        key="ll-custom-html"
         className="custom-html-landing"
         style={{ ...themeVars, fontFamily: "'Hind Siliguri', 'Noto Sans Bengali', system-ui, sans-serif", lineHeight: 1.6, overflowX: 'hidden', width: '100%' }}
       >

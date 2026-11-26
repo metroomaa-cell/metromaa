@@ -468,12 +468,7 @@ export function LandingThankYou({ slug }: { slug: string }) {
         .toast.show { opacity: 1; transform: translate(-50%, 0); }
       `}</style>
 
-      {/* Load typography fonts */}
-      <link rel="preconnect" href="https://fonts.googleapis.com" />
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-      <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
-
-      <div className="thankyou-wrapper">
+      <div key="ty-wrapper" translate="no" className="thankyou-wrapper notranslate">
         <div className="top-line"></div>
 
         <main className="wrap">
