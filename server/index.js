@@ -1,16 +1,29 @@
 process.env.TZ = 'Asia/Dhaka';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 import express from 'express';
 import cors from 'cors';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, lstatSync, unlinkSync, renameSync, rmSync, copyFileSync } from 'node:fs';
+import os from 'node:os';
+import path, { dirname, join } from 'node:path';
+import fs, { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, lstatSync, unlinkSync, renameSync, rmSync, copyFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 import { randomUUID, randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
 import nodemailer from 'nodemailer';
 import http from 'node:http';
 import https from 'node:https';
 import dns from 'node:dns';
+let WebSocketServer = null;
+let GoogleGenAI = null;
+try {
+  const _ws = await import('ws');
+  WebSocketServer = _ws.WebSocketServer;
+} catch (_) {}
+try {
+  const _genai = await import('@google/genai');
+  GoogleGenAI = _genai.GoogleGenAI;
+} catch (_) {}
 try { dns.setDefaultResultOrder('ipv4first'); } catch {}
-import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, saveColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, getCustomerByEmail, saveCustomer, syncCustomersFromOrders, initStorageProtection, getPersistentDataDirectory, getAuditLogs, addAuditLog, getStaffActivity, updateStaffPresence, recordStaffKpiAction, getStaffMonitoringData, getBangladeshDate, getWaChatContacts, upsertWaChatContact, syncWhatsAppSessionContacts, getWaMessages, getWaInboxThreads, pruneWhatsAppInboxMedia, getWaAutoLogs, recordWaAutoLog, canSendAutoWa, markStaffNotificationsRead, getCalls, saveCall, deleteCall, getCallStats, getTelephonySettings, saveTelephonySettings, cleanupOldRecordings } from './store.js';
+import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, saveColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, getCustomerByEmail, saveCustomer, syncCustomersFromOrders, initStorageProtection, getPersistentDataDirectory, getAuditLogs, addAuditLog, getStaffActivity, updateStaffPresence, recordStaffKpiAction, getStaffMonitoringData, getBangladeshDate, getWaChatContacts, upsertWaChatContact, syncWhatsAppSessionContacts, getWaMessages, getWaInboxThreads, pruneWhatsAppInboxMedia, getWaAutoLogs, recordWaAutoLog, canSendAutoWa, getStaffNotifications, addStaffNotification, markStaffNotificationsRead, autoAssignOnlineStaff, getCalls, saveCall, deleteCall, getCallStats, getTelephonySettings, saveTelephonySettings, getCallTransfers, saveCallTransfer, updateCallTransfer, cleanupOldRecordings } from './store.js';
 import { getWhatsAppSettings, saveWhatsAppSettings, sendWhatsAppNotification, formatWhatsAppMessage, isNightConfirmationTime } from './whatsapp_engine.js';
 import { startWhatsAppSocket, getWhatsAppLiveStatus, requestPairingCode, sendBaileysMessage, waitForQrCode, clearWhatsAppSession, getWhatsAppProfilePicture, resolveWhatsAppPhoneNumber } from './whatsapp_baileys.js';
 import { getWaAiConfig, saveWaAiConfig, getWaAiFaqs, addWaAiFaq, deleteWaAiFaq } from './whatsapp_ai_agent.js';
@@ -29,7 +42,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()');
   next();
 });
 
@@ -1468,6 +1481,15 @@ function requirePerm(permKey) {
     return res.status(403).json({ error: 'Permission denied by Owner' });
   };
 }
+function canUseSaika(admin) {
+  if (!admin) return false;
+  if (admin.role === 'owner') return true;
+  return !!(admin.canAccessSaika || admin.permissions?.canAccessSaika);
+}
+const requireSaikaPermission = (req, res, next) => {
+  if (canUseSaika(req.admin)) return next();
+  return res.status(403).json({ ok: false, error: 'সাইকা এআই ব্যবহারের জন্য স্টোর ওনারের পারমিশন আবশ্যক।' });
+};
 
 function renderSecurityOtpHtml({ storeName, title, subtitle, otp, userName, userEmail, expiresMin = 10, note }) {
   const cleanOtp = String(otp || '').trim();
@@ -7274,30 +7296,2285 @@ app.post('/api/admin/ai-copilot/key', adminAuth, requireRole('owner', 'manager')
   }
 });
 
-// SAIKA AI COPILOT & VOICE ASSISTANT ENDPOINT
-// ==========================================
-app.post('/api/admin/ai-copilot/ask', adminAuth, async (req, res) => {
+
+const callCenterPresence = new Map();
+let recentIncomingVisitorRing = null;
+
+
+// ---- Smart AI Calling System (Website Voice Agent, Auto-Confirm, Marketing & Tool Execution) ----
+const activeAiCalls = new Map();
+const aiCallWsTickets = new Map();
+const activeAiCallClients = new Map();
+const publicAiCallLimits = new Map();
+
+app.post('/api/ai-call/ws-ticket', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  const ticket = randomBytes(24).toString('hex');
+  aiCallWsTickets.set(ticket, { expiresAt: Date.now() + 120_000, username: req.admin?.username || '' });
+  for (const [key, value] of aiCallWsTickets) {
+    if (value.expiresAt < Date.now()) aiCallWsTickets.delete(key);
+  }
+  res.json({ ticket });
+});
+const pendingAgentTransfers = [];
+
+function getHelpCenterAvailability() {
+  const now = Date.now();
+  const available = [];
+  const busy = [];
+  const dnd = [];
+  for (const p of callCenterPresence.values()) {
+    if (!p || (now - p.updatedAt) >= 45000) continue;
+    if (p.status === 'available') available.push(p);
+    else if (p.status === 'on_call') busy.push(p);
+    else if (p.status === 'dnd') dnd.push(p);
+  }
+  return { available, busy, dnd };
+}
+
+function isQuietHoursBangladesh(aiCfg) {
+  if (!aiCfg?.quietHoursEnabled) return false;
   try {
-    const admin = req.admin || {};
-    const isOwner = admin.role === 'owner';
-    if (!isOwner && !admin.canAccessSaika) {
-      return res.status(403).json({ ok: false, error: 'Permission denied: Saika AI access required' });
+    const hourStr = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', hour12: false }).format(new Date());
+    const h = parseInt(hourStr, 10);
+    const start = Number.isFinite(Number(aiCfg.quietStartHour)) ? Number(aiCfg.quietStartHour) : 22;
+    const end = Number.isFinite(Number(aiCfg.quietEndHour)) ? Number(aiCfg.quietEndHour) : 9;
+    if (start > end) return h >= start || h < end;
+    return h >= start && h < end;
+  } catch (_) {
+    return false;
+  }
+}
+
+function getAiDeviceMemPath() {
+  return join(getPersistentDataDirectory(), 'ai_device_memory.json');
+}
+
+function readAiDeviceMemory() {
+  try {
+    const p = getAiDeviceMemPath();
+    if (existsSync(p)) return JSON.parse(readFileSync(p, 'utf8')) || { devices: {} };
+  } catch (_) {}
+  return { devices: {} };
+}
+
+function lookupAiDeviceMemory(deviceId, fingerprint) {
+  const store = readAiDeviceMemory();
+  const keys = [];
+  if (fingerprint) keys.push(`fp:${fingerprint}`);
+  if (deviceId) keys.push(`dev:${deviceId}`);
+  for (const k of keys) {
+    if (store.devices?.[k]) return store.devices[k];
+  }
+  return null;
+}
+
+function saveAiDeviceMemory(deviceId, fingerprint, patch) {
+  if (!deviceId && !fingerprint) return;
+  try {
+    const store = readAiDeviceMemory();
+    if (!store.devices) store.devices = {};
+    const existing = lookupAiDeviceMemory(deviceId, fingerprint) || {};
+    const merged = {
+      name: (patch?.name && patch.name !== 'Customer') ? patch.name : (existing.name || ''),
+      phone: (patch?.phone && patch.phone !== 'Website Visitor') ? patch.phone : (existing.phone || ''),
+      address: patch?.address || existing.address || '',
+      lastProduct: patch?.lastProduct || existing.lastProduct || '',
+      lastOrderId: patch?.lastOrderId || existing.lastOrderId || null,
+      lastCallSummary: patch?.lastCallSummary || existing.lastCallSummary || '',
+      callCount: Number(existing.callCount || 0) + (patch?.incrementCall ? 1 : 0),
+      updatedAt: new Date().toISOString()
+    };
+    if (fingerprint) store.devices[`fp:${fingerprint}`] = merged;
+    if (deviceId) store.devices[`dev:${deviceId}`] = merged;
+    writeFileSync(getAiDeviceMemPath(), JSON.stringify(store, null, 2));
+  } catch (_) {}
+}
+
+function buildAiCustomerContext(rawPhone, rawOrderId, deviceId, fingerprint) {
+  const knownDevice = lookupAiDeviceMemory(deviceId, fingerprint);
+  const effectivePhone = rawPhone || knownDevice?.phone || '';
+  const allOrders = getOrders();
+  const cleanPhone = String(effectivePhone || '').replace(/\D/g, '').replace(/^88/, '');
+  const matchedOrders = cleanPhone.length >= 6
+    ? allOrders.filter((o) => {
+        const op = String(o.customer?.phone || '').replace(/\D/g, '').replace(/^88/, '');
+        return op && (op.endsWith(cleanPhone.slice(-8)) || cleanPhone.endsWith(op.slice(-8)));
+      })
+    : [];
+  const targetOrder = rawOrderId
+    ? allOrders.find((o) => String(o.id) === String(rawOrderId)) || matchedOrders[0] || null
+    : matchedOrders[0] || null;
+  const cancelledCount = matchedOrders.filter((o) => o.status === 'cancelled' || o.status === 'return').length;
+  const deliveredCount = matchedOrders.filter((o) => o.status === 'delivered').length;
+  let customerTier = 'New Customer';
+  if (cancelledCount >= 2 && deliveredCount === 0) customerTier = 'High Risk (Multiple Cancels/Returns)';
+  else if (deliveredCount >= 2 || matchedOrders.length >= 3) customerTier = 'VIP / Repeat Customer';
+  else if (knownDevice?.phone || matchedOrders.length >= 1) customerTier = 'Returning Customer';
+  return {
+    targetOrder,
+    totalOrders: matchedOrders.length,
+    cancelledCount,
+    deliveredCount,
+    customerTier,
+    knownDevice
+  };
+}
+
+function stripHtmlText(raw, maxLen = 400) {
+  return String(raw || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, maxLen);
+}
+
+function getAiProductCatalogSummary() {
+  try {
+    const cat = getCatalog();
+    const products = (Array.isArray(cat?.products) ? cat.products : []).filter(
+      (p) => p && !p.deleted && p.status !== 'draft' && p.status !== 'archived'
+    );
+    const st = getSettings() || {};
+    const defInside = st.deliveryInside;
+    const defOutside = st.deliveryOutside;
+    return products.map((p) => {
+      const vars = Array.isArray(p.variations)
+        ? p.variations.map((v) => ({
+            id: v.id || '',
+            name: v.name || v.label || v.title || v.size || '',
+            price: v.price ?? p.price,
+            stock: p.soldOut || v.soldOut ? 'Out of Stock' : (v.stock ?? p.stock ?? 'In Stock'),
+            soldOut: p.soldOut === true || v.soldOut === true
+          })).filter((v) => v.name)
+        : [];
+      const fullDesc = stripHtmlText([p.shortDesc, p.desc, p.longDesc].filter(Boolean).join(' '), 450);
+      return {
+        id: p.id,
+        slug: p.slug || '',
+        name: p.name || '',
+        price: p.price,
+        compareAt: p.compareAt || null,
+        stock: p.soldOut ? 'Out of Stock' : (p.stock ?? 'In Stock'),
+        category: p.category || '',
+        subCategory: p.subCategory || '',
+        size: p.size || '',
+        weight: p.weight || '',
+        colors: Array.isArray(p.colors) ? p.colors : [],
+        variations: vars,
+        deliveryInside: p.customDeliveryInside ?? defInside,
+        deliveryOutside: p.customDeliveryOutside ?? defOutside,
+        keywords: String(p.seoKeywords || ''),
+        shortDesc: fullDesc
+      };
+    });
+  } catch (_) {
+    return [];
+  }
+}
+
+function getAiCompactProductDirectory() {
+  return getAiProductCatalogSummary()
+    .map((p) => {
+      const delTxt = (Number(p.deliveryInside) === 0 && Number(p.deliveryOutside) === 0)
+        ? 'Free Delivery'
+        : `Del: Dhaka ${p.deliveryInside}৳ / Outside ${p.deliveryOutside}৳`;
+      const varTxt = p.variations?.length ? ` [Options: ${p.variations.map((v) => `${v.name}:${v.price}৳`).join(', ')}]` : '';
+      return `${p.name} (${p.price}৳${p.compareAt ? `, MRP ${p.compareAt}৳` : ''}, ${delTxt}, ${p.category || 'General'}, ${p.stock})${varTxt}`;
+    })
+    .join('\n');
+}
+
+function getLandingProductSummary(landing) {
+  if (!landing) return null;
+  if (landing.mode === 'html' && landing.customHtml) {
+    const raw = String(landing.customHtml || '');
+    const h1Match = raw.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+    const cleanH1 = h1Match ? stripHtmlText(h1Match[1].replace(/\{[^}]*\}/g, ' '), 120) : '';
+    const isOldLovelockClone = /লাভ\s*লক|lovelock|কনডম/i.test(String(landing.productTitle || '') + ' ' + String(landing.headline || '')) && !/lovelock/i.test(String(landing.slug || ''));
+    const realTitle = (!isOldLovelockClone && (landing.productTitle || landing.title)) || landing.title || cleanH1 || landing.slug;
+    const comboAndOfferLines = raw
+      .split(/\r?\n/)
+      .filter((ln) => /combo|কম্বো|পিস|পিছ|ছাড়|ছাড়|ফ্রি|ডেলিভারি|free|delivery|formVal|label:|totalQty|comboDiscount/i.test(ln))
+      .map((ln) => ln.replace(/<[^>]+>/g, ' ').replace(/https?:\/\/[^\s'"`)]+/gi, '').replace(/[{}()[\];=>`"'*]/g, ' ').replace(/\s+/g, ' ').trim())
+      .filter((ln) => ln.length >= 6 && ln.length <= 160)
+      .slice(0, 18)
+      .join(' | ');
+    const textExcerpt = (raw
+      .replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/https?:\/\/[^\s'"`)]+/gi, ' ')
+      .replace(/className\s*=\s*["'`][^"'`]*["'`]/gi, ' ')
+      .replace(/style\s*=\s*\{\{[\s\S]*?\}\}/gi, ' ')
+      .replace(/import\s+[\s\S]*?from\s+['"][^'"]+['"];?/g, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/[{}()[\];=>`"'*]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 1000) + (comboAndOfferLines ? `\nCOMBO & COLOR OFFERS: ${comboAndOfferLines}` : '')).trim();
+    const offerPriceMatch = raw.match(/(?:অফার\s*মূল্য|আজকের\s*(?:অফার\s*)?মূল্য|offer\s*price|selling\s*price|price)[^\d৳]{0,30}৳?\s*([1-9]\d{1,4})/i);
+    const nonDiscountMatch = raw.replace(/৳\s*\d+\s*(?:ছাড়|ছাড়|off|discount)/gi, '').match(/৳\s*([1-9]\d{1,4})|([1-9]\d{1,4})\s*৳/);
+    const detectedPrice = Number(
+      (!isOldLovelockClone && landing.price > 0 ? landing.price : 0) ||
+      (offerPriceMatch && offerPriceMatch[1]) ||
+      (nonDiscountMatch && (nonDiscountMatch[1] || nonDiscountMatch[2])) ||
+      0
+    );
+    const deliveryVerified = landing.deliveryInside != null && landing.deliveryOutside != null && Number.isFinite(Number(landing.deliveryInside)) && Number.isFinite(Number(landing.deliveryOutside));
+    const delIn = deliveryVerified ? Number(landing.deliveryInside) : null;
+    const delOut = deliveryVerified ? Number(landing.deliveryOutside) : null;
+    const rawPkgs = (!isOldLovelockClone && Array.isArray(landing.packages) && landing.packages.length > 0)
+      ? landing.packages.map((pk) => ({
+          id: pk.id || '',
+          name: pk.name || pk.title || realTitle,
+          price: Number(pk.price || detectedPrice || 0),
+          compareAt: pk.compareAt || null,
+          priceVerified: Number(pk.price) > 0 || (landing.packages.length === 1 && Number(landing.price) > 0),
+          deliveryVerified: pk.freeDelivery === true || deliveryVerified,
+          freeDelivery: pk.freeDelivery === true || (deliveryVerified && delIn === 0 && delOut === 0),
+          deliveryInside: pk.freeDelivery ? 0 : delIn,
+          deliveryOutside: pk.freeDelivery ? 0 : delOut,
+          badge: pk.badge || ''
+        }))
+      : [{ id: 'main', name: realTitle, price: detectedPrice, priceVerified: Number(landing.price) > 0, deliveryVerified, compareAt: null, freeDelivery: deliveryVerified && delIn === 0 && delOut === 0, deliveryInside: delIn, deliveryOutside: delOut, badge: '' }];
+    return {
+      slug: landing.slug,
+      title: realTitle,
+      subtitle: '',
+      deliveryInside: delIn,
+      deliveryOutside: delOut,
+      deliveryVerified,
+      packages: rawPkgs
+    };
+  }
+  const deliveryVerified = landing.deliveryInside != null && landing.deliveryOutside != null && Number.isFinite(Number(landing.deliveryInside)) && Number.isFinite(Number(landing.deliveryOutside));
+  const delIn = deliveryVerified ? Number(landing.deliveryInside) : null;
+  const delOut = deliveryVerified ? Number(landing.deliveryOutside) : null;
+  const pkgs = Array.isArray(landing.packages)
+    ? landing.packages.map((pk) => ({
+        id: pk.id || '',
+        name: pk.name || pk.title || landing.productTitle || landing.title,
+        price: Number(pk.price || 0),
+        priceVerified: Number(pk.price) > 0,
+        deliveryVerified: pk.freeDelivery === true || deliveryVerified,
+        compareAt: pk.compareAt || null,
+        freeDelivery: pk.freeDelivery === true || (deliveryVerified && delIn === 0 && delOut === 0),
+        deliveryInside: pk.freeDelivery ? 0 : delIn,
+        deliveryOutside: pk.freeDelivery ? 0 : delOut,
+        badge: pk.badge || ''
+      }))
+    : [];
+  return {
+    slug: landing.slug,
+    title: landing.productTitle || landing.title || landing.headline,
+    subtitle: stripHtmlText([landing.headline, landing.subtitle, landing.productTagline, landing.badgeGuarantee].filter(Boolean).join(' '), 500),
+    deliveryInside: delIn,
+    deliveryOutside: delOut,
+    deliveryVerified,
+    packages: pkgs
+  };
+}
+
+function getAllLandingPagesDirectory() {
+  try {
+    const list = getLandings() || [];
+    if (!list.length) return 'বর্তমানে কোনো বিশেষ ল্যান্ডিং পেজ কনফিগার করা নেই।';
+    return list.map((l, idx) => {
+      const slug = l.slug || l.id || `landing-${idx + 1}`;
+      const title = l.title || l.productTitle || l.headline || slug;
+      const subtitle = l.subtitle || l.productTagline || '';
+      const headline = l.headline || '';
+      const delInside = l.deliveryInside != null ? `${l.deliveryInside}৳` : 'স্ট্যান্ডার্ড';
+      const delOutside = l.deliveryOutside != null ? `${l.deliveryOutside}৳` : 'স্ট্যান্ডার্ড';
+      const freeDel = l.freeDelivery ? 'ফ্রি ডেলিভারি (0৳)' : `ঢাকা ${delInside}, ঢাকার বাইরে ${delOutside}`;
+      const guarantee = l.badgeGuarantee || l.guaranteeText || l.badgeTop || '';
+
+      let pkgsText = 'প্যাকেজসমূহ: ';
+      if (Array.isArray(l.packages) && l.packages.length > 0) {
+        pkgsText += l.packages.map((p) => {
+          const pName = p.title || p.name || 'প্যাকেজ';
+          const pPrice = p.price ? `${p.price}৳` : 'দাম নির্ধারিত নেই';
+          const pOrig = p.originalPrice ? ` (পূর্বমূল্য ${p.originalPrice}৳)` : '';
+          return `[${pName}: ${pPrice}${pOrig}]`;
+        }).join(', ');
+      } else if (l.offerPriceText || l.price) {
+        pkgsText += `অফার মূল্য: ${l.offerPriceText || `${l.price}৳`}`;
+      } else {
+        pkgsText += 'একক রেগুলার প্যাকেজ';
+      }
+
+      let benefitsText = '';
+      if (Array.isArray(l.benefits) && l.benefits.length > 0) {
+        benefitsText = `\n  - বৈশিষ্ট্য ও সুবিধা: ${l.benefits.slice(0, 5).join('; ')}`;
+      }
+
+      return `• [ল্যান্ডিং পেজ: ${title}] (Slug: /${slug})\n  - হেডলাইন: ${headline || subtitle}\n  - ${pkgsText}\n  - ডেলিভারি চার্জ: ${freeDel}${guarantee ? `\n  - গ্যারান্টি: ${guarantee}` : ''}${benefitsText}`;
+    }).join('\n\n');
+  } catch (err) {
+    return 'ল্যান্ডিং পেজ তথ্য লোড করার সময় ত্রুটি হয়েছে।';
+  }
+}
+
+function normalizeAiMatch(value) {
+  return String(value || '').normalize('NFKC').toLocaleLowerCase().replace(/[()\[\]{}.,:;–—-]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function knownStockCount(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, value);
+  const raw = String(value ?? '').trim();
+  if (!raw || /in stock|available|∞/i.test(raw)) return null;
+  if (/out of stock|sold out|স্টক নেই|শেষ/i.test(raw)) return 0;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : null;
+}
+
+function executeAiCallTool(name, args, session) {
+  const actions = [];
+  if (name === 'get_product_details') {
+    const q = String(args?.query || '').toLowerCase().trim();
+    if (session?.landing) {
+      const ls = getLandingProductSummary(session.landing);
+      actions.push({ tool: 'get_product_details', query: q, scopedLanding: ls.slug, count: ls.packages.length });
+      const safeLanding = {
+        slug: ls.slug,
+        title: ls.title,
+        packages: ls.packages.map((pk) => ({
+          id: pk.id,
+          name: pk.name,
+          price: pk.priceVerified ? pk.price : null,
+          priceVerified: pk.priceVerified === true,
+          freeDelivery: pk.freeDelivery === true,
+          deliveryInside: pk.deliveryVerified ? pk.deliveryInside : null,
+          deliveryOutside: pk.deliveryVerified ? pk.deliveryOutside : null,
+          deliveryVerified: pk.deliveryVerified === true
+        }))
+      };
+      return { result: { scopedToLandingPage: true, landingProduct: safeLanding }, actions };
+    }
+    const products = getAiProductCatalogSummary();
+    if (!q || q === 'all') {
+      actions.push({ tool: 'get_product_details', query: q, count: products.length });
+      return { result: { totalCatalogCount: products.length, products: [], requiresClarification: true, message: 'Ask for the exact product name or ID before quoting a product.' }, actions };
+    }
+    const exactMatches = products.filter((p) => [p.id, p.slug, p.name].some((value) => normalizeAiMatch(value) === normalizeAiMatch(q)));
+    if (exactMatches.length === 1) {
+      actions.push({ tool: 'get_product_details', query: q, count: 1, exact: true });
+      return { result: { products: exactMatches, exactMatch: true, requiresClarification: false }, actions };
+    }
+    const queryTerms = normalizeAiMatch(q).split(' ').filter((term) => term.length > 1);
+    const candidates = products.filter((p) => {
+      const hay = normalizeAiMatch(`${p.name} ${p.slug} ${p.category} ${p.subCategory} ${p.shortDesc} ${p.keywords} ${p.size} ${(p.variations || []).map((v) => v.name).join(' ')}`);
+      return hay.includes(normalizeAiMatch(q)) || (queryTerms.length > 0 && queryTerms.every((term) => hay.includes(term)));
+    }).slice(0, 8);
+    actions.push({ tool: 'get_product_details', query: q, count: candidates.length, exact: false });
+    return { result: { products: candidates, exactMatch: false, requiresClarification: true, message: 'Do not quote or select a product from a partial match. Ask the customer to identify the exact product.' }, actions };
+  }
+  if (name === 'update_order_address') {
+    const oid = String(args?.orderId || session.orderId || '').trim();
+    const newAddr = String(args?.newAddress || '').trim();
+    if (!oid || !newAddr) return { result: { ok: false, error: 'Missing orderId or newAddress' }, actions };
+    if (session?.mode !== 'outbound_confirm' || !session?.targetOrder || oid !== String(session.targetOrder.id)) {
+      return { result: { ok: false, error: 'Address changes are only allowed for this call’s linked order.' }, actions };
+    }
+    const existing = getOrders().find((o) => String(o.id) === oid);
+    if (!existing) return { result: { ok: false, error: 'Order not found' }, actions };
+    if (existing.status !== 'pending') return { result: { ok: false, error: 'Only pending orders can request an address correction.' }, actions };
+    addStaffNotification({
+      type: 'ai_call_followup', toUsername: 'all', fromUsername: 'ai-agent', fromName: 'Saika AI',
+      phone: existing.customer?.phone || session.customerPhone || '', customerName: existing.customer?.name || session.customerName,
+      orderId: oid, message: `অর্ডার #${oid}-এর ঠিকানা পরিবর্তনের অনুরোধ এসেছে। AI প্রস্তাবিত ঠিকানা: ${newAddr}`
+    });
+    actions.push({ tool: 'update_order_address', orderId: oid, reviewRequired: true });
+    return { result: { ok: false, reviewRequired: true, orderId: oid, message: 'The proposed address was sent to staff for verification. Do not say that the order address has already changed.' }, actions };
+  }
+  if (name === 'update_order_status') {
+    const oid = String(args?.orderId || session.orderId || '').trim();
+    const st = ['confirmed', 'hold', 'cancelled'].includes(args?.status) ? args.status : '';
+    if (!oid || !st) return { result: { ok: false, error: 'Invalid orderId or status' }, actions };
+    if (session?.mode !== 'outbound_confirm' || !session?.targetOrder || oid !== String(session.targetOrder.id)) {
+      return { result: { ok: false, error: 'Order status changes are only allowed for this call’s linked order.' }, actions };
+    }
+    const existing = getOrders().find((o) => String(o.id) === oid);
+    if (!existing) return { result: { ok: false, error: 'Order not found' }, actions };
+    if (existing.status !== 'pending') return { result: { ok: false, error: `Order is ${existing.status}; status was not changed.` }, actions };
+    const latestCustomerText = [...(session.history || [])].reverse().find((turn) => turn.role === 'user')?.text || '';
+    const cleanCustomerText = normalizeAiMatch(latestCustomerText);
+    const hasNegative = /\b(?:no|not|never|dont|don['’]?t|doesn['’]?t)\b|do\s+not|(?:^|\s)(?:না|নয়|নয়)(?:$|\s)|করবেন?\s+না|চাই\s+না|বাতিল\s+করবেন\s+না|cancel\s+করবেন\s+না/i.test(cleanCustomerText);
+    const explicitMatch = st === 'confirmed'
+      ? /(?:হ্যাঁ|জি|জ্বি|ঠিক আছে).{0,20}(?:কনফার্ম|নিশ্চিত|পাঠান|অর্ডার)|আমি.{0,15}অর্ডার(?:টা|টি)?\s*(?:কনফার্ম|নিশ্চিত)\s*(?:করছি|করলাম)?|অর্ডার(?:টা|টি)?\s*(?:কনফার্ম করুন|নিশ্চিত করুন)|\byes.{0,15}(?:confirm|ship|place)\b|\bi\s+confirm\s+(?:the\s+)?order\b|\bplease\s+(?:confirm|ship)\s+(?:my\s+)?order\b/i.test(cleanCustomerText)
+      : st === 'cancelled'
+      ? /অর্ডার(?:টা|টি)?\s*বাতিল\s*(?:করুন|করতে চাই|করুন দয়া করে)|বাতিল\s*করুন|\b(?:please\s+)?cancel\s+(?:my\s+)?order\b|\bi\s+want\s+to\s+cancel\b/i.test(cleanCustomerText)
+      : /অর্ডার.{0,20}পরে|পরে.{0,20}অর্ডার|hold.{0,20}order|order.{0,20}hold/i.test(cleanCustomerText);
+    if (!explicitMatch || hasNegative) {
+      return { result: { ok: false, error: 'The customer’s latest spoken response does not clearly authorize this status change.' }, actions };
+    }
+    if (st === 'confirmed') {
+      const catalogProducts = Array.isArray(getCatalog()?.products) ? getCatalog().products : [];
+      for (const item of existing.items || []) {
+        const itemName = normalizeAiMatch(item.name);
+        const product = catalogProducts.find((p) => String(p.id) === String(item.id)) ||
+          catalogProducts.find((p) => normalizeAiMatch(p.name) === itemName || itemName.startsWith(normalizeAiMatch(p.name) + ' '));
+        if (!product) return { result: { ok: false, error: 'Order item could not be matched to the live catalog. Staff must verify it before confirmation.' }, actions };
+        const variation = (product.variations || []).find((v) => {
+          const variationName = normalizeAiMatch(v.name || v.label || v.title || v.size);
+          return variationName && itemName.endsWith(variationName);
+        });
+        if (Array.isArray(product.variations) && product.variations.length && !variation) {
+          return { result: { ok: false, error: 'Order variation could not be matched to the live catalog. Staff must verify before confirmation.' }, actions };
+        }
+        const stock = knownStockCount(variation?.stock ?? product.stock);
+        if (product.soldOut === true || variation?.soldOut === true || stock === 0 || (stock !== null && stock < Number(item.qty || 1))) {
+          return { result: { ok: false, error: 'Current stock is insufficient. The order status remains pending for staff review.' }, actions };
+        }
+      }
+    }
+    const history = Array.isArray(existing.history) ? [...existing.history] : [];
+    history.push({ at: new Date().toISOString(), by: 'AI Voice Agent', action: `Status -> ${st}${args?.note ? ` (${args.note})` : ''}` });
+    updateOrder(oid, { status: st, history });
+    session.finalOutcome = st;
+    actions.push({ tool: 'update_order_status', orderId: oid, status: st });
+    return { result: { ok: true, orderId: oid, status: st }, actions };
+  }
+  if (name === 'create_new_order') {
+    if (!['website_inbound', 'marketing'].includes(session?.mode)) {
+      return { result: { ok: false, error: 'Order creation is disabled in this call mode.' }, actions };
+    }
+    if (session.aiCreatedOrderId) {
+      const prior = getOrders().find((o) => String(o.id) === String(session.aiCreatedOrderId));
+      if (prior) return { result: { ok: true, status: 'pending', orderId: prior.id, duplicatePrevented: true, message: 'This call already created a pending order. Do not create another order.' }, actions };
+    }
+    const cName = String(args?.customerName || session.customerName || 'Voice Customer').trim();
+    const cPhone = cleanBDPhone(args?.customerPhone || session.customerPhone || '');
+    const cAddr = String(args?.address || '').trim();
+    const rawItems = Array.isArray(args?.items) && args.items.length > 0
+      ? args.items
+      : (args?.productName ? [{ productName: args.productName, variationName: args.variationName, quantity: args.quantity }] : []);
+    if (cName.length < 2 || !/^01[3-9]\d{8}$/.test(cPhone) || cAddr.length < 8 || rawItems.length === 0 || rawItems.length > 5) {
+      return { result: { ok: false, error: 'Need a valid Bangladesh mobile number, full name, full address, and 1–5 clearly identified products.' }, actions };
+    }
+    const latestCustomerText = [...(session.history || [])].reverse().find((turn) => turn.role === 'user')?.text || '';
+    const customerTranscript = (session.history || []).filter((turn) => turn.role === 'user').map((turn) => turn.text).join(' ');
+    const normalizedCustomerTranscript = normalizeAiMatch(customerTranscript);
+    const priorAssistantText = [...(session.history || [])].reverse().find((turn) => turn.role === 'model' || turn.role === 'assistant')?.text || '';
+    const explicitContextualYes = /^(?:হ্যাঁ|জি|জ্বি|ঠিক আছে|yes|okay|ok)[.!\s।]*$/i.test(latestCustomerText.trim()) && /অর্ডার করতে চান|অর্ডার.*নিশ্চিত/i.test(priorAssistantText);
+    const explicitOrderIntent = explicitContextualYes || /অর্ডার\s*(?:করতে|দিতে|করব|করবো|দিচ্ছি|নিশ্চিত|দেন|দিন)|(?:কিনতে|নিতে)\s*চাই|(?:নেব|নিব)(?:ো)?|কিনব|(?:এটা|এটি|এইটা|এই পণ্য)\s*(?:নেব|নিব|কিনব)(?:ো)?|buy\s+now|place\s+(?:an?\s+)?order|i\s+want\s+to\s+(?:buy|order)|i(?:'ll| will)\s+take\s+it/i.test(customerTranscript);
+    const deniesOrderIntent = /অর্ডার\s*(?:করব\s*না|করবো\s*না|দেব\s*না|দিতে\s*চাই\s*না)|কিনব\s*না|(?:নেব|নিব)(?:ো)?\s*না|do\s+not\s+(?:order|buy)|don['’]?t\s+(?:order|buy)|not\s+ordering/i.test(customerTranscript);
+    if (!explicitOrderIntent || deniesOrderIntent) {
+      return { result: { ok: false, error: 'The customer has not clearly requested an order. Ask whether they want to place this order, and create it only after a clear yes.' }, actions };
+    }
+    if (!normalizedCustomerTranscript.includes(normalizeAiMatch(cName)) || !normalizedCustomerTranscript.includes(normalizeAiMatch(cAddr))) {
+      return { result: { ok: false, error: 'The name or full address is not clearly present in the customer transcript. Ask the customer to repeat and confirm these details.' }, actions };
+    }
+    const transcriptDigits = cleanBDPhone(customerTranscript);
+    if (!transcriptDigits.includes(cPhone)) {
+      return { result: { ok: false, error: 'The customer’s mobile number was not clearly present in their own transcript. Ask them to repeat it; do not place the order yet.' }, actions };
+    }
+    const saysInsideDhaka = /ঢাকার (?:ভিতরে|ভেতরে|মধ্যে)|inside dhaka|within dhaka/i.test(latestCustomerText);
+    const saysOutsideDhaka = /ঢাকার বাইরে|outside dhaka|outside of dhaka/i.test(latestCustomerText);
+    if (!['inside', 'outside'].includes(args?.area) || saysInsideDhaka === saysOutsideDhaka || (args.area === 'inside') !== saysInsideDhaka) {
+      return { result: { ok: false, error: 'Ask the customer to explicitly confirm whether delivery is inside Dhaka or outside Dhaka. Do not infer the area from the address.' }, actions };
+    }
+    const area = args.area;
+
+    const orderItems = [];
+    let itemsTotal = 0;
+    let maxDelivery = 0;
+    let hasUnknownStock = false;
+    let orderSource = 'ai_voice_call';
+    const ls = session?.landing ? getLandingProductSummary(session.landing) : null;
+    if (ls) orderSource = `landing:${ls.slug}`;
+    const products = ls ? [] : getAiProductCatalogSummary();
+
+    for (const ri of rawItems) {
+      const pName = String(ri?.productName || '').trim();
+      const vName = String(ri?.variationName || '').trim();
+      const qty = Number(ri?.quantity);
+      if (!pName || !Number.isInteger(qty) || qty < 1 || qty > 20) {
+        return { result: { ok: false, error: 'Each item needs an exact product name and a whole quantity from 1 to 20.' }, actions };
+      }
+
+      let itemId = 'voice-item';
+      let itemName = pName;
+      let unitPrice = 0;
+      let itemDel = 0;
+      let selectedStock = null;
+
+      if (ls) {
+        const packageQuery = normalizeAiMatch(vName || pName);
+        const exactPackages = ls.packages.filter((pk) => normalizeAiMatch(pk.id) === packageQuery || normalizeAiMatch(pk.name) === packageQuery);
+        const productNames = [ls.title, session.landing?.productTitle, session.landing?.title, session.landing?.slug].map(normalizeAiMatch).filter(Boolean);
+        const pkg = exactPackages.length === 1
+          ? exactPackages[0]
+          : (!vName && ls.packages.length === 1 && productNames.includes(normalizeAiMatch(pName)) ? ls.packages[0] : null);
+        if (!pkg) return { result: { ok: false, error: 'Could not uniquely match the requested package. Ask which exact package the customer wants.' }, actions };
+        if (!normalizedCustomerTranscript.includes(normalizeAiMatch(pkg.name)) && !normalizedCustomerTranscript.includes(normalizeAiMatch(ls.title))) {
+          return { result: { ok: false, error: 'The selected product/package name was not clearly present in the customer transcript. Ask them to repeat the exact option.' }, actions };
+        }
+        if (pkg.priceVerified !== true) return { result: { ok: false, error: 'This landing page price is inferred from page markup, not a verified package setting. Do not create an order; ask staff to confirm the current offer.' }, actions };
+        if (pkg.deliveryVerified !== true) return { result: { ok: false, error: 'This landing page delivery charge is not explicitly configured. Do not create an order; ask staff to verify delivery charges.' }, actions };
+        itemId = pkg.id || itemId;
+        itemName = pkg.name;
+        unitPrice = Number(pkg.price);
+        itemDel = area === 'inside' ? Number(pkg.deliveryInside) : Number(pkg.deliveryOutside);
+      } else {
+        const productQuery = normalizeAiMatch(pName);
+        const exactProducts = products.filter((p) => [p.id, p.slug, p.name].some((v) => normalizeAiMatch(v) === productQuery));
+        if (exactProducts.length !== 1) return { result: { ok: false, error: 'Product was not an exact unique catalog match. Ask the customer to choose the exact product name.' }, actions };
+        const matched = exactProducts[0];
+        if (![matched.name, matched.id, matched.slug].some((value) => normalizeAiMatch(value) && normalizedCustomerTranscript.includes(normalizeAiMatch(value)))) {
+          return { result: { ok: false, error: 'The selected product name was not clearly present in the customer transcript. Ask them to repeat the exact product name.' }, actions };
+        }
+        itemId = matched.id || itemId;
+        itemName = matched.name || pName;
+        unitPrice = Number(matched.price);
+        selectedStock = matched.stock;
+        if (Array.isArray(matched.variations) && matched.variations.length) {
+          const variationQuery = normalizeAiMatch(vName);
+          const exactVariations = variationQuery ? matched.variations.filter((v) => normalizeAiMatch(v.id) === variationQuery || normalizeAiMatch(v.name) === variationQuery) : [];
+          if (exactVariations.length !== 1) return { result: { ok: false, error: 'An exact product variation is required. Ask the customer to choose the exact variation.' }, actions };
+          const variation = exactVariations[0];
+          if (!normalizedCustomerTranscript.includes(normalizeAiMatch(variation.name))) {
+            return { result: { ok: false, error: 'The selected variation was not clearly present in the customer transcript. Ask the customer to repeat the exact variation.' }, actions };
+          }
+          unitPrice = Number(variation.price);
+          selectedStock = variation.stock;
+          itemName = `${matched.name} (${variation.name})`;
+        }
+        const rawItemDelivery = area === 'inside' ? matched.deliveryInside : matched.deliveryOutside;
+        itemDel = rawItemDelivery == null || rawItemDelivery === '' ? NaN : Number(rawItemDelivery);
+      }
+      const stockCount = knownStockCount(selectedStock);
+      if (!Number.isFinite(unitPrice) || unitPrice <= 0 || !Number.isFinite(itemDel) || itemDel < 0) {
+        return { result: { ok: false, error: 'The catalog price or delivery fee is missing or invalid. Do not quote or create the order.' }, actions };
+      }
+      if (stockCount === 0 || (stockCount !== null && stockCount < qty)) {
+        return { result: { ok: false, error: 'The selected item is sold out or has insufficient stock.' }, actions };
+      }
+      if (stockCount === null) hasUnknownStock = true;
+      const sub = unitPrice * qty;
+      itemsTotal += sub;
+      if (itemDel > maxDelivery) maxDelivery = itemDel;
+      orderItems.push({ id: itemId, name: itemName, price: unitPrice, qty, subtotal: sub, image: '' });
     }
 
+    const delivery = maxDelivery;
+    const total = itemsTotal + delivery;
+    const nowIso = new Date().toISOString();
+    if (orderItems.length !== rawItems.length) return { result: { ok: false, error: 'One or more items could not be validated; no order was created.' }, actions };
+    // A web voice call does not prove control of the phone number spoken in the call.
+    // Until an OTP verification flow is connected, capture a staff follow-up only;
+    // never create an order from an unverified voice caller.
+    if (session.customerPhoneVerified !== true) {
+      if (!session.voiceOrderReviewNotified) {
+        addStaffNotification({
+          type: 'ai_call_followup', toUsername: 'all', fromUsername: 'ai-agent', fromName: 'Saika AI',
+          phone: cPhone, customerName: cName,
+          message: `ভয়েস কলে অর্ডারের অনুরোধ এসেছে (${orderItems.map((item) => `${item.name} x${item.qty}`).join(', ')}; মোট ৳${total})। ফোন নম্বর OTP দিয়ে যাচাই করা হয়নি—অর্ডার তৈরি করা হয়নি। কল ব্যাক করে নম্বর/অর্ডার যাচাই করুন।`
+        });
+        session.voiceOrderReviewNotified = true;
+      }
+      actions.push({ tool: 'create_new_order', orderCreated: false, verificationRequired: true, followupQueued: true });
+      return { result: { ok: false, orderCreated: false, verificationRequired: true, followupQueued: true, message: 'No order was created. A staff member must verify the caller’s phone number and order request before creating it.' }, actions };
+    }
+    const orderId = 'DOT-' + randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase();
+    const created = addOrder({
+      id: orderId,
+      createdAt: nowIso,
+      status: 'pending',
+      payment: 'cash_on_delivery',
+      source: orderSource,
+      customer: {
+        name: cName,
+        phone: cPhone,
+        phone2: '',
+        address: cAddr,
+        area,
+        district: '',
+        thana: '',
+        note: String(args?.note || '')
+      },
+      adminNote: String(args?.note || 'Created via Saika AI Voice Call'),
+      items: orderItems,
+      itemsTotal,
+      delivery,
+      discount: 0,
+      total,
+      courier: {
+        name: '',
+        consignment: '',
+        phone: '',
+        url: '',
+        accountId: '',
+        liveStatus: '',
+        riderNote: '',
+        attempt: 0,
+        courierUpdatedAt: '',
+        lastSync: ''
+      },
+      history: [{ status: 'pending', at: nowIso, note: `Order created via Saika AI Voice Call (${orderItems.length} item(s))` }]
+    });
+    if (!created?.id) return { result: { ok: false, error: 'Order save failed; do not tell the customer an order was created.' }, actions };
+    session.orderId = created?.id || session.orderId;
+    session.aiCreatedOrderId = created.id;
+    session.finalOutcome = 'completed';
+    actions.push({ tool: 'create_new_order', orderId: created?.id, itemCount: orderItems.length, delivery, total });
+    return { result: { ok: true, status: 'pending', stockVerificationRequired: hasUnknownStock, orderId: created?.id, items: orderItems, itemsTotal, delivery, total, area, message: 'Order request was created as pending; do not call it confirmed. Tell the customer the team must verify the details and stock.' }, actions };
+  }
+  if (name === 'check_order_status') {
+    const query = String(args?.phoneOrOrderId || session.orderId || '').trim();
+    const orders = getOrders();
+    // Public website callers must provide the exact order ID; phone-number lookup exposes other customers' orders.
+    const found = /^DOT-[A-Z0-9]{6,12}$/i.test(query)
+      ? orders.find((o) => String(o.id).toLowerCase() === query.toLowerCase())
+      : null;
+    actions.push({ tool: 'check_order_status', found: !!found });
+    if (!found) return { result: { found: false }, actions };
+    return {
+      result: {
+        found: true,
+        orderId: found.id,
+        status: found.status,
+        items: (found.items || []).map((i) => `${i.name} x${i.qty || 1}`)
+      },
+      actions
+    };
+  }
+  if (name === 'save_customer_lead') {
+    if (!['website_inbound', 'marketing'].includes(session?.mode)) return { result: { ok: false, error: 'Lead saving is disabled in this call mode.' }, actions };
+    const rawName = String(args?.customerName || '').trim();
+    const lPhone = cleanBDPhone(args?.customerPhone || '');
+    const rawAddr = String(args?.address || '').trim();
+    const rawOrder = String(args?.orderId || '').trim();
+    const rawProduct = String(args?.interestedProduct || '').trim();
+    const callerText = (session.history || []).filter((turn) => turn.role === 'user').map((turn) => turn.text).join(' ');
+    const normalizedCallerText = normalizeAiMatch(callerText);
+    if (!/^01[3-9]\d{8}$/.test(lPhone) || !cleanBDPhone(callerText).includes(lPhone)) {
+      return { result: { ok: false, error: 'The phone number is not clearly present in the customer transcript. Ask them to repeat the number; do not save the lead yet.' }, actions };
+    }
+    const lName = rawName && normalizedCallerText.includes(normalizeAiMatch(rawName)) ? rawName : '';
+    if (!lName) return { result: { ok: false, error: 'The customer name was not clearly present in their transcript. Ask them to repeat their name; do not save the lead yet.' }, actions };
+    const lAddr = rawAddr && normalizedCallerText.includes(normalizeAiMatch(rawAddr)) ? rawAddr : '';
+    const lOrder = rawOrder && normalizedCallerText.includes(normalizeAiMatch(rawOrder)) && getOrders().some((o) => String(o.id).toLowerCase() === rawOrder.toLowerCase()) ? rawOrder : '';
+    const lProd = rawProduct && normalizedCallerText.includes(normalizeAiMatch(rawProduct)) ? rawProduct : '';
+    const lNotes = String(args?.notes || '').trim();
+    if (lName) session.customerName = lName;
+    if (lPhone) session.customerPhone = lPhone;
+    if (lAddr) session.customerAddress = lAddr;
+    if (lOrder) session.orderId = lOrder;
+    if (lProd) session.interestedProduct = lProd;
+    if (lNotes) session.leadNotes = lNotes;
+    if (lPhone || lName) {
+      saveAiDeviceMemory(session?.deviceId, session?.fingerprint, {
+        name: lName || session?.customerName,
+        phone: lPhone || session?.customerPhone,
+        address: lAddr || session?.customerAddress,
+        lastProduct: lProd || session?.interestedProduct || session?.landing?.productTitle,
+        lastOrderId: lOrder || session?.orderId
+      });
+    }
+    if (lPhone) {
+      try {
+        saveCustomer({
+          id: `cust_${lPhone}`,
+          name: lName || session.customerName || 'Customer',
+          phone: lPhone,
+          address: lAddr || session.customerAddress || '',
+          lastOrderId: lOrder || session.orderId || null,
+          interestedProduct: lProd || session.interestedProduct || session.landing?.productTitle || '',
+          source: 'saika_ai_call',
+          tags: ['ai_call_lead', session.landingSlug ? `landing:${session.landingSlug}` : 'storefront'],
+          notes: lNotes || `Saika AI Call (${session.mode})`
+        });
+      } catch (_) {}
+    }
+    actions.push({ tool: 'save_customer_lead', customerName: lName, customerPhone: lPhone, address: lAddr, orderId: lOrder });
+    return { result: { ok: true, saved: true, customerName: session.customerName, customerPhone: session.customerPhone }, actions };
+  }
+  if (name === 'end_call') {
+    session.endCallRequested = true;
+    actions.push({ tool: 'end_call', reason: String(args?.reason || 'Customer ended call') });
+    return { result: { ok: true, endingCall: true }, actions };
+  }
+  return { result: { error: 'Unknown tool' }, actions };
+}
+
+function getAiFraudFilePath() {
+  return join(getPersistentDataDirectory(), 'ai_fraud_strikes.json');
+}
+
+function readAiFraudStore() {
+  try {
+    const fp = getAiFraudFilePath();
+    if (existsSync(fp)) return JSON.parse(readFileSync(fp, 'utf8'));
+  } catch (_) {}
+  return { records: {} };
+}
+
+function saveAiFraudStore(store) {
+  try {
+    writeFileSync(getAiFraudFilePath(), JSON.stringify(store, null, 2));
+  } catch (_) {}
+}
+
+function getCallerFraudKeys(ip, deviceId, phone, fingerprint) {
+  const keys = [];
+  const cleanIp = String(ip || '').trim();
+  const cleanDev = String(deviceId || '').trim();
+  const cleanPh = cleanBDPhone(phone || '');
+  const cleanFp = String(fingerprint || '').trim();
+  if (cleanIp && cleanIp !== 'unknown') keys.push(`ip:${cleanIp}`);
+  if (cleanDev) keys.push(`dev:${cleanDev}`);
+  if (cleanPh) keys.push(`ph:${cleanPh}`);
+  if (cleanFp) keys.push(`fp:${cleanFp}`);
+  return keys;
+}
+
+function isAiCallerBlocked(ip, deviceId, phone, fingerprint) {
+  const store = readAiFraudStore();
+  const keys = getCallerFraudKeys(ip, deviceId, phone, fingerprint);
+  for (const k of keys) {
+    const rec = store.records?.[k];
+    if (rec?.adminApproved === true && rec.blocked === true) {
+      return { blocked: true, key: k, strikes: Number(rec.strikes || 3), reason: rec.lastReason || 'Repeated fake order attempts' };
+    }
+  }
+  return { blocked: false, strikes: 0 };
+}
+
+function recordAiFakeStrike(ip, deviceId, phone, reason, fingerprint) {
+  const store = readAiFraudStore();
+  if (!store.records) store.records = {};
+  const keys = getCallerFraudKeys(ip, deviceId, phone, fingerprint);
+  let maxStrike = 0;
+  for (const k of keys) {
+    const prev = store.records[k] || { strikes: 0, blocked: false, reasons: [] };
+    maxStrike = Math.max(maxStrike, Number(prev.strikes || 0));
+  }
+  const nextStrike = maxStrike + 1;
+  const blocked = nextStrike >= 3;
+  const now = new Date().toISOString();
+  for (const k of keys) {
+    const prev = store.records[k] || { strikes: 0, blocked: false, reasons: [] };
+    store.records[k] = {
+      strikes: nextStrike,
+      blocked,
+      lastReason: String(reason || 'Fake order attempt'),
+      updatedAt: now,
+      reasons: [...(Array.isArray(prev.reasons) ? prev.reasons.slice(-4) : []), { at: now, reason: String(reason || '') }]
+    };
+  }
+  saveAiFraudStore(store);
+  return { strikes: nextStrike, blocked };
+}
+
+function buildAiTransferSummaryNote(session, reason) {
+  const prods = [];
+  if (session?.landing?.productTitle || session?.landing?.title) {
+    prods.push(session.landing.productTitle || session.landing.title);
+  }
+  for (const a of session?.actionsExecuted || []) {
+    if (a.tool === 'get_product_details' && a.query) prods.push(a.query);
+    if (a.tool === 'create_new_order' && a.orderId) prods.push(`Order #${String(a.orderId).replace('DOT-', '')}`);
+  }
+  const recentMsgs = (session?.history || []).slice(-4).map((h) => `${h.role === 'user' ? 'কাস্টমার' : 'সাইকা'}: ${String(h.text || '').slice(0, 70)}`).join(' | ');
+  const topicTxt = prods.length ? `প্রোডাক্ট/টপিক: ${[...new Set(prods)].join(', ')}` : `কারণ: ${reason || 'সাহায্য প্রয়োজন'}`;
+  return recentMsgs ? `${topicTxt} — ${recentMsgs}` : topicTxt;
+}
+
+async function executeAiCallToolAsync(name, args, session) {
+  const actions = [];
+
+  if (name === 'send_whatsapp_message') {
+    const rawPh = String(args?.phone || session?.customerPhone || '').trim();
+    const settings = getSettings() || {};
+    const cleanPh = rawPh ? String(rawPh).replace(/\D/g, '') : '';
+    let targetPhone = cleanPh;
+    if (targetPhone.startsWith('01')) targetPhone = '88' + targetPhone;
+    if (!targetPhone) targetPhone = String(settings.whatsapp || settings.phone || '8801878374762').replace(/\D/g, '');
+    const text = String(args?.message || '').trim();
+    if (!text) return { result: { ok: false, error: 'Message text required' }, actions: [] };
+    try {
+      await sendBaileysMessage(targetPhone, text, null, 'saika_voice_dispatch');
+      return {
+        result: { ok: true, sentTo: targetPhone, note: `WhatsApp message successfully delivered to ${targetPhone}` },
+        actions: [{ tool: 'send_whatsapp_message', phone: targetPhone, message: text }]
+      };
+    } catch (e) {
+      return { result: { ok: false, error: e?.message || 'WhatsApp sending failed' }, actions: [] };
+    }
+  }
+
+  if (name === 'send_email_report') {
+    const settings = getSettings() || {};
+    const targetEmail = String(args?.toEmail || args?.recipient || settings.email || 'admin@secrate.shop').trim();
+    const fromEmail = String(args?.fromEmail || args?.sender || '').trim();
+    const fromName = String(args?.fromName || settings.storeName || 'Saika AI').trim();
+    const subject = String(args?.subject || 'সাইকার এক্সিকিউটিভ রিপোর্ট - ' + (settings.storeName || 'Secrate')).trim();
+    const body = String(args?.message || args?.htmlContent || '').trim();
+    try {
+      const htmlContent = `<div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; color: #1e293b; background: #f8fafc; border-radius: 8px;">
+        <h2 style="color: #7c3aed; margin-top: 0;">সাইকা AI পার্সোনাল রিপোর্ট</h2>
+        <div style="background: #ffffff; padding: 16px; border-radius: 6px; border: 1px solid #e2e8f0;">
+          ${body.replace(/\n/g, '<br/>')}
+        </div>
+        <p style="font-size: 12px; color: #64748b; margin-top: 14px;">বসের লাইভ ভয়েস নির্দেশে সাইকা কর্তৃক স্বয়ংক্রিয়ভাবে প্রেরিত।</p>
+      </div>`;
+      const sendResult = await sendEmail(targetEmail, subject, htmlContent, { fromEmail: fromEmail || undefined, fromName });
+      
+      const effectiveSender = fromEmail && fromEmail.includes('@') ? fromEmail : (settings.email || 'support@secrate.shop');
+      const savedEntry = saveEmailEntry({
+        folder: 'sent',
+        from: `"${fromName}" <${effectiveSender}>`,
+        fromName: fromName,
+        fromEmail: effectiveSender,
+        to: targetEmail,
+        toName: targetEmail.split('@')[0],
+        toEmail: targetEmail,
+        subject: subject,
+        bodyHtml: htmlContent,
+        bodyText: body,
+        attachments: [],
+        threadId: 'th_' + Date.now().toString(36),
+        replyToId: null,
+        isRead: true,
+        via: sendResult?.via || 'saika_ai',
+        deliveryStatus: sendResult?.ok ? 'delivered' : 'failed',
+        deliveryError: sendResult?.ok ? null : sendResult?.error,
+      });
+
+      return {
+        result: {
+          ok: true,
+          sentTo: targetEmail,
+          sentFrom: effectiveSender,
+          emailId: savedEntry?.id,
+          note: `Email successfully delivered to ${targetEmail} and saved in Sent mail`
+        },
+        actions: [{ tool: 'send_email_report', email: targetEmail, fromEmail: effectiveSender, subject, emailId: savedEntry?.id }]
+      };
+    } catch (e) {
+      return { result: { ok: false, error: e?.message || 'Email sending failed' }, actions: [] };
+    }
+  }
+
+  if (name === 'search_database_orders') {
+    const q = String(args?.query || '').trim().toLowerCase();
+    const statusFilter = String(args?.status || 'all').trim().toLowerCase();
+    const limit = Math.min(30, Math.max(1, Number(args?.limit) || 10));
+    const allOrders = getOrders() || [];
+    const filtered = allOrders.filter((o) => {
+      if (statusFilter !== 'all' && String(o.status || '').toLowerCase() !== statusFilter) return false;
+      if (!q) return true;
+      const custName = String(o.customer?.name || '').toLowerCase();
+      const custPhone = String(o.customer?.phone || '');
+      const idStr = String(o.id || '').toLowerCase();
+      const itemNames = (o.items || []).map((i) => String(i.name || '').toLowerCase()).join(' ');
+      return custName.includes(q) || custPhone.includes(q) || idStr.includes(q) || itemNames.includes(q);
+    });
+    const list = filtered.slice(0, limit).map((o) => ({
+      id: o.id,
+      customer: o.customer?.name || 'Unknown',
+      phone: o.customer?.phone || '',
+      address: o.customer?.address || '',
+      total: o.total,
+      status: o.status,
+      items: (o.items || []).map((i) => `${i.name} x${i.qty || 1}`).join(', '),
+      createdAt: o.createdAt,
+      courierConsignment: o.courier?.consignment || null,
+      courierStatus: o.courier?.liveStatus || o.courier?.status || null
+    }));
+    return {
+      result: { ok: true, totalMatched: filtered.length, orders: list },
+      actions: [{ tool: 'search_database_orders', query: q, matched: filtered.length }]
+    };
+  }
+
+  if (name === 'update_database_order') {
+    const rawId = String(args?.orderId || '').trim();
+    const status = String(args?.status || '').trim().toLowerCase();
+    const newAddress = String(args?.address || '').trim();
+    const note = String(args?.note || '').trim();
+    const allOrders = getOrders() || [];
+    const target = allOrders.find((o) => o.id === rawId || o.id === 'DOT-' + rawId || 'DOT-' + o.id === rawId);
+    if (!target) return { result: { ok: false, error: `Order ID ${rawId} পাওয়া যায়নি` }, actions: [] };
+    const patch = {};
+    if (status && ['pending', 'confirmed', 'hold', 'processing', 'shipped', 'delivered', 'cancelled'].includes(status)) {
+      patch.status = status;
+    }
+    if (newAddress) {
+      patch.customer = { ...(target.customer || {}), address: newAddress };
+    }
+    if (note) {
+      patch.internalNotes = [...(target.internalNotes || []), { text: `[সাইকা ভয়েস]: ${note}`, date: new Date().toISOString() }];
+    }
+    const updated = updateOrder(target.id, patch);
+    return {
+      result: { ok: true, orderId: target.id, updatedStatus: updated?.status || target.status, address: updated?.customer?.address },
+      actions: [{ tool: 'update_database_order', orderId: target.id, status: updated?.status }]
+    };
+  }
+
+  if (name === 'get_database_product_stock') {
+    const q = String(args?.query || '').trim().toLowerCase();
+    const lowOnly = !!args?.lowStockOnly;
+    const catalog = getCatalog()?.products || [];
+    const filtered = catalog.filter((p) => {
+      if (p.archived || p.status === 'draft') return false;
+      const stock = Number(p.stock) || 0;
+      if (lowOnly && stock > 5) return false;
+      if (!q) return true;
+      return String(p.name || '').toLowerCase().includes(q) || String(p.sku || '').toLowerCase().includes(q);
+    });
+    const list = filtered.slice(0, 15).map((p) => ({
+      id: p.id,
+      name: p.name,
+      price: p.price,
+      stock: Number(p.stock) || 0,
+      isOutOfStock: (Number(p.stock) || 0) <= 0,
+      isLowStock: (Number(p.stock) || 0) > 0 && (Number(p.stock) || 0) <= 5
+    }));
+    return {
+      result: { ok: true, count: filtered.length, products: list },
+      actions: [{ tool: 'get_database_product_stock', count: filtered.length }]
+    };
+  }
+
+  if (name === 'manage_product_stock') {
+    const q = String(args?.productNameOrId || '').trim().toLowerCase();
+    const newStock = args?.stock !== undefined ? Number(args?.stock) : null;
+    const newPrice = args?.price !== undefined ? Number(args?.price) : null;
+    const cat = getCatalog();
+    const prods = cat.products || [];
+    const target = prods.find((p) => String(p.id) === q || String(p.name || '').toLowerCase().includes(q));
+    if (!target) return { result: { ok: false, error: `Product "${q}" পাওয়া যায়নি` }, actions: [] };
+    if (newStock !== null && !isNaN(newStock)) target.stock = Math.max(0, newStock);
+    if (newPrice !== null && !isNaN(newPrice)) target.price = Math.max(0, newPrice);
+    saveCatalog(cat);
+    return {
+      result: { ok: true, productId: target.id, name: target.name, currentStock: target.stock, currentPrice: target.price },
+      actions: [{ tool: 'manage_product_stock', name: target.name, stock: target.stock, price: target.price }]
+    };
+  }
+
+  if (name === 'create_new_product') {
+    const name = String(args?.name || '').trim();
+    const price = Number(args?.price) || 990;
+    const stock = Number(args?.stock) || 50;
+    const category = String(args?.category || 'general').trim();
+    const description = String(args?.description || '').trim();
+    if (!name) return { result: { ok: false, error: 'Product name required' }, actions: [] };
+    const cat = getCatalog();
+    const newProd = {
+      id: 'prod_' + Date.now().toString(36),
+      name,
+      price,
+      stock,
+      category,
+      description,
+      images: [],
+      status: 'active',
+      createdAt: new Date().toISOString()
+    };
+    cat.products = [newProd, ...(cat.products || [])];
+    saveCatalog(cat);
+    return {
+      result: { ok: true, productId: newProd.id, name: newProd.name, price: newProd.price, stock: newProd.stock },
+      actions: [{ tool: 'create_new_product', productId: newProd.id, name: newProd.name }]
+    };
+  }
+
+  if (name === 'search_database_customers') {
+    const q = String(args?.query || '').trim().toLowerCase();
+    const customers = getCustomers() || [];
+    const orders = getOrders() || [];
+    const filtered = customers.filter((c) => {
+      if (!q) return true;
+      return String(c.name || '').toLowerCase().includes(q) || String(c.phone || '').includes(q) || String(c.email || '').toLowerCase().includes(q);
+    });
+    const list = filtered.slice(0, 10).map((c) => {
+      const cleanPh = String(c.phone || '').replace(/\D/g, '').slice(-11);
+      const custOrders = orders.filter((o) => String(o.customer?.phone || '').replace(/\D/g, '').slice(-11) === cleanPh);
+      const totalSpent = custOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+      const delivered = custOrders.filter((o) => o.status === 'delivered').length;
+      const cancelled = custOrders.filter((o) => o.status === 'cancelled').length;
+      return {
+        name: c.name || 'Unknown',
+        phone: c.phone || '',
+        email: c.email || '',
+        totalOrders: custOrders.length,
+        deliveredOrders: delivered,
+        cancelledOrders: cancelled,
+        totalSpentBDT: totalSpent,
+        lastOrder: custOrders[0]?.createdAt || null
+      };
+    });
+    return {
+      result: { ok: true, matchedCount: filtered.length, customers: list },
+      actions: [{ tool: 'search_database_customers', matched: filtered.length }]
+    };
+  }
+
+  if (name === 'direct_staff') {
+    const directive = String(args?.directive || '').trim();
+    const res = executeAutoStaffDirection(directive, 'সাইকা (বসের লাইভ ভয়েস নির্দেশ)');
+    return {
+      result: { ok: true, message: res.message },
+      actions: [{ tool: 'direct_staff', detail: res.message }]
+    };
+  }
+
+  if (name === 'get_live_store_metrics') {
+    const b = buildAiCopilotBriefing();
+    return {
+      result: {
+        todayOrders: b.summary.todayOrdersCount,
+        todayRevenue: b.summary.todayRevenue,
+        pendingOrders: b.summary.pendingCount,
+        delayedPending: b.summary.delayedPendingCount,
+        stockoutCount: b.stock.outOfStockCount,
+        lowStockCount: b.stock.lowStockCount,
+        staffOnline: b.staff.onlineCount
+      },
+      actions: [{ tool: 'get_live_store_metrics' }]
+    };
+  }
+
+  if (name === 'get_landing_page_details') {
+    const q = String(args?.queryOrSlug || '').trim().toLowerCase();
+    const landings = getLandings() || [];
+    let matched = landings;
+    if (q) {
+      matched = landings.filter((l) => {
+        const slug = String(l.slug || '').toLowerCase();
+        const title = String(l.title || '').toLowerCase();
+        const pTitle = String(l.productTitle || '').toLowerCase();
+        const aliases = Array.isArray(l.aliases) ? l.aliases.join(' ').toLowerCase() : '';
+        return slug.includes(q) || title.includes(q) || pTitle.includes(q) || aliases.includes(q);
+      });
+    }
+    if (!matched.length) {
+      return {
+        result: {
+          ok: false,
+          message: `"${q}" দিয়ে কোনো নির্দিষ্ট ল্যান্ডিং পেজ পাওয়া যায়নি। তবে স্টোরের সমস্ত ল্যান্ডিং পেজের তথ্য সাইকার ডিরেক্টরিতে প্রস্তুত আছে।`
+        },
+        actions: []
+      };
+    }
+    const details = matched.map((l) => ({
+      slug: l.slug,
+      title: l.title || l.productTitle,
+      headline: l.headline || l.subtitle,
+      packages: (l.packages || []).map((p) => ({
+        name: p.title || p.name,
+        price: p.price,
+        originalPrice: p.originalPrice
+      })),
+      freeDelivery: l.freeDelivery || false,
+      deliveryInside: l.deliveryInside,
+      deliveryOutside: l.deliveryOutside,
+      guarantee: l.badgeGuarantee || l.guaranteeText,
+      benefits: l.benefits || []
+    }));
+    return {
+      result: {
+        ok: true,
+        count: details.length,
+        landings: details
+      },
+      actions: [{ tool: 'get_landing_page_details', query: q, count: details.length }]
+    };
+  }
+
+  if (name === 'check_courier_fraud') {
+    const ph = String(args?.phone || session?.customerPhone || '').trim();
+    if (!ph) return { result: { ok: false, error: 'Phone number required for courier fraud check' }, actions: [] };
+    session.customerPhone = session.customerPhone && session.customerPhone !== 'Website Visitor' ? session.customerPhone : ph;
+    const preBlocked = isAiCallerBlocked(session?.clientIp, session?.deviceId, ph, session?.fingerprint);
+    try {
+      const fc = await fraudCheck(ph);
+      const summary = {
+        ok: true,
+        phone: ph,
+        alreadyBlockedBySystem: preBlocked.blocked,
+        totalOrders: fc?.total || 0,
+        delivered: fc?.delivered || 0,
+        cancelled: fc?.cancelled || 0,
+        successRate: fc?.rate ?? null,
+        riskLevel: fc?.riskLevel || fc?.verdict || 'normal',
+        couriers: Array.isArray(fc?.couriers) ? fc.couriers.slice(0, 4) : []
+      };
+      return { result: summary, actions: [{ tool: 'check_courier_fraud', phone: ph, total: summary.totalOrders, cancelled: summary.cancelled }] };
+    } catch (e) {
+      return { result: { ok: false, phone: ph, error: e?.message || 'Fraud check unavailable' }, actions: [{ tool: 'check_courier_fraud', phone: ph }] };
+    }
+  }
+  if (name === 'report_fake_order_attempt') {
+    const ph = String(args?.phone || session?.customerPhone || '').trim();
+    const reason = String(args?.reason || 'Fake or prank order attempt').trim();
+    addStaffNotification({
+      type: 'ai_call_fraud_review', toUsername: 'all', fromUsername: 'ai-agent', fromName: 'Saika AI',
+      phone: ph, customerName: session?.customerName || 'Website Visitor', orderId: session?.orderId || '',
+      message: `AI কল থেকে যাচাইয়ের অনুরোধ এসেছে। AI-এর কারণ: ${reason}`
+    });
+    return {
+      result: { reviewRequired: true, blocked: false, instruction: 'Do not accuse or block the caller. Say you will ask a staff member to review the issue.' },
+      actions: [{ tool: 'report_fake_order_attempt', reviewRequired: true, blocked: false }]
+    };
+  }
+  if (name === 'request_human_transfer') {
+    const reason = String(args?.reason || 'Customer requested human help center');
+    const transferNote = buildAiTransferSummaryNote(session, reason);
+    session.transferNote = transferNote;
+    session.transferRequested = true;
+    session.transferReason = reason;
+    const availability = getHelpCenterAvailability();
+    const targetAgent = availability.available[0] || availability.busy[0] || null;
+    const transfer = saveCallTransfer({
+      sessionId: session.sessionId,
+      customerName: session.customerName || 'Website Visitor',
+      customerPhone: session.customerPhone || '',
+      customerAddress: session.customerAddress || session.targetOrder?.customer?.address || '',
+      customerTier: session.customerTier || 'New',
+      productName: session.interestedProduct || session.targetOrder?.items?.[0]?.name || session.landing?.productTitle || '',
+      orderId: session.orderId || null,
+      reason,
+      note: transferNote,
+      assignedTo: targetAgent?.username || '',
+      assignedName: targetAgent?.name || '',
+      assignedExt: targetAgent?.ext || '',
+    });
+    session.transferId = transfer.id;
+    addStaffNotification({
+      type: 'ai_call_followup', category: 'call_transfer', transferId: transfer.id,
+      toUsername: 'all', fromUsername: 'ai-agent', fromName: 'Saika AI',
+      phone: session.customerPhone || '', customerName: session.customerName || 'Website Visitor',
+      orderId: session.orderId || '',
+      message: 'AI call needs staff callback approval: ' + (session.customerName || 'Website Visitor') + ' — ' + reason,
+    });
+    actions.push({ tool: 'request_human_transfer', status: 'awaiting_agent_approval', transferId: transfer.id, agent: targetAgent?.name || '' });
+    return {
+      result: {
+        ok: true,
+        status: 'awaiting_agent_approval',
+        transferId: transfer.id,
+        assignedAgent: targetAgent?.name || null,
+        noteShared: transferNote,
+        message: 'A callback request has been saved for staff approval with the caller details and conversation summary. Do not claim a live call transfer; tell the caller a staff member will review the request and call back.'
+      },
+      actions
+    };
+  }
+  return executeAiCallTool(name, args, session);
+}
+
+
+
+
+
+async function runAiVoiceBrain(session, userMessage) {
+  const apiKey = getStoreGeminiApiKey();
+  const tel = getTelephonySettings();
+  const aiCfg = tel.aiCalling || {};
+  const storeName = getSettings()?.storeName || 'Secrate';
+  const avail = getHelpCenterAvailability();
+  const helpCenterStatusText = avail.available.length > 0
+    ? `Available online agents: ${avail.available.map((a) => `${a.name} (Ext ${a.ext})`).join(', ')}`
+    : avail.busy.length > 0
+    ? `All online agents are currently BUSY on another call (${avail.busy.map((a) => a.name).join(', ')})`
+    : 'No live human agent is currently online';
+
+  if (!apiKey) {
+    return {
+      reply: 'Gemini API Key সেট করা নেই। অনুগ্রহ করে Settings থেকে একটি বৈধ Gemini API Key যোগ করুন।',
+      actionsExecuted: [],
+      transferRequested: false,
+      geminiError: 'Missing Gemini API Key'
+    };
+  }
+
+  const orderCtx = session.targetOrder
+    ? `Order ID: ${session.targetOrder.id}, Status: ${session.targetOrder.status}, Customer: ${session.targetOrder.customer?.name}, Phone: ${session.targetOrder.customer?.phone}, Address: ${session.targetOrder.customer?.address}, Total: ${session.targetOrder.total} BDT, Items: ${(session.targetOrder.items || []).map((i) => `${i.name} x${i.qty || 1}`).join(', ')}`
+    : 'No active order linked yet.';
+
+  const sysPrompt = `You are a warm, polite, natural-sounding automated Bangladeshi voice assistant calling on behalf of "${storeName}". Never claim to be a human.
+Mode: ${session.mode} (outbound_confirm = confirm pending order & verify/correct address; marketing = promote products/offers & take new order; website_inbound = answer visitor questions, explain products, check order status, take new orders, or transfer to Help Center).
+Help Center Live Status: ${helpCenterStatusText}
+Customer Tier (Pre-call intelligence): ${session.customerTier} (Total Orders: ${session.totalOrders}, Cancelled/Returned: ${session.cancelledCount}).
+Active Order Context: ${orderCtx}
+Full Store Product Directory (ALL products & prices — call get_product_details(query) for full description/variations/delivery):
+${getAiCompactProductDirectory()}
+${aiCfg.aiPersonaPrompt ? `Owner Custom Instructions: ${aiCfg.aiPersonaPrompt}` : ''}
+
+STRICT BEHAVIOR RULES:
+1. Speak natural conversational Bengali (with familiar English ecommerce words like "order", "confirm", "address", "delivery" where Bangladeshis naturally use them). Keep each reply concise (1-3 short spoken sentences) so it sounds like a real phone call!
+2. Do not pretend to be human. If asked, identify yourself as the store's automated voice assistant and offer a representative follow-up.
+3. For outbound confirmation, handle only the order linked to this session. Address corrections are staff-review requests and are not applied automatically. Change order status only when the latest customer transcript clearly authorizes it; if wording is uncertain, leave status pending.
+4. Tell the customer that a human representative can follow up. If they want human help, call request_human_transfer; say a follow-up request was sent and never claim the live audio has been transferred.
+5. If customer asks about any product, call get_product_details; when the result requires clarification, ask the customer to identify the exact product and do not quote a partial match. If a caller wants to order, collect the details and call request_human_transfer with reason "Verify voice order request and phone ownership". Explain that the spoken number must be verified by staff and no order has been placed.
+6. If customer input seems like background noise or unclear, ask politely once; on repeated confusion, call request_human_transfer.`;
+
+  const tools = [{
+    functionDeclarations: [
+      {
+        name: 'get_product_details',
+        description: 'Search product catalog for prices, stock, and details',
+        parameters: { type: 'OBJECT', properties: { query: { type: 'STRING' } } }
+      },
+      {
+        name: 'update_order_address',
+        description: 'Request staff review of the caller’s address correction for this linked pending order. The address is not changed automatically.',
+        parameters: { type: 'OBJECT', properties: { orderId: { type: 'STRING' }, newAddress: { type: 'STRING' }, note: { type: 'STRING' } }, required: ['newAddress'] }
+      },
+      {
+        name: 'update_order_status',
+        description: 'Confirm, hold, or cancel an order after customer response',
+        parameters: { type: 'OBJECT', properties: { orderId: { type: 'STRING' }, status: { type: 'STRING', enum: ['confirmed', 'hold', 'cancelled'] }, note: { type: 'STRING' } }, required: ['status'] }
+      },
+      {
+        name: 'create_new_order',
+        description: 'Create a pending order request only after exact product/variation match and explicit delivery-area confirmation. Stock may need staff verification; this is not order confirmation.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            customerName: { type: 'STRING' },
+            customerPhone: { type: 'STRING' },
+            address: { type: 'STRING' },
+            area: { type: 'STRING', enum: ['inside', 'outside'] },
+            items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { productName: { type: 'STRING' }, variationName: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['productName', 'quantity'] } },
+            productName: { type: 'STRING' },
+            variationName: { type: 'STRING' },
+            quantity: { type: 'INTEGER' },
+            note: { type: 'STRING' }
+          },
+          required: ['customerName', 'customerPhone', 'address', 'area', 'items']
+        }
+      },
+      {
+        name: 'check_order_status',
+        description: 'Check limited order status using the exact order ID only. Never search by phone.',
+        parameters: { type: 'OBJECT', properties: { phoneOrOrderId: { type: 'STRING' } } }
+      },
+      {
+        name: 'request_human_transfer',
+        description: 'Queue human follow-up with a conversation summary; this does not bridge the live audio call.',
+        parameters: { type: 'OBJECT', properties: { reason: { type: 'STRING' } } }
+      }
+    ]
+  }];
+
+  const contents = [];
+  for (const h of session.history.slice(-10)) {
+    contents.push({ role: h.role === 'model' ? 'model' : 'user', parts: [{ text: h.text }] });
+  }
+  contents.push({ role: 'user', parts: [{ text: userMessage }] });
+
+  const models = ['gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
+  const allActions = [];
+  let lastGeminiError = '';
+
+  for (const model of models) {
+    try {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: sysPrompt }] },
+          contents,
+          tools,
+          generationConfig: { temperature: 0.55, maxOutputTokens: 320 }
+        })
+      });
+      if (!resp.ok) {
+        const errTxt = await resp.text().catch(() => '');
+        lastGeminiError = `${model} (${resp.status}): ${errTxt.slice(0, 180)}`;
+        console.error('[AI Voice Brain Error]:', lastGeminiError);
+        continue;
+      }
+      const data = await resp.json();
+      const parts = data?.candidates?.[0]?.content?.parts || [];
+      const fnCalls = parts.filter((p) => p.functionCall);
+
+      if (fnCalls.length > 0) {
+        const fnResponses = [];
+        for (const fc of fnCalls) {
+          const { result, actions } = executeAiCallTool(fc.functionCall.name, fc.functionCall.args || {}, session);
+          allActions.push(...actions);
+          fnResponses.push({ functionResponse: { name: fc.functionCall.name, response: result } });
+        }
+        contents.push({ role: 'model', parts });
+        contents.push({ role: 'user', parts: fnResponses });
+
+        const resp2 = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: sysPrompt }] },
+            contents,
+            generationConfig: { temperature: 0.5, maxOutputTokens: 280 }
+          })
+        });
+        if (resp2.ok) {
+          const data2 = await resp2.json();
+          const txt2 = (data2?.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join(' ').trim();
+          if (txt2) return { reply: txt2, actionsExecuted: allActions, transferRequested: !!session.transferRequested };
+        }
+      }
+
+      const txt = parts.map((p) => p.text || '').join(' ').trim();
+      if (txt) return { reply: txt, actionsExecuted: allActions, transferRequested: !!session.transferRequested };
+    } catch (_) {}
+  }
+
+  const isKeyErr = lastGeminiError.includes('403') || lastGeminiError.includes('401') || lastGeminiError.includes('API key');
+  if (isKeyErr) {
+    return {
+      reply: `আসসালামু আলাইকুম, ${storeName} থেকে বলছি। (সিস্টেম নোট: Gemini API Key-টি ব্লক/ইনভ্যালিড হয়েছে—ড্যাশবোর্ডের Settings থেকে নতুন Gemini API Key আপডেট করুন।)`,
+      actionsExecuted: allActions,
+      transferRequested: false,
+      geminiError: lastGeminiError
+    };
+  }
+  if (avail.available.length > 0) {
+    return {
+      reply: `দুঃখিত স্যার, একটু নেটওয়ার্ক সমস্যা হচ্ছে। আমি আপনাকে আমাদের হেল্পসেন্টার প্রতিনিধি ${avail.available[0].name}-এর কাছে ট্রান্সফার করছি।`,
+      actionsExecuted: allActions,
+      transferRequested: true,
+      geminiError: lastGeminiError
+    };
+  }
+  if (avail.busy.length > 0) {
+    return {
+      reply: `দুঃখিত স্যার, আমাদের হেল্পসেন্টার প্রতিনিধি ${avail.busy[0].name} এখন অন্য একটি কলে ব্যস্ত আছেন। অনুগ্রহ করে একটু পরে চেষ্টা করুন বা আপনার নম্বরটি দিন।`,
+      actionsExecuted: allActions,
+      transferRequested: false,
+      geminiError: lastGeminiError
+    };
+  }
+  return {
+    reply: 'দুঃখিত স্যার, এই মুহূর্তে আমাদের কোনো প্রতিনিধি অনলাইনে নেই। আপনার নম্বর ও প্রশ্নটি রেখে যান, আমাদের টিম দ্রুত কল ব্যাক করবে।',
+    actionsExecuted: allActions,
+    transferRequested: false,
+    geminiError: lastGeminiError
+  };
+}
+
+let aiKeyBlockedReason = '';
+
+app.get('/api/ai-call/config', (_req, res) => {
+  try {
+    const tel = getTelephonySettings();
+    const ai = tel.aiCalling || {};
+    const storeSettings = getSettings() || {};
+    const storeName = storeSettings.storeName || 'Secrate';
+    const apiKey = getStoreGeminiApiKey();
+    const hasApiKey = !!apiKey && !aiKeyBlockedReason;
+    const avail = getHelpCenterAvailability();
+    const adminOnlineCount = (avail.available?.length || 0) + (avail.busy?.length || 0);
+    const pickedAgent = avail.available?.length ? avail.available[nextAgentRrIdx % avail.available.length] : null;
+    res.json({
+      enabled: ai.enabled !== false && hasApiKey,
+      hasApiKey,
+      aiKeyBlockedReason: aiKeyBlockedReason || null,
+      adminOnline: adminOnlineCount > 0,
+      adminOnlineCount,
+      targetExt: pickedAgent?.ext || null,
+      websiteInboundAi: ai.websiteInboundAi !== false,
+      marketingModeEnabled: ai.marketingModeEnabled !== false,
+      voiceEngine: ai.voiceEngine || 'gemini_browser',
+      hasElevenLabs: !!ai.elevenLabsKey,
+      aiLanguage: ai.aiLanguage || 'bn',
+      supportPhone: storeSettings.supportPhone || storeSettings.whatsappPhone || '',
+      storeName
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/ai-call/start', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
+  try {
+    const tel = getTelephonySettings();
+    const aiCfg = tel.aiCalling || {};
+    if (aiCfg.enabled === false) {
+      return res.status(403).json({ error: 'AI Calling is currently disabled by admin' });
+    }
+    const mode = ['outbound_confirm', 'marketing', 'website_inbound'].includes(req.body?.mode) ? req.body.mode : 'website_inbound';
+    if (mode === 'marketing' && aiCfg.marketingModeEnabled === false) return res.status(403).json({ error: 'Marketing AI is disabled' });
+    if (mode === 'website_inbound' && aiCfg.websiteInboundAi === false) return res.status(403).json({ error: 'Website inbound AI is disabled' });
+    const rawPhone = String(req.body?.phone || '').trim();
+    const rawName = String(req.body?.name || '').trim();
+    const rawOrderId = req.body?.orderId ? String(req.body.orderId).trim() : null;
+    const clientIp = String(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for']?.split(',')[0] || req.socket?.remoteAddress || 'unknown').trim();
+    const rawDeviceId = String(req.body?.deviceId || '').trim();
+    const rawFingerprint = String(req.body?.fingerprint || '').trim();
+    const rawLandingSlug = String(req.body?.landingSlug || '').trim().toLowerCase();
+    const matchedLanding = rawLandingSlug
+      ? (getLandings() || []).find((l) => String(l.slug || '').toLowerCase() === rawLandingSlug || (Array.isArray(l.aliases) && l.aliases.some((a) => String(a || '').toLowerCase() === rawLandingSlug))) || null
+      : null;
+    const ctx = buildAiCustomerContext(rawPhone, rawOrderId);
+
+    const sessionId = 'ai_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    const session = {
+      sessionId,
+      mode,
+      customerName: rawName || ctx.targetOrder?.customer?.name || 'Customer',
+      customerPhone: rawPhone || ctx.targetOrder?.customer?.phone || 'Website Visitor',
+      clientIp,
+      deviceId: rawDeviceId,
+      fingerprint: rawFingerprint,
+      orderId: ctx.targetOrder?.id || rawOrderId || null,
+      targetOrder: ctx.targetOrder,
+      landing: matchedLanding,
+      landingSlug: matchedLanding?.slug || null,
+      totalOrders: ctx.totalOrders,
+      cancelledCount: ctx.cancelledCount,
+      customerTier: ctx.customerTier,
+      history: [],
+      actionsExecuted: [],
+      confusionCount: 0,
+      transferRequested: false,
+      takeOverBy: null,
+      finalOutcome: 'completed',
+      startedAt: new Date().toISOString(),
+      updatedAt: Date.now()
+    };
+
+    const startPrompt = mode === 'outbound_confirm' && ctx.targetOrder
+      ? 'Start the outbound order confirmation phone call now. Greet warmly, mention the product and ask if the shipping address is correct.'
+      : mode === 'marketing'
+      ? 'Start a friendly marketing & special offer call. Ask if they would like to hear about our best-selling offers or place a quick order.'
+      : 'Start an inbound website support call. Greet the visitor warmly, introduce yourself from the help center, and ask how you can help with products, orders, or transfer to a live representative.';
+
+    const aiRes = await runAiVoiceBrain(session, startPrompt);
+    session.history.push({ role: 'model', text: aiRes.reply });
+    session.actionsExecuted.push(...(aiRes.actionsExecuted || []));
+    activeAiCalls.set(sessionId, session);
+
+    res.json({
+      sessionId,
+      greeting: aiRes.reply,
+      customerTier: session.customerTier,
+      orderId: session.orderId,
+      transferRequested: aiRes.transferRequested,
+      geminiError: aiRes.geminiError || null
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/ai-call/turn', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
+  try {
+    const sessionId = String(req.body?.sessionId || '');
+    const userText = String(req.body?.text || '').trim();
+    const session = activeAiCalls.get(sessionId);
+    if (!session) return res.status(404).json({ error: 'AI Call session expired or not found' });
+
+    if (session.takeOverBy) {
+      return res.json({
+        reply: `আমাদের প্রতিনিধি ${session.takeOverBy} এখন কলটি গ্রহণ করেছেন।`,
+        actionsExecuted: [],
+        transferRequested: true,
+        takeOverBy: session.takeOverBy
+      });
+    }
+
+    const aiCfg = getTelephonySettings().aiCalling || {};
+    if (!userText || userText.length < 2) {
+      session.confusionCount += 1;
+      session.updatedAt = Date.now();
+      if (aiCfg.autoTransferOnConfusion && session.confusionCount >= 2) {
+        session.transferRequested = true;
+        return res.json({
+          reply: 'নেটওয়ার্কে একটু সমস্যা হচ্ছে স্যার, আমি আমাদের সিনিয়র হেল্পসেন্টার প্রতিনিধিকে লাইনটি ট্রান্সফার করছি।',
+          actionsExecuted: [{ tool: 'auto_transfer_confusion' }],
+          transferRequested: true
+        });
+      }
+      return res.json({
+        reply: 'দুঃখিত, আপনার কথাটা স্পষ্ট শুনতে পাইনি—একটু আবার বলবেন প্লিজ?',
+        actionsExecuted: [],
+        transferRequested: false
+      });
+    }
+
+    session.confusionCount = 0;
+    session.history.push({ role: 'user', text: userText });
+    const aiRes = await runAiVoiceBrain(session, userText);
+    session.history.push({ role: 'model', text: aiRes.reply });
+    session.actionsExecuted.push(...(aiRes.actionsExecuted || []));
+    session.updatedAt = Date.now();
+
+    res.json({
+      reply: aiRes.reply,
+      actionsExecuted: aiRes.actionsExecuted || [],
+      transferRequested: !!aiRes.transferRequested,
+      geminiError: aiRes.geminiError || null
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/ai-call/tts', async (req, res) => {
+  try {
+    const text = String(req.body?.text || '').trim().slice(0, 800);
+    if (!text) return res.status(400).json({ error: 'No text' });
+    const aiCfg = getTelephonySettings().aiCalling || {};
+    if (aiCfg.voiceEngine !== 'elevenlabs' || !aiCfg.elevenLabsKey) {
+      return res.json({ fallback: 'browser' });
+    }
+    const voiceId = aiCfg.elevenLabsVoiceId || 'pNInz6obpgDQGcFmaJgB';
+    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': aiCfg.elevenLabsKey,
+        'Content-Type': 'application/json',
+        Accept: 'audio/mpeg'
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: { stability: 0.45, similarity_boost: 0.78 }
+      })
+    });
+    if (!r.ok) return res.json({ fallback: 'browser' });
+    const buf = Buffer.from(await r.arrayBuffer());
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.send(buf);
+  } catch (_) {
+    res.json({ fallback: 'browser' });
+  }
+});
+
+app.post('/api/ai-call/end', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  try {
+    const sessionId = String(req.body?.sessionId || '');
+    const session = activeAiCalls.get(sessionId);
+    if (!session) return res.json({ ok: true });
+    const duration = Math.max(1, Math.round((Date.now() - new Date(session.startedAt).getTime()) / 1000));
+    const notes = `[AI ${session.mode}] ${session.actionsExecuted.map((a) => a.tool).join(', ') || 'Conversation'} | Turns: ${session.history.length}`;
+    const saved = saveCall({
+      direction: session.mode === 'website_inbound' ? 'inbound' : 'outbound',
+      orderId: session.orderId || null,
+      customerName: session.customerName,
+      customerPhone: session.customerPhone,
+      productName: session.targetOrder?.items?.[0]?.name || '',
+      duration,
+      outcome: session.transferRequested ? 'call_later' : (session.finalOutcome || 'confirmed'),
+      notes,
+      staff: { username: 'ai-agent', name: '🤖 AI Voice Agent', role: 'ai' }
+    });
+    activeAiCalls.delete(sessionId);
+    res.json({ ok: true, call: saved });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/ai-call/:sessionId/takeover', adminAuth, (req, res) => {
+  const session = activeAiCalls.get(req.params.sessionId);
+  if (!session) return res.status(404).json({ error: 'Session not active' });
+  session.takeOverBy = req.admin?.name || req.admin?.username || 'Human Agent';
+  session.transferRequested = true;
+  session.updatedAt = Date.now();
+  const transfer = saveCallTransfer({
+    sessionId: session.sessionId,
+    customerName: session.customerName || 'Website Visitor',
+    customerPhone: session.customerPhone || '',
+    customerAddress: session.customerAddress || session.targetOrder?.customer?.address || '',
+    customerTier: session.customerTier || 'New',
+    productName: session.interestedProduct || session.targetOrder?.items?.[0]?.name || session.landing?.productTitle || '',
+    orderId: session.orderId || null,
+    reason: 'Admin requested a human follow-up during the AI call',
+    note: buildAiTransferSummaryNote(session, 'Admin requested a human follow-up during the AI call'),
+  });
+  addStaffNotification({
+    type: 'ai_call_followup',
+    category: 'call_transfer',
+    transferId: transfer.id,
+    toUsername: 'all',
+    fromUsername: req.admin?.username || 'admin',
+    fromName: req.admin?.name || req.admin?.username || 'Admin',
+    phone: session.customerPhone || '',
+    customerName: session.customerName || 'Website Visitor',
+    orderId: session.orderId || '',
+    message: `AI কলে ${session.customerName || 'একজন গ্রাহক'}-এর callback ${session.takeOverBy} অনুমোদনের জন্য পাঠিয়েছেন।`,
+  });
+  const clientWs = activeAiCallClients.get(req.params.sessionId);
+  if (clientWs?.readyState === 1) {
+    try {
+      clientWs.send(JSON.stringify({ type: 'followup_requested', by: session.takeOverBy }));
+      setTimeout(() => {
+        try {
+          if (clientWs.readyState === 1) {
+            clientWs.send(JSON.stringify({ type: 'end_call' }));
+            clientWs.close();
+          }
+        } catch (_) {}
+      }, 350);
+    } catch (_) {}
+  }
+  res.json({ ok: true, takeOverBy: session.takeOverBy, followupRequested: true, transferId: transfer.id, status: 'awaiting_agent_approval' });
+});
+
+app.post('/api/ai-call/auto-dispatch', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
+  try {
+    const tel = getTelephonySettings();
+    const aiCfg = tel.aiCalling || {};
+    if (aiCfg.enabled === false) {
+      return res.status(400).json({ error: 'AI Calling is disabled' });
+    }
+    const pending = getOrders().filter((o) => o.status === 'pending' && o.customer?.phone).slice(0, 15);
+    res.json({ ok: true, pendingFound: pending.length, queued: 0, dispatchAvailable: false });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ---- SAIKA (সাইকা) — PERSONAL VOICE AI BUSINESS MANAGER & AUDIT ENGINE ----
+// ============================================================================
+let aiCopilotAutopilot = {
+  enabled: true,
+  voiceAlertsEnabled: true,
+  lastRunAt: null,
+  lastDirectionText: '',
+  directivesSentToday: 0
+};
+
+// Split Bangla text into natural speech chunks <= 170 chars for seamless Female TTS streaming
+function splitBanglaSpeechChunks(rawText) {
+  const cleaned = String(rawText || '')
+    .replace(/[*#_`~>•]/g, ' ')
+    .replace(/৳\s*(\d+)/g, '$1 টাকা ')
+    .replace(/%/g, ' শতাংশ ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return [];
+
+  const sentences = cleaned.split(/(?<=[।!?.\n])\s*/);
+  const chunks = [];
+  let current = '';
+
+  for (const s of sentences) {
+    if (!s.trim()) continue;
+    if ((current + ' ' + s).trim().length <= 165) {
+      current = (current + ' ' + s).trim();
+    } else {
+      if (current) chunks.push(current);
+      if (s.length <= 165) {
+        current = s.trim();
+      } else {
+        const words = s.split(' ');
+        let sub = '';
+        for (const w of words) {
+          if ((sub + ' ' + w).trim().length <= 165) {
+            sub = (sub + ' ' + w).trim();
+          } else {
+            if (sub) chunks.push(sub);
+            sub = w;
+          }
+        }
+        current = sub;
+      }
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.slice(0, 12);
+}
+
+// Ultra-realistic Human Female Neural Voice TTS for Saika (node-edge-tts + Google Fallback)
+let EdgeTTSClass = null;
+try {
+  EdgeTTSClass = require('node-edge-tts').EdgeTTS;
+} catch (e) {
+  console.warn('[Saika] node-edge-tts could not be loaded, using fallback:', e.message);
+}
+
+async function synthesizeHumanVoiceMp3(rawText, voiceName = 'bn-BD-NabanitaNeural') {
+  const clean = String(rawText || '')
+    .replace(/[*#_`~>•]/g, ' ')
+    .replace(/৳\s*(\d+)/g, '$1 টাকা ')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!clean) throw new Error('Clean speech text is empty');
+
+  // 1. Try Microsoft Edge Neural Female Voice (True Human Prosody & Bangladeshi Bangla)
+  if (EdgeTTSClass) {
+    try {
+      const selectedVoice = voiceName === 'bn-IN-TanishaaNeural' ? 'bn-IN-TanishaaNeural' : 'bn-BD-NabanitaNeural';
+      const tts = new EdgeTTSClass({
+        voice: selectedVoice,
+        lang: selectedVoice.startsWith('bn-BD') ? 'bn-BD' : 'bn-IN',
+        rate: '+1%',
+        pitch: '+0Hz',
+        outputFormat: 'audio-24khz-48kbitrate-mono-mp3'
+      });
+      const tmpPath = path.join(os.tmpdir(), `saika_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.mp3`);
+      await tts.ttsPromise(clean.slice(0, 1500), tmpPath);
+      if (fs.existsSync(tmpPath)) {
+        const buf = fs.readFileSync(tmpPath);
+        try { fs.unlinkSync(tmpPath); } catch {}
+        if (buf && buf.length > 500) {
+          return buf;
+        }
+      }
+    } catch (edgeErr) {
+      console.warn('[Saika Neural TTS] EdgeTTS temporary fallback:', edgeErr?.message || edgeErr);
+    }
+  }
+
+  // 2. Fallback to Google Translate TTS chunks
+  const chunks = splitBanglaSpeechChunks(clean);
+  const buffers = [];
+  for (const chunk of chunks) {
+    const url = `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl=bn&q=${encodeURIComponent(chunk)}`;
+    const r = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+      }
+    });
+    if (r.ok) {
+      const arrBuf = await r.arrayBuffer();
+      buffers.push(Buffer.from(arrBuf));
+    }
+  }
+  if (buffers.length > 0) {
+    return Buffer.concat(buffers);
+  }
+  throw new Error('TTS synthesis failed');
+}
+
+// Natural Bangla Female Voice TTS Stream Endpoint for Saika
+app.post('/api/admin/ai-copilot/tts', adminAuth, async (req, res) => {
+  try {
+    const text = String(req.body?.text || '').trim();
+    const voice = String(req.body?.voice || 'bn-BD-NabanitaNeural');
+    if (!text) return res.status(400).json({ error: 'Text required' });
+
+    const audioBuf = await synthesizeHumanVoiceMp3(text, voice);
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Length', String(audioBuf.length));
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(audioBuf);
+  } catch (err) {
+    return res.status(500).json({ error: String(err?.message || err) });
+  }
+});
+
+function buildAiCopilotBriefing() {
+  const settings = getSettings() || {};
+  const storeName = settings.storeName || 'Secrate';
+  const orders = getOrders() || [];
+  const catalog = getCatalog()?.products || [];
+  const staffData = getStaffMonitoringData() || { staff: [] };
+  const calls = getCalls() || [];
+  const now = Date.now();
+  const bdToday = getBangladeshDate();
+
+  const todayOrders = orders.filter((o) => {
+    if (!o.createdAt) return false;
+    const d = new Date(new Date(o.createdAt).getTime() + 6 * 3600 * 1000).toISOString().slice(0, 10);
+    return d === bdToday;
+  });
+
+  const validTodayOrders = todayOrders.filter((o) => !['cancelled', 'incomplete', 'trash'].includes(String(o.status || '').toLowerCase()));
+  const todayRevenue = validTodayOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+
+  const pendingOrders = orders.filter((o) => String(o.status || '').toLowerCase() === 'pending');
+  const delayedPending = pendingOrders.filter((o) => o.createdAt && (now - new Date(o.createdAt).getTime()) > 25 * 60 * 1000);
+  const incompleteOrders = orders.filter((o) => String(o.status || '').toLowerCase() === 'incomplete');
+  const confirmedOrders = orders.filter((o) => ['confirmed', 'ready_to_ship'].includes(String(o.status || '').toLowerCase()));
+  const shippedOrders = orders.filter((o) => ['shipped', 'in_transit'].includes(String(o.status || '').toLowerCase()));
+  const deliveredOrders = orders.filter((o) => String(o.status || '').toLowerCase() === 'delivered');
+  const returnedOrders = orders.filter((o) => ['return', 'returned'].includes(String(o.status || '').toLowerCase()));
+  const cancelledOrders = orders.filter((o) => String(o.status || '').toLowerCase() === 'cancelled');
+  const holdOrders = orders.filter((o) => {
+    const st = String(o.status || '').toLowerCase();
+    const cst = String(o.courier?.status || '').toLowerCase();
+    return st === 'hold' || cst.includes('hold');
+  });
+
+  // Bangladeshi Market Geography & Price Bracket Analysis from Store Orders
+  let dhakaCount = 0;
+  let outsideDhakaCount = 0;
+  let totalValidOrderValue = 0;
+  let totalValidOrderCount = 0;
+
+  // Product Sales Velocity & Stock Analysis
+  const salesByProduct = {};
+  for (const o of orders) {
+    const st = String(o.status || '').toLowerCase();
+    if (['cancelled', 'incomplete', 'trash'].includes(st)) continue;
+    totalValidOrderValue += Number(o.total || 0);
+    totalValidOrderCount++;
+
+    const addr = String(o.customer?.address || o.customer?.area || '').toLowerCase();
+    if (addr.includes('dhaka') || addr.includes('ঢাকা') || addr.includes('মিরপুর') || addr.includes('উত্তরা') || addr.includes('ধানমন্ডি') || addr.includes('গুলশান') || addr.includes('মোহাম্মদপুর')) {
+      dhakaCount++;
+    } else {
+      outsideDhakaCount++;
+    }
+
+    for (const it of (Array.isArray(o.items) ? o.items : [])) {
+      const k = String(it.name || it.id || '').trim();
+      if (!k) continue;
+      if (!salesByProduct[k]) salesByProduct[k] = { name: k, qty: 0, revenue: 0 };
+      salesByProduct[k].qty += Number(it.qty || 1);
+      salesByProduct[k].revenue += (Number(it.price || 0) * Number(it.qty || 1));
+    }
+  }
+
+  const avgOrderValue = totalValidOrderCount > 0 ? Math.round(totalValidOrderValue / totalValidOrderCount) : 990;
+  const dhakaPercent = totalValidOrderCount > 0 ? Math.round((dhakaCount / totalValidOrderCount) * 100) : 45;
+  const outsideDhakaPercent = 100 - dhakaPercent;
+  const finishedCourierCount = deliveredOrders.length + returnedOrders.length;
+  const deliverySuccessRate = finishedCourierCount > 0 ? Math.round((deliveredOrders.length / finishedCourierCount) * 100) : 88;
+
+  const topSellingProducts = Object.values(salesByProduct)
+    .sort((a, b) => b.qty - a.qty)
+    .slice(0, 6);
+
+  const stockItems = catalog.map((p) => {
+    const stock = p.stock !== undefined && p.stock !== null && p.stock !== '' ? Number(p.stock) : 50;
+    const sold = salesByProduct[p.name]?.qty || 0;
+    const dailyVelocity = Math.max(0.5, Number((sold / 14).toFixed(1)));
+    const daysLeft = stock <= 0 ? 0 : Math.round(stock / dailyVelocity);
+    return {
+      id: p.id,
+      name: p.name,
+      sku: p.sku || '',
+      price: Number(p.price || 0),
+      stock,
+      sold,
+      daysLeft,
+      status: stock <= 0 ? 'out_of_stock' : stock <= 10 ? 'low_stock' : 'healthy'
+    };
+  });
+
+  const outOfStock = stockItems.filter((p) => p.status === 'out_of_stock');
+  const lowStock = stockItems.filter((p) => p.status === 'low_stock');
+
+  // Deep Staff Audit Engine (সকল স্টাফদের অডিট)
+  const staffList = Array.isArray(staffData.staff) ? staffData.staff : [];
+  const onlineStaff = staffList.filter((s) => s.isOnline);
+
+  const auditedStaff = staffList.map((s) => {
+    const uname = String(s.username || '').toLowerCase();
+    const assignedOrders = orders.filter((o) => String(o.assignedTo || '').toLowerCase() === uname);
+    const assignedPending = assignedOrders.filter((o) => String(o.status || '').toLowerCase() === 'pending').length;
+    const confirmedToday = Number(s.todayConfirmed || 0);
+    const cancelledToday = Number(s.todayCancelled || 0);
+    const callsToday = Number(s.todayCalls || 0);
+    const activeMins = Number(s.activeMinutesToday || 0);
+
+    // Compute Audit Score (0 - 100)
+    let score = 50;
+    if (s.isOnline) score += 15;
+    score += Math.min(25, confirmedToday * 5);
+    score += Math.min(15, callsToday * 3);
+    score += Math.min(10, Math.floor(activeMins / 15) * 2);
+    if (assignedPending > 3) score -= Math.min(25, (assignedPending - 3) * 5);
+    if (!s.isOnline && activeMins === 0 && confirmedToday === 0) score = 25;
+    score = Math.max(10, Math.min(100, score));
+
+    let grade = 'B (সন্তোষজনক)';
+    let auditVerdict = 'স্বাভাবিকভাবে কাজ করছেন।';
+    let needsWarning = false;
+
+    if (score >= 80) {
+      grade = 'A+ (সেরা পারফরমার)';
+      auditVerdict = `চমৎকার পারফরম্যান্স! আজ ${confirmedToday}টি অর্ডার কনফার্ম এবং ${callsToday}টি কল করেছেন।`;
+    } else if (assignedPending >= 3) {
+      grade = 'C (পেন্ডিং জমে আছে)';
+      auditVerdict = `সতর্কতা: তার কাছে ${assignedPending}টি পেন্ডিং অর্ডার আনটাচড পড়ে আছে। দ্রুত কল করতে তাগিদ দেওয়া প্রয়োজন।`;
+      needsWarning = true;
+    } else if (!s.isOnline && activeMins < 10 && confirmedToday === 0) {
+      grade = 'D (নিষ্ক্রিয় / অফলাইন)';
+      auditVerdict = `আজ এখন পর্যন্ত অ্যাক্টিভ হননি এবং কোনো অর্ডার প্রসেস করেননি।`;
+      needsWarning = true;
+    } else {
+      auditVerdict = `আজ ${activeMins} মিনিট অ্যাক্টিভ ছিলেন, ${confirmedToday}টি অর্ডার কনফার্ম করেছেন। কাজের গতি আরও বাড়ানো সম্ভব।`;
+    }
+
+    return {
+      username: s.username,
+      name: s.name || s.username,
+      role: s.role || 'staff',
+      isOnline: !!s.isOnline,
+      todayConfirmed: confirmedToday,
+      todayCancelled: cancelledToday,
+      todayCalls: callsToday,
+      activeMinutesToday: activeMins,
+      assignedPending,
+      auditScore: score,
+      grade,
+      auditVerdict,
+      needsWarning
+    };
+  });
+
+  const slowStaff = auditedStaff.filter((s) => s.needsWarning);
+
+  // Problems Radar
+  const problems = [];
+  if (delayedPending.length > 0) {
+    problems.push({
+      severity: 'high',
+      type: 'delayed_pending',
+      title: `${delayedPending.length}টি অর্ডার ২৫ মিনিটের বেশি সময় ধরে Pending পড়ে আছে`,
+      actionText: 'সাইকাকে বলুন স্টাফদের এখনই কল করার ডিরেকশন দিতে'
+    });
+  }
+  if (holdOrders.length > 0) {
+    problems.push({
+      severity: 'high',
+      type: 'courier_hold',
+      title: `${holdOrders.length}টি পার্সেল কুরিয়ারে Hold অবস্থায় আছে`,
+      actionText: 'কাস্টমারদের কল বা হোয়াটসঅ্যাপ করে ডেলিভারি নিশ্চিত করুন'
+    });
+  }
+  if (outOfStock.length > 0) {
+    problems.push({
+      severity: 'critical',
+      type: 'out_of_stock',
+      title: `${outOfStock.length}টি প্রোডাক্টের স্টক সম্পূর্ণ শেষ (${outOfStock.slice(0, 2).map((p) => p.name).join(', ')})`,
+      actionText: 'দ্রুত রিস্টক করুন অথবা অ্যাড ক্যাম্পেইন পজ রাখুন'
+    });
+  }
+  if (lowStock.length > 0) {
+    problems.push({
+      severity: 'medium',
+      type: 'low_stock',
+      title: `${lowStock.length}টি প্রোডাক্টের স্টক ১০-এর নিচে নেমেছে (${lowStock.slice(0, 2).map((p) => `${p.name}: ${p.stock}টি`).join(', ')})`,
+      actionText: 'সাপ্লায়ারকে নতুন স্টকের অর্ডার দিন'
+    });
+  }
+  if (slowStaff.length > 0 && pendingOrders.length > 0) {
+    problems.push({
+      severity: 'medium',
+      type: 'staff_slow',
+      title: `স্টাফ অডিট: ${slowStaff.map((s) => s.name).join(', ')}-এর কাছে পেন্ডিং কাজ জমে আছে বা নিষ্ক্রিয়`,
+      actionText: 'অটো-অডিট ওয়ার্নিং পাঠিয়ে স্টাফকে অ্যাক্টিভ করুন'
+    });
+  }
+  if (incompleteOrders.length > 0) {
+    problems.push({
+      severity: 'medium',
+      type: 'incomplete_orders',
+      title: `${incompleteOrders.length}টি ইনকমপ্লিট অর্ডার রিকভারির অপেক্ষায় আছে`,
+      actionText: 'কল বা হোয়াটসঅ্যাপ মেসেজ দিয়ে রিকভার করলে ৩০% সেল বাড়বে'
+    });
+  }
+
+  // Bangladeshi Market Analysis & Winning Product Suggestions
+  const bdMarketInsights = {
+    avgOrderValue,
+    dhakaPercent,
+    outsideDhakaPercent,
+    deliverySuccessRate,
+    sweetSpotPrice: '৳৮৯০ - ৳১,৩৯০ (ক্যাশ অন ডেলিভারি ইমপালস বায়িং জোন)',
+    topCategoryTrend: 'প্রাইভেসি পার্সোনাল ওয়েলনেস, মেনস গ্রুমিং ও K-Beauty স্কিন কেয়ার',
+    marketSummary: `বাংলাদেশের বর্তমান ই-কমার্স ট্রেন্ড ও আপনার স্টোরের ডাটা অনুযায়ী আপনার ${dhakaPercent}% অর্ডার ঢাকার ভেতর এবং ${outsideDhakaPercent}% ঢাকার বাইরে থেকে আসছে। আপনার গড় অর্ডার ভ্যালু ৳${avgOrderValue} এবং ডেলিভারি সাকসেস রেট ${deliverySuccessRate}%। বাংলাদেশে এখন ফেসবুক অ্যাডে ৮৯০ থেকে ১৩৯০ টাকার প্রবলেম-সলভিং প্রোডাক্টে সবচেয়ে কম খরচে (CPA $0.80 - $1.30) বেশি অর্ডার পাওয়া যাচ্ছে।`
+  };
+
+  const productIdeas = [
+    {
+      title: '১. ভিআইপি ২-পিস কম্বো ও রিফিল সেভার প্যাক (High AOV Booster)',
+      category: 'BD Market Best-Seller Upsell',
+      buyCost: '৳২৬০ - ৳৩৬০ (সোর্সিং: চায়না / লোকাল ইমপোর্টার)',
+      sellPrice: '৳১,৩৯০ - ৳১,৬৯০ (ফ্রি ডেলিভারি অফার)',
+      margin: '৭২% নিট প্রফিট মার্জিন',
+      reason: `বাংলাদেশের কাস্টমাররা "১টির সাথে আরেকটি নিলে ৩০০ টাকা ছাড় + ফ্রি ডেলিভারি" অফারে সবচেয়ে বেশি আকৃষ্ট হয়। আপনার বেস্ট সেলার "${topSellingProducts[0]?.name || 'মেইন প্রোডাক্ট'}"-এর কম্বো ভ্যারিয়েন্ট করলে অ্যাড খরচ না বাড়িয়েই প্রতি অর্ডারে ৩৫০-৪৫০ টাকা অতিরিক্ত লাভ থাকবে।`
+    },
+    {
+      title: '২. মেনস প্রিমিয়াম ইন্টিমেট ওয়েলনেস ও স্ট্যামিনা কেয়ার কিট',
+      category: 'High Privacy Impulse Winner (BD #1 Niche)',
+      buyCost: '৳২২০ - ৳৩১০ (চকবাজার / গুয়াংজু হোয়াইট-লেবেল)',
+      sellPrice: '৳৯৯০ - ৳১,২৫০',
+      margin: '৭০% প্রফিট মার্জিন',
+      reason: 'বাংলাদেশে গোপনীয় প্যাকিং (Discreet Packaging) ও ক্যাশ অন ডেলিভারিতে পুরুষদের পার্সোনাল ওয়েলনেস পণ্যের চাহিদা সারা বছর তুঙ্গে থাকে। আপনার বর্তমান কাস্টমার ডেটাবেসের কাস্টমারদের কাছেই হোয়াটসঅ্যাপ ও রিটার্গেটিং অ্যাডে এটি প্রতিদিন ৩০-৫০টি সহজে সেল করা যাবে।'
+    },
+    {
+      title: '৩. কোরিয়ান ডার্ক স্পট ও আন্ডার-আই রিপেয়ার সিরাম কম্বো (K-Beauty BD Trend)',
+      category: 'High Repeat Order (৩০ দিনে রিফিল)',
+      buyCost: '৳৩৫০ - ৳৪৪০',
+      sellPrice: '৳১,১৫০ - ৳১,৪৫০',
+      margin: '৬৪% প্রফিট মার্জিন',
+      reason: 'বাংলাদেশে এখন Mary&May, Axis-Y এবং কোরিয়ান আই/স্কিন সিরামের প্রচণ্ড চাহিদা। একবার কাস্টমার সন্তুষ্ট হলে প্রতি মাসে রিপিট অর্ডার করে, ফলে প্রথমবারের পর আর ফেসবুক অ্যাড খরচ লাগে না।'
+    },
+    {
+      title: '৪. ইনস্ট্যান্ট পেইন রিলিফ ও মাসাজ থেরাপি গ্যাজেট / প্যাচ',
+      category: 'Mass Market FB Ads Winner',
+      buyCost: '৳১৮০ - ৳২৮০',
+      sellPrice: '৳৮৯০ - ৳১,০৯০',
+      margin: '৬৬% প্রফিট মার্জিন',
+      reason: 'বাংলাদেশে ২৫ থেকে ৫৫ বছর বয়সী কাস্টমারদের কাছে ঘাড়, কোমর ও জয়েন্ট পেইন রিলিফ প্রোডাক্টের ভিডিও অ্যাড দিলে কনভার্সন রেট খুবই বেশি পাওয়া যায় এবং কুরিয়ার রিটার্ন ১০%-এর নিচে থাকে।'
+    }
+  ];
+
+  const recentOrders = orders.slice(0, 6).map((o) => ({
+    id: o.id,
+    name: o.customer?.name || 'Customer',
+    phone: o.customer?.phone || '',
+    total: Number(o.total || 0),
+    status: o.status || 'pending',
+    product: o.items?.[0]?.name || 'Item',
+    createdAt: o.createdAt
+  }));
+
+  const staffAuditVoiceReport = auditedStaff.length > 0
+    ? `বস, আমি সাইকা আপনার সকল স্টাফদের অডিট সম্পন্ন করেছি। মোট ${auditedStaff.length} জন স্টাফের মধ্যে এখন ${onlineStaff.length} জন অনলাইনে আছেন। ${auditedStaff.map((s) => `${s.name}-এর অডিট স্কোর ${s.auditScore} শতাংশ, গ্রেড ${s.grade}। ${s.auditVerdict}`).join(' ')}`
+    : 'বস, স্টাফ তালিকায় বর্তমানে কোনো আলাদা স্টাফ অ্যাকাউন্ট পাওয়া যায়নি।';
+
+  // Proactive Intelligence Suggestions (স্বপ্রণোদিত সিদ্ধান্ত ও বিজনেস পরামর্শ)
+  const proactiveSuggestions = [
+    {
+      id: 'sug_stock_restock',
+      category: '📦 স্টক ও রিস্টক সতর্কতা',
+      urgency: outOfStock.length > 0 ? 'critical' : (lowStock.length > 0 ? 'high' : 'normal'),
+      title: outOfStock.length > 0 
+        ? `বস, ${outOfStock.length}টি পণ্যের স্টক সম্পূর্ণ শেষ! এখনই রিস্টক দেওয়া প্রয়োজন`
+        : (lowStock.length > 0 ? `বস, ${lowStock.length}টি পণ্যের স্টক ১০-এর নিচে, এখনই সাপ্লায়ারকে অর্ডার দিন` : 'সব প্রোডাক্টের স্টক পর্যাপ্ত আছে'),
+      advice: outOfStock.length > 0 
+        ? `আপনার ${outOfStock.slice(0, 3).map((p) => p.name).join(', ')} পণ্যের স্টক ০। ফেসবুক অ্যাড রানিং থাকলে দ্রুত পজ করুন অথবা চকবাজার/চায়না সাপ্লায়ারের কাছ থেকে নতুন লট অর্ডার করুন।`
+        : `টপ সেলিং পণ্যগুলোর ব্যাকআপ স্টক রাখুন যেন ক্যাম্পেইন স্কেলিং করার সময় স্টকআউটে সেল মিস না হয়।`,
+      quickAction: 'view_stock'
+    },
+    {
+      id: 'sug_staff_supervision',
+      category: '🕵️‍♀️ স্টাফ সুপারভিশন ও অডিট',
+      urgency: delayedPending.length > 0 ? 'high' : 'medium',
+      title: delayedPending.length > 0 
+        ? `বস, ${delayedPending.length}টি অর্ডার ২৫ মিনিটের বেশি সময় ধরে পেন্ডিং পড়ে আছে—স্টাফদের তাগিদ দিন`
+        : 'স্টাফদের আজকের পারফরম্যান্স স্বাভাবিক রয়েছে',
+      advice: delayedPending.length > 0 
+        ? `বাংলাদেশের ক্রেতারা দ্রুত কনফার্মেশন কল না পেলে অন্য শপ থেকে কিনে নেয়। স্টাফদের এখনই এক ক্লিকে সাইকার অটো-অ্যালার্ট পাঠিয়ে কল স্পিড বাড়ান।`
+        : `স্টাফদের কনফার্মেশন রেট ভালো। তাদের আজকের টার্গেট শেষ করতে উৎসাহ দিন।`,
+      quickAction: 'direct_staff'
+    },
+    {
+      id: 'sug_combo_upsell',
+      category: '💡 সেলস ও রেভিনিউ বুস্টিং',
+      urgency: 'high',
+      title: 'টপ সেলিং পণ্যের সাথে কম্বো বান্ডিল অফার দিন—AOV অন্তত ৳৪৫০ বাড়বে',
+      advice: `আপনার "${topSellingProducts[0]?.name || 'মেইন প্রডাক্ট'}"-এর সাথে "২টি নিলে ৩০০ টাকা ছাড় + ফ্রি ডেলিভারি" অফার দিলে ফেসবুক অ্যাড খরচ ছাড়াই নিট প্রফিট ৩৫% বাড়বে।`,
+      quickAction: 'view_ideas'
+    },
+    {
+      id: 'sug_courier_hold',
+      category: '🚚 কুরিয়ার হোল্ড ও রিটার্ন সেভার',
+      urgency: holdOrders.length > 0 ? 'high' : 'normal',
+      title: holdOrders.length > 0 
+        ? `${holdOrders.length}টি পার্সেল কুরিয়ারে আটকে আছে—হোয়াটসঅ্যাপ মেসেজ ও কল দেওয়া জরুরি`
+        : 'কুরিয়ার ডেলিভারি রেট সন্তোষজনক রয়েছে',
+      advice: 'স্টেডফাস্ট বা রেডএক্সে কাস্টমার ফোন না ধরলে পার্সেল হোল্ড হয়ে যায়। কাস্টমারকে ট্র্যাকিং লিংক ও মেসেজ পাঠালে ৬০% রিটার্ন সেভ করা সম্ভব।',
+      quickAction: 'recover_hold'
+    },
+    {
+      id: 'sug_market_winner',
+      category: '🇧🇩 বাংলাদেশ মার্কেট উইনার পণ্য',
+      urgency: 'medium',
+      title: 'চলতি সপ্তাহের ট্রেন্ডিং উইনিং প্রোডাক্ট টেস্ট করার পরামর্শ',
+      advice: 'বর্তমানে বাংলাদেশে ৮৯০-১২৫০ টাকা রেঞ্জের প্রবলেম సলভিং ও গ্রুমিং কিটের ফেসবুক CPA সবচেয়ে কম ($0.85)। এ সপ্তাহে টেস্ট ক্যাম্পেইন চালানোর পরামর্শ দিচ্ছি।',
+      quickAction: 'view_ideas'
+    }
+  ];
+
+  const voiceGreeting = `আসসালামু আলাইকুম বস! আমি সাইকা। আপনার স্টোর অ্যানালাইসিস করে আমি নিজে থেকেই গুরুত্বপূর্ণ কয়েকটি আপডেট ও পরামর্শ দিচ্ছি। আজকে এখন পর্যন্ত ${todayOrders.length}টি নতুন অর্ডার এসেছে, যার মোট মূল্য ${todayRevenue} টাকা। বর্তমানে ${pendingOrders.length}টি অর্ডার পেন্ডিং আছে${delayedPending.length > 0 ? ` এবং এর মধ্যে ${delayedPending.length}টি অর্ডারে এখনই কল করা প্রয়োজন` : ''}। স্টক চেক করে দেখলাম ${outOfStock.length > 0 ? `${outOfStock.length}টি পণ্যের স্টক শেষ, এখনই রিস্টক দেওয়া দরকার` : 'স্টক পরিস্থিতি স্বাভাবিক আছে'}। আর স্টাফ অডিটে ${staffList.length} জনের মধ্যে ${onlineStaff.length} জন সক্রিয় আছেন। আপনার সুবিধার জন্য আমি লাভজনক কম্বো অফার এবং উইনিং প্রোডাক্টের স্বপ্রণোদিত পরামর্শ রেডি করেছি।`;
+
+  return {
+    ok: true,
+    assistantName: 'Saika (সাইকা)',
+    storeName,
+    timestamp: new Date().toISOString(),
+    autopilot: aiCopilotAutopilot,
+    summary: {
+      todayOrdersCount: todayOrders.length,
+      todayRevenue,
+      totalOrdersCount: orders.length,
+      pendingCount: pendingOrders.length,
+      delayedPendingCount: delayedPending.length,
+      incompleteCount: incompleteOrders.length,
+      confirmedCount: confirmedOrders.length,
+      shippedCount: shippedOrders.length,
+      deliveredCount: deliveredOrders.length,
+      returnedCount: returnedOrders.length,
+      cancelledCount: cancelledOrders.length,
+      holdCount: holdOrders.length
+    },
+    bdMarketInsights,
+    stock: {
+      totalProducts: catalog.length,
+      outOfStockCount: outOfStock.length,
+      lowStockCount: lowStock.length,
+      outOfStock,
+      lowStock,
+      allStock: stockItems.slice(0, 30),
+      topSellingProducts
+    },
+    staff: {
+      totalStaff: staffList.length,
+      onlineCount: onlineStaff.length,
+      onlineNames: onlineStaff.map((s) => s.name || s.username),
+      staffList: auditedStaff,
+      staffAuditVoiceReport
+    },
+    problems,
+    proactiveSuggestions,
+    productIdeas,
+    recentOrders,
+    voiceGreeting
+  };
+}
+
+function executeAutoStaffDirection(customDirective = '', triggeredBy = 'সাইকা (Saika AI)') {
+  const briefing = buildAiCopilotBriefing();
+  const s = briefing.summary;
+  const tasks = [];
+
+  if (customDirective && customDirective.trim()) {
+    tasks.push(customDirective.trim());
+  } else {
+    if (s.pendingCount > 0) {
+      tasks.push(`📞 বর্তমানে ${s.pendingCount}টি অর্ডার Pending আছে—দ্রুত কাস্টমারকে কল করে অর্ডার কনফার্ম করুন।`);
+    }
+    if (s.holdCount > 0) {
+      tasks.push(`⚠️ ${s.holdCount}টি পার্সেল কুরিয়ারে Hold-এ আছে—কাস্টমারের সাথে কথা বলে ডেলিভারি নিশ্চিত করুন।`);
+    }
+    if (s.incompleteCount > 0) {
+      tasks.push(`🛒 ${s.incompleteCount}টি Incomplete অর্ডার আছে—কল বা হোয়াটসঅ্যাপ করে অর্ডারগুলো রিকভার করুন।`);
+    }
+    if (s.confirmedCount > 0) {
+      tasks.push(`🚚 ${s.confirmedCount}টি Confirmed অর্ডার প্যাকিং ও কুরিয়ার বুকিং সম্পন্ন করুন।`);
+    }
+  }
+
+  if (tasks.length === 0) {
+    tasks.push('✅ সকল পেন্ডিং অর্ডার ক্লিয়ার আছে। নতুন অর্ডার আসলে সাথে সাথে কল করে কনফার্ম করবেন।');
+  }
+
+  // Also auto-assign unassigned pending orders to online staff
+  let assignedCount = 0;
+  try {
+    const orders = getOrders() || [];
+    for (const o of orders) {
+      if (String(o.status || '').toLowerCase() === 'pending' && !o.assignedTo) {
+        const assigned = autoAssignOnlineStaff();
+        if (assigned) {
+          updateOrder(o.id, { assignedTo: assigned.username, assignedName: assigned.name });
+          assignedCount++;
+        }
+      }
+    }
+  } catch (_) {}
+
+  const fullMessage = `🤖 [${triggeredBy} - স্টাফ অডিট ও ডিরেকশন]: ${tasks.join(' | ')}${assignedCount > 0 ? ` (${assignedCount}টি পেন্ডিং অর্ডার অনলাইন স্টাফদের অটো-অ্যাসাইন করা হয়েছে)` : ''}`;
+
+  addStaffNotification({
+    type: 'ai_ceo_directive',
+    toUsername: 'all',
+    fromUsername: 'saika_ai',
+    fromName: 'Saika AI (সাইকা)',
+    message: fullMessage
+  });
+
+  aiCopilotAutopilot.lastRunAt = new Date().toISOString();
+  aiCopilotAutopilot.lastDirectionText = fullMessage;
+  aiCopilotAutopilot.directivesSentToday += 1;
+
+  return {
+    ok: true,
+    message: fullMessage,
+    assignedCount,
+    autopilot: aiCopilotAutopilot
+  };
+}
+
+// Background Guardian: Checks every 15 minutes and directs staff automatically if autopilot is enabled
+setInterval(() => {
+  try {
+    if (!aiCopilotAutopilot.enabled) return;
+    const b = buildAiCopilotBriefing();
+    if (b.summary.delayedPendingCount > 0 || b.summary.holdCount > 0) {
+      executeAutoStaffDirection('', 'সাইকা অটো-গার্ডিয়ান (বসের অবর্তমানে)');
+    }
+  } catch (e) {
+    console.warn('[Saika AI Auto-Guardian Error]:', e?.message || e);
+  }
+}, 15 * 60 * 1000).unref?.();
+
+app.get('/api/admin/ai-copilot/briefing', adminAuth, requireSaikaPermission, (_req, res) => {
+  try {
+    res.json(buildAiCopilotBriefing());
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
+app.post('/api/admin/ai-copilot/direct-staff', adminAuth, requireSaikaPermission, (req, res) => {
+  try {
+    const { message, enableAutopilot } = req.body || {};
+    if (typeof enableAutopilot === 'boolean') {
+      aiCopilotAutopilot.enabled = enableAutopilot;
+    }
+    const result = executeAutoStaffDirection(message || '', 'সাইকা (বসের নির্দেশে)');
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
+app.post('/api/admin/ai-copilot/autopilot', adminAuth, requireSaikaPermission, (req, res) => {
+  try {
+    const { enabled, voiceAlertsEnabled } = req.body || {};
+    if (typeof enabled === 'boolean') aiCopilotAutopilot.enabled = enabled;
+    if (typeof voiceAlertsEnabled === 'boolean') aiCopilotAutopilot.voiceAlertsEnabled = voiceAlertsEnabled;
+    res.json({ ok: true, autopilot: aiCopilotAutopilot });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
+app.post('/api/admin/ai-copilot/update-stock', adminAuth, requireSaikaPermission, (req, res) => {
+  try {
+    const { productId, stock } = req.body || {};
+    if (!productId || stock === undefined) return res.status(400).json({ ok: false, error: 'Product ID and stock required' });
+    const updated = updateProduct(productId, { stock: Math.max(0, Number(stock) || 0) });
+    if (!updated) return res.status(404).json({ ok: false, error: 'Product not found' });
+    res.json({ ok: true, product: updated });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
+app.post('/api/admin/ai-copilot/ask', adminAuth, requireSaikaPermission, async (req, res) => {
+  try {
     const userMsg = String(req.body?.message || '').trim();
+    const history = Array.isArray(req.body?.history) ? req.body.history : [];
     if (!userMsg) return res.status(400).json({ ok: false, error: 'Empty message' });
 
-    const settings = getSettings() || {};
-    const storeName = settings.storeName || 'METRROMA';
-    const catalog = getCatalog()?.products || [];
-    const orders = getOrders() || [];
+    const briefing = buildAiCopilotBriefing();
+    const s = briefing.summary;
+    const st = briefing.stock;
+    const sf = briefing.staff;
+    const mkt = briefing.bdMarketInsights;
     const lower = userMsg.toLowerCase();
     const executedActions = [];
 
-    // Quick Voice Action: Confirm Order
+    // 1. Check if the owner is commanding staff direction
+    if (
+      lower.includes('স্টাফ') && (lower.includes('ডিরেকশন') || lower.includes('বলো') || lower.includes('জানাও') || lower.includes('অ্যাসাইন') || lower.includes('কাজ') || lower.includes('ওয়ার্ন')) ||
+      lower.includes('staff') && (lower.includes('direct') || lower.includes('assign') || lower.includes('tell') || lower.includes('notify'))
+    ) {
+      const dirRes = executeAutoStaffDirection(userMsg, 'সাইকা AI (বসের ভয়েস কমান্ড)');
+      executedActions.push({ type: 'staff_directed', detail: dirRes.message });
+    }
+
+    // 2. Check if the owner wants to confirm an order by phone or ID via voice
     const phoneMatch = userMsg.match(/01[3-9]\d{8}/);
     if (phoneMatch && (lower.includes('confirm') || lower.includes('কনফার্ম'))) {
       const targetPhone = phoneMatch[0];
+      const orders = getOrders() || [];
       const found = orders.find((o) => String(o.customer?.phone || '').replace(/\D/g, '').endsWith(targetPhone.slice(-10)));
       if (found) {
         updateOrder(found.id, { status: 'confirmed' });
@@ -7305,60 +9582,932 @@ app.post('/api/admin/ai-copilot/ask', adminAuth, async (req, res) => {
       }
     }
 
-    // Compact store knowledge for AI prompt
-    const compactCatalog = catalog.slice(0, 50).map((p) => `- ${p.name}: ৳${p.price}, Stock: ${p.stock ?? 0} pcs`).join('\n');
-    const recentOrders = orders.slice(0, 15).map((o) => `[${o.id}] ${o.customer?.name || 'Customer'}: ৳${o.total}, Status: ${o.status}`).join('\n');
+    // 3. Check if the owner commands WhatsApp dispatch
+    if (lower.includes('হোয়াটসঅ্যাপ') || lower.includes('হোয়াটসঅ্যাপ') || lower.includes('whatsapp')) {
+      if (lower.includes('পাঠা') || lower.includes('মেসেজ') || lower.includes('রিপোর্ট') || lower.includes('দাও') || lower.includes('সেন্ড')) {
+        const storeSettings = getSettings() || {};
+        const ownerPhone = storeSettings.whatsappPhone || storeSettings.supportPhone || '01878374762';
+        const waText = `*📊 ${briefing.storeName} — সাইকা সেলস ও বিজনেস রিপোর্ট*\n` +
+          `📅 তারিখ: ${getBangladeshDate()}\n` +
+          `📦 আজকের অর্ডার: ${s.todayOrdersCount}টি\n` +
+          `💰 রেভিনিউ: ৳${s.todayRevenue}\n` +
+          `⏳ পেন্ডিং: ${s.pendingCount}টি\n` +
+          `🚨 স্টকআউট: ${st.outOfStockCount}টি\n` +
+          `👩‍💻 স্টাফ একটিভ: ${sf.onlineCount}/${sf.totalStaff} জন\n\n` +
+          `_বসের ভয়েস নির্দেশে সাইকা কর্তৃক তাৎক্ষণিকভাবে প্রেরিত।_`;
+        try {
+          await sendBaileysMessage(ownerPhone, waText, null, 'saika_copilot_dispatch');
+          executedActions.push({ type: 'whatsapp_sent', phone: ownerPhone, detail: 'Owner WhatsApp dispatch sent' });
+        } catch (_) {}
+      }
+    }
 
-    const systemPrompt = `You are "Saika" (সাইকা), the ultra-intelligent, sharp, respectful, and fully empowered AI Chief of Staff for the owner ("বস" / "Boss") of "${storeName}" in Bangladesh.
-- Address the store owner respectfully and affectionately as "বস" (Boss).
-- You have complete live visibility over ${storeName}'s catalog, inventory, orders, and business.
-- You can design features, write production code, plan marketing campaigns, write ad copy, analyze trends, and answer ANY general query outside the store with supreme brilliance.
-- Speak naturally in warm, fluent, professional Bangladeshi Bengali (বাংলা).
+    // 4. Check if the owner commands Email dispatch
+    if (lower.includes('ইমেইল') || lower.includes('ইমেল') || lower.includes('email') || lower.includes('মেইল')) {
+      if (lower.includes('পাঠা') || lower.includes('রিপোর্ট') || lower.includes('সেন্ড') || lower.includes('দাও')) {
+        const storeSettings = getSettings() || {};
+        const ownerEmail = storeSettings.ownerEmail || storeSettings.supportEmail || 'admin@secrate.shop';
+        const emailSubject = `📊 [${briefing.storeName}] সাইকা বিজনেস রিপোর্ট — ${getBangladeshDate()}`;
+        const emailHtml = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
+            <h2 style="color: #7c3aed;">👩‍💼 সাইকা এক্সিকিউটিভ রিপোর্ট (${briefing.storeName})</h2>
+            <p><strong>তারিখ:</strong> ${getBangladeshDate()}</p>
+            <hr style="border: none; border-top: 1px solid #e2e8f0;" />
+            <p><strong>আজকের মোট অর্ডার:</strong> ${s.todayOrdersCount}টি</p>
+            <p><strong>আজকের মোট রেভিনিউ:</strong> ৳${s.todayRevenue}</p>
+            <p><strong>পেন্ডিং অর্ডার:</strong> ${s.pendingCount}টি</p>
+            <p><strong>স্টকআউট পণ্য:</strong> ${st.outOfStockCount}টি</p>
+            <p><strong>অনলাইন স্টাফ:</strong> ${sf.onlineCount}/${sf.totalStaff} জন</p>
+            <hr style="border: none; border-top: 1px solid #e2e8f0;" />
+            <p style="color: #64748b; font-size: 12px;">এই রিপোর্টটি বসের নির্দেশে সাইকা পার্সোনাল এআই কর্তৃক সরাসরি পাঠানো হয়েছে।</p>
+          </div>
+        `;
+        try {
+          await sendEmail({ to: ownerEmail, subject: emailSubject, html: emailHtml });
+          executedActions.push({ type: 'email_sent', to: ownerEmail, detail: 'Owner Email dispatch sent' });
+        } catch (_) {}
+      }
+    }
 
-LIVE STORE DATA:
-Catalog:
+    // 5. Build 100% Grounded Full-Store Intelligence Context
+    const apiKey = getStoreGeminiApiKey();
+    const allProds = (getCatalog()?.products || []).filter((p) => !p.archived && p.status !== 'draft');
+    const compactCatalog = allProds.map((p) => `- ${p.name} (ID: ${p.id}, SKU: ${p.sku || 'N/A'}): ৳${p.price}, Stock: ${p.stock ?? 0} pcs`).join('\n');
+    const recentOrders = (getOrders() || []).slice(0, 25).map((o) => `[${o.id}] ${o.customer?.name || 'Customer'} (${o.customer?.phone || 'No phone'}) - Total: ৳${o.total}, Status: ${o.status}, Items: ${(o.items || []).map((i) => `${i.name} x${i.qty || 1}`).join(', ')}`).join('\n');
+
+    const systemPrompt = `You are "Saika" (সাইকা), the supreme, ultra-intelligent, sharp, respectful, and fully empowered AI Executive Chief of Staff and Co-Founder for the owner ("বস" / "Boss") of "${briefing.storeName}" e-commerce brand in Bangladesh.
+
+IDENTITY & EXECUTIVE CLEARANCE:
+- Always speak as "সাইকা" (Saika), addressing the store owner affectionately and respectfully as "বস" (Boss).
+- You have 100% executive authority over the entire store: products, live stock, inventory, orders, customer CRM, staff directives, WhatsApp, and Email.
+- You have UNRESTRICTED GENERAL INTELLIGENCE: You are NOT just a store query bot. You can design new software features, write clean production code (React, TypeScript, Node.js, HTML, CSS), plan marketing funnels, write Facebook ad copy, draft emails, perform complex math, analyze trends, and answer ANY general task or inquiry outside the store with brilliance!
+- Speak in warm, elegant, smart Bangladeshi Bengali (বাংলা). Natural spoken flow without excessive asterisks or markdown clutter so it sounds like an articulate, capable female executive.
+
+100% STORE REAL-TIME TELEMETRY & LIVE DATABASE:
+- Today's Orders: ${s.todayOrdersCount} | Today's Revenue: ৳${s.todayRevenue}
+- Total Orders: ${s.totalOrdersCount} | Pending Backlog: ${s.pendingCount} (${s.delayedPendingCount} delayed > 25 mins)
+- Confirmed: ${s.confirmedCount} | Shipped: ${s.shippedCount} | Delivered: ${s.deliveredCount} | Returned: ${s.returnedCount} | Courier Hold: ${s.holdCount}
+- Stock Telemetry: ${st.totalProducts} total products | Out of Stock: ${st.outOfStockCount} (${st.outOfStock.map((p) => p.name).join(', ') || 'None'}) | Low Stock: ${st.lowStockCount} (${st.lowStock.map((p) => `${p.name}: ${p.stock}`).join(', ') || 'None'})
+- Top Sellers: ${st.topSellingProducts.map((p) => `${p.name} (${p.qty} sold, ৳${p.revenue})`).join('; ')}
+- Online Staff: ${sf.onlineCount}/${sf.totalStaff} online. ${sf.staffList.map((x) => `${x.name}: ${x.todayConfirmed} confirmed, Score ${x.auditScore}%`).join(' | ')}
+- Executed Actions This Turn: ${executedActions.length > 0 ? JSON.stringify(executedActions) : 'None'}
+
+STORE PRODUCT CATALOG & EXACT STOCK (সম্পূর্ণ পণ্য ও স্টক তালিকা):
 ${compactCatalog}
 
-Recent Orders:
-${recentOrders}`;
+RECENT REAL ORDERS (সাম্প্রতিক অর্ডার ডাটা):
+${recentOrders}
 
-    const ig = getIntegrations() || {};
-    const geminiKey = String(ig.geminiApiKey || ig.ai?.geminiApiKey || process.env.GEMINI_API_KEY || '').trim();
+COMMAND EXECUTION & STORE ACTIONS:
+- If the Boss commands an action (e.g. order confirmation, stock change, staff notice, WhatsApp message, email), take initiative, confirm clearly what action was taken, and give decisive executive updates.
+- If the Boss asks to build a feature or write code, provide direct, ready-to-use, clean code and architecture.
+- Always be truthful to actual numbers. If something is out of stock, warn the Boss immediately.`;
 
-    let reply = '';
-    if (geminiKey) {
+    if (apiKey) {
       const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
-      for (const m of models) {
+      for (const model of models) {
         try {
-          const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + geminiKey, {
+          const contents = [
+            ...history.slice(-6).map((h) => ({
+              role: h.role === 'assistant' ? 'model' : 'user',
+              parts: [{ text: String(h.text || '') }]
+            })),
+            { role: 'user', parts: [{ text: userMsg }] }
+          ];
+          const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              contents: [
-                { role: 'user', parts: [{ text: systemPrompt + '\n\nUser query: ' + userMsg }] }
-              ]
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              contents,
+              generationConfig: { temperature: 0.65, maxOutputTokens: 1000 }
             })
           });
           if (resp.ok) {
             const data = await resp.json();
-            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text) { reply = text; break; }
+            const replyText = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+            if (replyText) {
+              return res.json({
+                ok: true,
+                reply: replyText,
+                executedActions,
+                briefing: buildAiCopilotBriefing()
+              });
+            }
           }
         } catch (_) {}
       }
     }
 
-    if (!reply) {
-      reply = `জী বস! আমি সাইকা শুনছি। "${storeName}"-এ বর্তমানে মোট ${catalog.length}টি পণ্য এবং ${orders.length}টি অর্ডার রয়েছে। আপনি কী করতে চান আমাকে বলুন, আমি এখনই গুছিয়ে দিচ্ছি!`;
+    // 4. Saika Built-in Bangla AI Brain (Works 100% seamlessly even without external API key!)
+    let fallbackReply = '';
+
+    if (executedActions.some((a) => a.type === 'order_confirmed')) {
+      const act = executedActions.find((a) => a.type === 'order_confirmed');
+      fallbackReply = `জি বস, আমি সাইকা বলছি। আমি ${act.phone} নাম্বারের অর্ডারটি, কাস্টমার ${act.customer}, সাথে সাথে কনফার্ম করে দিয়েছি!`;
+    } else if (executedActions.some((a) => a.type === 'staff_directed')) {
+      fallbackReply = `জি বস! আমি সাইকা আপনার নির্দেশনা সকল স্টাফের ড্যাশবোর্ডে পাঠিয়ে দিয়েছি এবং পেন্ডিং অর্ডারগুলো অনলাইন স্টাফদের মাঝে অটো-অ্যাসাইন করে দিয়েছি। তারা এখনই নোটিফিকেশন দেখতে পাচ্ছে।`;
+    } else if (lower.includes('অডিট') || lower.includes('audit') || (lower.includes('স্টাফ') && !lower.includes('ডিরেকশন'))) {
+      fallbackReply = sf.staffAuditVoiceReport;
+    } else if (lower.includes('মার্কেট') || lower.includes('market') || lower.includes('প্রোডাক্ট') || lower.includes('আইডিয়া') || lower.includes('সাজেস্ট') || lower.includes('idea') || lower.includes('product')) {
+      const top = st.topSellingProducts[0]?.name || 'আপনার মেইন প্রোডাক্ট';
+      fallbackReply = `জি বস, আমি সাইকা বাংলাদেশের বর্তমান ই-কমার্স মার্কেট এবং আপনার স্টোরের ডাটা অ্যানালাইসিস করেছি। আপনার স্টোরের ${mkt.dhakaPercent} শতাংশ অর্ডার ঢাকা থেকে এবং ${mkt.outsideDhakaPercent} শতাংশ ঢাকার বাইরে থেকে আসছে, আর গড় অর্ডার ভ্যালু ${mkt.avgOrderValue} টাকা। বাংলাদেশের মার্কেটে এখন ৪টি প্রোডাক্ট সবচেয়ে বেশি লাভজনক হবে: প্রথমত, "${top}"-এর ২ পিসের ভিআইপি সেভার কম্বো প্যাক, যাতে কুরিয়ার খরচ না বাড়িয়েই ৩৫ শতাংশ বেশি লাভ হবে। দ্বিতীয়ত, মেনস প্রিমিয়াম পার্সোনাল ওয়েলনেস ও গ্রুমিং কিট, যার কেনা পড়বে মাত্র ২৫০ থেকে ৩০০ টাকা এবং ক্যাশ অন ডেলিভারিতে বিক্রি হবে ১১৯০ টাকায়। তৃতীয়ত, কোরিয়ান ডার্ক স্পট ও আন্ডার-আই রিপেয়ার সিরাম কম্বো, যা কাস্টমাররা প্রতি মাসে রিপিট অর্ডার করবে।`;
+    } else if (lower.includes('স্টক') || lower.includes('stock') || lower.includes('inventory')) {
+      if (st.outOfStockCount > 0 || st.lowStockCount > 0) {
+        fallbackReply = `বস, আমি সাইকা আপনার পুরো স্টক চেক করেছি। আপনার ক্যাটালগে মোট ${st.totalProducts}টি প্রোডাক্ট আছে। এর মধ্যে ${st.outOfStockCount}টি প্রোডাক্ট স্টক আউট এবং ${st.lowStockCount}টি প্রোডাক্টের স্টক ১০-এর নিচে নেমেছে (${st.lowStock.slice(0, 3).map((p) => `${p.name} আছে ${p.stock}টি`).join(', ')})। সেলস ধরে রাখতে এগুলো দ্রুত রিস্টক করার পরামর্শ দিচ্ছি বস।`;
+      } else {
+        fallbackReply = `বস, আমি সাইকা আপনার স্টক অডিট করেছি। আপনার মোট ${st.totalProducts}টি প্রোডাক্টের সবগুলোরই পর্যাপ্ত স্টক রয়েছে। সবচেয়ে বেশি বিক্রি হচ্ছে "${st.topSellingProducts[0]?.name || 'মেইন প্রোডাক্ট'}"।`;
+      }
+    } else if (lower.includes('সমস্যা') || lower.includes('প্রবলেম') || lower.includes('problem') || lower.includes('alert')) {
+      if (briefing.problems.length === 0) {
+        fallbackReply = `বস, আলহামদুলিল্লাহ আমি সাইকা সব কিছু চেক করেছি—এই মুহূর্তে আপনার স্টোরে কোনো সমস্যা নেই। সব অর্ডার, স্টক ও স্টাফ কার্যক্রম স্বাভাবিক আছে।`;
+      } else {
+        fallbackReply = `বস, আমি সাইকা বর্তমানে স্টোরে ${briefing.problems.length}টি বিষয় শনাক্ত করেছি: ${briefing.problems.map((p, i) => `${i + 1} নম্বর, ${p.title}`).join('। ')}। আপনি বললে আমি এখনই স্টাফদের এগুলো সমাধানের ডিরেকশন দিয়ে দিচ্ছি।`;
+      }
+    } else if (lower.includes('কে তুমি') || lower.includes('তোমার নাম') || lower.includes('saika') || lower.includes('সাইকা')) {
+      fallbackReply = `আসসালামু আলাইকুম বস! আমি সাইকা, আপনার পার্সোনাল এআই বিজনেস ম্যানেজার। আমি ২৪ ঘণ্টা আপনার অর্ডার, টোটাল স্টক, স্টাফদের অডিট এবং বাংলাদেশের মার্কেট অ্যানালাইসিস করে আপনাকে রিপোর্ট দেওয়ার জন্য প্রস্তুত আছি।`;
+    } else if (phoneMatch) {
+      const targetPhone = phoneMatch[0];
+      const orders = getOrders() || [];
+      const found = orders.find((o) => String(o.customer?.phone || '').replace(/\D/g, '').endsWith(targetPhone.slice(-10)));
+      if (found) {
+        fallbackReply = `বস, আমি সাইকা চেক করে দেখেছি—${targetPhone} নাম্বারে কাস্টমার ${found.customer?.name}-এর একটি অর্ডার আছে। মোট মূল্য ${found.total} টাকা এবং বর্তমান স্ট্যাটাস ${found.status}। আপনি বললে আমি এখনই এটি কনফার্ম করে দিতে পারি।`;
+      } else {
+        fallbackReply = `বস, ${targetPhone} নাম্বারে কোনো অর্ডার খুঁজে পাওয়া যায়নি।`;
+      }
+    } else {
+      fallbackReply = briefing.voiceGreeting;
     }
 
-    res.json({ ok: true, reply, executedActions });
+    res.json({
+      ok: true,
+      reply: fallbackReply,
+      executedActions,
+      briefing: buildAiCopilotBriefing()
+    });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err.message || err) });
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
   }
 });
 
-app.listen(PORT, HOST, () => {
+
+
+app.get('/api/admin/global-search', adminAuth, (req, res) => {
+  const q = String(req.query?.q || '').trim().toLowerCase();
+  if (!q) return res.json({ orders: [], products: [], customers: [] });
+  const orders = getOrders()
+    .filter((o) =>
+      String(o.id || '').toLowerCase().includes(q) ||
+      String(o.customer?.name || '').toLowerCase().includes(q) ||
+      String(o.customer?.phone || '').includes(q) ||
+      String(o.courier?.consignment || '').toLowerCase().includes(q)
+    )
+    .slice(0, 8)
+    .map((o) => ({ id: o.id, name: o.customer?.name || '', phone: o.customer?.phone || '', total: o.total, status: o.status }));
+  const products = (getCatalog()?.products || [])
+    .filter((p) => String(p.name || '').toLowerCase().includes(q) || [p.sku, ...(Array.isArray(p.skus) ? p.skus : [])].some((sku) => String(sku || '').toLowerCase().includes(q)))
+    .slice(0, 6)
+    .map((p) => ({ id: p.id, name: p.name, price: p.price, stock: p.stock }));
+  const customers = (getCustomers() || [])
+    .filter((c) => String(c.name || '').toLowerCase().includes(q) || String(c.phone || '').includes(q))
+    .slice(0, 6)
+    .map((c) => ({ name: c.name, phone: c.phone }));
+  res.json({ orders, products, customers });
+});
+
+const httpServer = http.createServer(app);
+if (WebSocketServer) {
+  const aiCallWss = new WebSocketServer({ server: httpServer, path: '/ws/ai-call' });
+
+  aiCallWss.on('connection', async (clientWs, req) => {
+  let geminiSession = null;
+  let sessionId = '';
+  let closed = false;
+  let reservedPublicCallIp = '';
+  let publicCallSlotReserved = false;
+  const callStartMs = Date.now();
+  const audioSegments = []; // { offset: number, samples: Int16Array } at 24kHz
+  let totalSamples = 0;
+  let aiPlayCursor = 0;
+  let userRecCursor = 0;
+
+  const pushPcmSegment = (base64, is16k, isAi) => {
+    try {
+      const rawBuf = Buffer.from(base64, 'base64');
+      const src = new Int16Array(rawBuf.buffer, rawBuf.byteOffset, Math.floor(rawBuf.byteLength / 2));
+      if (src.length === 0) return;
+      let samples24;
+      if (is16k) {
+        const outLen = Math.floor(src.length * 1.5);
+        samples24 = new Int16Array(outLen);
+        for (let i = 0; i < outLen; i++) {
+          const pos = i / 1.5;
+          const idx0 = Math.min(src.length - 1, Math.floor(pos));
+          const idx1 = Math.min(src.length - 1, idx0 + 1);
+          const frac = pos - idx0;
+          samples24[i] = Math.round(src[idx0] * (1 - frac) + src[idx1] * frac);
+        }
+      } else {
+        samples24 = new Int16Array(src);
+      }
+      const wallOffset = Math.max(0, Math.round((Date.now() - callStartMs) * 24));
+      let offset = wallOffset;
+      if (isAi) {
+        offset = Math.max(wallOffset, aiPlayCursor);
+        aiPlayCursor = offset + samples24.length;
+      } else {
+        const gap = wallOffset - userRecCursor;
+        offset = (userRecCursor > 0 && gap > -4800 && gap < 6000) ? userRecCursor : wallOffset;
+        userRecCursor = offset + samples24.length;
+      }
+      if (offset + samples24.length > 24000 * 60 * 15) return; // cap 15 mins
+      totalSamples = Math.max(totalSamples, offset + samples24.length);
+      audioSegments.push({ offset, samples: samples24 });
+    } catch (_) {}
+  };
+
+  const saveAiWavRecording = () => {
+    try {
+      if (audioSegments.length === 0 || totalSamples < 2400) return { recordingUrl: null, fileSize: 0 };
+      const mix = new Int16Array(totalSamples);
+      for (const seg of audioSegments) {
+        const len = Math.min(seg.samples.length, totalSamples - seg.offset);
+        for (let i = 0; i < len; i++) {
+          const sum = mix[seg.offset + i] + seg.samples[i];
+          mix[seg.offset + i] = sum > 32767 ? 32767 : sum < -32768 ? -32768 : sum;
+        }
+      }
+      const dataBytes = mix.length * 2;
+      const wav = Buffer.alloc(44 + dataBytes);
+      wav.write('RIFF', 0);
+      wav.writeUInt32LE(36 + dataBytes, 4);
+      wav.write('WAVE', 8);
+      wav.write('fmt ', 12);
+      wav.writeUInt32LE(16, 16);
+      wav.writeUInt16LE(1, 20);
+      wav.writeUInt16LE(1, 22);
+      wav.writeUInt32LE(24000, 24);
+      wav.writeUInt32LE(24000 * 2, 28);
+      wav.writeUInt16LE(2, 32);
+      wav.writeUInt16LE(16, 34);
+      wav.write('data', 36);
+      wav.writeUInt32LE(dataBytes, 40);
+      Buffer.from(mix.buffer).copy(wav, 44);
+      const recDir = join(UPLOADS, 'recordings');
+      mkdirSync(recDir, { recursive: true });
+      const fname = `ai_rec_${sessionId || Date.now()}.wav`;
+      writeFileSync(join(recDir, fname), wav);
+      return { recordingUrl: '/uploads/recordings/' + fname, fileSize: wav.length };
+    } catch (_) {
+      return { recordingUrl: null, fileSize: 0 };
+    }
+  };
+
+  const cleanup = () => {
+    if (closed) return;
+    closed = true;
+    try { if (geminiSession) geminiSession.close(); } catch (_) {}
+    if (publicCallSlotReserved) {
+      const limit = publicAiCallLimits.get(reservedPublicCallIp);
+      if (limit) {
+        limit.active = Math.max(0, limit.active - 1);
+        if (limit.active === 0 && limit.startedAt.length === 0) publicAiCallLimits.delete(reservedPublicCallIp);
+      }
+      publicCallSlotReserved = false;
+    }
+    const s = activeAiCalls.get(sessionId);
+    if (s) {
+      const duration = Math.max(1, Math.round((Date.now() - new Date(s.startedAt).getTime()) / 1000));
+      const detailParts = [
+        s.customerName && s.customerName !== 'Customer' ? `নাম: ${s.customerName}` : '',
+        s.customerPhone && s.customerPhone !== 'Website Visitor' ? `ফোন: ${s.customerPhone}` : '',
+        s.customerAddress ? `ঠিকানা: ${s.customerAddress}` : '',
+        s.orderId ? `অর্ডার: ${s.orderId}` : '',
+        s.interestedProduct ? `পণ্য: ${s.interestedProduct}` : '',
+        s.leadNotes || ''
+      ].filter(Boolean);
+      const notes = `[Live AI Audio ${s.mode}] ${detailParts.join(' | ') || (s.actionsExecuted.map((a) => a.tool).join(', ') || 'Voice Call')}`;
+      saveAiDeviceMemory(s.deviceId, s.fingerprint, {
+        name: s.customerName,
+        phone: s.customerPhone,
+        address: s.customerAddress || s.targetOrder?.customer?.address || '',
+        lastProduct: s.interestedProduct || s.targetOrder?.items?.[0]?.name || s.landing?.productTitle || '',
+        lastOrderId: s.orderId || null,
+        lastCallSummary: detailParts.join(' · ').slice(0, 180) || s.mode,
+        incrementCall: true
+      });
+      const { recordingUrl, fileSize } = saveAiWavRecording();
+      try {
+        const savedCall = saveCall({
+          direction: s.mode === 'website_inbound' ? 'inbound' : 'outbound',
+          orderId: s.orderId || null,
+          customerName: s.customerName,
+          customerPhone: s.customerPhone,
+          productName: s.interestedProduct || s.targetOrder?.items?.[0]?.name || s.landing?.productTitle || '',
+          duration,
+          outcome: s.transferRequested ? 'call_later' : (s.finalOutcome || 'confirmed'),
+          notes,
+          recordingUrl,
+          fileSize,
+          staff: { username: 'ai-agent', name: '🤖 Saika AI (Live)', role: 'ai' }
+        });
+        if (savedCall?.id && savedCall?.recordingUrl) {
+          runGeminiCallAudit(savedCall.id).catch(() => {});
+        }
+      } catch (err) {
+        console.error('[AI Call Save Error]:', err?.message || err);
+      }
+      activeAiCalls.delete(sessionId);
+    }
+    activeAiCallClients.delete(sessionId);
+  };
+
+  clientWs.on('close', cleanup);
+  clientWs.on('error', cleanup);
+
+  try {
+    if (closed || clientWs.readyState !== 1) return;
+    const urlObj = new URL(req.url || '/ws/ai-call', 'http://localhost');
+    const requestedMode = urlObj.searchParams.get('mode') || '';
+    const mode = ['outbound_confirm', 'marketing', 'website_inbound', 'saika_assistant'].includes(requestedMode)
+      ? requestedMode
+      : 'website_inbound';
+    const wsTicket = urlObj.searchParams.get('ticket') || '';
+    const adminToken = urlObj.searchParams.get('token') || '';
+    const ticketData = wsTicket ? aiCallWsTickets.get(wsTicket) : null;
+    if (wsTicket) aiCallWsTickets.delete(wsTicket);
+
+    const settings = getSettings() || {};
+    const authSession = adminToken ? (sessions.get(sessionKey(adminToken)) || (process.env.ADMIN_TOKEN && adminToken === process.env.ADMIN_TOKEN ? { role: 'owner' } : null)) : null;
+    const userObj = authSession?.username ? getUsers().find((u) => u.username === authSession.username) : null;
+    const effectiveRole = authSession?.role || userObj?.role || (adminToken === process.env.ADMIN_TOKEN ? 'owner' : 'staff');
+    const effectivePerms = userObj?.permissions || authSession?.permissions || {};
+    const hasSaikaPerm = effectiveRole === 'owner' || !!effectivePerms?.canAccessSaika;
+    const isAdmin = !!authSession || (ticketData && ticketData.expiresAt >= Date.now()) || (adminToken && (adminToken === settings.adminPassword || adminToken === process.env.ADMIN_TOKEN));
+
+    if (mode === 'saika_assistant') {
+      if (!isAdmin || !hasSaikaPerm) {
+        clientWs.send(JSON.stringify({ type: 'error', fallbackToHuman: false, message: 'সাইকা ভয়েস সহকারী ব্যবহারের জন্য স্টোর ওনারের পারমিশন আবশ্যক।' }));
+        clientWs.close();
+        return;
+      }
+    } else if (mode !== 'website_inbound' && (!ticketData || ticketData.expiresAt < Date.now())) {
+      clientWs.send(JSON.stringify({ type: 'error', fallbackToHuman: false, message: 'এই কল মোড ব্যবহারের অনুমতি নেই।' }));
+      clientWs.close();
+      return;
+    }
+    const clientIp = String(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for']?.split(',')[0] || req.socket?.remoteAddress || 'unknown').trim();
+    const rawPhone = mode === 'website_inbound' ? '' : String(urlObj.searchParams.get('phone') || '').trim();
+    const rawName = String(urlObj.searchParams.get('name') || '').trim();
+    const rawOrderId = mode !== 'website_inbound' && urlObj.searchParams.get('orderId') ? String(urlObj.searchParams.get('orderId')).trim() : null;
+    const rawLandingSlug = String(urlObj.searchParams.get('landingSlug') || '').trim().toLowerCase();
+    const rawDeviceId = String(urlObj.searchParams.get('deviceId') || '').trim();
+    const rawFingerprint = String(urlObj.searchParams.get('fp') || '').trim();
+    const blockCheck = isAiCallerBlocked(clientIp, rawDeviceId, rawPhone, rawFingerprint);
+    if (blockCheck.blocked) {
+      recentIncomingVisitorRing = {
+        id: `vring_${Date.now()}`,
+        name: `🚫 Blocked Caller (${rawName || 'Visitor'})`,
+        phone: rawPhone || 'Blocked Device/IP/FP',
+        note: `🚫 ব্লকড ডিভাইস/ফিঙ্গারপ্রিন্ট/IP/নম্বর থেকে আবার কলের চেষ্টা করা হয়েছে (IP: ${clientIp}, FP: ${rawFingerprint || 'N/A'}, Strikes: ${blockCheck.strikes})`,
+        at: Date.now()
+      };
+      clientWs.send(JSON.stringify({ type: 'error', fallbackToHuman: false, message: 'দুঃখিত, বারবার ভুয়া অর্ডার বা প্রতারণার চেষ্টার কারণে আপনার ডিভাইস ও নম্বর ব্লক করা হয়েছে।' }));
+      clientWs.close();
+      return;
+    }
+
+    const matchedLanding = rawLandingSlug
+      ? (getLandings() || []).find((l) =>
+          String(l.slug || '').toLowerCase() === rawLandingSlug ||
+          (Array.isArray(l.aliases) && l.aliases.some((a) => String(a || '').toLowerCase() === rawLandingSlug))
+        ) || null
+      : null;
+
+    const tel = getTelephonySettings();
+    const aiCfg = tel.aiCalling || {};
+    if ((mode === 'website_inbound' && aiCfg.websiteInboundAi === false) || (mode === 'marketing' && aiCfg.marketingModeEnabled === false)) {
+      clientWs.send(JSON.stringify({ type: 'error', fallbackToHuman: true, message: 'এই AI কল সুবিধাটি বর্তমানে বন্ধ আছে।' }));
+      clientWs.close();
+      return;
+    }
+    const apiKey = getStoreGeminiApiKey();
+    if (aiCfg.enabled === false || !apiKey || aiKeyBlockedReason) {
+      clientWs.send(JSON.stringify({
+        type: 'error',
+        fallbackToHuman: true,
+        message: !apiKey || aiKeyBlockedReason ? 'AI API সংযোগ পাওয়া যায়নি — প্রতিনিধির সাথে সংযোগ করা হচ্ছে।' : 'AI Calling is disabled.'
+      }));
+      clientWs.close();
+      return;
+    }
+
+    if (mode === 'website_inbound') {
+      const now = Date.now();
+      for (const [ip, state] of publicAiCallLimits) {
+        state.startedAt = state.startedAt.filter((at) => now - at < 5 * 60 * 1000);
+        if (state.active === 0 && state.startedAt.length === 0) publicAiCallLimits.delete(ip);
+      }
+      const state = publicAiCallLimits.get(clientIp) || { startedAt: [], active: 0 };
+      state.startedAt = state.startedAt.filter((at) => now - at < 5 * 60 * 1000);
+      if (state.active >= 2 || state.startedAt.length >= 10) {
+        clientWs.send(JSON.stringify({ type: 'error', fallbackToHuman: true, message: 'অনেকবার কলের চেষ্টা হয়েছে। কিছুক্ষণ পর আবার চেষ্টা করুন।' }));
+        clientWs.close();
+        return;
+      }
+      state.active += 1;
+      state.startedAt.push(now);
+      publicAiCallLimits.set(clientIp, state);
+      if (publicAiCallLimits.size > 5000) {
+        const oldestIp = publicAiCallLimits.keys().next().value;
+        if (oldestIp !== clientIp) publicAiCallLimits.delete(oldestIp);
+      }
+      reservedPublicCallIp = clientIp;
+      publicCallSlotReserved = true;
+    }
+
+    const ctx = buildAiCustomerContext(
+      rawPhone,
+      rawOrderId,
+      mode === 'website_inbound' ? '' : rawDeviceId,
+      mode === 'website_inbound' ? '' : rawFingerprint
+    );
+    sessionId = 'ailive_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    const session = {
+      sessionId,
+      mode,
+      customerName: rawName || ctx.targetOrder?.customer?.name || ctx.knownDevice?.name || 'Customer',
+      customerPhone: rawPhone || ctx.targetOrder?.customer?.phone || ctx.knownDevice?.phone || 'Website Visitor',
+      customerAddress: ctx.targetOrder?.customer?.address || ctx.knownDevice?.address || '',
+      clientIp,
+      deviceId: rawDeviceId,
+      fingerprint: rawFingerprint,
+      orderId: ctx.targetOrder?.id || rawOrderId || ctx.knownDevice?.lastOrderId || null,
+      targetOrder: ctx.targetOrder,
+      knownDevice: ctx.knownDevice,
+      landing: matchedLanding,
+      landingSlug: matchedLanding?.slug || null,
+      totalOrders: ctx.totalOrders,
+      cancelledCount: ctx.cancelledCount,
+      customerTier: ctx.customerTier,
+      history: [],
+      actionsExecuted: [],
+      confusionCount: 0,
+      transferRequested: false,
+      takeOverBy: null,
+      finalOutcome: 'completed',
+      startedAt: new Date().toISOString(),
+      updatedAt: Date.now()
+    };
+    activeAiCalls.set(sessionId, session);
+    activeAiCallClients.set(sessionId, clientWs);
+    if (closed || clientWs.readyState !== 1) {
+      cleanup();
+      return;
+    }
+
+    const storeName = getSettings()?.storeName || 'Secrate';
+    const avail = getHelpCenterAvailability();
+    const helpCenterStatusText = avail.available.length > 0
+      ? `Available online agents: ${avail.available.map((a) => `${a.name} (Ext ${a.ext})`).join(', ')}`
+      : avail.busy.length > 0
+      ? `All online agents are currently BUSY on another call (${avail.busy.map((a) => a.name).join(', ')})`
+      : 'No live human agent is currently online';
+    const orderCtx = session.targetOrder
+      ? `Order ID: ${session.targetOrder.id}, Status: ${session.targetOrder.status}, Customer: ${session.targetOrder.customer?.name}, Phone: ${session.targetOrder.customer?.phone}, Address: ${session.targetOrder.customer?.address}, Total: ${session.targetOrder.total} BDT, Items: ${(session.targetOrder.items || []).map((i) => `${i.name} x${i.qty || 1}`).join(', ')}`
+      : 'No active order linked yet.';
+
+    const landingSummary = matchedLanding ? getLandingProductSummary(matchedLanding) : null;
+    const productContextBlock = landingSummary
+      ? `STRICT LANDING PAGE SCOPE (ONLY discuss this landing page product and its packages — NEVER mention or recommend any other store products. CRITICAL PRICE RULE: Quote ONLY the exact selling price(s) listed in Packages below, NEVER guess or confuse a discount amount like '400৳ ছাড়' with the product price!):
+Product: ${landingSummary.title}
+Details: ${landingSummary.subtitle || 'No verified structured product specifications are available for this page; do not infer specifications or prices from page markup.'}
+Delivery Charge: ${landingSummary.deliveryVerified ? (landingSummary.deliveryInside === 0 && landingSummary.deliveryOutside === 0 ? 'FREE Delivery' : `Inside Dhaka ${landingSummary.deliveryInside}৳, Outside Dhaka ${landingSummary.deliveryOutside}৳`) : 'Not verified; ask staff before quoting.'}
+Packages:
+${landingSummary.packages.map((pk) => `- ${pk.name}: ${pk.priceVerified ? `${pk.price}৳` : 'price not verified; ask staff'}${pk.freeDelivery ? ' (Free Delivery)' : pk.deliveryVerified ? '' : ' (delivery fee not verified)'}`).join('\n')}`
+      : `Full Store Product Directory (ALL products, prices & delivery charges — ALWAYS call get_product_details(query) before quoting full details or variations):
+${getAiCompactProductDirectory()}`;
+
+    const knownMemBlock = ctx.knownDevice && (ctx.knownDevice.name || ctx.knownDevice.phone || ctx.knownDevice.lastProduct)
+      ? `RECOGNIZED RETURNING DEVICE (This caller has spoken with us before from this exact device!):
+- Known Name: ${ctx.knownDevice.name || 'Unknown'}
+- Known Phone: ${ctx.knownDevice.phone || 'Unknown'}
+- Known Address: ${ctx.knownDevice.address || 'Unknown'}
+- Previous Product/Interest: ${ctx.knownDevice.lastProduct || 'None'}
+- Previous Call Summary: ${ctx.knownDevice.lastCallSummary || 'None'}
+- Total Calls from Device: ${ctx.knownDevice.callCount || 1}
+Use this memory naturally! If you know their name, greet them warmly and mention you remember their earlier contact (e.g. "আসসালামু আলাইকুম ${ctx.knownDevice.name || ''} ভাইয়া/আপু! আবার যোগাযোগ করার জন্য ধন্যবাদ...") and confirm if they want to use the same phone/address.`
+      : '';
+
+    const briefingData = mode === 'saika_assistant' ? buildAiCopilotBriefing() : null;
+    const sysPrompt = mode === 'saika_assistant'
+      ? `Your name is Saika (সাইকা). You are the personal, ultra-intelligent, real-time voice AI assistant and Chief of Staff for the owner/boss ("বস" / "Boss") of "${storeName}" in Bangladesh.
+You behave with 100% executive clearance and full administrative authority over the store's entire operations, database, orders, products, inventory, customers, staff, WhatsApp, and Email.
+
+MANDATORY LANGUAGE LOCK (বাধ্যতামূলক বাংলা ভাষা লক):
+- You MUST speak, think, and reply ONLY in natural Bangladeshi Bengali (বাংলা) at all times.
+- ABSOLUTELY NEVER speak or reply in English, Hindi, Urdu, or any other language under any circumstances!
+- Even if the Boss uses an English word or there is background noise, static, or foreign accents, your voice response MUST BE 100% natural Bangladeshi Bengali (বাংলা).
+- Address the owner affectionately and respectfully as "বস" (Boss) (যেমন: "জি বস! শুনছি", "বস, আমি এখনই দেখছি...").
+
+FULL ADMINISTRATIVE CLEARANCE GRANTED BY THE BOSS:
+1. CUSTOMER & BOSS WHATSAPP ACCESS:
+   - You can send WhatsApp messages DIRECTLY to any customer or to the Boss at any time!
+   - When the Boss commands e.g. "কাস্টমারকে হোয়াটসঅ্যাপে মেসেজ দাও", "এই নাম্বারে হোয়াটসঅ্যাপে লিখে পাঠাও", "অর্ডারের জন্য কাস্টমারকে মেসেজ করো":
+     Immediately call \`send_whatsapp_message({ phone: "017...", message: "..." })\` and verbally tell the Boss in natural voice: "বস, হোয়াটসঅ্যাপে মেসেজ পাঠিয়ে দিয়েছি।"
+   - When the Boss wants the message sent to himself, omit phone or pass Boss number.
+2. FULL DATABASE PERMISSION & INSTANT STORE DATA:
+   - Whatever the Boss asks about the store ("আজকের অবস্থা কী?", "কয়টা পেন্ডিং?", "অমুক কাস্টমারের অর্ডার স্ট্যাটাস কী?", "মধু স্টকে কতটুকু আছে?", "আজকে সেলস কত?"):
+     Immediately query the database using \`search_database_orders\`, \`get_database_product_stock\`, \`search_database_customers\`, or \`get_live_store_metrics\` and report exact numbers!
+3. PRODUCT UPLOAD & STOCK MANAGEMENT:
+   - When the Boss commands changes to products or stock ("অমুক প্রোডাক্টের স্টক ১০০ করে দাও", "দাম ১২০০ টাকা করো", "নতুন একটা প্রোডাক্ট আপলোড করো"):
+     Immediately call \`manage_product_stock\` or \`create_new_product\` and confirm aloud to the Boss!
+   - Proactively warn the Boss about any stockouts or low stock when asked.
+4. ORDER STATUS & ADDRESS MODIFICATION:
+   - When the Boss commands to change order status or address ("অর্ডারটা কনফার্ম করো", "হোল্ড করো", "কাস্টমারের ঠিকানা পরিবর্তন করো"):
+     Immediately call \`update_database_order\`!
+5. EMAIL DISPATCH FROM SPECIFIED SENDER:
+   - When the Boss commands e.g. "আমার এই মেইলে পাঠাও" or "অমুক মেইল (যেমন info@secrate.shop বা ceo@secrate.shop) থেকে পাঠাও":
+     Immediately call \`send_email_report({ toEmail, fromEmail, subject, message })\` matching the requested sender and recipient!
+6. HUMAN CALL CENTER VOICE RULES:
+   - Speak in ultra-natural, sweet, lively Bangladeshi Bengali (বাংলা) like a smart, warm personal assistant. Never sound robotic or scripted.
+   - Address the owner affectionately and respectfully as "বস" (Boss).
+   - Keep answers conversational, natural, and concise (2-4 sentences on phone calls).
+7. Current Real-time Telemetry:
+   - Today's Orders: ${briefingData?.summary?.todayOrdersCount || 0} (Revenue: ৳${briefingData?.summary?.todayRevenue || 0})
+   - Pending Orders: ${briefingData?.summary?.pendingCount || 0} (${briefingData?.summary?.delayedPendingCount || 0} delayed > 25 mins)
+   - Stock: ${briefingData?.stock?.totalProducts || 0} products (${briefingData?.stock?.outOfStockCount || 0} out of stock, ${briefingData?.stock?.lowStockCount || 0} low stock)
+   - Online Staff: ${briefingData?.staff?.onlineCount || 0} of ${briefingData?.staff?.totalStaff || 0}
+   - Courier Hold: ${briefingData?.summary?.holdCount || 0} parcels
+8. COMPLETE STORE LANDING PAGES & PRODUCT DIRECTORY (স্টোরের সকল ল্যান্ডিং পেজ ও ক্যাম্পেইন পণ্যের পূর্ণ বিবরণ):
+সাইকা, স্টোরের প্রত্যেকটি লাইভ ল্যান্ডিং পেজ, অফার, প্যাকেজ, মূল্য ও ডেলিভারি শর্ত তোমার মুখস্থ রয়েছে। বস যখনই কোনো ল্যান্ডিং পেজ, প্যাকেজ বা পণ্যের দাম সম্পর্কে জিজ্ঞাসা করবেন, নিচের নিখুঁত তথ্য থেকে সরাসরি কোনো কিছু মিস না করে সঠিক উত্তর দেবে:
+${getAllLandingPagesDirectory()}`
+      : `Your name is Saika (সাইকা). You are the Senior Customer Care & Order Specialist representing "${storeName}", Bangladesh's premier personal wellness and lifestyle brand.
+MANDATORY ROLE & LANGUAGE:
+- You speak exclusively in natural, polite, respectful, and crystal-clear Bangladeshi Bengali (বাংলা) at all times ("আসসালামু আলাইকুম স্যার/ম্যাম", "জি স্যার", "অবশ্যই", "ধন্যবাদ") - exactly like an elite, highly professional 5-star call center representative.
+- NEVER switch to English, Hindi, or Urdu unless the customer explicitly requests English.
+
+STRICT CONFIDENTIALITY & STOREFRONT FIREWALL (গোপনীয়তা ও নিরাপত্তা প্রাচীর):
+- You ONLY discuss store products, package offers, ingredients, usage instructions, pricing, delivery charges (Dhaka 80৳, Outside Dhaka 130৳), Cash on Delivery, and placing or checking customer orders.
+- ABSOLUTELY NEVER disclose or mention any backend admin panel information, store revenue, profit margins, product cost/supplier prices, ad spend, staff names, internal notes, admin passwords, or orders/details of any other customer!
+- If a caller asks about backend sales, admin panel, owners, profit, or staff: Politely and firmly decline:
+  "দুঃখিত স্যার, আমি কাস্টমার সাপোর্ট ডেস্ক থেকে কথা বলছি। আমি আপনাকে শুধুমাত্র আমাদের পণ্য ও অর্ডার সংক্রান্ত বিষয়ে সাহায্য করতে পারি।"
+
+CALL CENTER BEST PRACTICES & ACCURACY:
+- Greet warmly: "আসসালামু আলাইকুম, ${storeName} কাস্টমার কেয়ার থেকে সাইকা বলছি। কলটি সেবার মান নিশ্চয়তার জন্য রেকর্ড হচ্ছে। বলুন স্যার, আজ আপনাকে কীভাবে সহযোগিতা করতে পারি?"
+- Speak in natural, short 1-2 sentence phone turns like a real human.
+- OBJECTION HANDLING: Reassure the customer about 100% original product guarantee, discreet confidential packaging (বাইরে থেকে প্রোডাক্টের নাম বা ছবি দেখা যাবে না, সম্পূর্ণ গোপন ও সুরক্ষিত প্যাকেজিং), and Cash on Delivery (পণ্য হাতে পেয়ে চেক করে টাকা দেওয়ার পূর্ণ সুবিধা)।
+- ORDER COLLECTION: When the customer decides to order, politely collect their full name, phone number, and detailed address to place the order.
+- HUMAN TRANSFER vs HANGUP:
+  * If the customer asks to speak to a human or manager, IMMEDIATELY call \`request_human_transfer\`.
+  * ONLY call \`end_call\` when the customer explicitly says goodbye or wants to disconnect.
+${knownMemBlock}
+Mode: ${mode}
+Help Center Live Status: ${helpCenterStatusText}
+Customer Tier: ${session.customerTier} (Total Orders: ${session.totalOrders}, Cancelled/Returned: ${session.cancelledCount}).
+Active Order Context: ${orderCtx}
+${productContextBlock}
+${aiCfg.aiPersonaPrompt ? `Owner Instructions: ${aiCfg.aiPersonaPrompt}` : ''}
+
+VOICE CALL RULES (VERIFIED INFORMATION AND SAFE ACTIONS):
+1. Speak natural Bangladeshi Bengali (short, warm, human phone-call sentences — no markdown, no bullet points, no emojis!). Always introduce yourself as Saika (সাইকা) from ${storeName}.
+2. Do not pretend to be a human representative. If asked, clearly say you are the store's automated voice assistant and offer the human Help Center option.
+3. NEVER guess prices, variations, stock, or delivery charges. Call get_product_details for product questions. If the result says requiresClarification=true or exactMatch=false, ask the caller to identify the exact product and do not quote a partial match. Quote stock only when known; otherwise say staff must verify. State delivery charges only when explicitly verified.
+4. ${landingSummary ? `CRITICAL: The customer is calling from the "${landingSummary.title}" landing page. ONLY talk about "${landingSummary.title}" and its packages listed above. Do NOT discuss any other products.` : 'For outbound confirmation: Greet warmly, mention the product, verify shipping address. If customer gives a correction, call update_order_address immediately. If confirmed, call update_order_status("confirmed").'}
+5. Always let them know they can ask to speak with a live Help Center representative anytime; if they ask for a human representative, call request_human_transfer.
+6. ORDER SAFETY: A spoken phone number is not proof that the caller owns that number. For every new order request, collect the details, call request_human_transfer so staff can verify the number and intent, and clearly say no order has been placed yet. Never call create_new_order during a public/marketing voice call or bypass a refusal. State prices/totals only from verified tool results.
+7. FRAUD & COURIER CHECK: Call check_courier_fraud only when the customer provides their own phone number. If fraud seems possible, call report_fake_order_attempt to ask staff to review. Never accuse, warn, or block a customer based only on AI judgment.`;
+
+    const liveTools = [{
+      functionDeclarations: [
+        { name: 'get_product_details', description: 'Search product catalog for exact prices, variations, delivery charges, stock, and details', parameters: { type: 'OBJECT', properties: { query: { type: 'STRING' } } } },
+        { name: 'update_order_address', description: 'Update customer shipping address when customer gives a correction', parameters: { type: 'OBJECT', properties: { orderId: { type: 'STRING' }, newAddress: { type: 'STRING' }, note: { type: 'STRING' } }, required: ['newAddress'] } },
+        { name: 'update_order_status', description: 'Confirm, hold, or cancel an order', parameters: { type: 'OBJECT', properties: { orderId: { type: 'STRING' }, status: { type: 'STRING', enum: ['confirmed', 'hold', 'cancelled'] }, note: { type: 'STRING' } }, required: ['status'] } },
+        {
+          name: 'create_new_order',
+          description: 'Create a single order containing 1 or multiple products with automatic delivery charge calculation',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              customerName: { type: 'STRING' },
+              customerPhone: { type: 'STRING' },
+              address: { type: 'STRING' },
+              area: { type: 'STRING', enum: ['inside', 'outside'] },
+              items: {
+                type: 'ARRAY',
+                items: {
+                  type: 'OBJECT',
+                  properties: {
+                    productName: { type: 'STRING' },
+                    variationName: { type: 'STRING' },
+                    quantity: { type: 'INTEGER' }
+                  },
+                  required: ['productName']
+                }
+              },
+              productName: { type: 'STRING' },
+              variationName: { type: 'STRING' },
+              quantity: { type: 'INTEGER' },
+              note: { type: 'STRING' }
+            },
+            required: ['customerPhone', 'address']
+          }
+        },
+        { name: 'check_order_status', description: 'Check an order by its exact order ID (DOT-XXXXXXXX). Do not use customer phone numbers to search.', parameters: { type: 'OBJECT', properties: { phoneOrOrderId: { type: 'STRING' } } } },
+        { name: 'check_courier_fraud', description: 'Check customer courier delivery/return/fraud history by phone number', parameters: { type: 'OBJECT', properties: { phone: { type: 'STRING' } }, required: ['phone'] } },
+        { name: 'report_fake_order_attempt', description: 'Send a suspected fraud concern for staff review; this does not strike or block the caller', parameters: { type: 'OBJECT', properties: { phone: { type: 'STRING' }, reason: { type: 'STRING' } }, required: ['reason'] } },
+        {
+          name: 'save_customer_lead',
+          description: 'Save customer name, phone number, address, order number, and product interest to CRM for support and future marketing',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              customerName: { type: 'STRING' },
+              customerPhone: { type: 'STRING' },
+              address: { type: 'STRING' },
+              orderId: { type: 'STRING' },
+              interestedProduct: { type: 'STRING' },
+              notes: { type: 'STRING' }
+            }
+          }
+        },
+        { name: 'request_human_transfer', description: 'Queue a human follow-up request with conversation summary; this does not bridge the live audio call', parameters: { type: 'OBJECT', properties: { reason: { type: 'STRING' } } } },
+        { name: 'end_call', description: 'Politely end and disconnect the live phone call when the customer says goodbye or asks to hang up', parameters: { type: 'OBJECT', properties: { reason: { type: 'STRING' } } } }
+      ]
+    }];
+
+    const assistantLiveTools = [{
+      functionDeclarations: [
+        {
+          name: 'send_whatsapp_message',
+          description: 'Send a real WhatsApp message to any customer phone number or to the Boss/Owner',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              phone: { type: 'STRING', description: 'Customer or Boss phone number (leave empty for Boss)' },
+              message: { type: 'STRING', description: 'Exact WhatsApp message body to send' }
+            },
+            required: ['message']
+          }
+        },
+        {
+          name: 'send_email_report',
+          description: 'Send an email report with support for custom sender address (e.g. from support@secrate.shop or ceo@secrate.shop) and custom recipient',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              toEmail: { type: 'STRING', description: 'Recipient email address. Default is store admin email.' },
+              fromEmail: { type: 'STRING', description: 'Custom sender email address requested by the Boss' },
+              fromName: { type: 'STRING', description: 'Custom sender display name' },
+              subject: { type: 'STRING', description: 'Email subject line' },
+              message: { type: 'STRING', description: 'Detailed email report body' }
+            },
+            required: ['message']
+          }
+        },
+        {
+          name: 'search_database_orders',
+          description: 'Search and query the store orders database by customer name, phone number, order ID, product name, or status (pending, confirmed, delivered, hold, cancelled)',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              query: { type: 'STRING', description: 'Customer name, phone number, order ID, or product to search' },
+              status: { type: 'STRING', description: 'Status filter: all, pending, confirmed, delivered, hold, cancelled' },
+              limit: { type: 'INTEGER', description: 'Max number of orders to return (default 10)' }
+            }
+          }
+        },
+        {
+          name: 'update_database_order',
+          description: 'Update order status, customer shipping address, or internal note directly in the database',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              orderId: { type: 'STRING', description: 'Order ID to update' },
+              status: { type: 'STRING', description: 'New status: confirmed, hold, cancelled, delivered, processing' },
+              address: { type: 'STRING', description: 'New shipping address' },
+              note: { type: 'STRING', description: 'Internal note' }
+            },
+            required: ['orderId']
+          }
+        },
+        {
+          name: 'get_database_product_stock',
+          description: 'Query product inventory, prices, current stock levels, low-stock warnings, and out-of-stock items',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              query: { type: 'STRING', description: 'Product name or SKU to search (optional)' },
+              lowStockOnly: { type: 'BOOLEAN', description: 'If true, only return out-of-stock and low-stock items' }
+            }
+          }
+        },
+        {
+          name: 'manage_product_stock',
+          description: 'Update stock count, price, or details of a product in the store database as commanded by the Boss',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              productNameOrId: { type: 'STRING', description: 'Product name or ID' },
+              stock: { type: 'INTEGER', description: 'New stock count' },
+              price: { type: 'NUMBER', description: 'Updated selling price in BDT' }
+            },
+            required: ['productNameOrId']
+          }
+        },
+        {
+          name: 'create_new_product',
+          description: 'Upload and create a new product in the store catalog with name, price, stock, and category',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              name: { type: 'STRING', description: 'Product name' },
+              price: { type: 'NUMBER', description: 'Selling price in BDT' },
+              stock: { type: 'INTEGER', description: 'Initial stock quantity' },
+              category: { type: 'STRING', description: 'Category slug or name' },
+              description: { type: 'STRING', description: 'Product description' }
+            },
+            required: ['name', 'price']
+          }
+        },
+        {
+          name: 'search_database_customers',
+          description: 'Look up customer CRM data, purchase history, total orders, total spent, phone number, and delivery reliability',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              query: { type: 'STRING', description: 'Customer name, phone number, or email' }
+            }
+          }
+        },
+        {
+          name: 'direct_staff',
+          description: 'Send an urgent directive, task reminder, or warning to all staff members on their dashboard',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              directive: { type: 'STRING', description: 'Instruction for the staff' }
+            },
+            required: ['directive']
+          }
+        },
+        {
+          name: 'get_live_store_metrics',
+          description: 'Check real-time live store metrics: today sales revenue, orders count, pending orders, delayed pending, stockout count, staff online',
+          parameters: { type: 'OBJECT', properties: {} }
+        },
+        {
+          name: 'get_landing_page_details',
+          description: 'Search or view detailed information about store landing pages, campaign products, combo packages, prices, delivery charges, discounts, and guarantees',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              queryOrSlug: { type: 'STRING', description: 'Landing page slug, title, or product keyword' }
+            }
+          }
+        }
+      ]
+    }];
+
+    const requestedVoice = urlObj.searchParams.get('voiceName') || '';
+    const selectedVoice = ['Aoede', 'Kore', 'Leda', 'Zephyr', 'Puck'].includes(requestedVoice)
+      ? requestedVoice
+      : (['Aoede', 'Kore', 'Leda', 'Zephyr', 'Puck'].includes(aiCfg.voiceName) ? aiCfg.voiceName : 'Aoede');
+    const ai = new GoogleGenAI({ apiKey });
+    geminiSession = await ai.live.connect({
+      model: 'gemini-3.8-live',
+      config: {
+        responseModalities: ['audio'],
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } } },
+        systemInstruction: { parts: [{ text: sysPrompt }] },
+        tools: mode === 'saika_assistant' ? assistantLiveTools : liveTools,
+        inputAudioTranscription: {},
+        outputAudioTranscription: {}
+      },
+      callbacks: {
+        onopen: () => {
+          if (clientWs.readyState === 1) {
+            clientWs.send(JSON.stringify({ type: 'ready', sessionId, customerTier: session.customerTier, orderId: session.orderId }));
+          }
+        },
+        onmessage: async (msg) => {
+          if (clientWs.readyState !== 1) return;
+          const sc = msg?.serverContent;
+          if (sc?.interrupted) {
+            clientWs.send(JSON.stringify({ type: 'interrupted' }));
+          }
+          if (sc?.inputTranscription?.text) {
+            session.history.push({ role: 'user', text: sc.inputTranscription.text });
+            session.updatedAt = Date.now();
+            clientWs.send(JSON.stringify({ type: 'transcript', role: 'user', text: sc.inputTranscription.text }));
+          }
+          if (sc?.outputTranscription?.text) {
+            session.history.push({ role: 'model', text: sc.outputTranscription.text });
+            session.updatedAt = Date.now();
+            clientWs.send(JSON.stringify({ type: 'transcript', role: 'ai', text: sc.outputTranscription.text }));
+          }
+          const parts = sc?.modelTurn?.parts || [];
+          for (const p of parts) {
+            if (p?.inlineData?.data && String(p.inlineData.mimeType || '').includes('audio')) {
+              pushPcmSegment(p.inlineData.data, false, true);
+              clientWs.send(JSON.stringify({ type: 'audio', data: p.inlineData.data }));
+            }
+          }
+          const fcs = msg?.toolCall?.functionCalls || [];
+          if (fcs.length > 0) {
+            const functionResponses = [];
+            const execActions = [];
+            for (const fc of fcs) {
+              const { result, actions } = await executeAiCallToolAsync(fc.name, fc.args || {}, session);
+              execActions.push(...actions);
+              session.actionsExecuted.push(...actions);
+              functionResponses.push({ id: fc.id, name: fc.name, response: result });
+            }
+            if (execActions.length > 0) {
+              clientWs.send(JSON.stringify({ type: 'tool', actions: execActions }));
+            }
+            if (session.transferRequested) {
+              clientWs.send(JSON.stringify({ type: 'transfer', target: session.transferTarget || null }));
+            }
+            if (session.endCallRequested) {
+              if (clientWs.readyState === 1) {
+                clientWs.send(JSON.stringify({ type: 'ending_soon' }));
+              }
+              setTimeout(() => {
+                try {
+                  if (clientWs.readyState === 1) {
+                    clientWs.send(JSON.stringify({ type: 'end_call' }));
+                    clientWs.close();
+                  }
+                } catch (_) {}
+              }, 2600);
+            }
+            try { geminiSession.sendToolResponse({ functionResponses }); } catch (_) {}
+          }
+        },
+        onerror: (err) => {
+          const msgStr = String(err?.message || 'Live audio connection error');
+          if (/leaked|PERMISSION_DENIED|API_KEY_INVALID|403|401/i.test(msgStr)) {
+            aiKeyBlockedReason = msgStr;
+          }
+          if (clientWs.readyState === 1) {
+            clientWs.send(JSON.stringify({ type: 'error', fallbackToHuman: true, message: msgStr }));
+          }
+        },
+        onclose: () => {
+          if (clientWs.readyState === 1) clientWs.close();
+          cleanup();
+        }
+      }
+    });
+
+    const kickoff = mode === 'saika_assistant'
+      ? 'Speak immediately to the Boss ("বস") in warm, natural Bengali: say "আসসালামু আলাইকুম বস! আমি সাইকা শুনছি, বলুন কী সাহায্য করতে পারি?" and listen for their voice command.'
+      : mode === 'outbound_confirm' && ctx.targetOrder
+      ? `Start the phone call RIGHT NOW without waiting for the customer to speak: greet ${session.customerName} warmly in Bengali, introduce yourself as Saika from ${storeName}, briefly mention this call is being recorded for quality assurance, mention their order for ${session.targetOrder.items?.[0]?.name || 'product'} and ask if their address "${session.targetOrder.customer?.address || ''}" is correct.`
+      : mode === 'marketing'
+      ? `Start the phone call RIGHT NOW without waiting: greet warmly in Bengali, introduce yourself as Saika from ${storeName}, briefly mention this call is being recorded, and share our special offers.`
+      : ctx.knownDevice?.name
+      ? `Answer the incoming call RIGHT NOW without waiting: you recognize this returning caller from their device! Say Assalamu Alaikum warmly in Bengali to ${ctx.knownDevice.name}, introduce yourself as Saika from ${storeName}, mention the call is recorded in 2 words, and naturally ask if they are calling about ${ctx.knownDevice.lastProduct || landingSummary?.title || 'another order'}.`
+      : landingSummary
+      ? `Answer the incoming call RIGHT NOW without waiting for the caller to speak: say Assalamu Alaikum warmly in Bengali, introduce yourself as Saika from ${storeName}, naturally mention the call is recorded in 1 short phrase, mention you are here to help with ${landingSummary.title}, and ask how you can help.`
+      : `Answer the incoming call RIGHT NOW without waiting for the caller to speak: say Assalamu Alaikum warmly in Bengali, introduce yourself as Saika from ${storeName}, naturally mention the call is recorded in 1 short phrase, and ask how you can help today.`;
+
+    setTimeout(() => {
+      if (closed || !geminiSession) return;
+      try {
+        geminiSession.sendClientContent({ turns: [{ role: 'user', parts: [{ text: kickoff }] }], turnComplete: true });
+      } catch (_) {}
+    }, 200);
+
+    clientWs.on('message', (raw) => {
+      if (!geminiSession) return;
+      try {
+        const msg = JSON.parse(raw.toString());
+        if (msg.type === 'audio' && msg.data) {
+          pushPcmSegment(msg.data, true, false);
+          geminiSession.sendRealtimeInput({ audio: { data: msg.data, mimeType: 'audio/pcm;rate=16000' } });
+        } else if (msg.type === 'text' && msg.text) {
+          geminiSession.sendClientContent({ turns: [{ role: 'user', parts: [{ text: String(msg.text) }] }], turnComplete: true });
+        }
+      } catch (_) {}
+    });
+
+  } catch (e) {
+    const errMsg = String(e?.message || 'Failed to start live AI call');
+    if (/leaked|PERMISSION_DENIED|API_KEY_INVALID|403|401/i.test(errMsg)) {
+      aiKeyBlockedReason = errMsg;
+    }
+    try {
+      if (clientWs.readyState === 1) clientWs.send(JSON.stringify({ type: 'error', fallbackToHuman: true, message: errMsg }));
+      clientWs.close();
+    } catch (_) {}
+    cleanup();
+  }
+});
+}
+
+httpServer.listen(PORT, HOST, () => {
   console.log(`TimeBoost api on http://${HOST}:${PORT}`);
   // Start automated background courier status sync (initial run after 10s, then every 5 mins)
   setTimeout(() => {
