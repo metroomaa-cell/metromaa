@@ -275,8 +275,14 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
   }, [reviewsList.length]);
 
   const packagesList = useMemo(() => {
-    if (Array.isArray(cfg?.packages) && cfg.packages.length > 0) return cfg.packages;
-    if (Array.isArray(cfg?.variants) && cfg.variants.length > 0) {
+    const hasVariants = Array.isArray(cfg?.variants) && cfg.variants.length > 0;
+    const isDefaultCondomPkg =
+      Array.isArray(cfg?.packages) &&
+      cfg.packages.length === 1 &&
+      cfg.slug !== 'lovelock' &&
+      (cfg.packages[0]?.id === 'pkg_1' || String(cfg.packages[0]?.image || '').includes('/landing/package-'));
+
+    if (hasVariants && (cfg?.mode === 'html' || isDefaultCondomPkg || !Array.isArray(cfg?.packages) || cfg.packages.length === 0)) {
       return cfg.variants.map((v: any, idx: number) => ({
         id: v.id || `var_${idx + 1}`,
         title: v.title || v.name || cfg?.title || 'Product Package',
@@ -285,6 +291,9 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
         image: v.image || cfg?.heroImage || '',
         popular: idx === 0,
       }));
+    }
+    if (Array.isArray(cfg?.packages) && cfg.packages.length > 0 && !isDefaultCondomPkg) {
+      return cfg.packages;
     }
     return [
       {

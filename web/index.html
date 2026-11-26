@@ -130,6 +130,84 @@
         try { Object.defineProperty(window, 'fbq', fbqDescriptor); } catch (_) { window.fbq = guardedFbq; }
         try { Object.defineProperty(window, '_fbq', fbqDescriptor); } catch (_) { window._fbq = guardedFbq; }
 
+        // 3B. Auto Code Brain — TikTok Pixel (ttq.track) Auto-Enricher & Deduplicator
+        // Automatically injects missing content_id/contents into GTM TikTok tags and blocks duplicate events!
+        window.__TTK_SEEN_EVENTS__ = {};
+        window.__TTK_LAST_TIME__ = {};
+        function patchTtqInstance(ttqObj) {
+          if (!ttqObj || ttqObj.__brainPatched) return ttqObj;
+          var origTrack = ttqObj.track;
+          if (typeof origTrack !== 'function') return ttqObj;
+          ttqObj.__brainPatched = true;
+          ttqObj.track = function(evName, params, opts) {
+            try {
+              var p = (params && typeof params === 'object') ? Object.assign({}, params) : {};
+              var o = (opts && typeof opts === 'object') ? Object.assign({}, opts) : {};
+              var last = window.__LAST_TTK_PAYLOAD__ || {};
+              var evId = o.event_id || o.eventID || p.event_id || p.eventID || last.event_id || '';
+              if (evId) o.event_id = String(evId);
+
+              var commerceEvents = ['ViewContent', 'AddToCart', 'InitiateCheckout', 'CompletePayment', 'PlaceAnOrder'];
+              if (commerceEvents.indexOf(evName) !== -1) {
+                if (!p.content_id) p.content_id = String(last.content_id || 'product');
+                if (!p.content_type) p.content_type = String(last.content_type || 'product');
+                if (!p.content_name) p.content_name = String(last.content_name || document.title || 'Product');
+                if (!p.currency) p.currency = String(last.currency || 'BDT');
+                if (p.value === undefined || p.value === null || p.value === 0) {
+                  p.value = Number(last.value || last.price || 690);
+                } else {
+                  p.value = Number(p.value);
+                }
+                if (!p.price) p.price = Number(last.price || p.value || 690);
+                if (!p.quantity) p.quantity = Number(last.quantity || 1);
+                if (!Array.isArray(p.contents) || p.contents.length === 0) {
+                  p.contents = Array.isArray(last.contents) && last.contents.length > 0
+                    ? last.contents
+                    : [{
+                        content_id: String(p.content_id),
+                        content_type: 'product',
+                        content_name: String(p.content_name),
+                        quantity: Number(p.quantity) || 1,
+                        price: Number(p.price || p.value) || 0
+                      }];
+                }
+              }
+
+              var now = Date.now();
+              var dedupKey = evName + ':' + (evId || (p.content_id + ':' + p.value));
+              if (window.__TTK_SEEN_EVENTS__[dedupKey] && (now - window.__TTK_SEEN_EVENTS__[dedupKey] < 4000)) {
+                return;
+              }
+              if (commerceEvents.indexOf(evName) !== -1 && window.__TTK_LAST_TIME__[evName] && (now - window.__TTK_LAST_TIME__[evName] < 1500)) {
+                return;
+              }
+              window.__TTK_SEEN_EVENTS__[dedupKey] = now;
+              window.__TTK_LAST_TIME__[evName] = now;
+              return origTrack.call(this, evName, p, o);
+            } catch (_) {
+              return origTrack.apply(this, arguments);
+            }
+          };
+          return ttqObj;
+        }
+        window.__patchTtqInstance = patchTtqInstance;
+        var internalTtq = null;
+        try {
+          Object.defineProperty(window, 'ttq', {
+            configurable: true,
+            enumerable: true,
+            get: function() {
+              if (internalTtq && !internalTtq.__brainPatched && typeof internalTtq.track === 'function') {
+                patchTtqInstance(internalTtq);
+              }
+              return internalTtq;
+            },
+            set: function(val) {
+              internalTtq = val ? patchTtqInstance(val) : val;
+            }
+          });
+        } catch (_) {}
+
         // 4. Network & DOM Level Shield
         function shouldBlockGtmUrl(url) {
           if (!url || typeof url !== 'string') return false;

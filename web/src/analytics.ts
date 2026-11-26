@@ -81,6 +81,12 @@ export function ttkTrack(event: string, params?: Record<string, any>, eventId?: 
   try {
     if (import.meta.env.DEV || isAdminContext()) return;
     const w = window as any;
+    if (params && typeof params === 'object') {
+      w.__LAST_TTK_PAYLOAD__ = { ...params, event_id: eventId ? String(eventId) : undefined };
+    }
+    if (w.ttq && typeof w.__patchTtqInstance === 'function') {
+      w.__patchTtqInstance(w.ttq);
+    }
     if (w.ttq && typeof w.ttq.track === 'function') {
       const opts = eventId ? { event_id: String(eventId) } : undefined;
       w.ttq.track(event, params || {}, opts);
@@ -295,6 +301,19 @@ export function ecView(p: { id: string; name: string; price: number }) {
         price: numPrice,
       },
     ];
+    if (typeof window !== 'undefined') {
+      (window as any).__LAST_TTK_PAYLOAD__ = {
+        content_id: cleanId,
+        content_type: 'product',
+        content_name: cleanName,
+        contents: ttContents,
+        value: numPrice,
+        price: numPrice,
+        quantity: 1,
+        currency: CUR,
+        event_id: eventId,
+      };
+    }
     dl({ ecommerce: null });
     dl({ event: 'view_item', event_id: eventId, eventID: eventId, content_id: cleanId, content_ids: [cleanId], content_name: cleanName, content_type: 'product', contents: ttContents, ecommerce: { currency: CUR, value: numPrice, items: [{ item_id: cleanId, item_name: cleanName, price: numPrice, quantity: 1 }] } });
     dl({ event: 'ViewContent', event_id: eventId, eventID: eventId, content_id: cleanId, content_name: cleanName, content_ids: [cleanId], content_type: 'product', contents: ttContents, value: numPrice, price: numPrice, quantity: 1, currency: CUR });
