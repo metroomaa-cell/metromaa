@@ -4786,6 +4786,25 @@ app.get('/api/admin/courier-intelligence', adminAuth, requireRole('owner', 'mana
     const totalFinished = totalDelivered + totalCancelled;
     const avgSuccessRate = totalFinished > 0 ? Math.round((totalDelivered / totalFinished) * 100) : 100;
 
+    // Courier-wise global breakdown
+    const courierBreakdown = {};
+    for (const p of list) {
+      if (Array.isArray(p.couriers)) {
+        for (const c of p.couriers) {
+          if (!c || !c.courier) continue;
+          const key = c.courier;
+          if (!courierBreakdown[key]) {
+            courierBreakdown[key] = { courier: key, delivered: 0, cancelled: 0, total: 0 };
+          }
+          const d = Number(c.delivered) || 0;
+          const cn = Number(c.cancelled) || 0;
+          courierBreakdown[key].delivered += d;
+          courierBreakdown[key].cancelled += cn;
+          courierBreakdown[key].total += Math.max(Number(c.total) || 0, d + cn);
+        }
+      }
+    }
+
     const q = String(req.query.q || '').trim().toLowerCase();
     if (q) {
       list = list.filter((p) =>
@@ -4821,8 +4840,60 @@ app.get('/api/admin/courier-intelligence', adminAuth, requireRole('owner', 'mana
         highRiskCount,
         totalDelivered,
         totalCancelled,
-        avgSuccessRate
+        avgSuccessRate,
+        courierBreakdown: Object.values(courierBreakdown).sort((a, b) => b.total - a.total)
       }
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Bulk Import / Upload for Courier & Customer Delivery Intelligence
+app.post('/api/admin/courier-intelligence/import', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!items.length) return res.status(400).json({ ok: false, error: 'No items provided for import' });
+
+    let updatedCount = 0;
+    let createdCount = 0;
+    const map = getCourierIntelligenceMap();
+
+    for (const item of items) {
+      const p = cleanBDPhone(item.phone || item.mobile || item.contact || item.number);
+      if (!p || p.length < 10) continue;
+
+      const isNew = !map[p];
+      const courierName = String(item.courier || item.courierName || 'Imported Courier').trim();
+      const delivered = Math.max(0, parseInt(item.delivered ?? item.success, 10) || 0);
+      const cancelled = Math.max(0, parseInt(item.cancelled ?? item.cancel ?? item.return, 10) || 0);
+      const total = Math.max(0, parseInt(item.total, 10) || (delivered + cancelled));
+
+      mergeCourierProfile(p, {
+        couriers: [{
+          courier: courierName,
+          source: 'import',
+          total,
+          delivered,
+          cancelled,
+          rate: (delivered + cancelled > 0) ? Math.round((delivered / (delivered + cancelled)) * 100) : 0
+        }]
+      }, {
+        name: item.name || item.customerName || '',
+        district: item.district || '',
+        address: item.address || ''
+      });
+
+      if (isNew) createdCount++;
+      else updatedCount++;
+    }
+
+    res.json({
+      ok: true,
+      totalProcessed: items.length,
+      createdCount,
+      updatedCount,
+      message: `সফলভাবে ${createdCount + updatedCount}টি কাস্টমার প্রোফাইল আপডেট ও মার্জ করা হয়েছে (নতুন: ${createdCount}, আপডেট: ${updatedCount})`
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

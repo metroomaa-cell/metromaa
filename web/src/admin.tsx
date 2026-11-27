@@ -9877,10 +9877,12 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
   const computedItemsTotal = useMemo(() => items.reduce((s, it) => s + (Number(it.price || 0) * Number(it.qty || 1)), 0), [items]);
   const grandTotal = useMemo(() => Math.max(0, computedItemsTotal + Number(delivery || 0) - Number(discount || 0)), [computedItemsTotal, delivery, discount]);
 
-  const checkFraud = async () => {
-    setFraudMsg('checking courier history…'); setFraud(null);
+  const checkFraud = async (force: boolean = false) => {
+    if (!custPhone) return;
+    setFraudMsg('checking courier history…');
+    if (force) setFraud(null);
     try {
-      const r = await aFetch('/admin/fraud/check', { method: 'POST', body: JSON.stringify({ phone: custPhone }) }).then((x) => x.json());
+      const r = await aFetch('/admin/fraud/check', { method: 'POST', body: JSON.stringify({ phone: custPhone, force: !!force }) }).then((x) => x.json());
       if (r.error) setFraudMsg(r.error);
       else { setFraud(r); setFraudMsg(''); }
     } catch { setFraudMsg('check failed'); }
@@ -9889,7 +9891,10 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
   useEffect(() => {
     aFetch('/admin/integrations').then((r) => (r.ok ? r.json() : { couriers: [] })).then((d) => setAccounts((d.couriers || []).filter((c: any) => c.enabled))).catch(() => {});
     fetch('/api/products').then((r) => r.json()).then(setAllProducts).catch(() => {});
-  }, []);
+    if (custPhone) {
+      void checkFraud(false);
+    }
+  }, [custPhone]);
 
   const updateQty = (idx: number, delta: number) => {
     setItems((prev) =>
@@ -10807,7 +10812,9 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
             <div className="sa-om-fraud-row">
               <div className="sa-om-chip">
                 <span>📞 {custPhone}</span>
-                <button className="sa-btn-subtle" onClick={checkFraud}>Check History</button>
+                <button className="sa-btn-subtle" onClick={() => checkFraud(true)} title="Force re-query APIs and refresh courier history">
+                  {fraud ? '↻ Re-check' : 'Check History'}
+                </button>
               </div>
               {o.source && (
                 <div className="sa-om-chip">
@@ -10980,9 +10987,9 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                               type="button"
                               onClick={() => handleFixDistrictMismatch(isFreeDelivery ? 0 : 120)}
                               style={{
-                                background: 'rgba(239, 68, 68, 0.16)',
-                                color: '#f87171',
-                                border: '1px solid rgba(239, 68, 68, 0.4)',
+                                background: 'rgba(139, 92, 246, 0.16)',
+                                color: '#c4b5fd',
+                                border: '1px solid rgba(139, 92, 246, 0.35)',
                                 borderRadius: 4,
                                 padding: '2px 7px',
                                 fontSize: 10.5,
@@ -30675,6 +30682,565 @@ function CustomersAdmin() {
 // COURIER INTELLIGENCE & FRAUD DATABASE (PERMANENT DB VIEW)
 // ========================================================
 
+function CustomerCourierDetailModal({
+  profile,
+  onClose,
+  onRechecked
+}: {
+  profile: any;
+  onClose: () => void;
+  onRechecked: (updated: any) => void;
+}) {
+  const [rechecking, setRechecking] = useState(false);
+  const [current, setCurrent] = useState(profile);
+  const [toast, setToast] = useState('');
+
+  const handleRecheck = async () => {
+    setRechecking(true);
+    try {
+      const res = await aFetch('/admin/courier-intelligence/check', {
+        method: 'POST',
+        body: JSON.stringify({ phone: current.phone, forceRefresh: true })
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        const updated = data.profile || data.result;
+        setCurrent(updated);
+        onRechecked(updated);
+        setToast('API থেকে নতুন ডাটা সফলভাবে ফেচ ও মার্জ হয়েছে ✓');
+        setTimeout(() => setToast(''), 3000);
+      }
+    } catch (e: any) {
+      setToast('রি-চেক ব্যর্থ হয়েছে: ' + (e.message || 'Error'));
+      setTimeout(() => setToast(''), 3000);
+    } finally {
+      setRechecking(false);
+    }
+  };
+
+  const finished = (Number(current.delivered) || 0) + (Number(current.cancelled) || 0);
+  const rate = current.successRate != null ? current.successRate : (finished > 0 ? Math.round(((Number(current.delivered) || 0) / finished) * 100) : null);
+  const rateColor = rate == null ? '#94a3b8' : rate >= 80 ? '#34d399' : rate >= 50 ? '#fbbf24' : '#f87171';
+  const couriersList = Array.isArray(current.couriers) ? current.couriers : [];
+
+  return (
+    <div className="sa-modal-backdrop" onClick={onClose} style={{ zIndex: 9999 }}>
+      <div
+        className="sa-modal"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: 720,
+          width: '95%',
+          background: '#13111c',
+          border: '1px solid rgba(139, 92, 246, 0.4)',
+          borderRadius: 16,
+          padding: 0,
+          overflow: 'hidden',
+          boxShadow: '0 25px 60px rgba(0,0,0,0.8)'
+        }}
+      >
+        {/* Header */}
+        <div style={{ padding: '18px 24px', background: 'rgba(255, 255, 255, 0.02)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 22 }}>🛡️</span>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#f1f5f9' }}>
+                কাস্টমার কুরিয়ার ইন্টেলিজেন্স ডসিয়ার (Full Profile)
+              </h3>
+              <p style={{ margin: '2px 0 0 0', fontSize: 12, color: '#94a3b8' }}>
+                স্থায়ী সংরক্ষিত পার্সেল ডেলিভারি ও কুরিয়ারভিত্তিক বিশ্লেষণ
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>
+            ×
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div style={{ padding: 24, maxHeight: '80vh', overflowY: 'auto' }}>
+          {toast && (
+            <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 8, background: 'rgba(139, 92, 246, 0.25)', border: '1px solid #8b5cf6', color: '#fff', fontSize: 13, fontWeight: 600 }}>
+              {toast}
+            </div>
+          )}
+
+          {/* Customer Overview Card */}
+          <div style={{ padding: '16px 20px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: 12, marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: '#f1f5f9' }}>{current.phone}</span>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(current.phone)}
+                    style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                    title="Copy Phone"
+                  >
+                    📋
+                  </button>
+                </div>
+                <div style={{ fontSize: 13, color: '#cbd5e1', marginTop: 4 }}>
+                  {current.name || 'Unknown Name'} {current.district ? `· ${current.district}` : ''}
+                </div>
+                {current.address && (
+                  <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
+                    📍 {current.address}
+                  </div>
+                )}
+              </div>
+
+              {/* Success Badge */}
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 22, fontWeight: 900, color: rateColor }}>
+                  {rate != null ? `${rate}%` : '—'}
+                </div>
+                <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
+                  সার্বিক সফলতা ({current.delivered || 0} সফল · {current.cancelled || 0} বাতিল)
+                </div>
+                <div style={{ marginTop: 6 }}>
+                  {current.risk === 'high' ? (
+                    <span style={{ padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#f87171' }}>
+                      ⛔ High Risk Buyer
+                    </span>
+                  ) : current.risk === 'moderate' ? (
+                    <span style={{ padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: 'rgba(245, 158, 11, 0.2)', border: '1px solid rgba(245, 158, 11, 0.4)', color: '#fbbf24' }}>
+                      ⚠️ Moderate Risk
+                    </span>
+                  ) : (
+                    <span style={{ padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: 'rgba(16, 185, 129, 0.2)', border: '1px solid rgba(16, 185, 129, 0.4)', color: '#34d399' }}>
+                      ✓ Verified Safe Buyer
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Detailed Courier Table */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#c4b5fd', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>🚚</span> কুরিয়ারভিত্তিক পার্সেল রেকর্ড (Courier-Wise Details):
+            </div>
+            <div style={{ overflowX: 'auto', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: 10 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
+                <thead>
+                  <tr style={{ background: 'rgba(255, 255, 255, 0.04)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <th style={{ padding: '10px 14px', color: '#94a3b8' }}>কুরিয়ার</th>
+                    <th style={{ padding: '10px 14px', color: '#94a3b8', textAlign: 'center' }}>ডেলিভারি</th>
+                    <th style={{ padding: '10px 14px', color: '#94a3b8', textAlign: 'center' }}>বাতিল / রিটার্ন</th>
+                    <th style={{ padding: '10px 14px', color: '#94a3b8', textAlign: 'center' }}>মোট পার্সেল</th>
+                    <th style={{ padding: '10px 14px', color: '#94a3b8', textAlign: 'center' }}>সফলতার হার</th>
+                    <th style={{ padding: '10px 14px', color: '#94a3b8' }}>সোর্স / স্ট্যাটাস</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {couriersList.length > 0 ? (
+                    couriersList.map((c: any, i: number) => {
+                      const cRate = c.rate != null ? c.rate : (c.delivered + c.cancelled > 0 ? Math.round((c.delivered / (c.delivered + c.cancelled)) * 100) : 0);
+                      const cColor = cRate >= 80 ? '#34d399' : cRate >= 50 ? '#fbbf24' : '#f87171';
+                      return (
+                        <tr key={i} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                          <td style={{ padding: '10px 14px', fontWeight: 600, color: '#f1f5f9' }}>
+                            {c.courier}
+                          </td>
+                          <td style={{ padding: '10px 14px', textAlign: 'center', color: '#34d399', fontWeight: 700 }}>
+                            {c.delivered || 0}
+                          </td>
+                          <td style={{ padding: '10px 14px', textAlign: 'center', color: '#f87171', fontWeight: 700 }}>
+                            {c.cancelled || 0}
+                          </td>
+                          <td style={{ padding: '10px 14px', textAlign: 'center', color: '#e2e8f0' }}>
+                            {c.total || ((c.delivered || 0) + (c.cancelled || 0))}
+                          </td>
+                          <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: cColor }}>
+                            {cRate}%
+                          </td>
+                          <td style={{ padding: '10px 14px', color: '#94a3b8', fontSize: 11.5 }}>
+                            {c.source || 'aggregator'} {c.notice ? `(${c.notice})` : ''}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={6} style={{ padding: 18, textAlign: 'center', color: '#94a3b8' }}>
+                        কোনো পৃথক কুরিয়ার রেকর্ড নেই (শুধুমাত্র স্টোর ইন্টারনাল রেকর্ড বিদ্যমান)
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>
+              সর্বশেষ যাচাই: {current.lastCheckedAt ? new Date(current.lastCheckedAt).toLocaleString('en-GB') : '—'} · প্রথম ভেরিফিকেশন: {current.firstCheckedAt ? new Date(current.firstCheckedAt).toLocaleDateString('en-GB') : '—'}
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Actions Footer */}
+        <div style={{ padding: '14px 24px', background: 'rgba(255, 255, 255, 0.02)', borderTop: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <a
+              href={`https://wa.me/88${String(current.phone).replace(/\D/g, '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="sa-btn ghost sa-mini"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#25D366', borderColor: 'rgba(37, 211, 102, 0.3)' }}
+            >
+              💬 WhatsApp চ্যাট
+            </a>
+            <a
+              href={`tel:${current.phone}`}
+              className="sa-btn ghost sa-mini"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+            >
+              📞 কল করুন
+            </a>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              disabled={rechecking}
+              onClick={handleRecheck}
+              className="sa-btn ghost sa-mini"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+            >
+              {rechecking ? 'API রিফ্রেশ হচ্ছে…' : '🔄 Force API Re-Check'}
+            </button>
+            <button type="button" onClick={onClose} className="sa-btn primary sa-mini">
+              বন্ধ করুন
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ========================================================
+// COURIER DATA BULK IMPORT MODAL (EXCEL & CSV)
+// ========================================================
+
+function CourierIntelligenceImportModal({
+  onClose,
+  onImportSuccess
+}: {
+  onClose: () => void;
+  onImportSuccess: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errMsg, setErrMsg] = useState('');
+  const [selectedCourier, setSelectedCourier] = useState('Auto-Detect');
+  const [parsedRows, setParsedRows] = useState<any[]>([]);
+  const [fileName, setFileName] = useState('');
+
+  const downloadSampleExcel = async () => {
+    try {
+      const XLSX = await import('xlsx');
+      const ws_data = [
+        ['Phone', 'Customer Name', 'Courier', 'Delivered', 'Cancelled', 'District', 'Address'],
+        ['01712345678', 'Rahim Uddin', 'Pathao', 4, 0, 'Dhaka', 'Mirpur 10, Dhaka'],
+        ['01898765432', 'Karim Mia', 'Steadfast', 3, 1, 'Chittagong', 'GEC Circle, Chittagong'],
+        ['01911223344', 'Sabbir Ahmed', 'RedX', 2, 0, 'Sylhet', 'Zindabazar, Sylhet'],
+        ['01555667788', 'Tanvir Hasan', 'CarryBee', 5, 2, 'Khulna', 'Boyra, Khulna']
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      ws['!cols'] = [{ wch: 15 }, { wch: 18 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 28 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'CourierData');
+      XLSX.writeFile(wb, 'courier_intelligence_sample.xlsx');
+    } catch (e: any) {
+      alert('Error creating sample: ' + e.message);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    setLoading(true);
+    setErrMsg('');
+    setParsedRows([]);
+
+    try {
+      const XLSX = await import('xlsx');
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      if (!workbook.SheetNames.length) {
+        setErrMsg('ফাইলে কোনো ডাটা পাওয়া যায়নি (Empty file)');
+        setLoading(false);
+        return;
+      }
+
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+      if (!json.length) {
+        setErrMsg('শীটে কোনো রো পাওয়া যায়নি');
+        setLoading(false);
+        return;
+      }
+
+      // Column auto-matching
+      const findKey = (row: any, regex: RegExp) => Object.keys(row).find((k) => regex.test(k.trim().toLowerCase())) || '';
+
+      const firstRow = json[0] || {};
+      const phoneCol = findKey(firstRow, /phone|mobile|contact|নাম্বার|ফোন|মোবাইল/i);
+      const nameCol = findKey(firstRow, /customer_name|customer|name|নাম|কাস্টমার/i);
+      const courierCol = findKey(firstRow, /courier|provider|company|কুরিয়ার/i);
+      const delCol = findKey(firstRow, /delivered|delivered_order|success|ডেলিভারি|সফল/i);
+      const canCol = findKey(firstRow, /cancel|cancelled|return|returned|বাতিল|রিটার্ন/i);
+      const totalCol = findKey(firstRow, /total|parcel|orders|মোট/i);
+      const statusCol = findKey(firstRow, /status|order_status|স্ট্যাটাস/i);
+      const districtCol = findKey(firstRow, /district|জেলা|সিটি|city/i);
+      const addressCol = findKey(firstRow, /address|ঠিকানা/i);
+
+      if (!phoneCol) {
+        setErrMsg('ফাইলে কাস্টমারের ফোন নাম্বার (Phone/Mobile) কলাম পাওয়া যায়নি');
+        setLoading(false);
+        return;
+      }
+
+      const rows: any[] = [];
+      for (const r of json) {
+        const rawPhone = String(r[phoneCol] || '').trim();
+        if (!rawPhone) continue;
+
+        let delivered = delCol ? parseInt(r[delCol], 10) || 0 : 0;
+        let cancelled = canCol ? parseInt(r[canCol], 10) || 0 : 0;
+
+        // If sheet is a single parcel log with status column:
+        if (statusCol && !delCol && !canCol) {
+          const st = String(r[statusCol] || '').toLowerCase();
+          if (st.includes('deliver') || st.includes('success') || st.includes('সফল')) delivered = 1;
+          else if (st.includes('cancel') || st.includes('return') || st.includes('বাতিল') || st.includes('রিটার্ন') || st.includes('fail')) cancelled = 1;
+        }
+
+        let courierName = courierCol ? String(r[courierCol] || '').trim() : '';
+        if (!courierName || courierName === '') {
+          courierName = selectedCourier !== 'Auto-Detect' ? selectedCourier : 'Imported Courier';
+        }
+
+        const total = totalCol ? parseInt(r[totalCol], 10) || (delivered + cancelled) : (delivered + cancelled || 1);
+
+        rows.push({
+          phone: rawPhone,
+          name: nameCol ? String(r[nameCol] || '').trim() : '',
+          courier: courierName,
+          delivered,
+          cancelled,
+          total,
+          district: districtCol ? String(r[districtCol] || '').trim() : '',
+          address: addressCol ? String(r[addressCol] || '').trim() : ''
+        });
+      }
+
+      if (!rows.length) {
+        setErrMsg('কোনো ভ্যালিড কাস্টমার ডাটা পাওয়া যায়নি');
+      } else {
+        setParsedRows(rows);
+      }
+    } catch (err: any) {
+      setErrMsg('ফাইল পার্সিং এরর: ' + (err.message || 'Error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImportSubmit = async () => {
+    if (!parsedRows.length) return;
+    setSubmitting(true);
+    setErrMsg('');
+    try {
+      const res = await aFetch('/admin/courier-intelligence/import', {
+        method: 'POST',
+        body: JSON.stringify({ items: parsedRows })
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        onImportSuccess();
+        onClose();
+      } else {
+        setErrMsg(data.error || 'ইমপোর্ট ব্যর্থ হয়েছে');
+      }
+    } catch (err: any) {
+      setErrMsg(err.message || 'নেটওয়ার্ক এরর');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="sa-modal-backdrop" onClick={onClose} style={{ zIndex: 9999 }}>
+      <div
+        className="sa-modal"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: 680,
+          width: '95%',
+          background: '#13111c',
+          border: '1px solid rgba(139, 92, 246, 0.4)',
+          borderRadius: 16,
+          padding: 0,
+          overflow: 'hidden',
+          boxShadow: '0 25px 60px rgba(0,0,0,0.8)'
+        }}
+      >
+        <div style={{ padding: '18px 24px', background: 'rgba(255, 255, 255, 0.02)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 22 }}>📤</span>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#f1f5f9' }}>
+                কুরিয়ার ডাটা বাল্ক আপলোড ও মার্জ (Excel / CSV)
+              </h3>
+              <p style={{ margin: '2px 0 0 0', fontSize: 12, color: '#94a3b8' }}>
+                Steadfast, Pathao, RedX বা কাস্টম ফাইল আপলোড করুন — পূর্বের কোনো ডাটা মুছবে না, শুধু নতুন ডাটা মার্জ হবে
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>
+            ×
+          </button>
+        </div>
+
+        <div style={{ padding: 24 }}>
+          {errMsg && (
+            <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 8, background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#f87171', fontSize: 13 }}>
+              {errMsg}
+            </div>
+          )}
+
+          {/* Configuration Row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12.5, color: '#94a3b8' }}>কুরিয়ার প্রোভাইডার:</span>
+              <select
+                value={selectedCourier}
+                onChange={(e) => setSelectedCourier(e.target.value)}
+                style={{
+                  height: 32,
+                  padding: '0 10px',
+                  borderRadius: 6,
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  color: '#fff',
+                  fontSize: 12.5
+                }}
+              >
+                <option value="Auto-Detect">Auto-Detect (ফাইল কলাম থেকে)</option>
+                <option value="Pathao">Pathao</option>
+                <option value="Steadfast">Steadfast</option>
+                <option value="RedX">RedX</option>
+                <option value="CarryBee">CarryBee</option>
+                <option value="Paperfly">Paperfly</option>
+                <option value="Store Internal">Store Internal</option>
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={downloadSampleExcel}
+              className="sa-btn ghost sa-mini"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.3)' }}
+            >
+              📊 Sample Excel (.xlsx) ডাউনলোড
+            </button>
+          </div>
+
+          {/* Upload Dropzone */}
+          <div
+            style={{
+              position: 'relative',
+              padding: '28px 20px',
+              textAlign: 'center',
+              border: '2px dashed rgba(139, 92, 246, 0.4)',
+              borderRadius: 12,
+              background: 'rgba(139, 92, 246, 0.03)',
+              cursor: 'pointer',
+              marginBottom: 16
+            }}
+          >
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleFileChange}
+              style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
+            />
+            <div style={{ fontSize: 32, marginBottom: 6 }}>📁</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#f1f5f9' }}>
+              {fileName ? fileName : 'ক্লিক করে ফাইল সিলেক্ট করুন বা ড্র্যাগ করে ছাড়ুন'}
+            </div>
+            <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
+              সাপোর্টেড ফরম্যাট: .xlsx, .xls, .csv (Phone, Customer Name, Delivered, Cancelled ইত্যাদি)
+            </div>
+            {loading && (
+              <div style={{ marginTop: 10, color: '#c4b5fd', fontSize: 13, fontWeight: 600 }}>
+                ডাটা পার্স করা হচ্ছে… ⏳
+              </div>
+            )}
+          </div>
+
+          {/* Preview Table */}
+          {parsedRows.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#34d399' }}>
+                  ✓ {parsedRows.length}টি কাস্টমার রেকর্ড সনাক্ত হয়েছে
+                </span>
+                <span style={{ fontSize: 11.5, color: '#94a3b8' }}>
+                  প্রথম ৫টি রেকর্ডের প্রিভিউ:
+                </span>
+              </div>
+              <div style={{ overflowX: 'auto', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                      <th style={{ padding: '6px 10px', color: '#94a3b8', textAlign: 'left' }}>ফোন</th>
+                      <th style={{ padding: '6px 10px', color: '#94a3b8', textAlign: 'left' }}>নাম</th>
+                      <th style={{ padding: '6px 10px', color: '#94a3b8', textAlign: 'left' }}>কুরিয়ার</th>
+                      <th style={{ padding: '6px 10px', color: '#94a3b8', textAlign: 'center' }}>ডেলিভারি</th>
+                      <th style={{ padding: '6px 10px', color: '#94a3b8', textAlign: 'center' }}>বাতিল</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parsedRows.slice(0, 5).map((r, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                        <td style={{ padding: '6px 10px', fontWeight: 600, color: '#f1f5f9' }}>{r.phone}</td>
+                        <td style={{ padding: '6px 10px', color: '#cbd5e1' }}>{r.name || '—'}</td>
+                        <td style={{ padding: '6px 10px', color: '#c4b5fd' }}>{r.courier}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'center', color: '#34d399', fontWeight: 700 }}>{r.delivered}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'center', color: '#f87171', fontWeight: 700 }}>{r.cancelled}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: '14px 24px', background: 'rgba(255, 255, 255, 0.02)', borderTop: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+          <button type="button" onClick={onClose} className="sa-btn ghost">
+            বাতিল
+          </button>
+          <button
+            type="button"
+            disabled={submitting || parsedRows.length === 0}
+            onClick={handleImportSubmit}
+            className="sa-btn primary"
+            style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)', border: 'none', color: '#fff', fontWeight: 600 }}
+          >
+            {submitting ? 'মার্জ হচ্ছে…' : `✓ ${parsedRows.length}টি রেকর্ড ডেটাবেজে যুক্ত করুন`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CourierIntelligenceAdmin() {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({
@@ -30684,7 +31250,8 @@ function CourierIntelligenceAdmin() {
     highRiskCount: 0,
     totalDelivered: 0,
     totalCancelled: 0,
-    avgSuccessRate: 100
+    avgSuccessRate: 100,
+    courierBreakdown: []
   });
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -30693,6 +31260,10 @@ function CourierIntelligenceAdmin() {
   const [q, setQ] = useState('');
   const [riskFilter, setRiskFilter] = useState<'all' | 'safe' | 'moderate' | 'high'>('all');
   const [toast, setToast] = useState('');
+
+  // Modals state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [selectedDetailProfile, setSelectedDetailProfile] = useState<any | null>(null);
 
   // Manual Lookup states
   const [manualPhone, setManualPhone] = useState('');
@@ -30814,7 +31385,7 @@ function CourierIntelligenceAdmin() {
           </div>
         )}
 
-        {/* Header Title */}
+        {/* Header Title & Actions */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -30824,10 +31395,19 @@ function CourierIntelligenceAdmin() {
               </h2>
             </div>
             <p style={{ margin: '4px 0 0 34px', fontSize: 13, color: '#94a3b8' }}>
-              সকল কাস্টমারের স্থায়ী পার্সেল হিস্ট্রি (Pathao, Steadfast, Store) — অটোমেটিক যোগ হবে, কিন্তু পূর্বের কোনো ডাটা কখনোই মুছবে না
+              সকল কাস্টমারের স্থায়ী পার্সেল হিস্ট্রি (Pathao, Steadfast, RedX, Store) — অটোমেটিক যোগ হবে, কিন্তু পূর্বের কোনো ডাটা কখনোই মুছবে না
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="sa-btn primary"
+              onClick={() => setShowImportModal(true)}
+              style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)', border: 'none', color: '#fff', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              title="Steadfast, Pathao বা যেকোনো এক্সেল ফাইল আপলোড করে মার্জ করুন"
+            >
+              <span>📤</span> ডাটা আপলোড (Excel/CSV)
+            </button>
             <button type="button" className="sa-btn ghost" onClick={exportCSV} title="সম্পূর্ণ ডেটাবেজ CSV ফরম্যাটে ডাউনলোড করুন">
               📥 Export CSV
             </button>
@@ -30838,7 +31418,7 @@ function CourierIntelligenceAdmin() {
         </div>
 
         {/* KPI Stat Cards (Dark Violet Theme) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, marginBottom: 18 }}>
           <div style={{ padding: '16px 18px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: 12 }}>
             <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>
               👥 মোট সেভ করা কাস্টমার
@@ -30887,6 +31467,28 @@ function CourierIntelligenceAdmin() {
             </div>
           </div>
         </div>
+
+        {/* Global Courier-Wise Breakdown Row (All Couriers Details) */}
+        {Array.isArray(stats.courierBreakdown) && stats.courierBreakdown.length > 0 && (
+          <div style={{ marginBottom: 20, padding: '14px 18px', background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#c4b5fd', textTransform: 'uppercase', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>🚚</span> কুরিয়ারভিত্তিক সামগ্রিক পার্সেল বিশ্লেষণ (All Couriers Breakdown):
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+              {stats.courierBreakdown.map((cb: any, idx: number) => {
+                const finished = (Number(cb.delivered) || 0) + (Number(cb.cancelled) || 0);
+                const rate = finished > 0 ? Math.round(((Number(cb.delivered) || 0) / finished) * 100) : 100;
+                return (
+                  <div key={idx} style={{ padding: '8px 14px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: 8, minWidth: 140 }}>
+                    <div style={{ fontWeight: 700, color: '#f1f5f9', fontSize: 13 }}>{cb.courier}</div>
+                    <div style={{ fontSize: 11.5, color: '#34d399', marginTop: 2 }}>✓ {cb.delivered} ডেলিভারি ({rate}%)</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8' }}>✕ {cb.cancelled} বাতিল · মোট: {cb.total}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Manual Phone Lookup & Live Add Box */}
         <div style={{ padding: '16px 20px', background: '#13111c', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: 12, marginBottom: 20 }}>
@@ -31038,7 +31640,7 @@ function CourierIntelligenceAdmin() {
                 <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>কাস্টমার ও ফোন</th>
                 <th style={{ textAlign: 'center', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>সফলতার হার</th>
                 <th style={{ textAlign: 'center', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>অর্ডার হিস্ট্রি</th>
-                <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>কুরিয়ার ব্রেকডাউন</th>
+                <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>কুরিয়ার ব্রেকডাউন (বিস্তারিত)</th>
                 <th style={{ textAlign: 'center', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>রিস্ক স্ট্যাটাস</th>
                 <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>সর্বশেষ ভেরিফাইড</th>
                 <th style={{ textAlign: 'right', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>অ্যাকশন</th>
@@ -31141,16 +31743,27 @@ function CourierIntelligenceAdmin() {
                     </td>
 
                     <td style={{ padding: '12px 14px', textAlign: 'right' }}>
-                      <button
-                        type="button"
-                        disabled={isRecheckingThis}
-                        onClick={() => handleRecheckRow(p.phone)}
-                        className="sa-btn ghost sa-mini"
-                        style={{ height: 28, fontSize: 11.5, borderRadius: 6 }}
-                        title="কুরিয়ার API থেকে সর্বশেষ ডাটা ফেচ করে মার্জ করুন"
-                      >
-                        {isRecheckingThis ? 'রিফ্রেশ হচ্ছে…' : '🔄 Re-Check'}
-                      </button>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDetailProfile(p)}
+                          className="sa-btn ghost sa-mini"
+                          style={{ height: 28, fontSize: 11.5, borderRadius: 6, color: '#c4b5fd', borderColor: 'rgba(139, 92, 246, 0.3)' }}
+                          title="সকল কুরিয়ারের সম্পূর্ণ ব্রেকডাউন দেখুন"
+                        >
+                          👁️ বিস্তারিত
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isRecheckingThis}
+                          onClick={() => handleRecheckRow(p.phone)}
+                          className="sa-btn ghost sa-mini"
+                          style={{ height: 28, fontSize: 11.5, borderRadius: 6 }}
+                          title="কুরিয়ার API থেকে সর্বশেষ ডাটা ফেচ করে মার্জ করুন"
+                        >
+                          {isRecheckingThis ? 'রিফ্রেশ হচ্ছে…' : '🔄 Re-Check'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -31193,6 +31806,29 @@ function CourierIntelligenceAdmin() {
           </div>
         )}
       </div>
+
+      {/* Customer Courier Details Modal */}
+      {selectedDetailProfile && (
+        <CustomerCourierDetailModal
+          profile={selectedDetailProfile}
+          onClose={() => setSelectedDetailProfile(null)}
+          onRechecked={(updated) => {
+            setSelectedDetailProfile(updated);
+            setProfiles((prev) => prev.map((p) => (p.phone === updated.phone ? updated : p)));
+          }}
+        />
+      )}
+
+      {/* Bulk Courier Data Import Modal */}
+      {showImportModal && (
+        <CourierIntelligenceImportModal
+          onClose={() => setShowImportModal(false)}
+          onImportSuccess={() => {
+            showToast('ডাটা সফলভাবে ইমপোর্ট ও মার্জ হয়েছে ✓');
+            loadData(q, riskFilter, 1);
+          }}
+        />
+      )}
     </>
   );
 }
