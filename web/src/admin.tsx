@@ -2588,21 +2588,21 @@ export function Admin() {
     const groupForNav: Record<string, string> = {
       saika: 'saika_ai',
       orders: 'approved_orders',
-      courier_intelligence: 'approved_orders',
-      scanner: 'approved_orders',
-      fraud: 'approved_orders',
+      courier_intelligence: 'courier_hub',
+      scanner: 'courier_hub',
+      fraud: 'courier_hub',
       campaigns: 'ads', products: 'inventory', categories: 'inventory', colors: 'inventory', landings: 'inventory', media: 'inventory',
       whatsapp: 'messages', message_marketing: 'messages', emails: 'messages', push_popups: 'messages', finance: 'finance', reports: 'reports', payment_gateways: 'purchase', coupons: 'purchase',
       customers: 'task_followup', reviews: 'task_followup', calls: 'call_center', staff: 'work_inbox', integrations: 'work_inbox', settings: 'store_settings', backup: 'work_inbox',
     };
     const currentGroup = cur === 'integrations' && activeSubItem === 'Courier API Setup'
-      ? 'approved_orders'
+      ? 'courier_hub'
       : cur === 'finance' && activeSubItem === 'Courier Invoice Upload'
-      ? 'approved_orders'
+      ? 'courier_hub'
       : cur === 'courier_intelligence'
-      ? 'approved_orders'
+      ? 'courier_hub'
       : groupForNav[cur];
-    const groups = ['saika_ai', 'approved_orders', 'ads', 'web_orders', 'inventory', 'messages', 'purchase', 'finance', 'reports', 'task_followup', 'call_center', 'store_settings', 'work_inbox'];
+    const groups = ['saika_ai', 'approved_orders', 'courier_hub', 'ads', 'web_orders', 'inventory', 'messages', 'purchase', 'finance', 'reports', 'task_followup', 'call_center', 'store_settings', 'work_inbox'];
     let savedGroup = '';
     try {
       const saved = sessionStorage.getItem('sa_sidebar_open_groups');
@@ -2657,9 +2657,9 @@ export function Admin() {
       coupons: 'purchase',
       customers: 'task_followup',
       reviews: 'task_followup',
-      courier_intelligence: 'approved_orders',
-      scanner: 'approved_orders',
-      fraud: 'approved_orders',
+      courier_intelligence: 'courier_hub',
+      scanner: 'courier_hub',
+      fraud: 'courier_hub',
       calls: 'call_center',
       staff: 'work_inbox',
       integrations: 'work_inbox',
@@ -2668,13 +2668,13 @@ export function Admin() {
     };
     const isWebOrderEntry = cur === 'orders' && (activeSubItem === 'Store Orders' || /^\d+ · /.test(activeSubItem));
     const g = cur === 'integrations' && activeSubItem === 'Courier API Setup'
-      ? 'approved_orders'
+      ? 'courier_hub'
       : isWebOrderEntry
       ? 'web_orders'
       : cur === 'finance' && activeSubItem === 'Courier Invoice Upload'
-      ? 'approved_orders'
+      ? 'courier_hub'
       : cur === 'courier_intelligence'
-      ? 'approved_orders'
+      ? 'courier_hub'
       : cur === 'customers' && activeSubItem === 'Contacts'
       ? 'call_center'
       : navToGroup[cur];
@@ -3212,13 +3212,27 @@ export function Admin() {
               { id: 'orders', label: 'Orders Dashboard', action: () => navigateOrders('Orders Dashboard', 'confirmed') },
               { id: 'orders', label: 'Preorders', action: () => navigateOrders('Preorders', 'pending') },
               { id: 'orders', label: 'Bulk Order Actions', action: () => navigateOrders('Bulk Order Actions', 'all', '', true) },
-              { id: 'scanner', label: 'Scan To Update' },
-              { id: 'finance', label: 'Courier Invoice Upload', action: navigateToCourierReconcile },
-              { id: 'integrations', label: 'Courier API Setup' },
-              { id: 'fraud', label: 'Fraud & Risk Protection' },
-              { id: 'courier_intelligence', label: 'Courier Intelligence DB', action: () => { setNav('courier_intelligence'); setActiveSubItem('Courier Intelligence DB'); setMobileMenuOpen(false); } },
             ],
             newOrders
+          )}
+
+          {/* 3. Courier (Completely Dedicated Section) */}
+          {renderGroup(
+            'courier_hub',
+            'Courier',
+            <svg className="sa-grp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18, flexShrink: 0, color: '#38bdf8' }}>
+              <rect x="1" y="3" width="15" height="13" rx="2" />
+              <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+              <circle cx="5.5" cy="18.5" r="2.5" />
+              <circle cx="18.5" cy="18.5" r="2.5" />
+            </svg>,
+            [
+              { id: 'courier_intelligence', label: 'Courier Intelligence DB', action: () => { setNav('courier_intelligence'); setActiveSubItem('Courier Intelligence DB'); setMobileMenuOpen(false); } },
+              { id: 'integrations', label: 'Courier API Setup' },
+              { id: 'finance', label: 'Courier Invoice Upload', action: navigateToCourierReconcile },
+              { id: 'fraud', label: 'Fraud & Risk Protection' },
+              { id: 'scanner', label: 'Scan To Update' },
+            ]
           )}
 
           {/* 3. Ads (Exact Match with User Screenshot) */}
