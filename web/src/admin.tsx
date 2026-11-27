@@ -109,13 +109,18 @@ function normalizeBDMobile(value: string) {
   return digits;
 }
 const isValidBDMobile = (value: string) => /^01[3-9]\d{8}$/.test(normalizeBDMobile(value));
-const COURIER_SCORE_CACHE_KEY = 'dot_admin_courier_scores_v3';
-const COURIER_SCORE_CACHE_TTL = 24 * 60 * 60 * 1000;
+const COURIER_SCORE_CACHE_KEY = 'dot_admin_courier_scores_v6';
+const COURIER_SCORE_CACHE_TTL = 5 * 60 * 1000;
 let courierScoreSessionCache: Record<string, any> | null = null;
 function getCourierScoreSessionCache() {
   if (courierScoreSessionCache) return courierScoreSessionCache;
   const cache: Record<string, any> = {};
   try {
+    try {
+      sessionStorage.removeItem('dot_admin_courier_scores_v3');
+      sessionStorage.removeItem('dot_admin_courier_scores_v4');
+      sessionStorage.removeItem('dot_admin_courier_scores_v5');
+    } catch (_) {}
     const saved = JSON.parse(sessionStorage.getItem(COURIER_SCORE_CACHE_KEY) || '{}');
     const now = Date.now();
     Object.entries(saved && typeof saved === 'object' ? saved : {}).forEach(([phone, value]: [string, any]) => {
@@ -7403,6 +7408,43 @@ function OrdersAdmin({
   }, [visibleOrderIds]);
   const visiblePhoneKeys = Array.from(new Set(paged.map((o) => normalizeBDMobile(o?.customer?.phone || '')).filter((p) => isValidBDMobile(p))));
   const visiblePhoneKey = visiblePhoneKeys.join(',');
+
+  useEffect(() => {
+    const onCourierRefresh = (e: any) => {
+      const detail = e?.detail;
+      if (detail?.phone) {
+        const norm = normalizeBDMobile(detail.phone);
+        const d = detail.data;
+        if (d) {
+          const couriers = Array.isArray(d?.couriers) ? d.couriers.map((c: any) => ({
+            courier: String(c?.courier || ''),
+            source: String(c?.source || ''),
+            total: Number(c?.total) || 0,
+            delivered: Number(c?.delivered) || 0,
+            cancelled: Number(c?.cancelled) || 0,
+            status: String(c?.status || ''),
+            notice: String(c?.notice || '').slice(0, 180),
+            rating: String(c?.rating || '').slice(0, 80),
+          })) : [];
+          const updated = {
+            couriers,
+            total: Number(d.total ?? d.totalOrders) || 0,
+            delivered: Number(d.delivered ?? d.success) || 0,
+            cancelled: Number(d.cancelled ?? d.cancel) || 0,
+            rate: d.rate ?? d.successRate,
+            risk: d.risk || 'unknown',
+            at: Date.now()
+          };
+          courierHistoryCache.current[norm] = updated;
+          persistCourierScoreSessionCache(courierHistoryCache.current);
+          setCourierHistoryByPhone((prev) => ({ ...prev, [norm]: updated }));
+        }
+      }
+    };
+    window.addEventListener('courier-intelligence-refresh', onCourierRefresh);
+    return () => window.removeEventListener('courier-intelligence-refresh', onCourierRefresh);
+  }, []);
+
   useEffect(() => {
     const phoneKeys = visiblePhoneKey ? visiblePhoneKey.split(',') : [];
     let cancelled = false;
@@ -7444,7 +7486,15 @@ function OrdersAdmin({
             notice: String(c?.notice || '').slice(0, 180),
             rating: String(c?.rating || '').slice(0, 80),
           })) : [];
-          result = response.ok && data && data.ok !== false && !data.error ? { couriers, at: Date.now() } : { error: true, at: Date.now() };
+          result = response.ok && data && data.ok !== false && !data.error ? {
+            couriers,
+            total: Number(data.total ?? data.totalOrders) || 0,
+            delivered: Number(data.delivered ?? data.success) || 0,
+            cancelled: Number(data.cancelled ?? data.cancel) || 0,
+            rate: data.rate ?? data.successRate,
+            risk: data.risk || 'unknown',
+            at: Date.now()
+          } : { error: true, at: Date.now() };
         } catch {
           result = { error: true, at: Date.now() };
         }
@@ -8147,13 +8197,29 @@ function OrdersAdmin({
           const courierRatings = (Array.isArray(courierHistory?.couriers) ? courierHistory.couriers : []).filter((c: any) => c?.source !== 'internal' && c?.status === 'rated' && c?.rating);
           const courierApiIssues = (Array.isArray(courierHistory?.couriers) ? courierHistory.couriers : []).filter((c: any) => c?.source !== 'internal' && ['error', 'inactive'].includes(String(c?.status || '').toLowerCase()));
           const courierApiIssueText = courierApiIssues.map((c: any) => `${c.courier}: ${c.notice || c.status}`).join(' · ');
-          const apiDelivered = apiCourierRows.reduce((sum: number, c: any) => sum + (Number(c?.delivered) || 0), 0);
-          const apiCancelled = apiCourierRows.reduce((sum: number, c: any) => sum + (Number(c?.cancelled) || 0), 0);
+          let apiDelivered = Number(courierHistory?.delivered) || 0;
+          let apiCancelled = Number(courierHistory?.cancelled) || 0;
+          if (apiDelivered === 0 && apiCancelled === 0 && apiCourierRows.length > 0) {
+            apiDelivered = apiCourierRows.reduce((sum: number, c: any) => sum + (Number(c?.delivered) || 0), 0);
+            apiCancelled = apiCourierRows.reduce((sum: number, c: any) => sum + (Number(c?.cancelled) || 0), 0);
+          }
           const apiFinished = apiDelivered + apiCancelled;
           const localHistory = successByPhone[phone] || { d: 0, c: 0 };
           const localRatio = ratioFor(phone);
+          const activeCouriers = apiCourierRows.map((c: any) => c.courier).filter(Boolean);
+          const courierDisplayNames = activeCouriers.length > 0
+            ? activeCouriers
+            : (Array.isArray(courierHistory?.couriers)
+                ? courierHistory.couriers.filter((c: any) => c.courier && c.courier !== 'Store Internal' && c.courier !== 'Store Internal Orders').map((c: any) => c.courier)
+                : []);
           const scoreData = apiFinished > 0
-            ? { ratio: Math.round((apiDelivered / apiFinished) * 100), delivered: apiDelivered, cancelled: apiCancelled, source: 'Courier API', courierNames: apiCourierRows.map((c: any) => c.courier).filter(Boolean) }
+            ? {
+                ratio: courierHistory?.rate != null ? Number(courierHistory.rate) : Math.round((apiDelivered / apiFinished) * 100),
+                delivered: apiDelivered,
+                cancelled: apiCancelled,
+                source: courierDisplayNames.length ? courierDisplayNames.slice(0, 2).join(' · ') : 'Courier API',
+                courierNames: courierDisplayNames
+              }
             : localRatio != null
               ? { ratio: localRatio, delivered: localHistory.d, cancelled: localHistory.c, source: 'Store history', courierNames: [] }
               : null;
