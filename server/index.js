@@ -4988,6 +4988,23 @@ async function runCourierBatchSync() {
   });
 }
 
+// Automatically start background batch sync on server boot for unverified profiles
+setTimeout(() => {
+  try {
+    const map = getCourierIntelligenceMap();
+    const unverified = Object.values(map).some((p) => {
+      const ext = (p.couriers || []).filter(
+        (c) => c.source !== 'internal' && c.courier !== 'Store Internal' && c.courier !== 'Store Internal Orders'
+      );
+      return ext.length === 0;
+    });
+    if (unverified && !courierBatchSync.running) {
+      console.log('[Courier Intelligence] Starting auto-batch sync for unverified customer profiles...');
+      runCourierBatchSync();
+    }
+  } catch (_) {}
+}, 4000);
+
 // Check batch sync status
 app.get('/api/admin/courier-intelligence/batch-sync', adminAuth, (req, res) => {
   res.json({ ok: true, sync: courierBatchSync });
