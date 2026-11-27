@@ -10167,190 +10167,220 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
               </div>
             </div>
           </div>
-          <div className="sa-om-head-acts">
-            {isLockedActive ? (
-              <button
-                type="button"
-                className="sa-btn sa-mini"
-                style={{ background: 'rgba(245, 158, 11, 0.18)', border: '1px solid rgba(245, 158, 11, 0.45)', color: '#fbbf24', fontWeight: 600 }}
-                onClick={releaseOrder}
-                title="Order is locked for 10 mins. Click to release."
-              >
-                🔒 {lockState.lockedByName || lockState.lockedBy} (Release)
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="sa-btn ghost sa-mini"
-                onClick={claimOrder}
-                title="Lock this order for 10 minutes while you call/process so others don't duplicate"
-              >
-                🔓 Claim (10m)
-              </button>
-            )}
-            {status === 'delivered' && !o.isExchange && !o.exchangeOrderId && (
-              <button
-                type="button"
-                className="sa-btn sa-mini"
-                style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)', color: '#fff', border: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}
-                onClick={() => setShowExchangeModal(true)}
-                title="Create an exchange shipment for this customer"
-              >
-                🔄 Exchange Order
-              </button>
-            )}
+          <button className="sa-om-close" onClick={onClose} title={adminTranslate("Close")}>×</button>
+        </div>
+
+        {/* Dedicated Quick Action Toolbar Row */}
+        <div
+          className="sa-om-toolbar"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 24px',
+            background: 'rgba(255, 255, 255, 0.02)',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.07)',
+            flexWrap: 'wrap'
+          }}
+        >
+          {isLockedActive ? (
             <button
               type="button"
-              className={`sa-btn sa-mini ${isEditing ? 'primary' : 'ghost'}`}
-              onClick={() => setIsEditing(!isEditing)}
-              title="Toggle Edit Mode (Address, Products, Prices)"
+              className="sa-btn sa-mini"
+              style={{ background: 'rgba(245, 158, 11, 0.18)', border: '1px solid rgba(245, 158, 11, 0.45)', color: '#fbbf24', fontWeight: 600, height: 32, padding: '0 12px', borderRadius: 7 }}
+              onClick={releaseOrder}
+              title="Order is locked for 10 mins. Click to release."
             >
-              {isEditing ? '✓ View Order' : '✏️ Edit Order'}
+              🔒 {lockState.lockedByName || lockState.lockedBy} (Release)
             </button>
+          ) : (
             <button
               type="button"
               className="sa-btn ghost sa-mini"
-              onClick={() => {
-                triggerAdminIPCall({
-                  order: o,
-                  phone: custPhone,
-                  name: custName,
-                  orderId: o.id,
-                  product: items?.[0]?.name
-                });
-              }}
-              title="Call customer via In-Browser IP Softphone & Auto Record"
+              onClick={claimOrder}
+              style={{ height: 32, padding: '0 12px', borderRadius: 7 }}
+              title="Lock this order for 10 minutes while you call/process so others don't duplicate"
+            >
+              🔒 Claim (10m)
+            </button>
+          )}
+
+          {status === 'delivered' && !o.isExchange && !o.exchangeOrderId && (
+            <button
+              type="button"
+              className="sa-btn sa-mini"
+              style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)', color: '#fff', border: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5, height: 32, padding: '0 12px', borderRadius: 7 }}
+              onClick={() => setShowExchangeModal(true)}
+              title="Create an exchange shipment for this customer"
+            >
+              🔄 Exchange Order
+            </button>
+          )}
+
+          <button
+            type="button"
+            className={`sa-btn sa-mini ${isEditing ? 'primary' : 'ghost'}`}
+            onClick={() => setIsEditing(!isEditing)}
+            style={{ height: 32, padding: '0 12px', borderRadius: 7 }}
+            title="Toggle Edit Mode (Address, Products, Prices)"
+          >
+            {isEditing ? '✓ View Order' : '✏️ Edit Order'}
+          </button>
+
+          <button
+            type="button"
+            className="sa-btn ghost sa-mini"
+            onClick={() => {
+              triggerAdminIPCall({
+                order: o,
+                phone: custPhone,
+                name: custName,
+                orderId: o.id,
+                product: items?.[0]?.name
+              });
+            }}
+            title="Call customer via In-Browser IP Softphone & Auto Record"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              color: '#38bdf8',
+              borderColor: 'rgba(56, 189, 248, 0.4)',
+              background: 'rgba(56, 189, 248, 0.1)',
+              height: 32,
+              padding: '0 12px',
+              borderRadius: 7
+            }}
+          >
+            📞 IP Call
+          </button>
+
+          <a className="sa-btn ghost sa-mini" href={'tel:' + custPhone} title="Direct call from phone/device" style={{ height: 32, padding: '0 12px', borderRadius: 7, display: 'inline-flex', alignItems: 'center' }}>
+            Cell Call
+          </a>
+
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <button
+              type="button"
+              className="sa-btn ghost sa-mini"
+              onClick={() => setShowWhatsAppTemplates(!showWhatsAppTemplates)}
+              title="Send WhatsApp via Store WhatsApp (No Tab)"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer', height: 32, padding: '0 12px', borderRadius: 7 }}
+            >
+              <WhatsAppIcon size={14} variant="official" /> WhatsApp
+            </button>
+            {showWhatsAppTemplates && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  marginTop: 4,
+                  background: '#13111c',
+                  border: '1px solid rgba(139, 92, 246, 0.4)',
+                  borderRadius: 8,
+                  padding: 6,
+                  boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
+                  zIndex: 1000,
+                  minWidth: 220,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowWhatsAppTemplates(false);
+                    triggerAdminWhatsApp({ order: o, phone: custPhone, name: custName });
+                  }}
+                  style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
+                >
+                  💬 সাধারণ চ্যাট খুলুন (Direct Chat)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendWhatsAppTemplate('confirm')}
+                  style={{ textAlign: 'left', background: 'rgba(139, 92, 246, 0.12)', border: 'none', color: '#c4b5fd', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                >
+                  📋 কনফার্মেশন রিসিট মেসেজ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendWhatsAppTemplate('missed')}
+                  style={{ textAlign: 'left', background: 'rgba(255, 255, 255, 0.05)', border: 'none', color: '#cbd5e1', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                >
+                  📞 কল মিসড / রিসিভ করেননি
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendWhatsAppTemplate('address')}
+                  style={{ textAlign: 'left', background: 'rgba(255, 255, 255, 0.05)', border: 'none', color: '#cbd5e1', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
+                >
+                  📍 পূর্ণাঙ্গ ঠিকানা নিশ্চিতকরণ
+                </button>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            className="sa-btn ghost sa-mini"
+            onClick={() => {
+              const pm: Record<string, any> = {};
+              (Array.isArray(allProducts) ? allProducts : []).forEach((p) => { if (p?.id) pm[p.id] = p; });
+              exportCSV([o], pm, undefined, `secrate-order-${o.id}`);
+            }}
+            title="Download CSV for this order"
+            style={{ height: 32, padding: '0 12px', borderRadius: 7 }}
+          >
+            📥 CSV
+          </button>
+
+          <button className="sa-btn ghost sa-mini" onClick={() => printInvoice(o)} title="Print invoice" style={{ height: 32, padding: '0 12px', borderRadius: 7 }}>
+            🖨️ Print
+          </button>
+
+          {sortedHistory.length > 0 && (
+            <button
+              type="button"
+              className="sa-btn ghost sa-mini"
+              onClick={() => setHistoryExpanded((v) => !v)}
+              title="Toggle Order History & Audit Trail"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 5,
-                color: '#38bdf8',
-                borderColor: 'rgba(56, 189, 248, 0.4)',
-                background: 'rgba(56, 189, 248, 0.1)'
+                gap: 4,
+                background: historyExpanded ? 'rgba(139, 92, 246, 0.25)' : undefined,
+                color: historyExpanded ? '#c084fc' : undefined,
+                borderColor: historyExpanded ? 'rgba(139, 92, 246, 0.4)' : undefined,
+                height: 32,
+                padding: '0 12px',
+                borderRadius: 7
               }}
             >
-              📞 IP Call
+              📜 History ({sortedHistory.length})
             </button>
-            <a className="sa-btn ghost sa-mini" href={'tel:' + custPhone} title="Direct call from phone/device">
-              Cell Call
-            </a>
-            <div style={{ position: 'relative', display: 'inline-block' }}>
-              <button
-                type="button"
-                className="sa-btn ghost sa-mini"
-                onClick={() => setShowWhatsAppTemplates(!showWhatsAppTemplates)}
-                title="Send WhatsApp or choose a quick template"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}
-              >
-                <WhatsAppIcon size={14} variant="official" /> WhatsApp ▾
-              </button>
-              {showWhatsAppTemplates && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
-                    marginTop: 4,
-                    background: '#1a162b',
-                    border: '1px solid rgba(139, 92, 246, 0.4)',
-                    borderRadius: 8,
-                    padding: 6,
-                    boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-                    zIndex: 1000,
-                    minWidth: 220,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 4
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowWhatsAppTemplates(false);
-                      triggerAdminWhatsApp({ order: o, phone: custPhone, name: custName });
-                    }}
-                    style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
-                  >
-                    💬 সাধারণ চ্যাট খুলুন (Direct Chat)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => sendWhatsAppTemplate('confirm')}
-                    style={{ textAlign: 'left', background: 'rgba(16, 185, 129, 0.1)', border: 'none', color: '#34d399', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
-                  >
-                    📋 কনফার্মেশন রিসিট মেসেজ
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => sendWhatsAppTemplate('missed')}
-                    style={{ textAlign: 'left', background: 'rgba(245, 158, 11, 0.1)', border: 'none', color: '#fbbf24', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
-                  >
-                    📞 কল মিসড / রিসিভ করেননি
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => sendWhatsAppTemplate('address')}
-                    style={{ textAlign: 'left', background: 'rgba(56, 189, 248, 0.1)', border: 'none', color: '#38bdf8', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
-                  >
-                    📍 পূর্ণাঙ্গ ঠিকানা নিশ্চিতকরণ
-                  </button>
-                </div>
-              )}
-            </div>
-            <button
-              type="button"
-              className="sa-btn ghost sa-mini"
-              onClick={() => {
-                const pm: Record<string, any> = {};
-                (Array.isArray(allProducts) ? allProducts : []).forEach((p) => { if (p?.id) pm[p.id] = p; });
-                exportCSV([o], pm, undefined, `secrate-order-${o.id}`);
-              }}
-              title="Download CSV for this order"
-            >
-              📥 CSV
-            </button>
-            <button className="sa-btn ghost sa-mini" onClick={() => printInvoice(o)} title="Print invoice">
-              🖨️ Print
-            </button>
-            {sortedHistory.length > 0 && (
-              <button
-                type="button"
-                className="sa-btn ghost sa-mini"
-                onClick={() => setHistoryExpanded((v) => !v)}
-                title="Toggle Order History & Audit Trail"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  background: historyExpanded ? 'rgba(139, 92, 246, 0.25)' : undefined,
-                  color: historyExpanded ? '#c084fc' : undefined,
-                  borderColor: historyExpanded ? 'rgba(139, 92, 246, 0.4)' : undefined
-                }}
-              >
-                📜 History ({sortedHistory.length})
-              </button>
-            )}
-            <button className="sa-om-close" onClick={onClose} title={adminTranslate("Close")}>×</button>
-          </div>
+          )}
         </div>
 
         {/* Modal Body */}
         <div className="sa-om-body">
           {saveMsg && (
-            <div style={{ marginBottom: 12, padding: '8px 12px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: 8, color: '#34d399', fontSize: 13, fontWeight: 600 }}>
+            <div style={{ marginBottom: 12, padding: '8px 12px', background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: 8, color: '#c4b5fd', fontSize: 13, fontWeight: 600 }}>
               {saveMsg}
             </div>
           )}
 
-          {/* 1-Click Fast Disposition Bar (Call-Center Rapid Actions) */}
+          {/* 1-Click Fast Disposition Bar (Unified Dark Violet Theme) */}
           <div
+            className="sa-om-card"
             style={{
               marginBottom: 16,
-              padding: '12px 16px',
-              borderRadius: 12,
-              background: 'linear-gradient(135deg, rgba(28, 22, 50, 0.95) 0%, rgba(18, 14, 32, 0.95) 100%)',
-              border: '1px solid rgba(139, 92, 246, 0.35)',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+              background: '#13111c',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: 14,
+              padding: '14px 18px',
               display: 'flex',
               flexDirection: 'column',
               gap: 10
@@ -10358,20 +10388,19 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 16 }}>⚡</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#c4b5fd', letterSpacing: '0.2px' }}>
-                  কল সেন্টার কুইক অ্যাকশন (১-ক্লিক রেজাল্ট):
+                <span style={{ fontSize: 14, color: '#a78bfa' }}>⚡</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: '#f1f5f9', letterSpacing: '0.2px' }}>
+                  কল সেন্টার অ্যাকশন (১-ক্লিক রেজাল্ট):
                 </span>
                 {o.lastCall && (
-                  <span style={{ fontSize: 11, color: '#94a3b8', background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: 4 }}>
-                    সর্বশেষ কল: {o.lastCall.by || o.lastCall.username} ({timeAgo(o.lastCall.at)})
+                  <span style={{ fontSize: 11, color: '#94a3b8', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.06)' }}>
+                    সর্বশেষ: {o.lastCall.by || o.lastCall.username} ({timeAgo(o.lastCall.at)})
                   </span>
                 )}
               </div>
               {isLockedActive && (
-                <span style={{ fontSize: 11, color: '#fbbf24', background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.35)', padding: '2px 8px', borderRadius: 6, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
-                  🔒 লকড: {lockState.lockedByName || lockState.lockedBy}
+                <span style={{ fontSize: 11, color: '#fbbf24', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '2px 8px', borderRadius: 6, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  🔒 {lockState.lockedByName || lockState.lockedBy}
                 </span>
               )}
             </div>
@@ -10381,15 +10410,15 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                 type="button"
                 onClick={() => handleDisposition('confirmed')}
                 disabled={busy}
+                className="sa-btn ghost sa-mini"
                 style={{
-                  background: status === 'confirmed' ? '#059669' : 'rgba(16, 185, 129, 0.16)',
-                  color: status === 'confirmed' ? '#fff' : '#34d399',
-                  border: '1px solid rgba(16, 185, 129, 0.4)',
+                  height: 36,
                   borderRadius: 8,
-                  padding: '8px 12px',
-                  fontWeight: 700,
                   fontSize: 12,
-                  cursor: 'pointer',
+                  fontWeight: 600,
+                  background: status === 'confirmed' ? 'rgba(139, 92, 246, 0.25)' : 'rgba(255, 255, 255, 0.04)',
+                  borderColor: status === 'confirmed' ? '#8b5cf6' : 'rgba(255, 255, 255, 0.1)',
+                  color: status === 'confirmed' ? '#fff' : '#e2e8f0',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -10397,7 +10426,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                 }}
                 title="কথা বলে অর্ডার কনফার্ম করা হয়েছে"
               >
-                <span>🟢</span>
+                <span>✓</span>
                 <span>কনফার্মড (Confirmed)</span>
               </button>
 
@@ -10405,15 +10434,15 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                 type="button"
                 onClick={() => handleDisposition('no_answer')}
                 disabled={busy}
+                className="sa-btn ghost sa-mini"
                 style={{
-                  background: 'rgba(245, 158, 11, 0.16)',
-                  color: '#fbbf24',
-                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  height: 36,
                   borderRadius: 8,
-                  padding: '8px 12px',
-                  fontWeight: 700,
                   fontSize: 12,
-                  cursor: 'pointer',
+                  fontWeight: 600,
+                  background: status === 'hold' ? 'rgba(139, 92, 246, 0.25)' : 'rgba(255, 255, 255, 0.04)',
+                  borderColor: status === 'hold' ? '#8b5cf6' : 'rgba(255, 255, 255, 0.1)',
+                  color: status === 'hold' ? '#fff' : '#e2e8f0',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -10421,7 +10450,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                 }}
                 title="কল করা হয়েছে কিন্তু রিসিভ করেনি"
               >
-                <span>🟡</span>
+                <span>📞</span>
                 <span>রিসিভ করেনি (Hold)</span>
               </button>
 
@@ -10429,16 +10458,16 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                 <button
                   type="button"
                   onClick={() => { setShowCallLaterMenu(!showCallLaterMenu); setShowCancelMenu(false); }}
+                  className="sa-btn ghost sa-mini"
                   style={{
                     width: '100%',
-                    background: 'rgba(56, 189, 248, 0.15)',
-                    color: '#38bdf8',
-                    border: '1px solid rgba(56, 189, 248, 0.4)',
+                    height: 36,
                     borderRadius: 8,
-                    padding: '8px 12px',
-                    fontWeight: 700,
                     fontSize: 12,
-                    cursor: 'pointer',
+                    fontWeight: 600,
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                    color: '#e2e8f0',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -10446,8 +10475,8 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                   }}
                   title="পরে কল দেওয়ার সময় নির্ধারণ করুন"
                 >
-                  <span>🟠</span>
-                  <span>পরে কল (Later) ▾</span>
+                  <span>⏰</span>
+                  <span>পরে কল (Later)</span>
                 </button>
                 {showCallLaterMenu && (
                   <div
@@ -10456,8 +10485,8 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                       top: '100%',
                       left: 0,
                       marginTop: 4,
-                      background: '#1a162b',
-                      border: '1px solid rgba(56, 189, 248, 0.4)',
+                      background: '#13111c',
+                      border: '1px solid rgba(139, 92, 246, 0.35)',
                       borderRadius: 8,
                       padding: 6,
                       boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
@@ -10468,10 +10497,10 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                       gap: 4
                     }}
                   >
-                    <button type="button" onClick={() => scheduleCallLater(30, '30 মিনিট পর')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>⏱️ ৩০ মিনিট পর</button>
-                    <button type="button" onClick={() => scheduleCallLater(60, '১ ঘণ্টা পর')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>⏱️ ১ ঘণ্টা পর</button>
-                    <button type="button" onClick={() => scheduleCallLater(240, 'বিকেলে (৫:০০ PM)')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>🌆 বিকেলে (৫:০০ PM)</button>
-                    <button type="button" onClick={() => scheduleCallLater(1440, 'কাল সকালে (১১:০০ AM)')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>🌅 কাল সকালে (১১:০০ AM)</button>
+                    <button type="button" onClick={() => scheduleCallLater(30, '30 মিনিট পর')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>⏱️ ৩০ মিনিট পর</button>
+                    <button type="button" onClick={() => scheduleCallLater(60, '১ ঘণ্টা পর')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>⏱️ ১ ঘণ্টা পর</button>
+                    <button type="button" onClick={() => scheduleCallLater(240, 'বিকেলে (৫:০০ PM)')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>🌆 বিকেলে (৫:০০ PM)</button>
+                    <button type="button" onClick={() => scheduleCallLater(1440, 'কাল সকালে (১১:০০ AM)')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>🌅 কাল সকালে (১১:০০ AM)</button>
                   </div>
                 )}
               </div>
@@ -10480,16 +10509,16 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                 <button
                   type="button"
                   onClick={() => { setShowCancelMenu(!showCancelMenu); setShowCallLaterMenu(false); }}
+                  className="sa-btn ghost sa-mini"
                   style={{
                     width: '100%',
-                    background: status === 'cancelled' ? '#dc2626' : 'rgba(239, 68, 68, 0.15)',
-                    color: status === 'cancelled' ? '#fff' : '#f87171',
-                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    height: 36,
                     borderRadius: 8,
-                    padding: '8px 12px',
-                    fontWeight: 700,
                     fontSize: 12,
-                    cursor: 'pointer',
+                    fontWeight: 600,
+                    background: status === 'cancelled' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                    borderColor: status === 'cancelled' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(255, 255, 255, 0.1)',
+                    color: status === 'cancelled' ? '#f87171' : '#e2e8f0',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -10497,8 +10526,8 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                   }}
                   title="অর্ডার বাতিলের কারণ নির্বাচন করুন"
                 >
-                  <span>🔴</span>
-                  <span>বাতিল (Cancel) ▾</span>
+                  <span>✕</span>
+                  <span>বাতিল (Cancel)</span>
                 </button>
                 {showCancelMenu && (
                   <div
@@ -10507,8 +10536,8 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                       top: '100%',
                       right: 0,
                       marginTop: 4,
-                      background: '#1a162b',
-                      border: '1px solid rgba(239, 68, 68, 0.4)',
+                      background: '#13111c',
+                      border: '1px solid rgba(139, 92, 246, 0.35)',
                       borderRadius: 8,
                       padding: 6,
                       boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
@@ -10519,11 +10548,11 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                       gap: 4
                     }}
                   >
-                    <button type="button" onClick={() => cancelWithReason('কাস্টমার মত পরিবর্তন করেছে')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>কাস্টমার মত পরিবর্তন করেছে</button>
-                    <button type="button" onClick={() => cancelWithReason('দাম বেশি মনে হয়েছে')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>দাম বেশি মনে হয়েছে</button>
-                    <button type="button" onClick={() => cancelWithReason('ডেলিভারি বেশি দেরি হবে')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>ডেলিভারি বেশি দেরি হবে</button>
-                    <button type="button" onClick={() => cancelWithReason('ভুলবশত অর্ডার করেছিল')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>ভুলবশত অর্ডার করেছিল</button>
-                    <button type="button" onClick={() => cancelWithReason('ফোন রিসিভ করেনি বা বন্ধ')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>ফোন রিসিভ করেনি বা বন্ধ</button>
+                    <button type="button" onClick={() => cancelWithReason('কাস্টমার মত পরিবর্তন করেছে')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>কাস্টমার মত পরিবর্তন করেছে</button>
+                    <button type="button" onClick={() => cancelWithReason('দাম বেশি মনে হয়েছে')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>দাম বেশি মনে হয়েছে</button>
+                    <button type="button" onClick={() => cancelWithReason('ডেলিভারি বেশি দেরি হবে')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>ডেলিভারি বেশি দেরি হবে</button>
+                    <button type="button" onClick={() => cancelWithReason('ভুলবশত অর্ডার করেছিল')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>ভুলবশত অর্ডার করেছিল</button>
+                    <button type="button" onClick={() => cancelWithReason('ফোন রিসিভ করেনি বা বন্ধ')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>ফোন রিসিভ করেনি বা বন্ধ</button>
                   </div>
                 )}
               </div>
