@@ -1287,7 +1287,10 @@ export function SecrateAiAssistant() {
               নতুন Gemini API Key পেস্ট করুন:
             </label>
             <input
-              type="password"
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              data-lpignore="true"
               value={keyModalInput}
               onChange={(e) => setKeyModalInput(e.target.value)}
               placeholder="AIzaSy... কি এখানে পেস্ট করুন"
@@ -1302,7 +1305,8 @@ export function SecrateAiAssistant() {
                 color: '#fff',
                 fontSize: 13,
                 outline: 'none',
-                marginBottom: 12
+                marginBottom: 12,
+                ...(keyModalInput ? ({ WebkitTextSecurity: 'disc' } as any) : {})
               }}
             />
 

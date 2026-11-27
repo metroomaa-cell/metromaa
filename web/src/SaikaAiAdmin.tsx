@@ -3,6 +3,13 @@ import { Perfect3DAppleOrb, type AiBriefing } from './SecrateAiAssistant';
 
 export type SaikaSection = 'overview' | 'api' | 'voice' | 'channels' | 'knowledge' | 'access';
 
+interface SaikaMemoryItem {
+  id: string;
+  title: string;
+  content: string;
+  createdAt?: string;
+}
+
 interface SaikaControlConfig {
   assistantName: string;
   preferredModel: string;
@@ -13,35 +20,20 @@ interface SaikaControlConfig {
   wakeWordEnabled: boolean;
   proactiveVoiceAlert: boolean;
   adminAssistantEnabled: boolean;
+  allowOrderActions: boolean;
+  allowStockActions: boolean;
+  allowStaffActions: boolean;
+  allowWhatsappDispatch: boolean;
+  allowEmailDispatch: boolean;
   autopilotEnabled: boolean;
   autopilotIntervalMins: number;
   delayedPendingMins: number;
   bossCustomInstructions: string;
-  customerCallInstructions: string;
-  websiteVoiceCallEnabled: boolean;
-  outboundConfirmCallEnabled: boolean;
-  marketingCallEnabled: boolean;
-  quietHoursEnabled: boolean;
-  quietStartHour: number;
-  quietEndHour: number;
-  whatsappAi: {
-    enabled: boolean;
-    tone: string;
-    voiceNoteEnabled: boolean;
-    orderTrackEnabled: boolean;
-    chatToOrderEnabled: boolean;
-    pauseMinutes: number;
-    storeInfo: string;
-  };
+  businessStrategyNotes: string;
+  memories: SaikaMemoryItem[];
   keysCount: number;
   maskedKeys: { index: number; masked: string; isPrimary: boolean }[];
   hasApiKey: boolean;
-}
-
-interface FaqItem {
-  id: string;
-  question: string;
-  answer: string;
 }
 
 interface StaffMember {
@@ -119,14 +111,14 @@ const SECTION_TABS: { id: SaikaSection; icon: string; label: string; subLabel: s
   { id: 'overview', icon: '✨', label: 'Command Center', subLabel: 'Command Center' },
   { id: 'api', icon: '🔑', label: 'API & Model Setup', subLabel: 'API & Model Setup' },
   { id: 'voice', icon: '🎙️', label: 'Voice & Widget Studio', subLabel: 'Voice & Widget Studio' },
-  { id: 'channels', icon: '📡', label: 'Channel Controls', subLabel: 'Channel Controls' },
-  { id: 'knowledge', icon: '🧠', label: 'Knowledge & Training', subLabel: 'Knowledge & Training' },
+  { id: 'channels', icon: '⚡', label: 'Capabilities & Autopilot', subLabel: 'Capabilities & Autopilot' },
+  { id: 'knowledge', icon: '🧠', label: 'Boss Knowledge & Rules', subLabel: 'Knowledge & Training' },
   { id: 'access', icon: '🛡️', label: 'Staff Access & Logs', subLabel: 'Staff Access & Logs' },
 ];
 
 const DEFAULT_CONFIG: SaikaControlConfig = {
   assistantName: 'Saika (সাইকা)',
-  preferredModel: 'gemini-2.5-flash',
+  preferredModel: 'gemini-3.8-flash',
   liveVoiceModel: 'gemini-3.8-live',
   liveVoiceName: 'Aoede',
   ttsVoiceName: 'bn-BD-NabanitaNeural',
@@ -134,26 +126,17 @@ const DEFAULT_CONFIG: SaikaControlConfig = {
   wakeWordEnabled: false,
   proactiveVoiceAlert: true,
   adminAssistantEnabled: true,
+  allowOrderActions: true,
+  allowStockActions: true,
+  allowStaffActions: true,
+  allowWhatsappDispatch: true,
+  allowEmailDispatch: true,
   autopilotEnabled: false,
   autopilotIntervalMins: 15,
   delayedPendingMins: 25,
   bossCustomInstructions: '',
-  customerCallInstructions: '',
-  websiteVoiceCallEnabled: true,
-  outboundConfirmCallEnabled: true,
-  marketingCallEnabled: true,
-  quietHoursEnabled: false,
-  quietStartHour: 22,
-  quietEndHour: 9,
-  whatsappAi: {
-    enabled: false,
-    tone: 'friendly_bangla',
-    voiceNoteEnabled: true,
-    orderTrackEnabled: true,
-    chatToOrderEnabled: true,
-    pauseMinutes: 30,
-    storeInfo: '',
-  },
+  businessStrategyNotes: '',
+  memories: [],
   keysCount: 0,
   maskedKeys: [],
   hasApiKey: false,
@@ -170,9 +153,8 @@ export function SaikaAiAdmin({
 }) {
   const [config, setConfig] = useState<SaikaControlConfig>(DEFAULT_CONFIG);
   const [briefing, setBriefing] = useState<AiBriefing | null>(null);
-  const [faqs, setFaqs] = useState<FaqItem[]>([]);
   const [users, setUsers] = useState<StaffMember[]>([]);
-  const [callLogs, setCallLogs] = useState<any[]>([]);
+  const [voiceSessions, setVoiceSessions] = useState<any[]>([]);
   const [directiveLogs, setDirectiveLogs] = useState<any[]>([]);
   const [storeSummary, setStoreSummary] = useState<{ productsCount: number; landingsCount: number }>({
     productsCount: 0,
@@ -199,23 +181,24 @@ export function SaikaAiAdmin({
 
   // API Key Setup State
   const [newApiKey, setNewApiKey] = useState('');
+  const [showKeyPlain, setShowKeyPlain] = useState(false);
   const [makePrimaryKey, setMakePrimaryKey] = useState(true);
   const [keyBusy, setKeyBusy] = useState(false);
   const [testingKey, setTestingKey] = useState(false);
 
   // Voice Test Text
   const [voiceSampleText, setVoiceSampleText] = useState(
-    'আসসালামু আলাইকুম বস! আমি সাইকা বলছি। আপনার স্টোরের অর্ডার, স্টক ও কাস্টমার সাপোর্ট সম্পূর্ণ সচল রয়েছে।'
+    'আসসালামু আলাইকুম বস! আমি সাইকা বলছি। আপনার অ্যাডমিন প্যানেলের অর্ডার, স্টক ও বিজনেস অপারেশন আমি পর্যবেক্ষণ করছি।'
   );
 
-  // FAQ Form State
-  const [faqQ, setFaqQ] = useState('');
-  const [faqA, setFaqA] = useState('');
-  const [addingFaq, setAddingFaq] = useState(false);
+  // Executive Memory Form State
+  const [memTitle, setMemTitle] = useState('');
+  const [memContent, setMemContent] = useState('');
+  const [addingMem, setAddingMem] = useState(false);
 
   const showNotice = useCallback((text: string, type: 'ok' | 'err' = 'ok') => {
     setToast({ type, text });
-    setTimeout(() => setToast(null), 4500);
+    setTimeout(() => setToast(null), 5000);
   }, []);
 
   const broadcastConfigToWidget = useCallback((nextCfg: SaikaControlConfig) => {
@@ -229,47 +212,49 @@ export function SaikaAiAdmin({
     } catch {}
   }, []);
 
-  const loadAll = useCallback(async (initial = false) => {
-    if (initial) setLoading(true);
-    try {
-      const [ctrlRes, briefRes] = await Promise.all([
-        saikaFetch('/admin/saika/control'),
-        saikaFetch('/admin/ai-copilot/briefing'),
-      ]);
-      if (ctrlRes?.ok) {
-        const mergedCfg: SaikaControlConfig = {
-          ...DEFAULT_CONFIG,
-          ...(ctrlRes.config || {}),
-          whatsappAi: { ...DEFAULT_CONFIG.whatsappAi, ...(ctrlRes.config?.whatsappAi || {}) },
-        };
-        setConfig(mergedCfg);
-        setFaqs(Array.isArray(ctrlRes.faqs) ? ctrlRes.faqs : []);
-        setUsers(Array.isArray(ctrlRes.users) ? ctrlRes.users : []);
-        setCallLogs(Array.isArray(ctrlRes.logs?.calls) ? ctrlRes.logs.calls : []);
-        setDirectiveLogs(Array.isArray(ctrlRes.logs?.directives) ? ctrlRes.logs.directives : []);
-        if (ctrlRes.storeSummary) setStoreSummary(ctrlRes.storeSummary);
+  const loadAll = useCallback(
+    async (initial = false) => {
+      if (initial) setLoading(true);
+      try {
+        const [ctrlRes, briefRes] = await Promise.all([
+          saikaFetch('/admin/saika/control'),
+          saikaFetch('/admin/ai-copilot/briefing'),
+        ]);
+        if (ctrlRes?.ok) {
+          const mergedCfg: SaikaControlConfig = {
+            ...DEFAULT_CONFIG,
+            ...(ctrlRes.config || {}),
+            memories: Array.isArray(ctrlRes.config?.memories) ? ctrlRes.config.memories : [],
+          };
+          setConfig(mergedCfg);
+          setUsers(Array.isArray(ctrlRes.users) ? ctrlRes.users : []);
+          setVoiceSessions(Array.isArray(ctrlRes.logs?.sessions) ? ctrlRes.logs.sessions : []);
+          setDirectiveLogs(Array.isArray(ctrlRes.logs?.directives) ? ctrlRes.logs.directives : []);
+          if (ctrlRes.storeSummary) setStoreSummary(ctrlRes.storeSummary);
+        }
+        if (briefRes?.ok) {
+          setBriefing(briefRes);
+          setChatMessages((prev) =>
+            prev.length === 0 && briefRes.voiceGreeting
+              ? [
+                  {
+                    id: 'init_greeting',
+                    role: 'assistant',
+                    text: briefRes.voiceGreeting,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                  },
+                ]
+              : prev
+          );
+        }
+      } catch {
+        showNotice('ডাটা লোড করতে সমস্যা হয়েছে।', 'err');
+      } finally {
+        if (initial) setLoading(false);
       }
-      if (briefRes?.ok) {
-        setBriefing(briefRes);
-        setChatMessages((prev) =>
-          prev.length === 0 && briefRes.voiceGreeting
-            ? [
-                {
-                  id: 'init_greeting',
-                  role: 'assistant',
-                  text: briefRes.voiceGreeting,
-                  time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                },
-              ]
-            : prev
-        );
-      }
-    } catch {
-      showNotice('ডাটা লোড করতে সমস্যা হয়েছে।', 'err');
-    } finally {
-      if (initial) setLoading(false);
-    }
-  }, [showNotice]);
+    },
+    [showNotice]
+  );
 
   useEffect(() => {
     loadAll(true);
@@ -283,7 +268,6 @@ export function SaikaAiAdmin({
     const optimistic: SaikaControlConfig = {
       ...config,
       ...patch,
-      whatsappAi: patch.whatsappAi ? { ...config.whatsappAi, ...patch.whatsappAi } : config.whatsappAi,
     };
     setConfig(optimistic);
     broadcastConfigToWidget(optimistic);
@@ -294,14 +278,14 @@ export function SaikaAiAdmin({
         body: JSON.stringify(optimistic),
       });
       if (res?.ok && res.config) {
-        const synced = {
+        const synced: SaikaControlConfig = {
           ...DEFAULT_CONFIG,
           ...res.config,
-          whatsappAi: { ...DEFAULT_CONFIG.whatsappAi, ...(res.config.whatsappAi || {}) },
+          memories: Array.isArray(res.config.memories) ? res.config.memories : [],
         };
         setConfig(synced);
         broadcastConfigToWidget(synced);
-        showNotice(silentMsg || '✅ সাইকা সেটিংস সফলভাবে সংরক্ষিত হয়েছে!');
+        showNotice(silentMsg || '✅ অ্যাডমিন প্যানেলের Saika AI সেটিংস সংরক্ষিত হয়েছে!');
       } else {
         showNotice(res?.error || 'সেভ করতে সমস্যা হয়েছে।', 'err');
       }
@@ -418,7 +402,9 @@ export function SaikaAiAdmin({
 
   const toggleConsoleMic = () => {
     if (listeningMic) {
-      try { recRef.current?.stop(); } catch {}
+      try {
+        recRef.current?.stop();
+      } catch {}
       setListeningMic(false);
       return;
     }
@@ -439,7 +425,11 @@ export function SaikaAiAdmin({
     rec.onerror = () => setListeningMic(false);
     rec.onend = () => setListeningMic(false);
     recRef.current = rec;
-    try { rec.start(); } catch { setListeningMic(false); }
+    try {
+      rec.start();
+    } catch {
+      setListeningMic(false);
+    }
   };
 
   const handleSendDirective = async (customMsg = '') => {
@@ -487,7 +477,7 @@ export function SaikaAiAdmin({
       if (res?.ok) {
         setNewApiKey('');
         if (res.config) setConfig((prev) => ({ ...prev, ...res.config }));
-        showNotice(res.message || '✅ Gemini API Key ভেরিফাইড ও সেভ হয়েছে!');
+        showNotice(res.message || '✅ অ্যাডমিন প্যানেলের Saika AI Key ভেরিফাইড ও সেভ হয়েছে!');
       } else {
         showNotice(res?.error || 'API Key সঠিক নয় বা কোটা শেষ।', 'err');
       }
@@ -505,7 +495,9 @@ export function SaikaAiAdmin({
       });
       if (res?.ok && res.config) {
         setConfig((prev) => ({ ...prev, ...res.config }));
-        showNotice(action === 'promote' ? '⭐ প্রাইমারি API Key আপডেট হয়েছে!' : '🗑️ API Key মুছে ফেলা হয়েছে।');
+        showNotice(
+          action === 'promote' ? '⭐ প্রাইমারি API Key আপডেট হয়েছে!' : '🗑️ API Key মুছে ফেলা হয়েছে।'
+        );
       }
     } finally {
       setKeyBusy(false);
@@ -515,9 +507,12 @@ export function SaikaAiAdmin({
   const handleTestActiveKey = async () => {
     setTestingKey(true);
     try {
-      const res = await saikaFetch('/ai-call/test-key', { method: 'POST', body: JSON.stringify({}) });
+      const res = await saikaFetch('/admin/saika/keys', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'test' }),
+      });
       if (res?.ok) {
-        showNotice(res.message || `✅ প্রাইমারি API Key সচল আছে (${res.model})!`);
+        showNotice(res.message || `✅ প্রাইমারি Saika AI Key সচল আছে (${res.model})!`);
       } else {
         showNotice(res?.error || 'API Key টেস্ট ব্যর্থ হয়েছে।', 'err');
       }
@@ -526,31 +521,33 @@ export function SaikaAiAdmin({
     }
   };
 
-  const handleAddFaq = async () => {
-    if (!faqQ.trim() || !faqA.trim()) return;
-    setAddingFaq(true);
+  const handleAddMemory = async () => {
+    if (!memTitle.trim() || !memContent.trim()) return;
+    setAddingMem(true);
     try {
-      const res = await saikaFetch('/admin/whatsapp/ai-faq', {
+      const res = await saikaFetch('/admin/saika/memories', {
         method: 'POST',
-        body: JSON.stringify({ question: faqQ.trim(), answer: faqA.trim() }),
+        body: JSON.stringify({ action: 'add', title: memTitle.trim(), content: memContent.trim() }),
       });
-      if (res?.ok || res?.faqs) {
-        setFaqQ('');
-        setFaqA('');
-        if (Array.isArray(res.faqs)) setFaqs(res.faqs);
-        else loadAll(false);
-        showNotice('✅ নতুন প্রশ্ন ও উত্তর সাইকার মেমোরিতে যুক্ত হয়েছে!');
+      if (res?.ok && Array.isArray(res.memories)) {
+        setMemTitle('');
+        setMemContent('');
+        setConfig((prev) => ({ ...prev, memories: res.memories }));
+        showNotice('✅ নতুন বিজনেস রুল/মেমোরি সাইকার মেমোরিতে যুক্ত হয়েছে!');
       }
     } finally {
-      setAddingFaq(false);
+      setAddingMem(false);
     }
   };
 
-  const handleDeleteFaq = async (id: string) => {
-    const res = await saikaFetch(`/admin/whatsapp/ai-faq/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    if (res?.ok || Array.isArray(res?.faqs)) {
-      setFaqs((prev) => prev.filter((f) => f.id !== id));
-      showNotice('🗑️ প্রশ্নোত্তর মুছে ফেলা হয়েছে।');
+  const handleDeleteMemory = async (id: string) => {
+    const res = await saikaFetch('/admin/saika/memories', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'remove', id }),
+    });
+    if (res?.ok && Array.isArray(res.memories)) {
+      setConfig((prev) => ({ ...prev, memories: res.memories }));
+      showNotice('🗑️ মেমোরি মুছে ফেলা হয়েছে।');
     }
   };
 
@@ -579,8 +576,8 @@ export function SaikaAiAdmin({
       {/* Top Executive Header */}
       <div className="sa-top fin-header" style={{ marginBottom: 16 }}>
         <div>
-          <div className="fin-eyebrow">SAIKA EXECUTIVE AI · FULL CONTROL STUDIO</div>
-          <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="fin-eyebrow">ADMIN PANEL DEDICATED AI · 100% ISOLATED FROM CALL CENTER AI</div>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span>Saika AI Control Center</span>
             <span
               style={{
@@ -595,11 +592,24 @@ export function SaikaAiAdmin({
                 color: config.hasApiKey ? '#34d399' : '#fbbf24',
               }}
             >
-              {config.hasApiKey ? `● Gemini Live (${config.keysCount} Key)` : '● Built-in Bangla Brain'}
+              {config.hasApiKey ? `● Dedicated API Active (${config.keysCount} Key)` : '● Built-in Bangla Brain'}
+            </span>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                padding: '3px 10px',
+                borderRadius: 999,
+                background: 'rgba(139, 92, 246, 0.15)',
+                border: '1px solid rgba(167, 139, 250, 0.35)',
+                color: '#c4b5fd',
+              }}
+            >
+              🔒 Only Admin Panel Boss AI (Call Center AI থেকে সম্পূর্ণ আলাদা)
             </span>
           </h1>
           <p>
-            সাইকার API Key, লাইভ ভয়েস, ফ্লোটিং উইজেট, ওয়েবসাইট কল, হোয়াটসঅ্যাপ অটো-রিপ্লাই, কাস্টম ট্রেনিং ও স্টাফ পারমিশন—সবকিছু এক জায়গা থেকে নিয়ন্ত্রণ করুন।
+            এটি শুধুমাত্র আপনার অ্যাডমিন প্যানেলের পার্সোনাল এক্সিকিউটিভ সহকারী (Saika AI)-এর নিজস্ব কন্ট্রোল প্যানেল। এর API Key, ভয়েস, মেমোরি ও লগ কাস্টমার Call Center AI থেকে ১০০% আলাদা।
           </p>
         </div>
 
@@ -617,7 +627,7 @@ export function SaikaAiAdmin({
             className="sa-btn ghost"
             onClick={() => window.dispatchEvent(new CustomEvent('open-secrate-ai'))}
           >
-            🎙️ লাইভ ভয়েস কল
+            🎙️ বসের লাইভ ভয়েস
           </button>
           <button
             type="button"
@@ -637,21 +647,17 @@ export function SaikaAiAdmin({
         </div>
         <div className="cc-hero-copy" style={{ flex: 1 }}>
           <strong style={{ fontSize: 15 }}>
-            {config.assistantName} — ২৪/৭ পার্সোনাল বিজনেস চিফ অব স্টাফ ও কল সেন্টার এজেন্ট
+            {config.assistantName} — অ্যাডমিন প্যানেল এক্সিকিউটিভ চিফ অব স্টাফ
           </strong>
           <span>
-            মডেল: <b style={{ color: '#ddd6fe' }}>{config.preferredModel}</b> · লাইভ ভয়েস:{' '}
+            মডেল: <b style={{ color: '#ddd6fe' }}>{config.preferredModel}</b> · বসের লাইভ ভয়েস:{' '}
             <b style={{ color: '#ddd6fe' }}>{config.liveVoiceName}</b> · ফ্লোটিং বার:{' '}
             <b style={{ color: config.showFloatingOrb ? '#6ee7b7' : '#fca5a5' }}>
               {config.showFloatingOrb ? 'চালু আছে' : 'লুকানো আছে'}
             </b>{' '}
-            · ওয়েবসাইট ভয়েস কল:{' '}
-            <b style={{ color: config.websiteVoiceCallEnabled ? '#6ee7b7' : '#fca5a5' }}>
-              {config.websiteVoiceCallEnabled ? 'চালু' : 'বন্ধ'}
-            </b>{' '}
-            · WhatsApp AI:{' '}
-            <b style={{ color: config.whatsappAi.enabled ? '#6ee7b7' : '#fca5a5' }}>
-              {config.whatsappAi.enabled ? 'চালু' : 'বন্ধ'}
+            · স্টাফ অটো-গার্ডিয়ান:{' '}
+            <b style={{ color: config.autopilotEnabled ? '#6ee7b7' : '#94a3b8' }}>
+              {config.autopilotEnabled ? 'সক্রিয়' : 'বন্ধ'}
             </b>
           </span>
         </div>
@@ -675,7 +681,9 @@ export function SaikaAiAdmin({
               onChange={(next) =>
                 saveConfigPatch(
                   { showFloatingOrb: next },
-                  next ? '✅ নিচের ফ্লোটিং সাইকা বার চালু করা হয়েছে!' : '✅ নিচের ফ্লোটিং সাইকা বার লুকানো হয়েছে!'
+                  next
+                    ? '✅ নিচের ফ্লোটিং সাইকা বার চালু করা হয়েছে!'
+                    : '✅ নিচের ফ্লোটিং সাইকা বার লুকানো হয়েছে!'
                 )
               }
             />
@@ -698,7 +706,7 @@ export function SaikaAiAdmin({
         </div>
       )}
 
-      {/* Sub-Navigation Bar matching Finance / Admin Tabs */}
+      {/* Sub-Navigation Bar */}
       <div className="fin-nav">
         {SECTION_TABS.map((t) => (
           <button
@@ -752,7 +760,7 @@ export function SaikaAiAdmin({
                   </small>
                 </div>
                 <div className="fin-metric fin-blue">
-                  <span>সক্রিয় Gemini API Keys</span>
+                  <span>Saika Admin API Keys</span>
                   <strong>{config.keysCount} টি Key</strong>
                   <small>
                     {config.hasApiKey ? 'মাল্টি-কি অটো ফেইলওভার সক্রিয়' : 'API সেটআপ ট্যাব থেকে Key যুক্ত করুন'}
@@ -954,6 +962,7 @@ export function SaikaAiAdmin({
                     </button>
                     <input
                       type="text"
+                      autoComplete="off"
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
                       placeholder="সাইকাকে যেকোনো নির্দেশ দিন (যেমন: আজকের রিপোর্ট দাও / 017... অর্ডার কনফার্ম করো)..."
@@ -968,7 +977,6 @@ export function SaikaAiAdmin({
 
                 {/* Right: Staff Directive + Store Radar + Quick Stock */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {/* Instant Staff Directive Card */}
                   <div className="fin-form-card" style={{ margin: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                       <h3 style={{ fontSize: 14 }}>📢 স্টাফদের তাৎক্ষণিক নির্দেশনা ও অটো-অ্যাসাইন</h3>
@@ -985,6 +993,7 @@ export function SaikaAiAdmin({
                     <div style={{ display: 'flex', gap: 8 }}>
                       <input
                         type="text"
+                        autoComplete="off"
                         value={directiveInput}
                         onChange={(e) => setDirectiveInput(e.target.value)}
                         placeholder="স্টাফদের জন্য বিশেষ মেসেজ লিখুন..."
@@ -1001,7 +1010,6 @@ export function SaikaAiAdmin({
                     </div>
                   </div>
 
-                  {/* Problems & Alerts Radar */}
                   <div className="fin-form-card" style={{ margin: 0 }}>
                     <h3 style={{ fontSize: 14, marginBottom: 10 }}>🚨 লাইভ স্টোর রাডার ও এআই পরামর্শ</h3>
                     {briefing?.problems && briefing.problems.length > 0 ? (
@@ -1043,7 +1051,6 @@ export function SaikaAiAdmin({
                     )}
                   </div>
 
-                  {/* Quick Stock Restock */}
                   <div className="fin-form-card" style={{ margin: 0 }}>
                     <h3 style={{ fontSize: 14, marginBottom: 10 }}>📦 স্টকআউট ও লো-স্টক কুইক রিস্টক</h3>
                     {[...(stk?.outOfStock || []), ...(stk?.lowStock || [])].slice(0, 5).length > 0 ? (
@@ -1108,26 +1115,46 @@ export function SaikaAiAdmin({
           )}
 
           {/* =====================================================================
-              TAB 2: API & MODEL SETUP (MULTI-KEY FAILOVER + MODEL PICKER)
+              TAB 2: API & MODEL SETUP (STRICTLY DEDICATED TO ADMIN PANEL SAIKA AI)
              ===================================================================== */}
           {activeSection === 'api' && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: 16 }}>
               <div className="fin-form-card" style={{ margin: 0 }}>
-                <h3 style={{ fontSize: 15, marginBottom: 6 }}>🔑 নতুন Google Gemini API Key যুক্ত করুন</h3>
+                <h3 style={{ fontSize: 15, marginBottom: 6 }}>🔑 অ্যাডমিন Saika AI-এর নিজস্ব Gemini API Key</h3>
                 <p className="fin-help" style={{ marginBottom: 14 }}>
-                  একাধিক API Key যুক্ত করে রাখলে ১ নম্বর Key-এর কোটা বা লিমিট শেষ হওয়ার সাথে সাথে সাইকা স্বয়ংক্রিয়ভাবে ২ নম্বর ব্যাকআপ Key ব্যবহার করবে—কখনোই সার্ভিস বন্ধ হবে না।
+                  এখানে যুক্ত করা API Key শুধুমাত্র অ্যাডমিন প্যানেলের Saika AI ব্যবহার করবে (Call Center AI-এর সাথে এটি কখনোই মিক্স হবে না)। একাধিক Key যুক্ত করলে একটির লিমিট শেষ হলেই পরের ব্যাকআপ Key স্বয়ংক্রিয়ভাবে চালু হবে।
                 </p>
 
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
                   Gemini API Key পেস্ট করুন (AIzaSy...)
                 </label>
-                <input
-                  type="password"
-                  value={newApiKey}
-                  onChange={(e) => setNewApiKey(e.target.value)}
-                  placeholder="AIzaSy... এখানে পেস্ট করুন"
-                  style={{ marginBottom: 12 }}
-                />
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  <input
+                    type="text"
+                    name="saika_gemini_api_token_field"
+                    autoComplete="off"
+                    spellCheck={false}
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    value={newApiKey}
+                    onChange={(e) => setNewApiKey(e.target.value)}
+                    placeholder="AIzaSy... এখানে পেস্ট করুন"
+                    style={{
+                      flex: 1,
+                      fontFamily: 'monospace',
+                      ...(!showKeyPlain && newApiKey ? ({ WebkitTextSecurity: 'disc' } as any) : {}),
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="sa-btn ghost"
+                    onClick={() => setShowKeyPlain((v) => !v)}
+                    title={showKeyPlain ? 'লুকান' : 'দেখুন'}
+                    style={{ padding: '0 12px', flexShrink: 0 }}
+                  >
+                    {showKeyPlain ? '🙈' : '👁️'}
+                  </button>
+                </div>
 
                 <div
                   style={{
@@ -1180,16 +1207,15 @@ export function SaikaAiAdmin({
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {/* Saved Keys Table */}
                 <div className="fin-table-card" style={{ margin: 0 }}>
                   <div className="fin-card-title">
-                    <h3>সংরক্ষিত API Keys ({config.maskedKeys.length}টি)</h3>
-                    <span>Multi-Key Auto-Failover Pool</span>
+                    <h3>সংরক্ষিত Admin Saika API Keys ({config.maskedKeys.length}টি)</h3>
+                    <span>Dedicated Admin Multi-Key Pool</span>
                   </div>
                   <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {config.maskedKeys.length === 0 ? (
                       <div style={{ padding: 18, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-                        কোনো API Key সেভ করা নেই। বাম পাশ থেকে আপনার Gemini API Key যুক্ত করুন।
+                        অ্যাডমিন প্যানেলের Saika AI-তে এখনো কোনো API Key সেভ করা নেই। বাম পাশ থেকে যুক্ত করুন।
                       </div>
                     ) : (
                       config.maskedKeys.map((k) => (
@@ -1215,7 +1241,7 @@ export function SaikaAiAdmin({
                                 {k.masked}
                               </div>
                               <div style={{ fontSize: 11, color: k.isPrimary ? '#c4b5fd' : '#94a3b8' }}>
-                                {k.isPrimary ? 'Primary Active Key (সকল চ্যানেলে ব্যবহৃত)' : `Backup Key #${k.index + 1} (অটো-ফেইলওভার)`}
+                                {k.isPrimary ? 'Primary Active Key (Admin Saika AI)' : `Backup Key #${k.index + 1} (অটো-ফেইলওভার)`}
                               </div>
                             </div>
                           </div>
@@ -1246,28 +1272,30 @@ export function SaikaAiAdmin({
                   </div>
                 </div>
 
-                {/* AI Model Selector */}
                 <div className="fin-form-card" style={{ margin: 0 }}>
                   <h3 style={{ fontSize: 15, marginBottom: 12 }}>🤖 সাইকার AI Brain ও Model সিলেকশন</h3>
                   <div className="fin-form-grid" style={{ margin: 0 }}>
                     <label>
-                      Text, Chat & WhatsApp Brain Model
+                      Executive Reasoning & Chat Brain Model
                       <select
                         value={config.preferredModel}
                         onChange={(e) => saveConfigPatch({ preferredModel: e.target.value })}
                       >
-                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended · Fastest & Smartest)</option>
-                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (High Speed)</option>
-                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (Classic Stable)</option>
+                        <option value="gemini-3.8-flash">Gemini 3.8 Flash (Recommended · Latest & Smartest)</option>
+                        <option value="gemini-3.7-flash">Gemini 3.7 Flash (High Reasoning)</option>
+                        <option value="gemini-3.6-flash">Gemini 3.6 Flash (Fast Agentic)</option>
+                        <option value="gemini-3.5-flash">Gemini 3.5 Flash (Balanced)</option>
+                        <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ultra High Quota)</option>
                       </select>
                     </label>
                     <label>
-                      Real-Time Two-Way Voice Call Model
+                      Boss Live Two-Way Voice Model
                       <select
                         value={config.liveVoiceModel}
                         onChange={(e) => saveConfigPatch({ liveVoiceModel: e.target.value })}
                       >
                         <option value="gemini-3.8-live">Gemini 3.8 Live Native Audio (Recommended)</option>
+                        <option value="gemini-3.1-flash-live-preview">Gemini 3.1 Flash Live</option>
                       </select>
                     </label>
                   </div>
@@ -1277,11 +1305,10 @@ export function SaikaAiAdmin({
           )}
 
           {/* =====================================================================
-              TAB 3: VOICE & WIDGET STUDIO (FLOATING BAR TOGGLE + VOICE TUNING)
+              TAB 3: VOICE & WIDGET STUDIO (ADMIN PANEL FLOATING BAR + BOSS VOICE)
              ===================================================================== */}
           {activeSection === 'voice' && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: 16 }}>
-              {/* Left: Floating Widget & Alert Toggles */}
               <div className="fin-form-card" style={{ margin: 0 }}>
                 <h3 style={{ fontSize: 15, marginBottom: 12 }}>✨ অ্যাডমিন প্যানেল ফ্লোটিং উইজেট ও ভয়েস অ্যালার্ট</h3>
 
@@ -1289,7 +1316,7 @@ export function SaikaAiAdmin({
                   {[
                     {
                       title: 'নিচের ডানপাশের ফ্লোটিং Saika AI বার দেখান (Floating Orb)',
-                      desc: 'বন্ধ করলে স্ক্রিনের নিচে ডানপাশের ভাসমান সাইকা বার লুকিয়ে থাকবে। আপনি তখনও উপরের "Ask Saika" বা এই পেজ থেকে সাইকা ব্যবহার করতে পারবেন।',
+                      desc: 'বন্ধ করলে স্ক্রিনের নিচে ডানপাশের ভাসমান সাইকা বার লুকিয়ে থাকবে। আপনি তখনও উপরের "Ask Saika" বা সাইডবারের "Saika AI" থেকে সাইকা ব্যবহার করতে পারবেন।',
                       checked: config.showFloatingOrb,
                       onChange: (v: boolean) =>
                         saveConfigPatch(
@@ -1305,7 +1332,7 @@ export function SaikaAiAdmin({
                     },
                     {
                       title: 'নতুন অর্ডার ও জরুরি সমস্যার ভয়েস অ্যালার্ট',
-                      desc: 'নতুন অর্ডার এলে বা স্টক শেষ হলে সাইকা নিজে থেকে কণ্ঠে আপনাকে তাৎক্ষণিক জানাবে।',
+                      desc: 'অ্যাডমিন প্যানেলে নতুন অর্ডার এলে বা স্টক শেষ হলে সাইকা নিজে থেকে কণ্ঠে আপনাকে জানাবে।',
                       checked: config.proactiveVoiceAlert,
                       onChange: (v: boolean) => saveConfigPatch({ proactiveVoiceAlert: v }),
                     },
@@ -1335,15 +1362,15 @@ export function SaikaAiAdmin({
                 </div>
               </div>
 
-              {/* Right: Voice Identity & Studio Test */}
               <div className="fin-form-card" style={{ margin: 0 }}>
-                <h3 style={{ fontSize: 15, marginBottom: 12 }}>🎙️ কণ্ঠস্বর ও পরিচয় সেটআপ (Voice Persona)</h3>
+                <h3 style={{ fontSize: 15, marginBottom: 12 }}>🎙️ অ্যাডমিন সাইকার নিজস্ব কণ্ঠস্বর ও পরিচয়</h3>
 
                 <div className="fin-form-grid" style={{ marginTop: 0 }}>
                   <label>
-                    এআই সহকারীর নাম (Assistant Name)
+                    অ্যাডমিন সহকারীর নাম (Assistant Name)
                     <input
                       type="text"
+                      autoComplete="off"
                       value={config.assistantName}
                       onChange={(e) => setConfig({ ...config, assistantName: e.target.value })}
                       placeholder="Saika (সাইকা)"
@@ -1351,7 +1378,7 @@ export function SaikaAiAdmin({
                   </label>
 
                   <label>
-                    লাইভ ফোন কল কণ্ঠস্বর (Gemini Live Voice)
+                    বসের সাথে লাইভ কথোপকথনের কণ্ঠস্বর (Gemini Live Voice)
                     <select
                       value={config.liveVoiceName}
                       onChange={(e) =>
@@ -1360,7 +1387,7 @@ export function SaikaAiAdmin({
                     >
                       <option value="Aoede">Aoede — মিষ্টি ও স্বাভাবিক নারী কণ্ঠ (Recommended)</option>
                       <option value="Leda">Leda — প্রফেশনাল এক্সিকিউটিভ নারী কণ্ঠ</option>
-                      <option value="Kore">Kore — স্পষ্ট ও স্মার্ট কল সেন্টার কণ্ঠ</option>
+                      <option value="Kore">Kore — স্পষ্ট ও স্মার্ট কণ্ঠ</option>
                       <option value="Zephyr">Zephyr — শান্ত ও কোমল কণ্ঠ</option>
                       <option value="Puck">Puck — প্রাণবন্ত পুরুষ কণ্ঠ</option>
                     </select>
@@ -1415,50 +1442,49 @@ export function SaikaAiAdmin({
           )}
 
           {/* =====================================================================
-              TAB 4: CHANNEL CONTROLS (ADMIN, WEBSITE CALL, OUTBOUND, WHATSAPP, AUTOPILOT)
+              TAB 4: EXECUTIVE CAPABILITIES & AUTOPILOT (100% ADMIN PANEL AI ONLY)
              ===================================================================== */}
           {activeSection === 'channels' && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: 16 }}>
-              {/* Voice Call & Boss Channels */}
               <div className="fin-form-card" style={{ margin: 0 }}>
-                <h3 style={{ fontSize: 15, marginBottom: 12 }}>📞 ভয়েস কল ও অ্যাডমিন অটোমেশন চ্যানেল</h3>
+                <h3 style={{ fontSize: 15, marginBottom: 12 }}>⚡ সাইকার অ্যাডমিন ক্ষমতা ও অ্যাকশন পারমিশন</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {[
                     {
-                      title: 'অ্যাডমিন প্যানেল বস অ্যাসিস্ট্যান্ট (Boss Executive AI)',
-                      desc: 'অ্যাডমিন প্যানেলে বসের ভয়েস ও টেক্সট কমান্ডে অর্ডার, স্টক, স্টাফ ও রিপোর্ট নিয়ন্ত্রণ।',
+                      title: 'অ্যাডমিন প্যানেল বস অ্যাসিস্ট্যান্ট সক্রিয় (Master Switch)',
+                      desc: 'বন্ধ করলে অ্যাডমিন প্যানেলে সাইকার লাইভ ভয়েস ও এক্সিকিউটিভ চ্যাট সাময়িকভাবে বন্ধ থাকবে।',
                       checked: config.adminAssistantEnabled,
                       onChange: (v: boolean) => saveConfigPatch({ adminAssistantEnabled: v }),
                     },
                     {
-                      title: 'ওয়েবসাইট ও ল্যান্ডিং পেজ লাইভ ভয়েস কল (Inbound AI Call)',
-                      desc: 'কাস্টমাররা স্টোর বা ল্যান্ডিং পেজ থেকে সরাসরি সাইকার সাথে কথা বলে পণ্যের তথ্য জানতে পারবে।',
-                      checked: config.websiteVoiceCallEnabled,
-                      onChange: (v: boolean) => saveConfigPatch({ websiteVoiceCallEnabled: v }),
+                      title: 'অর্ডার কনফার্ম, হোল্ড ও ঠিকানা পরিবর্তনের ক্ষমতা',
+                      desc: 'বস মুখে বা লিখে বললে সাইকা সরাসরি ডাটাবেসে অর্ডারের স্ট্যাটাস ও ঠিকানা আপডেট করতে পারবে।',
+                      checked: config.allowOrderActions,
+                      onChange: (v: boolean) => saveConfigPatch({ allowOrderActions: v }),
                     },
                     {
-                      title: 'অর্ডার কনফার্মেশন আউটবাউন্ড AI কল',
-                      desc: 'নতুন অর্ডারের ঠিকানা ও কনফার্মেশন যাচাই করতে সাইকার অটোমেটিক আউটবাউন্ড কল সুবিধা।',
-                      checked: config.outboundConfirmCallEnabled,
-                      onChange: (v: boolean) => saveConfigPatch({ outboundConfirmCallEnabled: v }),
+                      title: 'নতুন প্রোডাক্ট আপলোড ও স্টক আপডেট করার ক্ষমতা',
+                      desc: 'বসের নির্দেশে সাইকা সরাসরি পণ্যের স্টক সংখ্যা ও মূল্য পরিবর্তন বা নতুন পণ্য যুক্ত করতে পারবে।',
+                      checked: config.allowStockActions,
+                      onChange: (v: boolean) => saveConfigPatch({ allowStockActions: v }),
                     },
                     {
-                      title: 'AI মার্কেটিং ও অফার কল মোড',
-                      desc: 'পুরাতন কাস্টমারদের বিশেষ অফার জানানোর জন্য মার্কেটিং ভয়েস কল মোড।',
-                      checked: config.marketingCallEnabled,
-                      onChange: (v: boolean) => saveConfigPatch({ marketingCallEnabled: v }),
+                      title: 'স্টাফ অডিট ও ডিরেকশন ব্রডকাস্টের ক্ষমতা',
+                      desc: 'স্টাফদের পারফরম্যান্স অডিট করা এবং ড্যাশবোর্ডে জরুরি নির্দেশনা পাঠানোর অনুমতি।',
+                      checked: config.allowStaffActions,
+                      onChange: (v: boolean) => saveConfigPatch({ allowStaffActions: v }),
                     },
                     {
-                      title: '২৪/৭ স্টাফ অটো-গার্ডিয়ান (Autopilot Supervision)',
-                      desc: 'বসের অনুপস্থিতিতে প্রতি ১৫ মিনিটে পেন্ডিং অর্ডার চেক করে অনলাইন স্টাফদের স্বয়ংক্রিয়ভাবে তাগিদ দেবে।',
-                      checked: config.autopilotEnabled,
-                      onChange: (v: boolean) => saveConfigPatch({ autopilotEnabled: v }),
+                      title: 'বসের নির্দেশে WhatsApp মেসেজ ও রিপোর্ট প্রেরণ',
+                      desc: 'বস বললে তাৎক্ষণিক সেলস রিপোর্ট বা কাস্টমারকে হোয়াটসঅ্যাপ মেসেজ পাঠাতে পারবে।',
+                      checked: config.allowWhatsappDispatch,
+                      onChange: (v: boolean) => saveConfigPatch({ allowWhatsappDispatch: v }),
                     },
                     {
-                      title: 'রাতের নীরব সময় (Night Quiet Hours — BD Time)',
-                      desc: `রাত ${config.quietStartHour}:০০ থেকে সকাল ${config.quietEndHour}:০০ পর্যন্ত অটোমেটিক আউটবাউন্ড কল বন্ধ থাকবে।`,
-                      checked: config.quietHoursEnabled,
-                      onChange: (v: boolean) => saveConfigPatch({ quietHoursEnabled: v }),
+                      title: 'বসের নির্দেশে ইমেইল রিপোর্ট প্রেরণ',
+                      desc: 'বসের মেইলে বা নির্দিষ্ট মেইল ঠিকানায় বিজনেস রিপোর্ট পাঠানোর অনুমতি।',
+                      checked: config.allowEmailDispatch,
+                      onChange: (v: boolean) => saveConfigPatch({ allowEmailDispatch: v }),
                     },
                   ].map((ch, idx) => (
                     <div
@@ -1484,90 +1510,66 @@ export function SaikaAiAdmin({
                 </div>
               </div>
 
-              {/* WhatsApp Smart AI Controls */}
               <div className="fin-form-card" style={{ margin: 0 }}>
-                <h3 style={{ fontSize: 15, marginBottom: 12 }}>💬 WhatsApp Smart AI চ্যানেল কন্ট্রোল</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-                  {[
-                    {
-                      title: 'WhatsApp Smart AI অটো-রিপ্লাই',
-                      desc: 'হোয়াটসঅ্যাপে কাস্টমার মেসেজ দিলে সাইকা পণ্যের দাম, স্টক ও ডেলিভারি তথ্যসহ স্মার্ট রিপ্লাই দেবে।',
-                      checked: config.whatsappAi.enabled,
-                      onChange: (v: boolean) =>
-                        saveConfigPatch({ whatsappAi: { ...config.whatsappAi, enabled: v } }),
-                    },
-                    {
-                      title: 'ভয়েস নোট (Audio Message) বোঝার ক্ষমতা',
-                      desc: 'কাস্টমার ভয়েস মেসেজ পাঠালে সাইকা সেটি শুনে বাংলায় সঠিক উত্তর দেবে।',
-                      checked: config.whatsappAi.voiceNoteEnabled,
-                      onChange: (v: boolean) =>
-                        saveConfigPatch({ whatsappAi: { ...config.whatsappAi, voiceNoteEnabled: v } }),
-                    },
-                    {
-                      title: 'লাইভ অর্ডার ট্র্যাকিং রিপ্লাই',
-                      desc: 'কাস্টমার অর্ডারের খবর জানতে চাইলে ডাটাবেস চেক করে বর্তমান কুরিয়ার স্ট্যাটাস জানাবে।',
-                      checked: config.whatsappAi.orderTrackEnabled,
-                      onChange: (v: boolean) =>
-                        saveConfigPatch({ whatsappAi: { ...config.whatsappAi, orderTrackEnabled: v } }),
-                    },
-                    {
-                      title: 'চ্যাট থেকে অটো অর্ডার তৈরি (Chat-to-Order)',
-                      desc: 'কাস্টমার নাম, ফোন ও ঠিকানা দিলে সাইকা সরাসরি নতুন অর্ডার এন্ট্রি করে নেবে।',
-                      checked: config.whatsappAi.chatToOrderEnabled,
-                      onChange: (v: boolean) =>
-                        saveConfigPatch({ whatsappAi: { ...config.whatsappAi, chatToOrderEnabled: v } }),
-                    },
-                  ].map((w, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 14,
-                        padding: '12px 14px',
-                        borderRadius: 10,
-                        background: '#100f18',
-                        border: '1px solid rgba(255,255,255,0.075)',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize: 13.5, fontWeight: 700, color: '#f8fafc' }}>{w.title}</div>
-                        <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>{w.desc}</div>
-                      </div>
-                      <PillSwitch checked={w.checked} onChange={w.onChange} />
+                <h3 style={{ fontSize: 15, marginBottom: 12 }}>🤖 ২৪/৭ স্টাফ অটো-গার্ডিয়ান (Autopilot Supervision)</h3>
+                <p className="fin-help" style={{ marginBottom: 14 }}>
+                  বস যখন ড্যাশবোর্ডে থাকবেন না, তখন সাইকা স্বয়ংক্রিয়ভাবে পেন্ডিং ও কুরিয়ার হোল্ড অর্ডার মনিটর করে অনলাইন স্টাফদের কাজ বণ্টন ও তাগিদ দেবে।
+                </p>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 14,
+                    padding: '14px',
+                    borderRadius: 11,
+                    background: config.autopilotEnabled ? 'rgba(16, 185, 129, 0.1)' : '#100f18',
+                    border: config.autopilotEnabled
+                      ? '1px solid rgba(52, 211, 153, 0.35)'
+                      : '1px solid rgba(255,255,255,0.08)',
+                    marginBottom: 16,
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>
+                      ২৪/৭ অটো-পাইলট গার্ডিয়ান চালু রাখুন
                     </div>
-                  ))}
+                    <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>
+                      আজ অটো-ডিরেকশন পাঠানো হয়েছে: {briefing?.autopilot?.directivesSentToday ?? 0} বার
+                    </div>
+                  </div>
+                  <PillSwitch
+                    checked={config.autopilotEnabled}
+                    onChange={(v) => saveConfigPatch({ autopilotEnabled: v })}
+                  />
                 </div>
 
                 <div className="fin-form-grid" style={{ margin: 0 }}>
                   <label>
-                    হোয়াটসঅ্যাপ কথা বলার ধরন (AI Tone)
-                    <select
-                      value={config.whatsappAi.tone}
-                      onChange={(e) =>
-                        saveConfigPatch({ whatsappAi: { ...config.whatsappAi, tone: e.target.value } })
-                      }
-                    >
-                      <option value="friendly_bangla">আন্তরিক ও ভদ্র বাংলা (Recommended)</option>
-                      <option value="formal_bangla">ফরমাল প্রফেশনাল বাংলা</option>
-                      <option value="banglish">বাংলা + English (Banglish)</option>
-                    </select>
-                  </label>
-                  <label>
-                    হিউম্যান রিপ্লাই দিলে AI বিরতি (মিনিট)
+                    অটো-অডিট চেক বিরতি (মিনিট)
                     <input
                       type="number"
                       min={5}
-                      max={240}
-                      value={config.whatsappAi.pauseMinutes}
+                      max={120}
+                      value={config.autopilotIntervalMins}
                       onChange={(e) =>
-                        setConfig({
-                          ...config,
-                          whatsappAi: { ...config.whatsappAi, pauseMinutes: Number(e.target.value) || 30 },
-                        })
+                        setConfig({ ...config, autopilotIntervalMins: Number(e.target.value) || 15 })
                       }
-                      onBlur={() => saveConfigPatch({ whatsappAi: config.whatsappAi })}
+                      onBlur={() => saveConfigPatch({ autopilotIntervalMins: config.autopilotIntervalMins })}
+                    />
+                  </label>
+                  <label>
+                    ডিলেইড পেন্ডিং সতর্কতা সময় (মিনিট)
+                    <input
+                      type="number"
+                      min={10}
+                      max={180}
+                      value={config.delayedPendingMins}
+                      onChange={(e) =>
+                        setConfig({ ...config, delayedPendingMins: Number(e.target.value) || 25 })
+                      }
+                      onBlur={() => saveConfigPatch({ delayedPendingMins: config.delayedPendingMins })}
                     />
                   </label>
                 </div>
@@ -1576,25 +1578,24 @@ export function SaikaAiAdmin({
           )}
 
           {/* =====================================================================
-              TAB 5: KNOWLEDGE & TRAINING (CUSTOM PROMPTS + FAQ MANAGER)
+              TAB 5: BOSS KNOWLEDGE & RULES (PRIVATE TO ADMIN PANEL SAIKA AI)
              ===================================================================== */}
           {activeSection === 'knowledge' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div className="fin-note">
-                <b>🔄 লাইভ ডাটাবেস সিঙ্ক সক্রিয়:</b>
+                <b>🔒 গোপন এক্সিকিউটিভ মেমোরি:</b>
                 <span>
-                  সাইকা আপনার স্টোরের <b>{storeSummary.productsCount}টি ক্যাটালগ প্রোডাক্ট</b> এবং{' '}
-                  <b>{storeSummary.landingsCount}টি লাইভ ল্যান্ডিং পেজের</b> দাম, প্যাকেজ ও ডেলিভারি চার্জ স্বয়ংক্রিয়ভাবে মুখস্থ রাখে। নিচে আপনার বিশেষ নিয়ম ও প্রশ্নোত্তর যুক্ত করতে পারবেন।
+                  এখানে লেখা তথ্য ও নিয়ম শুধুমাত্র অ্যাডমিন প্যানেলের <b>Saika AI</b> জানবে (কাস্টমার Call Center AI কখনোই এই গোপন বিজনেস তথ্য দেখতে বা বলতে পারবে না)। স্টোরের{' '}
+                  <b>{storeSummary.productsCount}টি পণ্য</b> ও <b>{storeSummary.landingsCount}টি ল্যান্ডিং পেজ</b> অটো-সিঙ্কড আছে।
                 </span>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: 16 }}>
-                {/* Custom Prompts */}
                 <div className="fin-form-card" style={{ margin: 0 }}>
-                  <h3 style={{ fontSize: 15, marginBottom: 12 }}>📜 কাস্টম নির্দেশনা ও পার্সোনা রুলস</h3>
+                  <h3 style={{ fontSize: 15, marginBottom: 12 }}>📜 বসের বিশেষ নির্দেশনা ও বিজনেস স্ট্র্যাটেজি</h3>
 
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                    ১. বসের জন্য বিশেষ নির্দেশনা (Boss Executive Rules)
+                    ১. বসের কাস্টম নির্দেশনা (Boss Custom Instructions)
                   </label>
                   <textarea
                     rows={4}
@@ -1605,29 +1606,13 @@ export function SaikaAiAdmin({
                   />
 
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                    ২. কাস্টমার ভয়েস কলের বিশেষ নিয়ম (Website & Phone Call Persona)
+                    ২. গোপন প্রফিট টার্গেট, সাপ্লায়ার ও অ্যাড স্ট্র্যাটেজি নোটস
                   </label>
                   <textarea
                     rows={4}
-                    value={config.customerCallInstructions}
-                    onChange={(e) => setConfig({ ...config, customerCallInstructions: e.target.value })}
-                    placeholder="যেমন: ১০০% গোপন ও সুরক্ষিত প্যাকেজিংয়ের কথা বলবে, ঢাকার ভেতরে ডেলিভারি চার্জ ৮০ টাকা এবং বাইরে ১৩০ টাকা..."
-                    style={{ marginBottom: 14 }}
-                  />
-
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                    ৩. হোয়াটসঅ্যাপ স্টোর পলিসি ও ডেলিভারি তথ্য
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={config.whatsappAi.storeInfo}
-                    onChange={(e) =>
-                      setConfig({
-                        ...config,
-                        whatsappAi: { ...config.whatsappAi, storeInfo: e.target.value },
-                      })
-                    }
-                    placeholder="রিটার্ন পলিসি, ডেলিভারি সময় (ঢাকায় ২৪ ঘণ্টা, ঢাকার বাইরে ২-৩ দিন), ক্যাশ অন ডেলিভারি নিয়ম..."
+                    value={config.businessStrategyNotes}
+                    onChange={(e) => setConfig({ ...config, businessStrategyNotes: e.target.value })}
+                    placeholder="যেমন: আমাদের টার্গেট ROAS 3.5x, মিনিমাম নেট প্রফিট মার্জিন ৩০%, মেইন কুরিয়ার CarryBee ও Pathao..."
                     style={{ marginBottom: 14 }}
                   />
 
@@ -1638,60 +1623,59 @@ export function SaikaAiAdmin({
                     onClick={() =>
                       saveConfigPatch({
                         bossCustomInstructions: config.bossCustomInstructions,
-                        customerCallInstructions: config.customerCallInstructions,
-                        whatsappAi: config.whatsappAi,
+                        businessStrategyNotes: config.businessStrategyNotes,
                       })
                     }
                   >
-                    {saving ? 'সেভ হচ্ছে...' : '💾 কাস্টম ট্রেনিং সেভ করুন'}
+                    {saving ? 'সেভ হচ্ছে...' : '💾 বসের নির্দেশনা সেভ করুন'}
                   </button>
                 </div>
 
-                {/* FAQ Knowledge Manager */}
                 <div className="fin-form-card" style={{ margin: 0 }}>
-                  <h3 style={{ fontSize: 15, marginBottom: 12 }}>🧠 প্রশ্ন ও উত্তর ট্রেনিং ব্যাংক (Q&A Memory)</h3>
+                  <h3 style={{ fontSize: 15, marginBottom: 12 }}>🧠 সাইকার প্রাইভেট মেমোরি ব্যাংক (Saved Notes & Rules)</h3>
 
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 5 }}>
-                    কাস্টমারের সাধারণ প্রশ্ন
+                    বিষয় / শিরোনাম
                   </label>
                   <input
                     type="text"
-                    value={faqQ}
-                    onChange={(e) => setFaqQ(e.target.value)}
-                    placeholder="যেমন: প্রোডাক্ট কি অরিজিনাল? কোনো পার্শ্বপ্রতিক্রিয়া আছে?"
+                    autoComplete="off"
+                    value={memTitle}
+                    onChange={(e) => setMemTitle(e.target.value)}
+                    placeholder="যেমন: স্টাফ ডিউটি টাইম / প্রোডাক্ট কেনা দাম"
                     style={{ marginBottom: 10 }}
                   />
 
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 5 }}>
-                    সাইকার আদর্শ উত্তর
+                    বিস্তারিত তথ্য বা নিয়ম
                   </label>
                   <textarea
                     rows={3}
-                    value={faqA}
-                    onChange={(e) => setFaqA(e.target.value)}
-                    placeholder="যেমন: জি স্যার, আমাদের প্রোডাক্ট ১০০% অরিজিনাল ও পরীক্ষিত..."
+                    value={memContent}
+                    onChange={(e) => setMemContent(e.target.value)}
+                    placeholder="সাইকা যে তথ্যটি সবসময় মনে রাখবে তা লিখুন..."
                     style={{ marginBottom: 10 }}
                   />
 
                   <button
                     type="button"
                     className="sa-btn"
-                    disabled={addingFaq || !faqQ.trim() || !faqA.trim()}
-                    onClick={handleAddFaq}
+                    disabled={addingMem || !memTitle.trim() || !memContent.trim()}
+                    onClick={handleAddMemory}
                     style={{ marginBottom: 16 }}
                   >
-                    {addingFaq ? 'যুক্ত হচ্ছে...' : '➕ মেমোরিতে যুক্ত করুন'}
+                    {addingMem ? 'যুক্ত হচ্ছে...' : '➕ মেমোরিতে যুক্ত করুন'}
                   </button>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
-                    {faqs.length === 0 ? (
+                    {config.memories.length === 0 ? (
                       <div style={{ fontSize: 12.5, color: '#94a3b8', padding: '12px 0' }}>
-                        এখনো কোনো কাস্টম FAQ যুক্ত করা হয়নি।
+                        এখনো কোনো প্রাইভেট মেমোরি নোট যুক্ত করা হয়নি।
                       </div>
                     ) : (
-                      faqs.map((f) => (
+                      config.memories.map((m) => (
                         <div
-                          key={f.id}
+                          key={m.id}
                           style={{
                             padding: '10px 12px',
                             borderRadius: 10,
@@ -1700,17 +1684,17 @@ export function SaikaAiAdmin({
                           }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                            <strong style={{ fontSize: 13, color: '#e9d5ff' }}>প্রশ্ন: {f.question}</strong>
+                            <strong style={{ fontSize: 13, color: '#e9d5ff' }}>📌 {m.title}</strong>
                             <button
                               type="button"
                               className="fin-text-btn"
                               style={{ color: '#fca5a5', borderColor: 'rgba(248,113,113,0.3)' }}
-                              onClick={() => handleDeleteFaq(f.id)}
+                              onClick={() => handleDeleteMemory(m.id)}
                             >
                               মুছুন
                             </button>
                           </div>
-                          <div style={{ fontSize: 12.5, color: '#cbd5e1', marginTop: 4 }}>উত্তর: {f.answer}</div>
+                          <div style={{ fontSize: 12.5, color: '#cbd5e1', marginTop: 4 }}>{m.content}</div>
                         </div>
                       ))
                     )}
@@ -1721,15 +1705,14 @@ export function SaikaAiAdmin({
           )}
 
           {/* =====================================================================
-              TAB 6: STAFF ACCESS & LOGS (PERMISSIONS + CALL & DIRECTIVE HISTORY)
+              TAB 6: STAFF ACCESS & EXECUTIVE LOGS (NO CALL CENTER MIXING)
              ===================================================================== */}
           {activeSection === 'access' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Staff Permission Table */}
               <div className="fin-table-card" style={{ margin: 0 }}>
                 <div className="fin-card-title">
                   <h3>🛡️ স্টাফ ও ম্যানেজার Saika AI অ্যাক্সেস কন্ট্রোল</h3>
-                  <span>কে কে অ্যাডমিন প্যানেলে সাইকা ব্যবহার করতে পারবে তা নির্ধারণ করুন</span>
+                  <span>কে কে অ্যাডমিন প্যানেলে Saika AI ব্যবহার করতে পারবে তা নির্ধারণ করুন</span>
                 </div>
                 <div className="fin-table-scroll">
                   <table className="fin-table" style={{ minWidth: 540 }}>
@@ -1772,52 +1755,45 @@ export function SaikaAiAdmin({
                 </div>
               </div>
 
-              {/* Recent AI Voice Calls & Recordings */}
               <div className="fin-table-card" style={{ margin: 0 }}>
                 <div className="fin-card-title">
-                  <h3>📞 সাম্প্রতিক সাইকা লাইভ ভয়েস কল ও রেকর্ডিং ({callLogs.length})</h3>
-                  <span>Website Inbound, Confirmation & Executive Calls</span>
+                  <h3>🎙️ বসের লাইভ ভয়েস সেশন লগ ({voiceSessions.length})</h3>
+                  <span>Strictly Admin Executive Sessions (Call Center লগ থেকে আলাদা)</span>
                 </div>
                 <div className="fin-table-scroll">
                   <table className="fin-table">
                     <thead>
                       <tr>
                         <th>সময়</th>
-                        <th>কাস্টমার / কলার</th>
-                        <th>সময়কাল ও ফলাফল</th>
-                        <th>সারসংক্ষেপ</th>
-                        <th>কল রেকর্ডিং</th>
+                        <th>সময়কাল</th>
+                        <th>কমান্ড / আলোচনার সারসংক্ষেপ</th>
+                        <th>অডিও রেকর্ডিং</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {callLogs.length === 0 ? (
+                      {voiceSessions.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="fin-empty">
-                            এখনো কোনো এআই ভয়েস কল রেকর্ড হয়নি।
+                          <td colSpan={4} className="fin-empty">
+                            এখনো বসের কোনো লাইভ ভয়েস সেশন রেকর্ড হয়নি।
                           </td>
                         </tr>
                       ) : (
-                        callLogs.map((c: any) => (
-                          <tr key={c.id}>
+                        voiceSessions.map((s: any) => (
+                          <tr key={s.id}>
                             <td style={{ whiteSpace: 'nowrap' }}>
-                              {c.createdAt ? new Date(c.createdAt).toLocaleString('bn-BD') : '—'}
+                              {s.createdAt ? new Date(s.createdAt).toLocaleString('bn-BD') : '—'}
                             </td>
                             <td>
-                              <b>{c.customerName || 'Visitor'}</b>
-                              <small>{c.customerPhone || 'Browser Voice'}</small>
+                              <b>{s.duration || 0}s</b>
+                            </td>
+                            <td style={{ maxWidth: 380 }}>
+                              <span style={{ fontSize: 12.5 }}>{s.summary || 'Boss Executive Voice Session'}</span>
                             </td>
                             <td>
-                              <b>{c.duration || 0}s</b>
-                              <small>{c.outcome || 'completed'}</small>
-                            </td>
-                            <td style={{ maxWidth: 320 }}>
-                              <span style={{ fontSize: 12 }}>{c.notes || 'AI Voice Session'}</span>
-                            </td>
-                            <td>
-                              {c.recordingUrl ? (
-                                <audio controls preload="none" src={c.recordingUrl} style={{ height: 30, width: 190 }} />
+                              {s.recordingUrl ? (
+                                <audio controls preload="none" src={s.recordingUrl} style={{ height: 30, width: 190 }} />
                               ) : (
-                                <span style={{ color: '#64748b', fontSize: 11.5 }}>রেকর্ডিং নেই</span>
+                                <span style={{ color: '#64748b', fontSize: 11.5 }}>—</span>
                               )}
                             </td>
                           </tr>
@@ -1828,7 +1804,6 @@ export function SaikaAiAdmin({
                 </div>
               </div>
 
-              {/* Recent Directives Log */}
               {directiveLogs.length > 0 && (
                 <div className="fin-table-card" style={{ margin: 0 }}>
                   <div className="fin-card-title">

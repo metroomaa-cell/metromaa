@@ -7187,23 +7187,24 @@ const HOST = process.env.HOST || '0.0.0.0';
 // ==========================================
 
 // ==========================================
-// STORE GEMINI API KEY HELPERS & TEST ENDPOINTS (Multi-Key Auto-Failover)
+// STRICTLY SEPARATED AI KEY POOLS:
+// 1) Admin Panel Saika AI Keys (ig.saikaConfig.geminiApiKeys) — 100% isolated for Boss/Admin Panel AI
+// 2) Call Center AI Key (tel.aiCalling.geminiApiKey) — 100% isolated for Customer Call Center AI
 // ==========================================
 const failedGeminiKeysCooldown = new Map(); // key -> timestamp
+let saikaAdminKeyBlockedReason = '';
 
-export function getStoreGeminiApiKeysList() {
+export function markGeminiKeyCooldown(key) {
+  if (key) failedGeminiKeysCooldown.set(String(key).trim(), Date.now() + 5 * 60 * 1000);
+}
+
+// ---- 1. ADMIN PANEL SAIKA AI DEDICATED KEYS (Totally separate from Call Center AI) ----
+export function getAdminSaikaApiKeysList() {
   const ig = getIntegrations() || {};
-  const wa = getWhatsAppSettings() || {};
-  const tel = getTelephonySettings() || {};
-  const settings = getSettings() || {};
+  const sc = ig.saikaConfig || {};
   const rawList = [
-    ...(Array.isArray(ig.saikaConfig?.geminiApiKeys) ? ig.saikaConfig.geminiApiKeys : []),
-    ig.geminiApiKey,
-    ig.ai?.geminiApiKey,
-    wa.geminiApiKey,
-    tel.aiCalling?.geminiApiKey,
-    settings.geminiApiKey,
-    process.env.GEMINI_API_KEY,
+    ...(Array.isArray(sc.geminiApiKeys) ? sc.geminiApiKeys : []),
+    sc.geminiApiKey,
   ];
   const unique = [];
   for (const k of rawList) {
@@ -7213,12 +7214,8 @@ export function getStoreGeminiApiKeysList() {
   return unique;
 }
 
-export function markGeminiKeyCooldown(key) {
-  if (key) failedGeminiKeysCooldown.set(String(key).trim(), Date.now() + 5 * 60 * 1000);
-}
-
-export function getStoreGeminiApiKey() {
-  const all = getStoreGeminiApiKeysList();
+export function getAdminSaikaApiKey() {
+  const all = getAdminSaikaApiKeysList();
   const now = Date.now();
   for (const k of all) {
     const until = failedGeminiKeysCooldown.get(k) || 0;
@@ -7227,113 +7224,202 @@ export function getStoreGeminiApiKey() {
   return all[0] || '';
 }
 
-export function saveStoreGeminiApiKey(rawKey, backupKeys = null) {
+export function saveAdminSaikaApiKey(rawKey, backupKeys = null) {
   const key = String(rawKey || '').trim();
   const ig = getIntegrations() || {};
-  ig.geminiApiKey = key;
-  if (!ig.whatsapp) ig.whatsapp = {};
-  ig.whatsapp.geminiApiKey = key;
   if (!ig.saikaConfig) ig.saikaConfig = {};
+  ig.saikaConfig.geminiApiKey = key;
   if (Array.isArray(backupKeys)) {
     const merged = [key, ...backupKeys.map((x) => String(x || '').trim())].filter(Boolean);
     ig.saikaConfig.geminiApiKeys = [...new Set(merged)];
   } else if (key) {
     const prev = Array.isArray(ig.saikaConfig.geminiApiKeys) ? ig.saikaConfig.geminiApiKeys : [];
     ig.saikaConfig.geminiApiKeys = [key, ...prev.filter((x) => x && x !== key)];
+  } else {
+    ig.saikaConfig.geminiApiKeys = [];
   }
   saveIntegrations(ig);
-  try {
-    saveWhatsAppSettings({ geminiApiKey: key });
-  } catch (_) {}
-  try {
-    const tel = getTelephonySettings() || {};
-    if (!tel.aiCalling) tel.aiCalling = {};
-    tel.aiCalling.geminiApiKey = key;
-    saveTelephonySettings(tel);
-  } catch (_) {}
   return key;
+}
+
+// ---- 2. CALL CENTER AI DEDICATED KEY (Totally separate from Admin Panel Saika AI) ----
+export function getCallCenterGeminiApiKey() {
+  const tel = getTelephonySettings() || {};
+  return String(tel.aiCalling?.geminiApiKey || tel.geminiApiKey || '').trim();
+}
+
+export function saveCallCenterGeminiApiKey(rawKey) {
+  const key = String(rawKey || '').trim();
+  const tel = getTelephonySettings() || {};
+  if (!tel.aiCalling) tel.aiCalling = {};
+  tel.aiCalling.geminiApiKey = key;
+  tel.geminiApiKey = key;
+  saveTelephonySettings(tel);
+  return key;
+}
+
+// Legacy alias kept for Call Center audit helpers ONLY (never touches Saika Admin config)
+export function getStoreGeminiApiKeysList() {
+  const k = getCallCenterGeminiApiKey();
+  return k ? [k] : [];
+}
+export function getStoreGeminiApiKey() {
+  return getCallCenterGeminiApiKey();
+}
+export function saveStoreGeminiApiKey(rawKey) {
+  return saveCallCenterGeminiApiKey(rawKey);
+}
+
+export const CURRENT_GEMINI_FLASH_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-3.7-flash',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-2.5-flash',
+];
+
+export async function verifyGeminiApiKeyLive(rawKey) {
+  const key = String(rawKey || '').trim();
+  if (!key) return { ok: false, error: 'অনুগ্রহ করে একটি বৈধ Gemini API Key দিন।' };
+
+  let discoveredFlashModels = [];
+  let listModelsOk = false;
+  let listErr = '';
+
+  try {
+    const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
+    if (listResp.ok) {
+      listModelsOk = true;
+      const listData = await listResp.json().catch(() => ({}));
+      const allModels = Array.isArray(listData?.models) ? listData.models : [];
+      const genModels = allModels
+        .filter((m) => Array.isArray(m?.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+        .map((m) => String(m.name || '').replace(/^models\//, ''))
+        .filter(Boolean);
+      const preferredAvailable = CURRENT_GEMINI_FLASH_MODELS.filter((id) => genModels.includes(id));
+      const extraFlash = genModels.filter((id) => id.includes('flash') && !id.includes('tts') && !id.includes('image') && !id.includes('live') && !preferredAvailable.includes(id));
+      discoveredFlashModels = [...preferredAvailable, ...extraFlash];
+    } else {
+      const errJson = await listResp.json().catch(() => ({}));
+      listErr = errJson?.error?.message || `HTTP ${listResp.status}`;
+      if (listResp.status === 400 || listResp.status === 401 || listResp.status === 403) {
+        return { ok: false, error: `API Key সঠিক নয় বা অনুমতি নেই: ${listErr}` };
+      }
+    }
+  } catch (err) {
+    listErr = err?.message || '';
+  }
+
+  const candidateModels = discoveredFlashModels.length > 0 ? discoveredFlashModels : CURRENT_GEMINI_FLASH_MODELS;
+  let lastGenErr = '';
+  let sawQuota429 = false;
+
+  for (const m of candidateModels.slice(0, 5)) {
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'OK' }] }], generationConfig: { maxOutputTokens: 8 } })
+      });
+      if (r.ok) {
+        return { ok: true, model: m, availableModels: candidateModels };
+      }
+      if (r.status === 429) sawQuota429 = true;
+      const errJson = await r.json().catch(() => ({}));
+      const msg = errJson?.error?.message || `HTTP ${r.status}`;
+      if (r.status !== 404) lastGenErr = msg;
+      else if (!lastGenErr) lastGenErr = msg;
+    } catch (err) {
+      if (!lastGenErr) lastGenErr = err?.message || '';
+    }
+  }
+
+  if (listModelsOk && sawQuota429) {
+    return {
+      ok: true,
+      model: candidateModels[0] || 'gemini-3.8-flash',
+      availableModels: candidateModels,
+      quotaNote: true,
+    };
+  }
+
+  if (listModelsOk && candidateModels.length > 0) {
+    return {
+      ok: true,
+      model: candidateModels[0],
+      availableModels: candidateModels,
+    };
+  }
+
+  return { ok: false, error: lastGenErr || listErr || 'API Key যাচাই করা যায়নি।' };
 }
 
 export function getUnifiedSaikaControlConfig() {
   const ig = getIntegrations() || {};
   const sc = ig.saikaConfig || {};
-  const tel = getTelephonySettings() || {};
-  const aiCall = tel.aiCalling || {};
-  const waAi = getWaAiConfig();
-  const keys = getStoreGeminiApiKeysList();
+  const keys = getAdminSaikaApiKeysList();
   const mask = (k) => (k && k.length > 10 ? `${k.slice(0, 6)}••••${k.slice(-4)}` : (k ? '••••••' : ''));
+  const rawPref = sc.preferredModel || '';
+  const retiredPrefs = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash'];
+  const effectiveModel = rawPref && !retiredPrefs.includes(rawPref) ? rawPref : 'gemini-3.8-flash';
   return {
     assistantName: sc.assistantName || 'Saika (সাইকা)',
-    preferredModel: sc.preferredModel || 'gemini-2.5-flash',
+    preferredModel: effectiveModel,
     liveVoiceModel: sc.liveVoiceModel || 'gemini-3.8-live',
-    liveVoiceName: ['Aoede', 'Leda', 'Kore', 'Zephyr', 'Puck'].includes(sc.liveVoiceName || aiCall.voiceName) ? (sc.liveVoiceName || aiCall.voiceName) : 'Aoede',
+    liveVoiceName: ['Aoede', 'Leda', 'Kore', 'Zephyr', 'Puck'].includes(sc.liveVoiceName) ? sc.liveVoiceName : 'Aoede',
     ttsVoiceName: sc.ttsVoiceName || 'bn-BD-NabanitaNeural',
     showFloatingOrb: sc.showFloatingOrb !== false,
     wakeWordEnabled: !!sc.wakeWordEnabled,
     proactiveVoiceAlert: sc.proactiveVoiceAlert !== false,
     adminAssistantEnabled: sc.adminAssistantEnabled !== false,
+    allowOrderActions: sc.allowOrderActions !== false,
+    allowStockActions: sc.allowStockActions !== false,
+    allowStaffActions: sc.allowStaffActions !== false,
+    allowWhatsappDispatch: sc.allowWhatsappDispatch !== false,
+    allowEmailDispatch: sc.allowEmailDispatch !== false,
     autopilotEnabled: sc.autopilotEnabled !== undefined ? !!sc.autopilotEnabled : !!aiCopilotAutopilot.enabled,
     autopilotIntervalMins: Math.max(5, Math.min(120, Number(sc.autopilotIntervalMins) || 15)),
     delayedPendingMins: Math.max(10, Math.min(180, Number(sc.delayedPendingMins) || 25)),
     bossCustomInstructions: String(sc.bossCustomInstructions || ''),
-    customerCallInstructions: String(aiCall.aiPersonaPrompt || sc.customerCallInstructions || ''),
-    websiteVoiceCallEnabled: aiCall.enabled !== false && aiCall.websiteInboundAi !== false,
-    outboundConfirmCallEnabled: aiCall.enabled !== false && aiCall.outboundConfirmEnabled !== false,
-    marketingCallEnabled: aiCall.marketingModeEnabled !== false,
-    quietHoursEnabled: !!aiCall.quietHoursEnabled,
-    quietStartHour: Number.isFinite(Number(aiCall.quietStartHour)) ? Number(aiCall.quietStartHour) : 22,
-    quietEndHour: Number.isFinite(Number(aiCall.quietEndHour)) ? Number(aiCall.quietEndHour) : 9,
-    whatsappAi: waAi,
+    businessStrategyNotes: String(sc.businessStrategyNotes || ''),
+    memories: Array.isArray(sc.memories) ? sc.memories : [],
     keysCount: keys.length,
     maskedKeys: keys.map((k, idx) => ({ index: idx, masked: mask(k), isPrimary: idx === 0 })),
     hasApiKey: keys.length > 0,
   };
 }
 
+// Call Center AI Key Test Endpoint (Strictly for Call Center AI ONLY)
 app.post('/api/ai-call/test-key', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   try {
-    const key = String(req.body?.geminiApiKey || getStoreGeminiApiKey() || '').trim();
-    if (!key) return res.json({ ok: false, error: 'কোনো Gemini API Key পাওয়া যায়নি।' });
-    const testModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
-    let lastErr = '';
-    for (const m of testModels) {
-      try {
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(key)}`;
-        const r = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Say OK' }] }], generationConfig: { maxOutputTokens: 10 } })
-        });
-        if (r.ok) {
-          if (req.body?.geminiApiKey && String(req.body.geminiApiKey).trim()) {
-            saveStoreGeminiApiKey(key);
-          }
-          return res.json({ ok: true, model: m, message: `✅ Gemini API Key কাজ করছে (${m}) এবং এই স্টোরের জন্য সেভ হয়েছে!` });
-        }
-        const errData = await r.json().catch(() => ({}));
-        lastErr = errData?.error?.message || `HTTP ${r.status}`;
-      } catch (err) {
-        lastErr = err?.message;
+    const key = String(req.body?.geminiApiKey || getCallCenterGeminiApiKey() || '').trim();
+    if (!key) return res.json({ ok: false, error: 'Call Center AI-এর জন্য কোনো Gemini API Key পাওয়া যায়নি।' });
+    const check = await verifyGeminiApiKeyLive(key);
+    if (check.ok) {
+      if (req.body?.geminiApiKey && String(req.body.geminiApiKey).trim()) {
+        aiKeyBlockedReason = '';
+        saveCallCenterGeminiApiKey(key);
       }
+      return res.json({ ok: true, model: check.model, message: `✅ Call Center AI Key কাজ করছে (${check.model}) এবং সচল আছে!` });
     }
-    res.json({ ok: false, error: lastErr || 'Unknown error' });
+    res.json({ ok: false, error: check.error || 'Unknown error' });
   } catch (e) {
     res.json({ ok: false, error: e.message });
   }
 });
 
+// Admin Panel Saika AI Key Endpoints (Strictly for Admin Panel Saika AI ONLY)
 app.get('/api/admin/ai-copilot/key', adminAuth, (req, res) => {
   try {
-    const key = getStoreGeminiApiKey();
+    const key = getAdminSaikaApiKey();
     const masked = key ? (key.length > 10 ? `${key.slice(0, 6)}...${key.slice(-4)}` : '******') : '';
-    const ig = getIntegrations() || {};
-    const isStoreSpecific = !!(ig.geminiApiKey || ig.whatsapp?.geminiApiKey);
     res.json({
       ok: true,
       hasKey: !!key,
       keyMasked: masked,
-      isStoreSpecific,
-      storeName: getSettings()?.storeName || 'METRROMA'
+      isStoreSpecific: !!key,
+      storeName: getSettings()?.storeName || 'Store'
     });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -7344,37 +7430,17 @@ app.post('/api/admin/ai-copilot/key', adminAuth, requireRole('owner', 'manager')
   try {
     const key = String(req.body?.geminiApiKey || '').trim();
     if (!key) return res.status(400).json({ ok: false, error: 'অনুগ্রহ করে একটি বৈধ Gemini API Key দিন।' });
-    const testModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
-    let verified = false;
-    let activeModel = '';
-    let lastErr = '';
-    for (const m of testModels) {
-      try {
-        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(key)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Say OK' }] }], generationConfig: { maxOutputTokens: 10 } })
-        });
-        if (r.ok) {
-          verified = true;
-          activeModel = m;
-          break;
-        }
-        const errJson = await r.json().catch(() => ({}));
-        lastErr = errJson?.error?.message || `HTTP ${r.status}`;
-      } catch (err) {
-        lastErr = err?.message;
-      }
+    const check = await verifyGeminiApiKeyLive(key);
+    if (!check.ok) {
+      return res.status(400).json({ ok: false, error: check.error || 'API Key সঠিক নয় বা কোটা সমস্যা।' });
     }
-    if (!verified) {
-      return res.status(400).json({ ok: false, error: lastErr || 'API Key সঠিক নয় বা কোটা সমস্যা।' });
-    }
-    saveStoreGeminiApiKey(key);
-    const storeName = getSettings()?.storeName || 'METRROMA';
+    saikaAdminKeyBlockedReason = '';
+    failedGeminiKeysCooldown.delete(key);
+    saveAdminSaikaApiKey(key);
     res.json({
       ok: true,
-      model: activeModel,
-      message: `✅ "${storeName}" স্টোরের নিজস্ব Gemini API Key সংরক্ষিত ও সক্রিয় হয়েছে!`
+      model: check.model,
+      message: `✅ অ্যাডমিন প্যানেলের Saika AI Key (${check.model}) সংরক্ষিত ও সক্রিয় হয়েছে!`
     });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -9714,12 +9780,16 @@ app.post('/api/admin/ai-copilot/ask', adminAuth, requireSaikaPermission, async (
       }
     }
 
-    // 5. Build 100% Grounded Full-Store Intelligence Context
-    const apiKey = getStoreGeminiApiKey();
+    // 5. Build 100% Grounded Full-Store Intelligence Context (Strictly Admin Panel Saika AI)
+    const apiKey = getAdminSaikaApiKey();
     const saikaCtrl = getUnifiedSaikaControlConfig();
-    const bossExtraRules = saikaCtrl.bossCustomInstructions
-      ? `\nBOSS CUSTOM INSTRUCTIONS (বসের বিশেষ নির্দেশনা — সর্বদা মেনে চলবে):\n${saikaCtrl.bossCustomInstructions}\n`
+    const memLines = Array.isArray(saikaCtrl.memories) && saikaCtrl.memories.length > 0
+      ? `\nBOSS SAVED MEMORY BANK:\n${saikaCtrl.memories.map((m) => `- ${m.title}: ${m.content}`).join('\n')}\n`
       : '';
+    const stratLines = saikaCtrl.businessStrategyNotes
+      ? `\nPRIVATE BUSINESS STRATEGY & PROFIT RULES:\n${saikaCtrl.businessStrategyNotes}\n`
+      : '';
+    const bossExtraRules = (saikaCtrl.bossCustomInstructions ? `\nBOSS CUSTOM INSTRUCTIONS (বসের বিশেষ নির্দেশনা — সর্বদা মেনে চলবে):\n${saikaCtrl.bossCustomInstructions}\n` : '') + stratLines + memLines;
     const allProds = (getCatalog()?.products || []).filter((p) => !p.archived && p.status !== 'draft');
     const compactCatalog = allProds.map((p) => `- ${p.name} (ID: ${p.id}, SKU: ${p.sku || 'N/A'}): ৳${p.price}, Stock: ${p.stock ?? 0} pcs`).join('\n');
     const recentOrders = (getOrders() || []).slice(0, 25).map((o) => `[${o.id}] ${o.customer?.name || 'Customer'} (${o.customer?.phone || 'No phone'}) - Total: ৳${o.total}, Status: ${o.status}, Items: ${(o.items || []).map((i) => `${i.name} x${i.qty || 1}`).join(', ')}`).join('\n');
@@ -9752,10 +9822,10 @@ COMMAND EXECUTION & STORE ACTIONS:
 - If the Boss asks to build a feature or write code, provide direct, ready-to-use, clean code and architecture.
 - Always be truthful to actual numbers. If something is out of stock, warn the Boss immediately.`;
 
-    const allApiKeys = getStoreGeminiApiKeysList();
+    const allApiKeys = getAdminSaikaApiKeysList();
     if (allApiKeys.length > 0 && saikaCtrl.adminAssistantEnabled !== false) {
-      const pref = saikaCtrl.preferredModel || 'gemini-2.5-flash';
-      const models = [...new Set([pref, 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'])];
+      const pref = saikaCtrl.preferredModel || 'gemini-3.8-flash';
+      const models = [...new Set([pref, ...CURRENT_GEMINI_FLASH_MODELS])];
       for (const candidateKey of allApiKeys) {
         for (const model of models) {
           try {
@@ -9848,12 +9918,13 @@ COMMAND EXECUTION & STORE ACTIONS:
 });
 
 // ============================================================================
-// ---- UNIFIED SAIKA AI COMMAND CENTER CONTROL ENDPOINTS ----
+// ---- UNIFIED ADMIN PANEL SAIKA AI CONTROL ENDPOINTS (100% Separate from Call Center AI) ----
 // ============================================================================
 app.get('/api/admin/saika/control', adminAuth, requireSaikaPermission, (_req, res) => {
   try {
     const config = getUnifiedSaikaControlConfig();
-    const faqs = getWaAiFaqs();
+    const ig = getIntegrations() || {};
+    const voiceSessions = Array.isArray(ig.saikaConfig?.voiceSessions) ? ig.saikaConfig.voiceSessions.slice(0, 30) : [];
     const users = getUsers().map((u) => ({
       id: u.id,
       username: u.username,
@@ -9861,15 +9932,13 @@ app.get('/api/admin/saika/control', adminAuth, requireSaikaPermission, (_req, re
       role: u.role || 'staff',
       canAccessSaika: u.role === 'owner' ? true : !!(u.canAccessSaika || u.permissions?.canAccessSaika),
     }));
-    const aiCalls = getCalls({}).filter((c) => c.staff?.role === 'ai' || String(c.notes || '').includes('[AI') || String(c.notes || '').includes('[Live AI')).slice(0, 30);
-    const aiNotifs = getStaffNotifications('owner').filter((n) => n.fromUsername === 'saika_ai' || n.fromUsername === 'ai-agent' || String(n.type || '').startsWith('ai_')).slice(0, 30);
+    const aiNotifs = getStaffNotifications('owner').filter((n) => n.fromUsername === 'saika_ai' || String(n.type || '').startsWith('ai_ceo')).slice(0, 30);
     res.json({
       ok: true,
       config,
-      faqs,
       users,
       logs: {
-        calls: aiCalls,
+        sessions: voiceSessions,
         directives: aiNotifs,
       },
       storeSummary: {
@@ -9898,6 +9967,11 @@ app.put('/api/admin/saika/control', adminAuth, requireRole('owner', 'manager'), 
     if (typeof b.wakeWordEnabled === 'boolean') sc.wakeWordEnabled = b.wakeWordEnabled;
     if (typeof b.proactiveVoiceAlert === 'boolean') sc.proactiveVoiceAlert = b.proactiveVoiceAlert;
     if (typeof b.adminAssistantEnabled === 'boolean') sc.adminAssistantEnabled = b.adminAssistantEnabled;
+    if (typeof b.allowOrderActions === 'boolean') sc.allowOrderActions = b.allowOrderActions;
+    if (typeof b.allowStockActions === 'boolean') sc.allowStockActions = b.allowStockActions;
+    if (typeof b.allowStaffActions === 'boolean') sc.allowStaffActions = b.allowStaffActions;
+    if (typeof b.allowWhatsappDispatch === 'boolean') sc.allowWhatsappDispatch = b.allowWhatsappDispatch;
+    if (typeof b.allowEmailDispatch === 'boolean') sc.allowEmailDispatch = b.allowEmailDispatch;
     if (typeof b.autopilotEnabled === 'boolean') {
       sc.autopilotEnabled = b.autopilotEnabled;
       aiCopilotAutopilot.enabled = b.autopilotEnabled;
@@ -9905,41 +9979,37 @@ app.put('/api/admin/saika/control', adminAuth, requireRole('owner', 'manager'), 
     if (b.autopilotIntervalMins !== undefined) sc.autopilotIntervalMins = Math.max(5, Math.min(120, Number(b.autopilotIntervalMins) || 15));
     if (b.delayedPendingMins !== undefined) sc.delayedPendingMins = Math.max(10, Math.min(180, Number(b.delayedPendingMins) || 25));
     if (typeof b.bossCustomInstructions === 'string') sc.bossCustomInstructions = b.bossCustomInstructions.slice(0, 4000);
-    if (typeof b.customerCallInstructions === 'string') sc.customerCallInstructions = b.customerCallInstructions.slice(0, 4000);
+    if (typeof b.businessStrategyNotes === 'string') sc.businessStrategyNotes = b.businessStrategyNotes.slice(0, 4000);
+    if (Array.isArray(b.memories)) sc.memories = b.memories.slice(0, 100);
 
     saveIntegrations(ig);
-
-    // Sync Telephony AI Call Settings
-    const tel = getTelephonySettings() || {};
-    if (!tel.aiCalling) tel.aiCalling = {};
-    if (typeof b.websiteVoiceCallEnabled === 'boolean') {
-      tel.aiCalling.websiteInboundAi = b.websiteVoiceCallEnabled;
-      if (b.websiteVoiceCallEnabled) tel.aiCalling.enabled = true;
-    }
-    if (typeof b.outboundConfirmCallEnabled === 'boolean') {
-      tel.aiCalling.outboundConfirmEnabled = b.outboundConfirmCallEnabled;
-    }
-    if (typeof b.marketingCallEnabled === 'boolean') {
-      tel.aiCalling.marketingModeEnabled = b.marketingCallEnabled;
-    }
-    if (typeof b.websiteVoiceCallEnabled === 'boolean' && typeof b.outboundConfirmCallEnabled === 'boolean' && !b.websiteVoiceCallEnabled && !b.outboundConfirmCallEnabled) {
-      tel.aiCalling.enabled = false;
-    } else if (b.websiteVoiceCallEnabled || b.outboundConfirmCallEnabled) {
-      tel.aiCalling.enabled = true;
-    }
-    if (typeof b.liveVoiceName === 'string') tel.aiCalling.voiceName = sc.liveVoiceName;
-    if (typeof b.customerCallInstructions === 'string') tel.aiCalling.aiPersonaPrompt = sc.customerCallInstructions;
-    if (typeof b.quietHoursEnabled === 'boolean') tel.aiCalling.quietHoursEnabled = b.quietHoursEnabled;
-    if (b.quietStartHour !== undefined) tel.aiCalling.quietStartHour = Math.max(0, Math.min(23, Number(b.quietStartHour) || 22));
-    if (b.quietEndHour !== undefined) tel.aiCalling.quietEndHour = Math.max(0, Math.min(23, Number(b.quietEndHour) || 9));
-    saveTelephonySettings(tel);
-
-    // Sync WhatsApp Smart AI Settings if provided
-    if (b.whatsappAi && typeof b.whatsappAi === 'object') {
-      saveWaAiConfig(b.whatsappAi);
-    }
-
     res.json({ ok: true, config: getUnifiedSaikaControlConfig() });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
+app.post('/api/admin/saika/memories', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  try {
+    const { action, id, title, content } = req.body || {};
+    const ig = getIntegrations() || {};
+    if (!ig.saikaConfig) ig.saikaConfig = {};
+    if (!Array.isArray(ig.saikaConfig.memories)) ig.saikaConfig.memories = [];
+    if (action === 'remove') {
+      ig.saikaConfig.memories = ig.saikaConfig.memories.filter((m) => m.id !== id);
+    } else {
+      const cleanTitle = String(title || '').trim();
+      const cleanContent = String(content || '').trim();
+      if (!cleanTitle || !cleanContent) return res.status(400).json({ ok: false, error: 'শিরোনাম এবং তথ্য উভয়ই প্রয়োজন।' });
+      ig.saikaConfig.memories.unshift({
+        id: 'mem_' + Date.now().toString(36),
+        title: cleanTitle.slice(0, 180),
+        content: cleanContent.slice(0, 1500),
+        createdAt: new Date().toISOString(),
+      });
+    }
+    saveIntegrations(ig);
+    res.json({ ok: true, memories: ig.saikaConfig.memories });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err?.message || err) });
   }
@@ -9950,7 +10020,17 @@ app.post('/api/admin/saika/keys', adminAuth, requireRole('owner', 'manager'), as
     const action = String(req.body?.action || 'add');
     const ig = getIntegrations() || {};
     if (!ig.saikaConfig) ig.saikaConfig = {};
-    let keys = getStoreGeminiApiKeysList();
+    let keys = getAdminSaikaApiKeysList();
+
+    if (action === 'test') {
+      const activeKey = getAdminSaikaApiKey();
+      if (!activeKey) return res.json({ ok: false, error: 'অ্যাডমিন প্যানেলের Saika AI-তে কোনো API Key সেভ করা নেই।' });
+      const check = await verifyGeminiApiKeyLive(activeKey);
+      if (check.ok) {
+        return res.json({ ok: true, model: check.model, message: `✅ অ্যাডমিন Saika AI Key সচল আছে (${check.model})!` });
+      }
+      return res.json({ ok: false, error: check.error || 'API Key যাচাই ব্যর্থ হয়েছে।' });
+    }
 
     if (action === 'remove') {
       const idx = Number(req.body?.index);
@@ -9958,16 +10038,8 @@ app.post('/api/admin/saika/keys', adminAuth, requireRole('owner', 'manager'), as
         keys.splice(idx, 1);
       }
       ig.saikaConfig.geminiApiKeys = keys;
-      ig.geminiApiKey = keys[0] || '';
-      if (ig.whatsapp) ig.whatsapp.geminiApiKey = keys[0] || '';
+      ig.saikaConfig.geminiApiKey = keys[0] || '';
       saveIntegrations(ig);
-      try { saveWhatsAppSettings({ geminiApiKey: keys[0] || '' }); } catch (_) {}
-      try {
-        const tel = getTelephonySettings() || {};
-        if (!tel.aiCalling) tel.aiCalling = {};
-        tel.aiCalling.geminiApiKey = keys[0] || '';
-        saveTelephonySettings(tel);
-      } catch (_) {}
       return res.json({ ok: true, config: getUnifiedSaikaControlConfig() });
     }
 
@@ -9976,7 +10048,7 @@ app.post('/api/admin/saika/keys', adminAuth, requireRole('owner', 'manager'), as
       if (Number.isInteger(idx) && idx > 0 && idx < keys.length) {
         const [picked] = keys.splice(idx, 1);
         keys.unshift(picked);
-        saveStoreGeminiApiKey(keys[0], keys.slice(1));
+        saveAdminSaikaApiKey(keys[0], keys.slice(1));
       }
       return res.json({ ok: true, config: getUnifiedSaikaControlConfig() });
     }
@@ -9984,43 +10056,23 @@ app.post('/api/admin/saika/keys', adminAuth, requireRole('owner', 'manager'), as
     const rawKey = String(req.body?.geminiApiKey || '').trim();
     if (!rawKey) return res.status(400).json({ ok: false, error: 'অনুগ্রহ করে একটি বৈধ Gemini API Key দিন।' });
 
-    const testModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
-    let verified = false;
-    let activeModel = '';
-    let lastErr = '';
-    for (const m of testModels) {
-      try {
-        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(rawKey)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Say OK' }] }], generationConfig: { maxOutputTokens: 10 } })
-        });
-        if (r.ok) {
-          verified = true;
-          activeModel = m;
-          break;
-        }
-        const errJson = await r.json().catch(() => ({}));
-        lastErr = errJson?.error?.message || `HTTP ${r.status}`;
-      } catch (err) {
-        lastErr = err?.message;
-      }
+    const check = await verifyGeminiApiKeyLive(rawKey);
+    if (!check.ok) {
+      return res.status(400).json({ ok: false, error: check.error || 'API Key সঠিক নয় বা কোটা শেষ।' });
     }
-    if (!verified) {
-      return res.status(400).json({ ok: false, error: lastErr || 'API Key সঠিক নয় বা কোটা শেষ।' });
-    }
+    const activeModel = check.model || 'gemini-3.8-flash';
 
-    aiKeyBlockedReason = '';
+    saikaAdminKeyBlockedReason = '';
     failedGeminiKeysCooldown.delete(rawKey);
     const makePrimary = req.body?.makePrimary !== false;
     const filtered = keys.filter((k) => k !== rawKey);
     const nextKeys = makePrimary ? [rawKey, ...filtered] : [...filtered, rawKey];
-    saveStoreGeminiApiKey(nextKeys[0], nextKeys.slice(1));
+    saveAdminSaikaApiKey(nextKeys[0], nextKeys.slice(1));
 
     res.json({
       ok: true,
       model: activeModel,
-      message: `✅ API Key ভেরিফাইড (${activeModel}) এবং সেভ হয়েছে! মোট সক্রিয় Key: ${nextKeys.length}টি`,
+      message: `✅ অ্যাডমিন Saika AI Key ভেরিফাইড (${activeModel}) এবং সেভ হয়েছে! মোট সক্রিয় Key: ${nextKeys.length}টি`,
       config: getUnifiedSaikaControlConfig()
     });
   } catch (err) {
@@ -10188,35 +10240,56 @@ if (WebSocketServer) {
         s.leadNotes || ''
       ].filter(Boolean);
       const notes = `[Live AI Audio ${s.mode}] ${detailParts.join(' | ') || (s.actionsExecuted.map((a) => a.tool).join(', ') || 'Voice Call')}`;
-      saveAiDeviceMemory(s.deviceId, s.fingerprint, {
-        name: s.customerName,
-        phone: s.customerPhone,
-        address: s.customerAddress || s.targetOrder?.customer?.address || '',
-        lastProduct: s.interestedProduct || s.targetOrder?.items?.[0]?.name || s.landing?.productTitle || '',
-        lastOrderId: s.orderId || null,
-        lastCallSummary: detailParts.join(' · ').slice(0, 180) || s.mode,
-        incrementCall: true
-      });
       const { recordingUrl, fileSize } = saveAiWavRecording();
-      try {
-        const savedCall = saveCall({
-          direction: s.mode === 'website_inbound' ? 'inbound' : 'outbound',
-          orderId: s.orderId || null,
-          customerName: s.customerName,
-          customerPhone: s.customerPhone,
-          productName: s.interestedProduct || s.targetOrder?.items?.[0]?.name || s.landing?.productTitle || '',
-          duration,
-          outcome: s.transferRequested ? 'call_later' : (s.finalOutcome || 'confirmed'),
-          notes,
-          recordingUrl,
-          fileSize,
-          staff: { username: 'ai-agent', name: '🤖 Saika AI (Live)', role: 'ai' }
+      if (s.mode === 'saika_assistant') {
+        // Save strictly to Admin Panel Saika AI Executive Logs (NEVER mix into Call Center customer call logs)
+        try {
+          const ig = getIntegrations() || {};
+          if (!ig.saikaConfig) ig.saikaConfig = {};
+          if (!Array.isArray(ig.saikaConfig.voiceSessions)) ig.saikaConfig.voiceSessions = [];
+          const summaryText = s.actionsExecuted.length > 0
+            ? `কমান্ড অ্যাকশন: ${s.actionsExecuted.map((a) => a.tool || a.type || 'action').join(', ')}`
+            : (s.history.slice(-2).map((h) => h.text).join(' · ').slice(0, 180) || 'Boss Live Voice Session');
+          ig.saikaConfig.voiceSessions.unshift({
+            id: sessionId,
+            createdAt: s.startedAt || new Date().toISOString(),
+            duration,
+            summary: summaryText,
+            recordingUrl,
+          });
+          ig.saikaConfig.voiceSessions = ig.saikaConfig.voiceSessions.slice(0, 40);
+          saveIntegrations(ig);
+        } catch (_) {}
+      } else {
+        saveAiDeviceMemory(s.deviceId, s.fingerprint, {
+          name: s.customerName,
+          phone: s.customerPhone,
+          address: s.customerAddress || s.targetOrder?.customer?.address || '',
+          lastProduct: s.interestedProduct || s.targetOrder?.items?.[0]?.name || s.landing?.productTitle || '',
+          lastOrderId: s.orderId || null,
+          lastCallSummary: detailParts.join(' · ').slice(0, 180) || s.mode,
+          incrementCall: true
         });
-        if (savedCall?.id && savedCall?.recordingUrl) {
-          runGeminiCallAudit(savedCall.id).catch(() => {});
+        try {
+          const savedCall = saveCall({
+            direction: s.mode === 'website_inbound' ? 'inbound' : 'outbound',
+            orderId: s.orderId || null,
+            customerName: s.customerName,
+            customerPhone: s.customerPhone,
+            productName: s.interestedProduct || s.targetOrder?.items?.[0]?.name || s.landing?.productTitle || '',
+            duration,
+            outcome: s.transferRequested ? 'call_later' : (s.finalOutcome || 'confirmed'),
+            notes,
+            recordingUrl,
+            fileSize,
+            staff: { username: 'ai-agent', name: '📞 Call Center AI', role: 'ai' }
+          });
+          if (savedCall?.id && savedCall?.recordingUrl) {
+            runGeminiCallAudit(savedCall.id).catch(() => {});
+          }
+        } catch (err) {
+          console.error('[AI Call Save Error]:', err?.message || err);
         }
-      } catch (err) {
-        console.error('[AI Call Save Error]:', err?.message || err);
       }
       activeAiCalls.delete(sessionId);
     }
@@ -10287,20 +10360,40 @@ if (WebSocketServer) {
 
     const tel = getTelephonySettings();
     const aiCfg = tel.aiCalling || {};
-    if ((mode === 'website_inbound' && aiCfg.websiteInboundAi === false) || (mode === 'marketing' && aiCfg.marketingModeEnabled === false)) {
-      clientWs.send(JSON.stringify({ type: 'error', fallbackToHuman: true, message: 'এই AI কল সুবিধাটি বর্তমানে বন্ধ আছে।' }));
-      clientWs.close();
-      return;
-    }
-    const apiKey = getStoreGeminiApiKey();
-    if (aiCfg.enabled === false || !apiKey || aiKeyBlockedReason) {
-      clientWs.send(JSON.stringify({
-        type: 'error',
-        fallbackToHuman: true,
-        message: !apiKey || aiKeyBlockedReason ? 'AI API সংযোগ পাওয়া যায়নি — প্রতিনিধির সাথে সংযোগ করা হচ্ছে।' : 'AI Calling is disabled.'
-      }));
-      clientWs.close();
-      return;
+    const saikaWsCfg = getUnifiedSaikaControlConfig();
+    let apiKey = '';
+    if (mode === 'saika_assistant') {
+      if (saikaWsCfg.adminAssistantEnabled === false) {
+        clientWs.send(JSON.stringify({ type: 'error', fallbackToHuman: false, message: 'অ্যাডমিন প্যানেলের Saika AI বর্তমানে বন্ধ রাখা হয়েছে।' }));
+        clientWs.close();
+        return;
+      }
+      apiKey = getAdminSaikaApiKey();
+      if (!apiKey || saikaAdminKeyBlockedReason) {
+        clientWs.send(JSON.stringify({
+          type: 'error',
+          fallbackToHuman: false,
+          message: 'অ্যাডমিন Saika AI-তে এখনো কোনো সচল Gemini API Key যুক্ত করা হয়নি। বাম পাশের Saika AI -> API & Model Setup থেকে Key যুক্ত করুন।'
+        }));
+        clientWs.close();
+        return;
+      }
+    } else {
+      if ((mode === 'website_inbound' && aiCfg.websiteInboundAi === false) || (mode === 'marketing' && aiCfg.marketingModeEnabled === false)) {
+        clientWs.send(JSON.stringify({ type: 'error', fallbackToHuman: true, message: 'এই AI কল সুবিধাটি বর্তমানে বন্ধ আছে।' }));
+        clientWs.close();
+        return;
+      }
+      apiKey = getCallCenterGeminiApiKey();
+      if (aiCfg.enabled === false || !apiKey || aiKeyBlockedReason) {
+        clientWs.send(JSON.stringify({
+          type: 'error',
+          fallbackToHuman: true,
+          message: !apiKey || aiKeyBlockedReason ? 'Call Center AI API সংযোগ পাওয়া যায়নি — প্রতিনিধির সাথে সংযোগ করা হচ্ছে।' : 'AI Calling is disabled.'
+        }));
+        clientWs.close();
+        return;
+      }
     }
 
     if (mode === 'website_inbound') {
@@ -10674,12 +10767,14 @@ VOICE CALL RULES (VERIFIED INFORMATION AND SAFE ACTIONS):
     }];
 
     const requestedVoice = urlObj.searchParams.get('voiceName') || '';
+    const fallbackVoice = mode === 'saika_assistant' ? saikaLiveCtrl.liveVoiceName : aiCfg.voiceName;
     const selectedVoice = ['Aoede', 'Kore', 'Leda', 'Zephyr', 'Puck'].includes(requestedVoice)
       ? requestedVoice
-      : (['Aoede', 'Kore', 'Leda', 'Zephyr', 'Puck'].includes(aiCfg.voiceName) ? aiCfg.voiceName : 'Aoede');
+      : (['Aoede', 'Kore', 'Leda', 'Zephyr', 'Puck'].includes(fallbackVoice) ? fallbackVoice : 'Aoede');
+    const selectedLiveModel = mode === 'saika_assistant' ? (saikaLiveCtrl.liveVoiceModel || 'gemini-3.8-live') : 'gemini-3.8-live';
     const ai = new GoogleGenAI({ apiKey });
     geminiSession = await ai.live.connect({
-      model: 'gemini-3.8-live',
+      model: selectedLiveModel,
       config: {
         responseModalities: ['audio'],
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } } },
@@ -10752,10 +10847,14 @@ VOICE CALL RULES (VERIFIED INFORMATION AND SAFE ACTIONS):
         onerror: (err) => {
           const msgStr = String(err?.message || 'Live audio connection error');
           if (/leaked|PERMISSION_DENIED|API_KEY_INVALID|403|401/i.test(msgStr)) {
-            aiKeyBlockedReason = msgStr;
+            if (mode === 'saika_assistant') {
+              markGeminiKeyCooldown(apiKey);
+            } else {
+              aiKeyBlockedReason = msgStr;
+            }
           }
           if (clientWs.readyState === 1) {
-            clientWs.send(JSON.stringify({ type: 'error', fallbackToHuman: true, message: msgStr }));
+            clientWs.send(JSON.stringify({ type: 'error', fallbackToHuman: mode !== 'saika_assistant', message: msgStr }));
           }
         },
         onclose: () => {

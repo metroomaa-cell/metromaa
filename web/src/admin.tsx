@@ -2718,7 +2718,7 @@ export function Admin() {
         'Command Center': 'overview',
         'API & Model Setup': 'api',
         'Voice & Widget Studio': 'voice',
-        'Channel Controls': 'channels',
+        'Capabilities & Autopilot': 'channels',
         'Knowledge & Training': 'knowledge',
         'Staff Access & Logs': 'access',
       };
@@ -3018,8 +3018,14 @@ export function Admin() {
           <input
             ref={quickSearchRef}
             type="search"
-            name="sa_menu_filter_quick"
+            name="sa_menu_filter_quick_nologin"
             autoComplete="off"
+            data-lpignore="true"
+            data-1p-ignore="true"
+            data-form-type="other"
+            readOnly
+            onMouseDown={(e) => e.currentTarget.removeAttribute('readonly')}
+            onFocus={(e) => e.currentTarget.removeAttribute('readonly')}
             placeholder={adminText('Quick Search')}
             value={navq}
             onChange={(e) => setNavq(e.target.value)}
@@ -3069,10 +3075,12 @@ export function Admin() {
               if (sidebarCollapsed) {
                 setSidebarCollapsed(false);
                 setTimeout(() => {
+                  quickSearchRef.current?.removeAttribute('readonly');
                   quickSearchRef.current?.focus();
                   quickSearchRef.current?.select();
                 }, 150);
               } else {
+                quickSearchRef.current?.removeAttribute('readonly');
                 quickSearchRef.current?.focus();
                 quickSearchRef.current?.select();
               }
@@ -3114,7 +3122,7 @@ export function Admin() {
               { id: 'saika', label: 'Command Center', action: () => navigateSaikaSection('overview', 'Command Center') },
               { id: 'saika', label: 'API & Model Setup', action: () => navigateSaikaSection('api', 'API & Model Setup') },
               { id: 'saika', label: 'Voice & Widget Studio', action: () => navigateSaikaSection('voice', 'Voice & Widget Studio') },
-              { id: 'saika', label: 'Channel Controls', action: () => navigateSaikaSection('channels', 'Channel Controls') },
+              { id: 'saika', label: 'Capabilities & Autopilot', action: () => navigateSaikaSection('channels', 'Capabilities & Autopilot') },
               { id: 'saika', label: 'Knowledge & Training', action: () => navigateSaikaSection('knowledge', 'Knowledge & Training') },
               { id: 'saika', label: 'Staff Access & Logs', action: () => navigateSaikaSection('access', 'Staff Access & Logs') },
             ]
