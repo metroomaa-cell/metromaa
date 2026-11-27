@@ -82,11 +82,24 @@ function ago(d: string) {
   return fmt(d);
 }
 
-const BD_DISTRICTS = ['dhaka', 'chattogram', 'chittagong', 'gazipur', 'narayanganj', 'cumilla', 'comilla', 'sylhet', 'rajshahi', 'khulna', 'barishal', 'barisal', 'rangpur', 'mymensingh', 'bogura', 'bogra', 'jashore', 'jessore', 'narsingdi', 'tangail', 'savar', 'cox', 'feni', 'noakhali', 'dinajpur', 'pabna', 'kushtia', 'faridpur', 'gulshan', 'dhanmondi', 'uttara', 'mirpur'];
+const BD_DISTRICTS = [
+  'dhaka', 'chattogram', 'chittagong', 'gazipur', 'narayanganj', 'cumilla', 'comilla', 'sylhet', 'moulvibazar', 'moulvi bazar', 'habiganj', 'sunamganj', 'brahmanbaria', 'rajshahi', 'khulna', 'barishal', 'barisal', 'rangpur', 'mymensingh', 'bogura', 'bogra', 'jashore', 'jessore', 'narsingdi', 'tangail', 'savar', 'coxs bazar', 'cox\'s bazar', 'cox', 'feni', 'noakhali', 'dinajpur', 'pabna', 'kushtia', 'faridpur', 'chandpur', 'lakshmipur', 'bagerhat', 'satkhira', 'chuadanga', 'meherpur', 'jhenaidah', 'magura', 'narail', 'patuakhali', 'pirojpur', 'bhola', 'jhalokati', 'barguna', 'kurigram', 'lalmonirhat', 'nilphamari', 'gaibandha', 'thakurgaon', 'panchagarh', 'joypurhat', 'naogaon', 'natore', 'chapainawabganj', 'sherpur', 'jamalpur', 'netrokona', 'kishoreganj', 'manikganj', 'munshiganj', 'gopalganj', 'madaripur', 'rajbari', 'shariatpur', 'sirajganj', 'gulshan', 'dhanmondi', 'uttara', 'mirpur', 'banani', 'badda', 'mohammadpur', 'malibagh', 'rampura', 'jatrabari', 'motijheel', 'bashundhara'
+];
+function isDhakaZone(districtOrArea: string) {
+  const s = String(districtOrArea || '').toLowerCase();
+  return ['dhaka', 'mirpur', 'uttara', 'dhanmondi', 'gulshan', 'banani', 'badda', 'mohammadpur', 'malibagh', 'rampura', 'jatrabari', 'motijheel', 'bashundhara', 'khilgaon'].some((k) => s.includes(k));
+}
 function detectDistrict(addr: string) {
   const a = (addr || '').toLowerCase();
   const hit = BD_DISTRICTS.find((d) => a.includes(d));
-  return hit ? hit.charAt(0).toUpperCase() + hit.slice(1) : '';
+  if (!hit) return '';
+  if (hit === 'moulvi bazar' || hit === 'moulvibazar') return 'Moulvibazar';
+  if (hit === 'chattogram' || hit === 'chittagong') return 'Chittagong';
+  if (hit === 'cumilla' || hit === 'comilla') return 'Comilla';
+  if (hit === 'bogura' || hit === 'bogra') return 'Bogra';
+  if (hit === 'jashore' || hit === 'jessore') return 'Jessore';
+  if (hit === 'barishal' || hit === 'barisal') return 'Barisal';
+  return hit.charAt(0).toUpperCase() + hit.slice(1);
 }
 function normalizeBDMobile(value: string) {
   const bnDigits: Record<string, string> = { '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9' };
@@ -9760,6 +9773,9 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
   const [newInternalNote, setNewInternalNote] = useState('');
   const [followUpAt, setFollowUpAt] = useState(o.followUpAt ? String(o.followUpAt).slice(0, 16) : '');
   const [noteBusy, setNoteBusy] = useState(false);
+  const [showCallLaterMenu, setShowCallLaterMenu] = useState(false);
+  const [showCancelMenu, setShowCancelMenu] = useState(false);
+  const [showWhatsAppTemplates, setShowWhatsAppTemplates] = useState(false);
 
   const isLockedActive = !!(lockState.lockedBy && lockState.lockedUntil && new Date(lockState.lockedUntil).getTime() > Date.now());
 
@@ -10008,6 +10024,114 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
     }
   };
 
+  const detectedFromAddr = detectDistrict(custAddress);
+  const isDetectedOutside = !!(detectedFromAddr && !isDhakaZone(detectedFromAddr));
+  const hasDistrictMismatch = isDetectedOutside && (
+    custArea === 'inside' ||
+    delivery <= 80 ||
+    String(custDistrict || '').toLowerCase().includes('dhaka') ||
+    String(custDistrict || '').toLowerCase() === 'bangladesh'
+  );
+
+  const handleFixDistrictMismatch = async () => {
+    const targetDistrict = detectedFromAddr || 'Outside Dhaka';
+    setCustDistrict(targetDistrict);
+    setCustArea('outside');
+    setDelivery(120);
+    setSaveMsg(`✅ জেলা ও জোন ফিক্সড: ${targetDistrict} (Outside Dhaka ৳120)`);
+    try {
+      await aFetch('/orders/' + o.id, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          customer: {
+            ...o.customer,
+            name: custName,
+            phone: custPhone,
+            phone2: custPhone2,
+            address: custAddress,
+            district: targetDistrict,
+            thana: custThana,
+            area: 'outside',
+            note: custNote
+          },
+          delivery: 120,
+          total: Math.max(0, computedItemsTotal + 120 - Number(discount || 0))
+        })
+      });
+      window.dispatchEvent(new CustomEvent('admin-orders-updated', { detail: { id: o.id } }));
+    } catch {}
+    setTimeout(() => setSaveMsg(''), 3000);
+  };
+
+  const handleDisposition = async (action: 'confirmed' | 'no_answer') => {
+    if (action === 'confirmed') {
+      await handleQuickStatus('confirmed');
+      aFetch(`/orders/${o.id}/manual-call`, {
+        method: 'POST',
+        body: JSON.stringify({ outcome: 'talked' })
+      }).catch(() => {});
+      setSaveMsg('🟢 কথা বলে অর্ডারটি সফলভাবে কনফার্ম করা হয়েছে! ✓');
+    } else if (action === 'no_answer') {
+      await handleQuickStatus('hold');
+      aFetch(`/orders/${o.id}/manual-call`, {
+        method: 'POST',
+        body: JSON.stringify({ outcome: 'attempted' })
+      }).catch(() => {});
+      setSaveMsg('🟡 রিসিভ করেনি — স্ট্যাটাস Hold করা হয়েছে এবং কল ট্রায়াল লগ হয়েছে');
+    }
+    setTimeout(() => setSaveMsg(''), 3000);
+  };
+
+  const scheduleCallLater = async (minutes: number, label: string) => {
+    setShowCallLaterMenu(false);
+    const targetTime = new Date(Date.now() + minutes * 60000).toISOString();
+    await handleQuickStatus('hold');
+    aFetch(`/admin/orders/${o.id}/internal-note`, {
+      method: 'POST',
+      body: JSON.stringify({
+        text: `⏰ কাস্টমার পরে কল দিতে বলেছেন: ${label}`,
+        followUpAt: targetTime
+      })
+    }).then((r) => r.json()).then((d) => {
+      if (d.internalNotes) setInternalNotes(d.internalNotes);
+    }).catch(() => {});
+    setSaveMsg(`🟠 শিডিউল সেট করা হয়েছে: ${label}`);
+    setTimeout(() => setSaveMsg(''), 3000);
+  };
+
+  const cancelWithReason = async (reason: string) => {
+    setShowCancelMenu(false);
+    await handleQuickStatus('cancelled');
+    aFetch(`/admin/orders/${o.id}/internal-note`, {
+      method: 'POST',
+      body: JSON.stringify({
+        text: `🔴 অর্ডার বাতিল করা হয়েছে। কারণ: ${reason}`
+      })
+    }).then((r) => r.json()).then((d) => {
+      if (d.internalNotes) setInternalNotes(d.internalNotes);
+    }).catch(() => {});
+    setSaveMsg(`🔴 অর্ডার বাতিল করা হয়েছে: ${reason}`);
+    setTimeout(() => setSaveMsg(''), 3000);
+  };
+
+  const sendWhatsAppTemplate = (type: 'confirm' | 'missed' | 'address') => {
+    setShowWhatsAppTemplates(false);
+    let msg = '';
+    if (type === 'confirm') {
+      msg = `আসসালামু আলাইকুম ${custName ? `${custName} স্যার/ম্যাম` : 'স্যার/ম্যাম'}! secrate.shop থেকে আপনার অর্ডার #${String(o.orderNumber || o.id).replace(/^DOT-/i, '')} নিশ্চিত করা হয়েছে।\n\nপণ্য: ${items[0]?.name || 'অর্ডারকৃত পণ্য'} ${items[0]?.qty ? `(${items[0].qty}টি)` : ''}\nমোট মূল্য: ৳${grandTotal} (ক্যাশ অন ডেলিভারি)\nডেলিভারি ঠিকানা: ${custAddress}\n\nআগামী ২-৩ কর্মদিবসের মধ্যে ডেলিভারি পেয়ে যাবেন। ধন্যবাদ!`;
+    } else if (type === 'missed') {
+      msg = `আসসালামু আলাইকুম ${custName ? `${custName} স্যার/ম্যাম` : 'স্যার/ম্যাম'}! secrate.shop থেকে আপনার অর্ডারের জন্য কল দেওয়া হয়েছিল কিন্তু আপনাকে ফোনে পাওয়া যায়নি।\n\nঅর্ডারটি ডেলিভারি পেতে চাইলে অনুগ্রহ করে এই মেসেজে 'হ্যাঁ' লিখে রিপ্লাই দিন অথবা আমাদের সাথে যোগাযোগ করুন। ধন্যবাদ!`;
+    } else if (type === 'address') {
+      msg = `আসসালামু আলাইকুম ${custName ? `${custName} স্যার/ম্যাম` : 'স্যার/ম্যাম'}! আপনার অর্ডারের পার্সেল দ্রুত পৌঁছাতে অনুগ্রহ করে আপনার পূর্ণাঙ্গ ঠিকানা, থানা, জেলা ও নিকটস্থ পরিচিত স্থান লিখে জানান। ধন্যবাদ!`;
+    }
+    triggerAdminWhatsApp({
+      order: o,
+      phone: custPhone,
+      name: custName,
+      defaultMsg: msg
+    });
+  };
+
   const formattedDate = new Date(o.createdAt).toLocaleString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit'
   });
@@ -10108,21 +10232,69 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
             <a className="sa-btn ghost sa-mini" href={'tel:' + custPhone} title="Direct call from phone/device">
               Cell Call
             </a>
-            <button
-              type="button"
-              className="sa-btn ghost sa-mini"
-              onClick={() => {
-                triggerAdminWhatsApp({
-                  order: o,
-                  phone: custPhone,
-                  name: custName,
-                });
-              }}
-              title="Send WhatsApp via Store WhatsApp (No Tab)"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}
-            >
-              <WhatsAppIcon size={14} variant="official" /> WhatsApp
-            </button>
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              <button
+                type="button"
+                className="sa-btn ghost sa-mini"
+                onClick={() => setShowWhatsAppTemplates(!showWhatsAppTemplates)}
+                title="Send WhatsApp or choose a quick template"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}
+              >
+                <WhatsAppIcon size={14} variant="official" /> WhatsApp ▾
+              </button>
+              {showWhatsAppTemplates && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    marginTop: 4,
+                    background: '#1a162b',
+                    border: '1px solid rgba(139, 92, 246, 0.4)',
+                    borderRadius: 8,
+                    padding: 6,
+                    boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                    zIndex: 1000,
+                    minWidth: 220,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowWhatsAppTemplates(false);
+                      triggerAdminWhatsApp({ order: o, phone: custPhone, name: custName });
+                    }}
+                    style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
+                  >
+                    💬 সাধারণ চ্যাট খুলুন (Direct Chat)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => sendWhatsAppTemplate('confirm')}
+                    style={{ textAlign: 'left', background: 'rgba(16, 185, 129, 0.1)', border: 'none', color: '#34d399', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                  >
+                    📋 কনফার্মেশন রিসিট মেসেজ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => sendWhatsAppTemplate('missed')}
+                    style={{ textAlign: 'left', background: 'rgba(245, 158, 11, 0.1)', border: 'none', color: '#fbbf24', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                  >
+                    📞 কল মিসড / রিসিভ করেননি
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => sendWhatsAppTemplate('address')}
+                    style={{ textAlign: 'left', background: 'rgba(56, 189, 248, 0.1)', border: 'none', color: '#38bdf8', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
+                  >
+                    📍 পূর্ণাঙ্গ ঠিকানা নিশ্চিতকরণ
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               className="sa-btn ghost sa-mini"
@@ -10165,6 +10337,244 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
           {saveMsg && (
             <div style={{ marginBottom: 12, padding: '8px 12px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: 8, color: '#34d399', fontSize: 13, fontWeight: 600 }}>
               {saveMsg}
+            </div>
+          )}
+
+          {/* 1-Click Fast Disposition Bar (Call-Center Rapid Actions) */}
+          <div
+            style={{
+              marginBottom: 16,
+              padding: '12px 16px',
+              borderRadius: 12,
+              background: 'linear-gradient(135deg, rgba(28, 22, 50, 0.95) 0%, rgba(18, 14, 32, 0.95) 100%)',
+              border: '1px solid rgba(139, 92, 246, 0.35)',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 16 }}>⚡</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#c4b5fd', letterSpacing: '0.2px' }}>
+                  কল সেন্টার কুইক অ্যাকশন (১-ক্লিক রেজাল্ট):
+                </span>
+                {o.lastCall && (
+                  <span style={{ fontSize: 11, color: '#94a3b8', background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: 4 }}>
+                    সর্বশেষ কল: {o.lastCall.by || o.lastCall.username} ({timeAgo(o.lastCall.at)})
+                  </span>
+                )}
+              </div>
+              {isLockedActive && (
+                <span style={{ fontSize: 11, color: '#fbbf24', background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.35)', padding: '2px 8px', borderRadius: 6, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
+                  🔒 লকড: {lockState.lockedByName || lockState.lockedBy}
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => handleDisposition('confirmed')}
+                disabled={busy}
+                style={{
+                  background: status === 'confirmed' ? '#059669' : 'rgba(16, 185, 129, 0.16)',
+                  color: status === 'confirmed' ? '#fff' : '#34d399',
+                  border: '1px solid rgba(16, 185, 129, 0.4)',
+                  borderRadius: 8,
+                  padding: '8px 12px',
+                  fontWeight: 700,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6
+                }}
+                title="কথা বলে অর্ডার কনফার্ম করা হয়েছে"
+              >
+                <span>🟢</span>
+                <span>কনফার্মড (Confirmed)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDisposition('no_answer')}
+                disabled={busy}
+                style={{
+                  background: 'rgba(245, 158, 11, 0.16)',
+                  color: '#fbbf24',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  borderRadius: 8,
+                  padding: '8px 12px',
+                  fontWeight: 700,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6
+                }}
+                title="কল করা হয়েছে কিন্তু রিসিভ করেনি"
+              >
+                <span>🟡</span>
+                <span>রিসিভ করেনি (Hold)</span>
+              </button>
+
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowCallLaterMenu(!showCallLaterMenu); setShowCancelMenu(false); }}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(56, 189, 248, 0.15)',
+                    color: '#38bdf8',
+                    border: '1px solid rgba(56, 189, 248, 0.4)',
+                    borderRadius: 8,
+                    padding: '8px 12px',
+                    fontWeight: 700,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6
+                  }}
+                  title="পরে কল দেওয়ার সময় নির্ধারণ করুন"
+                >
+                  <span>🟠</span>
+                  <span>পরে কল (Later) ▾</span>
+                </button>
+                {showCallLaterMenu && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      marginTop: 4,
+                      background: '#1a162b',
+                      border: '1px solid rgba(56, 189, 248, 0.4)',
+                      borderRadius: 8,
+                      padding: 6,
+                      boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
+                      zIndex: 1000,
+                      minWidth: 170,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4
+                    }}
+                  >
+                    <button type="button" onClick={() => scheduleCallLater(30, '30 মিনিট পর')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>⏱️ ৩০ মিনিট পর</button>
+                    <button type="button" onClick={() => scheduleCallLater(60, '১ ঘণ্টা পর')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>⏱️ ১ ঘণ্টা পর</button>
+                    <button type="button" onClick={() => scheduleCallLater(240, 'বিকেলে (৫:০০ PM)')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>🌆 বিকেলে (৫:০০ PM)</button>
+                    <button type="button" onClick={() => scheduleCallLater(1440, 'কাল সকালে (১১:০০ AM)')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>🌅 কাল সকালে (১১:০০ AM)</button>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowCancelMenu(!showCancelMenu); setShowCallLaterMenu(false); }}
+                  style={{
+                    width: '100%',
+                    background: status === 'cancelled' ? '#dc2626' : 'rgba(239, 68, 68, 0.15)',
+                    color: status === 'cancelled' ? '#fff' : '#f87171',
+                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    borderRadius: 8,
+                    padding: '8px 12px',
+                    fontWeight: 700,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6
+                  }}
+                  title="অর্ডার বাতিলের কারণ নির্বাচন করুন"
+                >
+                  <span>🔴</span>
+                  <span>বাতিল (Cancel) ▾</span>
+                </button>
+                {showCancelMenu && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      right: 0,
+                      marginTop: 4,
+                      background: '#1a162b',
+                      border: '1px solid rgba(239, 68, 68, 0.4)',
+                      borderRadius: 8,
+                      padding: 6,
+                      boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
+                      zIndex: 1000,
+                      minWidth: 190,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4
+                    }}
+                  >
+                    <button type="button" onClick={() => cancelWithReason('কাস্টমার মত পরিবর্তন করেছে')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>কাস্টমার মত পরিবর্তন করেছে</button>
+                    <button type="button" onClick={() => cancelWithReason('দাম বেশি মনে হয়েছে')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>দাম বেশি মনে হয়েছে</button>
+                    <button type="button" onClick={() => cancelWithReason('ডেলিভারি বেশি দেরি হবে')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>ডেলিভারি বেশি দেরি হবে</button>
+                    <button type="button" onClick={() => cancelWithReason('ভুলবশত অর্ডার করেছিল')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>ভুলবশত অর্ডার করেছিল</button>
+                    <button type="button" onClick={() => cancelWithReason('ফোন রিসিভ করেনি বা বন্ধ')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>ফোন রিসিভ করেনি বা বন্ধ</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Smart District & Area Mismatch Detection Banner */}
+          {hasDistrictMismatch && (
+            <div
+              style={{
+                marginBottom: 16,
+                padding: '12px 16px',
+                borderRadius: 10,
+                background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.16) 0%, rgba(220, 38, 38, 0.08) 100%)',
+                border: '1px solid rgba(239, 68, 68, 0.45)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 12
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 22 }}>⚠️</span>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: '#f87171' }}>
+                    জেলা ও কুরিয়ার জোন মিসম্যাচ ডিটেকশন!
+                  </div>
+                  <div style={{ fontSize: 12, color: '#fca5a5', marginTop: 2 }}>
+                    ঠিকানায় জেলা পাওয়া গেছে <strong>"{detectedFromAddr}"</strong>, কিন্তু ডেলিভারি জোন সিলেক্টেড আছে <strong>"Inside Dhaka (৳{delivery})"</strong>। এতে কুরিয়ার বুকিং আটকে যাবে বা ভুল চার্জ হবে।
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleFixDistrictMismatch}
+                style={{
+                  background: '#ef4444',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '7px 14px',
+                  fontWeight: 700,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  boxShadow: '0 2px 8px rgba(239,68,68,0.3)'
+                }}
+              >
+                ⚡ অটো-ফিক্স: {detectedFromAddr} (Outside Dhaka ৳120)
+              </button>
             </div>
           )}
 
@@ -10503,10 +10913,38 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                   </div>
                   <div className="sa-om-kv">
                     <span className="sa-om-k">District &amp; Area</span>
-                    <span className="sa-om-v">
-                      📍 {[custThana, custDistrict].filter(Boolean).join(', ') || 'Bangladesh'}
-                      {custArea ? ` (${custArea} dhaka)` : ''}
-                    </span>
+                    <div className="sa-om-v" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span>
+                          📍 {[custThana, custDistrict].filter(Boolean).join(', ') || 'Bangladesh'}
+                          {custArea ? ` (${custArea} dhaka)` : ''}
+                        </span>
+                        {hasDistrictMismatch && (
+                          <button
+                            type="button"
+                            onClick={handleFixDistrictMismatch}
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.16)',
+                              color: '#f87171',
+                              border: '1px solid rgba(239, 68, 68, 0.4)',
+                              borderRadius: 4,
+                              padding: '2px 7px',
+                              fontSize: 10.5,
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                            title="ঠিকানায় ঢাকার বাইরের জেলা পাওয়া গেছে। ক্লিক করে Outside Dhaka ফিক্স করুন।"
+                          >
+                            ⚡ ফিক্স: {detectedFromAddr} (Outside Dhaka ৳120)
+                          </button>
+                        )}
+                      </div>
+                      {detectedFromAddr && !hasDistrictMismatch && !custDistrict && (
+                        <span style={{ fontSize: 11, color: '#38bdf8' }}>
+                          🔍 ঠিকানায় পাওয়া জেলা: <b>{detectedFromAddr}</b>
+                        </span>
+                      )}
+                    </div>
                   </div>
                   {o.deviceId && (
                     <div className="sa-om-kv">
@@ -10698,6 +11136,17 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                 <div className="sa-om-stat-label">AVG ORDER VALUE</div>
               </div>
             </div>
+            <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {totalOrders > 1 ? (
+                <span style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.35)', padding: '3px 9px', borderRadius: 6, fontSize: 11.5, fontWeight: 700 }}>
+                  ⭐ Repeat VIP Customer ({totalOrders}টি অর্ডার, মোট ৳{totalRevenue})
+                </span>
+              ) : (
+                <span style={{ background: 'rgba(139, 92, 246, 0.12)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.3)', padding: '3px 9px', borderRadius: 6, fontSize: 11.5, fontWeight: 600 }}>
+                  🆕 নতুন কাস্টমার (1st Order)
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Card: ITEMS (Editable) */}
@@ -10721,7 +11170,21 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                   <div className="sa-om-item-left">
                     {it.image ? <img src={it.image} alt="" className="sa-om-item-thumb" /> : <div className="sa-om-item-thumb empty">📦</div>}
                     <div className="sa-om-item-info">
-                      <div className="sa-om-item-name">{it.name}</div>
+                      <div className="sa-om-item-name" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span>{it.name}</span>
+                        {allProducts.length > 0 && (() => {
+                          const matched = allProducts.find((p) => p.id === it.id || p.name === it.name);
+                          if (matched && matched.stock != null) {
+                            const isLow = Number(matched.stock) <= 5;
+                            return (
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: isLow ? 'rgba(239,68,68,0.16)' : 'rgba(16,185,129,0.16)', color: isLow ? '#f87171' : '#34d399', border: `1px solid ${isLow ? 'rgba(239,68,68,0.35)' : 'rgba(16,185,129,0.35)'}` }}>
+                                📦 স্টক: {matched.stock} pcs {isLow ? '(Low!)' : ''}
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
                       {(it.variantTitle || it.color || it.size) && (
                         <div style={{ marginTop: 2 }}>
                           <span style={{ background: '#1c1830', border: '1px solid rgba(139, 92, 246, 0.3)', color: '#c4b5fd', fontSize: 11, padding: '1px 6px', borderRadius: 4, fontWeight: 500 }}>
