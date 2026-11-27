@@ -20566,12 +20566,12 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
           <div className="wa-inbox-list-head">
             <div className="wa-user-bar">
               <span className="wa-user-avatar-ring">
-                <span className="wa-user-avatar-dot" />
                 <WhatsAppInboxAvatar phone="store-owner" name="Secrate" />
+                <span className="wa-user-avatar-dot" />
               </span>
-              <div>
-                <strong>চ্যাট লিস্ট</strong>
-                <span className="wa-thread-count">{threads.length.toLocaleString()} টি চ্যাট</span>
+              <div className="wa-user-info">
+                <strong>ইনবক্স চ্যাট</strong>
+                <span className="wa-thread-count">{threads.length.toLocaleString()} টি কথোপকথন</span>
               </div>
             </div>
             <div className="wa-head-tools">
@@ -20587,7 +20587,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="চ্যাট বা নম্বর খুঁজুন…"
+                placeholder="চ্যাট বা মোবাইল নম্বর খুঁজুন…"
               />
               {search && <button type="button" className="wa-search-clear" onClick={() => setSearch('')}>×</button>}
             </label>
@@ -20856,28 +20856,28 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
 
                       {m.mediaExpired && <div className="wa-inbox-media-expired">সংরক্ষণ মেয়াদ উত্তীর্ণ হওয়ায় ফাইলটি আর পাওয়া যাচ্ছে না।</div>}
 
-                      {/* Message Text */}
-                      {messageText && (
-                        <div className="wa-inbox-message-text">
-                          {messageText.startsWith('> 💬 Replying to:') ? messageText.split('\n\n').slice(1).join('\n\n') : messageText}
-                        </div>
-                      )}
-
-                      {/* Footer: Time + Delivery Status */}
-                      <footer>
-                        <span className="wa-msg-time">
-                          {m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                          {isOut && m.byStaff ? ` · ${m.byStaff.replace(/_/g, ' ')}` : ''}
-                        </span>
-                        {isOut && (
-                          <span
-                            className={`wa-inbox-ticks ${m.deliveryStatus === 'read' ? 'is-read' : ''} ${m.deliveryStatus === 'failed' ? 'is-failed' : ''}`}
-                            title={m.deliveryStatus === 'read' ? 'পড়া হয়েছে (Seen)' : m.deliveryStatus === 'delivered' ? 'পৌঁছেছে (Delivered)' : m.deliveryStatus === 'failed' ? 'ব্যর্থ হয়েছে' : 'পাঠানো হয়েছে (Sent)'}
-                          >
-                            {m.deliveryStatus === 'failed' ? '!' : m.deliveryStatus === 'delivered' || m.deliveryStatus === 'read' ? '✓✓' : '✓'}
+                      {/* Message Text & Footer */}
+                      <div className="wa-bubble-body">
+                        {messageText && (
+                          <span className="wa-inbox-message-text">
+                            {messageText.startsWith('> 💬 Replying to:') ? messageText.split('\n\n').slice(1).join('\n\n') : messageText}
                           </span>
                         )}
-                      </footer>
+                        <span className="wa-bubble-footer">
+                          <span className="wa-msg-time">
+                            {m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                            {isOut && m.byStaff ? ` · ${m.byStaff.replace(/_/g, ' ')}` : ''}
+                          </span>
+                          {isOut && (
+                            <span
+                              className={`wa-inbox-ticks ${m.deliveryStatus === 'read' ? 'is-read' : ''} ${m.deliveryStatus === 'failed' ? 'is-failed' : ''}`}
+                              title={m.deliveryStatus === 'read' ? 'পড়া হয়েছে (Seen)' : m.deliveryStatus === 'delivered' ? 'পৌঁছেছে (Delivered)' : m.deliveryStatus === 'failed' ? 'ব্যর্থ হয়েছে' : 'পাঠানো হয়েছে (Sent)'}
+                            >
+                              {m.deliveryStatus === 'failed' ? '!' : m.deliveryStatus === 'delivered' || m.deliveryStatus === 'read' ? '✓✓' : '✓'}
+                            </span>
+                          )}
+                        </span>
+                      </div>
                     </article>
                   );
                 })}
