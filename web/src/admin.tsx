@@ -58,7 +58,11 @@ async function aFetch(path: string, opts: any = {}) {
 const STATUSES = ['pending', 'incomplete', 'approved', 'hold', 'confirmed', 'shipped', 'delivered', 'cancelled', 'return', 'lost'];
 const COURIERS = ['Pathao', 'Steadfast', 'RedX', 'Sundarban', 'eCourier', 'Paperfly'];
 function timeAgo(iso: string) {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (!iso) return '';
+  const parsed = new Date(iso).getTime();
+  if (isNaN(parsed)) return '';
+  const s = Math.floor((Date.now() - parsed) / 1000);
+  if (s < 0) return 'just now';
   if (s < 60) return 'just now';
   const m = Math.floor(s / 60); if (m < 60) return m + ' min ago';
   const h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
@@ -66,7 +70,11 @@ function timeAgo(iso: string) {
 }
 
 function ago(d: string) {
-  const s = (Date.now() - new Date(d).getTime()) / 1000;
+  if (!d) return '';
+  const parsed = new Date(d).getTime();
+  if (isNaN(parsed)) return '';
+  const s = (Date.now() - parsed) / 1000;
+  if (s < 0) return 'just now';
   if (s < 60) return 'just now';
   if (s < 3600) return Math.floor(s / 60) + 'm ago';
   if (s < 86400) return Math.floor(s / 3600) + 'h ago';
@@ -217,7 +225,7 @@ export function resolveOrderSource(orderOrSource: any): {
   }
 
   // 2. Phone Call
-  if (ch === 'phone' || s.includes('phone') || s === 'phone_call') {
+  if (ch === 'phone' || s === 'phone' || s === 'phone_call' || s === 'manual_call') {
     return {
       channel: 'phone',
       label: 'Phone Call',
@@ -225,6 +233,20 @@ export function resolveOrderSource(orderOrSource: any): {
       color: '#fbbf24',
       bg: 'rgba(245, 158, 11, 0.15)',
       border: 'rgba(245, 158, 11, 0.35)',
+      iconType: 'phone',
+    };
+  }
+
+  // 2b. AI Voice Call (Saika Call Center / Voice Order)
+  if (ch === 'ai_voice_call' || s === 'ai_voice_call' || s.includes('voice_call') || s.includes('saika_call') || s.includes('ai_call')) {
+    return {
+      channel: 'phone',
+      label: 'AI Voice Call',
+      subLabel: landing ? `l/${landing}` : undefined,
+      isPaid: false,
+      color: '#38bdf8',
+      bg: 'rgba(56, 189, 248, 0.15)',
+      border: 'rgba(56, 189, 248, 0.35)',
       iconType: 'phone',
     };
   }
@@ -7905,19 +7927,28 @@ function OrdersAdmin({
               <div className="og-cell-order" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: '#c4b5fd' }}>
-                    #{String(o.id || '').replace('DOT-', '')}
+                    #{String(o.orderNumber || o.id || o.order_id || '').replace(/^DOT-/i, '') || 'N/A'}
                   </span>
-                  {Date.now() - new Date(o.createdAt).getTime() < 86400000 && (
-                    <span style={{ background: '#8b5cf6', color: '#fff', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4 }}>
-                      NEW
-                    </span>
-                  )}
+                  {(() => {
+                    const dt = o.createdAt || o.orderDate || o.date;
+                    const parsed = dt ? new Date(dt).getTime() : NaN;
+                    return !isNaN(parsed) && Date.now() - parsed < 86400000 ? (
+                      <span style={{ background: '#8b5cf6', color: '#fff', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4 }}>
+                        NEW
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
                 <div style={{ fontSize: 11.5, color: '#94a3b8' }}>
-                  {timeAgo(o.createdAt)}
+                  {timeAgo(o.createdAt || o.orderDate || o.date) || 'Recent'}
                 </div>
                 <div style={{ fontSize: 10.5, color: '#64748b' }}>
-                  {new Date(o.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  {(() => {
+                    const dt = o.createdAt || o.orderDate || o.date;
+                    if (!dt) return '';
+                    const d = new Date(dt);
+                    return isNaN(d.getTime()) ? '' : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+                  })()}
                 </div>
                 {filter === 'delivered' && (() => {
                   const delTime = getOrderEventTime(o, 'delivered');
@@ -18893,14 +18924,23 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
   const loadThreads = async () => {
     try {
       const r = await aFetch('/admin/whatsapp/inbox/threads');
-      if (!r.ok) throw new Error('Could not load conversations');
-      const d = await r.json();
+      if (!r.ok) {
+        setNotice('');
+        return;
+      }
+      const rawText = await r.text();
+      if (!rawText || rawText.trim().startsWith('<')) {
+        setNotice('');
+        return;
+      }
+      let d: any = null;
+      try { d = JSON.parse(rawText); } catch { return; }
       const nextThreads = Array.isArray(d?.threads) ? d.threads : [];
       setThreads(nextThreads);
       setSelectedPhone((current) => current && nextThreads.some((t: any) => t.phone === current) ? current : (nextThreads[0]?.phone || ''));
       setNotice('');
-    } catch (e: any) {
-      setNotice(e?.message || 'Inbox could not be refreshed');
+    } catch {
+      // never display raw Unexpected token '<'
     } finally {
       setLoadingThreads(false);
     }
@@ -18933,11 +18973,14 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
       timeout = setTimeout(() => controller?.abort(), 15000);
       try {
         const r = await aFetch(messagesUrl(selectedPhone, contactRemoteJid), { signal: controller.signal });
-        if (!r.ok) throw new Error('Could not load this conversation');
-        const d = await r.json();
+        if (!r.ok) return;
+        const rawText = await r.text();
+        if (!rawText || rawText.trim().startsWith('<')) return;
+        let d: any = null;
+        try { d = JSON.parse(rawText); } catch { return; }
         if (active && d) setChatData({ messages: Array.isArray(d.messages) ? d.messages : [], orders: Array.isArray(d.orders) ? d.orders : [] });
       } catch (e: any) {
-        if (active) setNotice(e?.name === 'AbortError' ? 'Conversation request timed out. Please refresh the inbox and try again.' : (e?.message || 'Conversation could not be loaded'));
+        if (active && e?.name === 'AbortError') setNotice('কথোপকথন লোড হতে দেরি হচ্ছে। অনুগ্রহ করে রিফ্রেশ করুন।');
       } finally {
         if (timeout) clearTimeout(timeout);
         timeout = null;

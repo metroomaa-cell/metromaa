@@ -1,0 +1,7 @@
+{
+  "versionCode": 13,
+  "versionName": "2.4.7",
+  "apkUrl": "https://raw.githubusercontent.com/metroomaa-cell/metromaa/main/web/dist/ShakilEcom.apk",
+  "sha256": "3df2867928067b31794a178be5b584423d4c9ebfb94a514f935b0667510f70f4",
+  "releaseNotes": "Adds a direct in-app Call Center shortcut for live SIP calling, AI callback approval, follow-up call logs, and call-center tools. Retains the full admin panel, in-app audio/video permissions, automatic update checks, and existing store features. Real calling requires a connected IPTSP/SIP account."
+}

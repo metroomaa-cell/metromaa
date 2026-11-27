@@ -7283,76 +7283,65 @@ export async function verifyGeminiApiKeyLive(rawKey) {
   const key = String(rawKey || '').trim();
   if (!key) return { ok: false, error: 'অনুগ্রহ করে একটি বৈধ Gemini API Key দিন।' };
 
-  let discoveredFlashModels = [];
-  let listModelsOk = false;
-  let listErr = '';
-
-  try {
-    const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
-    if (listResp.ok) {
-      listModelsOk = true;
-      const listData = await listResp.json().catch(() => ({}));
-      const allModels = Array.isArray(listData?.models) ? listData.models : [];
-      const genModels = allModels
-        .filter((m) => Array.isArray(m?.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
-        .map((m) => String(m.name || '').replace(/^models\//, ''))
-        .filter(Boolean);
-      const preferredAvailable = CURRENT_GEMINI_FLASH_MODELS.filter((id) => genModels.includes(id));
-      const extraFlash = genModels.filter((id) => id.includes('flash') && !id.includes('tts') && !id.includes('image') && !id.includes('live') && !preferredAvailable.includes(id));
-      discoveredFlashModels = [...preferredAvailable, ...extraFlash];
-    } else {
-      const errJson = await listResp.json().catch(() => ({}));
-      listErr = errJson?.error?.message || `HTTP ${listResp.status}`;
-      if (listResp.status === 400 || listResp.status === 401 || listResp.status === 403) {
-        return { ok: false, error: `API Key সঠিক নয় বা অনুমতি নেই: ${listErr}` };
-      }
-    }
-  } catch (err) {
-    listErr = err?.message || '';
-  }
-
-  const candidateModels = discoveredFlashModels.length > 0 ? discoveredFlashModels : CURRENT_GEMINI_FLASH_MODELS;
-  let lastGenErr = '';
+  // 1. Direct fast test against Gemini Flash models with strict 4.5s timeout per request
+  const testModels = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.7-flash'];
   let sawQuota429 = false;
+  let lastErr = '';
 
-  for (const m of candidateModels.slice(0, 5)) {
+  for (const m of testModels) {
     try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4500);
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(key)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'OK' }] }], generationConfig: { maxOutputTokens: 8 } })
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 5 } }),
+        signal: controller.signal
       });
+      clearTimeout(timer);
+
       if (r.ok) {
-        return { ok: true, model: m, availableModels: candidateModels };
+        return { ok: true, model: m, availableModels: CURRENT_GEMINI_FLASH_MODELS };
       }
-      if (r.status === 429) sawQuota429 = true;
+      if (r.status === 429) {
+        // HTTP 429 proves Google accepted and authenticated the API Key!
+        sawQuota429 = true;
+        return { ok: true, model: m, quotaNote: true, availableModels: CURRENT_GEMINI_FLASH_MODELS };
+      }
       const errJson = await r.json().catch(() => ({}));
       const msg = errJson?.error?.message || `HTTP ${r.status}`;
-      if (r.status !== 404) lastGenErr = msg;
-      else if (!lastGenErr) lastGenErr = msg;
+      if (r.status === 400 || r.status === 401 || r.status === 403) {
+        if (/API_KEY_INVALID|key not valid|API key not valid/i.test(msg)) {
+          return { ok: false, error: 'আপনার দেওয়া Google Gemini API Key-টি সঠিক নয়।' };
+        }
+      }
+      lastErr = msg;
     } catch (err) {
-      if (!lastGenErr) lastGenErr = err?.message || '';
+      lastErr = err?.name === 'AbortError' ? 'Google API সংযোগের সময় অতিক্রম হয়েছে (Timeout)' : (err?.message || '');
     }
   }
 
-  if (listModelsOk && sawQuota429) {
-    return {
-      ok: true,
-      model: candidateModels[0] || 'gemini-3.8-flash',
-      availableModels: candidateModels,
-      quotaNote: true,
-    };
+  if (sawQuota429) {
+    return { ok: true, model: 'gemini-2.5-flash', quotaNote: true, availableModels: CURRENT_GEMINI_FLASH_MODELS };
   }
 
-  if (listModelsOk && candidateModels.length > 0) {
-    return {
-      ok: true,
-      model: candidateModels[0],
-      availableModels: candidateModels,
-    };
-  }
+  // 2. Fast fallback GET /v1beta/models with 3.5s timeout
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3500);
+    const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`, {
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    if (listResp.ok) {
+      return { ok: true, model: 'gemini-2.5-flash', availableModels: CURRENT_GEMINI_FLASH_MODELS };
+    }
+    if (listResp.status === 429) {
+      return { ok: true, model: 'gemini-2.5-flash', quotaNote: true, availableModels: CURRENT_GEMINI_FLASH_MODELS };
+    }
+  } catch (_) {}
 
-  return { ok: false, error: lastGenErr || listErr || 'API Key যাচাই করা যায়নি।' };
+  return { ok: false, error: lastErr || 'Google API সংযোগে সমস্যা হয়েছে। "সরাসরি সেভ করুন" বাটনটি ব্যবহার করুন।' };
 }
 
 export function getUnifiedSaikaControlConfig() {
@@ -10056,11 +10045,16 @@ app.post('/api/admin/saika/keys', adminAuth, requireRole('owner', 'manager'), as
     const rawKey = String(req.body?.geminiApiKey || '').trim();
     if (!rawKey) return res.status(400).json({ ok: false, error: 'অনুগ্রহ করে একটি বৈধ Gemini API Key দিন।' });
 
-    const check = await verifyGeminiApiKeyLive(rawKey);
-    if (!check.ok) {
-      return res.status(400).json({ ok: false, error: check.error || 'API Key সঠিক নয় বা কোটা শেষ।' });
+    const skipVerify = req.body?.skipVerify === true;
+    let activeModel = 'gemini-3.8-flash';
+
+    if (!skipVerify) {
+      const check = await verifyGeminiApiKeyLive(rawKey);
+      if (!check.ok) {
+        return res.status(400).json({ ok: false, error: check.error || 'API Key সঠিক নয় বা কোটা শেষ।' });
+      }
+      activeModel = check.model || activeModel;
     }
-    const activeModel = check.model || 'gemini-3.8-flash';
 
     saikaAdminKeyBlockedReason = '';
     failedGeminiKeysCooldown.delete(rawKey);
@@ -10072,7 +10066,9 @@ app.post('/api/admin/saika/keys', adminAuth, requireRole('owner', 'manager'), as
     res.json({
       ok: true,
       model: activeModel,
-      message: `✅ অ্যাডমিন Saika AI Key ভেরিফাইড (${activeModel}) এবং সেভ হয়েছে! মোট সক্রিয় Key: ${nextKeys.length}টি`,
+      message: skipVerify
+        ? `⚡ অ্যাডমিন Saika AI Key সরাসরি সেভ ও সক্রিয় করা হয়েছে! মোট সক্রিয় Key: ${nextKeys.length}টি`
+        : `✅ অ্যাডমিন Saika AI Key ভেরিফাইড (${activeModel}) এবং সেভ হয়েছে! মোট সক্রিয় Key: ${nextKeys.length}টি`,
       config: getUnifiedSaikaControlConfig()
     });
   } catch (err) {

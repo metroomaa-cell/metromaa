@@ -47,15 +47,35 @@ interface StaffMember {
 const getTok = () => localStorage.getItem('dot_admin') || '';
 
 async function saikaFetch(path: string, opts: RequestInit = {}) {
-  const res = await fetch('/api' + path, {
-    ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      'x-admin-token': getTok(),
-      ...(opts.headers || {}),
-    },
-  });
-  return res.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 9500);
+  try {
+    const res = await fetch('/api' + path, {
+      ...opts,
+      signal: opts.signal || controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-token': getTok(),
+        ...(opts.headers || {}),
+      },
+    });
+    const text = await res.text();
+    if (!text || text.trim().startsWith('<')) {
+      return { ok: false, error: `সার্ভার থেকে অকার্যকর রেসপন্স এসেছে (HTTP ${res.status})` };
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { ok: false, error: 'JSON পার্স করা সম্ভব হয়নি।' };
+    }
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      return { ok: false, error: 'অনুরোধটি সময় অতিক্রম (Timeout) করেছে।' };
+    }
+    return { ok: false, error: err?.message || 'নেটওয়ার্ক সংযোগ ব্যর্থ' };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function PillSwitch({
@@ -462,7 +482,7 @@ export function SaikaAiAdmin({
     }
   };
 
-  const handleAddApiKey = async () => {
+  const handleAddApiKey = async (skipVerify = false) => {
     if (!newApiKey.trim()) return;
     setKeyBusy(true);
     try {
@@ -472,15 +492,18 @@ export function SaikaAiAdmin({
           action: 'add',
           geminiApiKey: newApiKey.trim(),
           makePrimary: makePrimaryKey,
+          skipVerify,
         }),
       });
       if (res?.ok) {
         setNewApiKey('');
         if (res.config) setConfig((prev) => ({ ...prev, ...res.config }));
-        showNotice(res.message || '✅ অ্যাডমিন প্যানেলের Saika AI Key ভেরিফাইড ও সেভ হয়েছে!');
+        showNotice(res.message || '✅ অ্যাডমিন প্যানেলের Saika AI Key সেভ হয়েছে!');
       } else {
-        showNotice(res?.error || 'API Key সঠিক নয় বা কোটা শেষ।', 'err');
+        showNotice(res?.error || 'API Key সঠিক নয় বা সংযোগে সমস্যা। "সরাসরি সেভ করুন" বাটন দিয়ে চেষ্টা করতে পারেন।', 'err');
       }
+    } catch {
+      showNotice('সার্ভারের সাথে সংযোগে সমস্যা হয়েছে। "সরাসরি সেভ করুন" দিয়ে চেষ্টা করুন।', 'err');
     } finally {
       setKeyBusy(false);
     }
@@ -1177,14 +1200,25 @@ export function SaikaAiAdmin({
                   <PillSwitch checked={makePrimaryKey} onChange={setMakePrimaryKey} />
                 </div>
 
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                   <button
                     type="button"
                     className="sa-btn"
                     disabled={keyBusy || !newApiKey.trim()}
-                    onClick={handleAddApiKey}
+                    onClick={() => handleAddApiKey(false)}
+                    style={{ background: '#8b5cf6', borderColor: '#8b5cf6', color: '#fff', fontWeight: 700 }}
                   >
                     {keyBusy ? 'ভেরিফাই হচ্ছে...' : '✅ ভেরিফাই ও সেভ করুন'}
+                  </button>
+                  <button
+                    type="button"
+                    className="sa-btn ghost"
+                    disabled={keyBusy || !newApiKey.trim()}
+                    onClick={() => handleAddApiKey(true)}
+                    title="Google ভেরিফিকেশন ছাড়াও সরাসরি সেভ করতে পারেন"
+                    style={{ borderColor: 'rgba(56, 189, 248, 0.45)', color: '#38bdf8', fontWeight: 600 }}
+                  >
+                    ⚡ সরাসরি সেভ করুন (Skip Verify)
                   </button>
                   <button
                     type="button"
