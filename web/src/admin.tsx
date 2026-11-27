@@ -19918,7 +19918,109 @@ function FinanceTransactionsTable({ entries, accounts, money }: { entries: any[]
 // ==========================================
 // 2. WHATSAPP AUTOMATION & MARKETING HUB
 // ==========================================
-function WhatsAppInboxMedia({ message }: { message: any }) {
+function WhatsAppVoiceNotePlayer({ src, fileName }: { src: string; fileName?: string }) {
+  const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (playing) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(() => {});
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+      if (audioRef.current.duration && !isNaN(audioRef.current.duration)) {
+        setDuration(audioRef.current.duration);
+      }
+    }
+  };
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioRef.current || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    audioRef.current.currentTime = percent * duration;
+    setCurrentTime(percent * duration);
+  };
+
+  const cycleSpeed = () => {
+    const nextRate = playbackRate === 1 ? 1.5 : playbackRate === 1.5 ? 2 : 1;
+    setPlaybackRate(nextRate);
+    if (audioRef.current) audioRef.current.playbackRate = nextRate;
+  };
+
+  const formatSec = (s: number) => {
+    if (isNaN(s) || s <= 0) return '0:00';
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec < 10 ? '0' : ''}${sec}`;
+  };
+
+  const progress = duration > 0 ? currentTime / duration : 0;
+  const waveformBars = [10, 20, 14, 26, 12, 24, 30, 16, 22, 10, 18, 28, 24, 12, 20, 30, 26, 14, 22, 10, 16, 24, 14, 8];
+
+  return (
+    <div className="wa-voice-player">
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="metadata"
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => { setPlaying(false); setCurrentTime(0); }}
+        onLoadedMetadata={(e) => {
+          const d = (e.target as HTMLAudioElement).duration;
+          if (d && !isNaN(d)) setDuration(d);
+        }}
+        onTimeUpdate={handleTimeUpdate}
+      />
+      <button type="button" className="wa-voice-btn" onClick={togglePlay} title={playing ? 'Pause' : 'Play voice note'}>
+        {playing ? (
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+        ) : (
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        )}
+      </button>
+      <div className="wa-voice-track" onClick={handleSeek} title="Click to seek">
+        <div className="wa-voice-waveform">
+          {waveformBars.map((height, i) => {
+            const barFraction = i / waveformBars.length;
+            const isPlayed = barFraction <= progress;
+            return (
+              <span
+                key={i}
+                className={`wa-waveform-bar ${isPlayed ? 'is-played' : ''}`}
+                style={{ height: `${height}px` }}
+              />
+            );
+          })}
+        </div>
+        <div className="wa-voice-meta">
+          <span>{formatSec(currentTime > 0 ? currentTime : duration)}</span>
+          <button type="button" className="wa-voice-speed" onClick={(e) => { e.stopPropagation(); cycleSpeed(); }} title="Playback speed">
+            {playbackRate}x
+          </button>
+        </div>
+      </div>
+      <div className="wa-voice-mic-badge" title="Voice note">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function WhatsAppInboxMedia({ message, onOpenImage }: { message: any; onOpenImage?: (url: string) => void }) {
   const [url, setUrl] = useState('');
   useEffect(() => {
     let active = true;
@@ -19936,11 +20038,29 @@ function WhatsAppInboxMedia({ message }: { message: any }) {
     return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [message?.mediaUrl]);
   if (!message?.mediaUrl) return null;
-  if (!url) return <div className="wa-inbox-media-loading">Loading attachment…</div>;
-  if (message.mediaType === 'image') return <a className="wa-inbox-media-link" href={url} target="_blank" rel="noreferrer"><img className="wa-inbox-media-image" src={url} alt={message.fileName || 'WhatsApp photo'} /></a>;
-  if (message.mediaType === 'video') return <video className="wa-inbox-media-video" src={url} controls preload="metadata" />;
-  if (message.mediaType === 'audio') return <audio className="wa-inbox-media-audio" src={url} controls preload="metadata" />;
-  return <a className="wa-inbox-media-document" href={url} download={message.fileName || 'whatsapp-attachment'}>▤ {message.fileName || 'Download attachment'}</a>;
+  if (!url) return <div className="wa-inbox-media-loading"><span className="wa-spinner" /> লোড হচ্ছে…</div>;
+  if (message.mediaType === 'image') return (
+    <div className="wa-inbox-media-image-wrap" onClick={() => onOpenImage ? onOpenImage(url) : window.open(url, '_blank')}>
+      <img className="wa-inbox-media-image" src={url} alt={message.fileName || 'WhatsApp photo'} loading="lazy" />
+      <span className="wa-image-zoom-hint">🔍 প্রিভিউ দেখতে ক্লিক করুন</span>
+    </div>
+  );
+  if (message.mediaType === 'video') return (
+    <div className="wa-inbox-media-video-wrap">
+      <video className="wa-inbox-media-video" src={url} controls preload="metadata" />
+    </div>
+  );
+  if (message.mediaType === 'audio') return <WhatsAppVoiceNotePlayer src={url} fileName={message.fileName} />;
+  return (
+    <a className="wa-inbox-media-document" href={url} download={message.fileName || 'whatsapp-attachment'}>
+      <span className="wa-doc-icon">📄</span>
+      <div className="wa-doc-details">
+        <strong>{message.fileName || 'Download attachment'}</strong>
+        <small>ফাইল ডাউনলোড করতে ক্লিক করুন</small>
+      </div>
+      <span className="wa-doc-download-arrow">↓</span>
+    </a>
+  );
 }
 
 function WhatsAppInboxAvatar({ phone, remoteJid = '', name = '', large = false }: { phone: string; remoteJid?: string; name?: string; large?: boolean }) {
@@ -19971,6 +20091,47 @@ function WhatsAppInboxAvatar({ phone, remoteJid = '', name = '', large = false }
   return <span ref={avatarRef} className={`wa-inbox-avatar ${large ? 'large' : ''}`}>{photo ? <img src={photo} alt="" referrerPolicy="no-referrer" onError={() => setPhoto('')} /> : fallback}</span>;
 }
 
+const WA_QUICK_TEMPLATES = [
+  {
+    title: 'অর্ডার কনফার্মেশন',
+    badge: 'Order Confirm',
+    text: (custName?: string, orderId?: string) =>
+      `হ্যালো ${custName ? custName : 'ভাইয়া'}! আপনার অর্ডারটি ${orderId ? `(Order ID: ${orderId})` : ''} সফলভাবে কনফার্ম করা হয়েছে।\n\nসাধারণত ঢাকার ভেতরে ২৪-৪৮ ঘণ্টা এবং ঢাকার বাইরে ২-৪ দিনের মধ্যে পার্সেল পৌঁছে যায়। কুরিয়ারে হ্যান্ডওভার করার সাথে সাথে ট্র্যাকিং আপডেট জানিয়ে দেয়া হবে। ধন্যবাদ!`
+  },
+  {
+    title: 'কুরিয়ারে পাঠানো হয়েছে',
+    badge: 'Dispatched',
+    text: (_custName?: string, _orderId?: string) =>
+      `আপনার অর্ডারটি প্যাকিং সম্পন্ন করে কুরিয়ারে হ্যান্ডওভার করা হয়েছে। কুরিয়ার থেকে ডেলিভারিম্যান ডেলিভারির পূর্বে আপনার নম্বরে কল করবে। অনুগ্রহ করে ফোনটি সচল রাখুন। ধন্যবাদ!`
+  },
+  {
+    title: 'ঠিকানা ও ফোন যাচাই',
+    badge: 'Address Check',
+    text: (_custName?: string, _orderId?: string) =>
+      `অর্ডারটি দ্রুততম সময়ে ডেলিভারির জন্য অনুগ্রহ করে আপনার পূর্ণাঙ্গ ডেলিভারি ঠিকানা (জেলা, থানা/এলাকা, বাসার ঠিকানা) এবং একটি সচল বিকল্প মোবাইল নম্বর লিখে রিপ্লাই দিন।`
+  },
+  {
+    title: 'অগ্রিম ডেলিভারি চার্জ',
+    badge: 'Advance Fee',
+    text: (_custName?: string, _orderId?: string) =>
+      `সম্মানিত গ্রাহক, ঢাকার বাইরে ক্যাশ অন ডেলিভারিতে অর্ডার নিশ্চিত করতে ডেলিভারি চার্জ অগ্রিম বিকাশ বা নগদে সেন্ড মানি করতে হবে।\n\nটাকা পাঠিয়ে লাস্ট ৩ ডিজিট জানান, আমরা অর্ডার কনফার্ম করে দিচ্ছি। ধন্যবাদ!`
+  },
+  {
+    title: 'কল ব্যাক রিকোয়েস্ট',
+    badge: 'Call Back',
+    text: (_custName?: string, _orderId?: string) =>
+      `হ্যালো! আমরা আপনার অর্ডারের বিষয়ে কথা বলতে কল করেছিলাম কিন্তু সংযোগ পাওয়া যায়নি। ফ্রি হয়ে অনুগ্রহ করে এই নম্বরে একটি কল বা মেসেজ দিন।`
+  },
+  {
+    title: 'রিটার্ন ও চেক পলিসি',
+    badge: 'Check Policy',
+    text: (_custName?: string, _orderId?: string) =>
+      `ডেলিভারিম্যানের উপস্থিতিতে পণ্যটি চেক করে রিসিভ করবেন। কোনো ত্রুটি থাকলে ডেলিভারিম্যান থাকা অবস্থাতেই আমাদের জানান।`
+  }
+];
+
+const WA_POPULAR_EMOJIS = ['😊', '👍', '❤️', '🙏', '📦', '✅', '🚚', '🛍️', '🔥', '৳', '📞', '💯', '🤝', '⚡', '🎉', '👌', '⭐', '🕒', '😍', '👋', '🛵', '🌸'];
+
 function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
   const [threads, setThreads] = useState<any[]>([]);
   const [browserCallMode, setBrowserCallMode] = useState<'audio' | 'video' | null>(null);
@@ -19978,6 +20139,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
   const [chatData, setChatData] = useState<{ messages: any[]; orders: any[] }>({ messages: [], orders: [] });
   const [reply, setReply] = useState('');
   const [search, setSearch] = useState('');
+  const [threadFilter, setThreadFilter] = useState<'all' | 'unread' | 'orders' | 'risk'>('all');
   const [loadingThreads, setLoadingThreads] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
@@ -19987,13 +20149,29 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
   const [attachment, setAttachment] = useState<File | null>(null);
   const [voiceNoteAttachment, setVoiceNoteAttachment] = useState(false);
   const [recordingVoiceNote, setRecordingVoiceNote] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [attachmentPreview, setAttachmentPreview] = useState('');
+  const [replyingTo, setReplyingTo] = useState<any | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [showInChatSearch, setShowInChatSearch] = useState(false);
+  const [inChatSearchQuery, setInChatSearchQuery] = useState('');
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [activeBubbleMenuId, setActiveBubbleMenuId] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [copiedToast, setCopiedToast] = useState('');
+
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const docInputRef = useRef<HTMLInputElement | null>(null);
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceStreamRef = useRef<MediaStream | null>(null);
   const voiceChunksRef = useRef<BlobPart[]>([]);
+  const voiceTimerRef = useRef<any>(null);
   const messagesAreaRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const keepMessagesAtBottomRef = useRef(true);
+
   const activeThread = threads.find((t) => t.phone === selectedPhone);
   const inferLidJid = (phone: string) => {
     const digits = String(phone || '').replace(/\D/g, '');
@@ -20005,15 +20183,9 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
   const loadThreads = async () => {
     try {
       const r = await aFetch('/admin/whatsapp/inbox/threads');
-      if (!r.ok) {
-        setNotice('');
-        return;
-      }
+      if (!r.ok) { setNotice(''); return; }
       const rawText = await r.text();
-      if (!rawText || rawText.trim().startsWith('<')) {
-        setNotice('');
-        return;
-      }
+      if (!rawText || rawText.trim().startsWith('<')) { setNotice(''); return; }
       let d: any = null;
       try { d = JSON.parse(rawText); } catch { return; }
       const nextThreads = Array.isArray(d?.threads) ? d.threads : [];
@@ -20021,7 +20193,6 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
       setSelectedPhone((current) => current && nextThreads.some((t: any) => t.phone === current) ? current : (nextThreads[0]?.phone || ''));
       setNotice('');
     } catch {
-      // never display raw Unexpected token '<'
     } finally {
       setLoadingThreads(false);
     }
@@ -20029,7 +20200,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
 
   useEffect(() => {
     void loadThreads();
-    const t = setInterval(() => void loadThreads(), 12000);
+    const t = setInterval(() => void loadThreads(), 10000);
     return () => clearInterval(t);
   }, []);
 
@@ -20046,6 +20217,9 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
     setChatData({ messages: [], orders: [] });
     setLoadingMessages(true);
     setNotice('');
+    setReplyingTo(null);
+    setShowInChatSearch(false);
+    setInChatSearchQuery('');
     const loadMessages = async (showLoading = false) => {
       if (inFlight) return;
       inFlight = true;
@@ -20070,7 +20244,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
       }
     };
     void loadMessages(true);
-    const t = setInterval(() => void loadMessages(false), 8000);
+    const t = setInterval(() => void loadMessages(false), 6000);
     return () => {
       active = false;
       if (timeout) clearTimeout(timeout);
@@ -20123,8 +20297,17 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
   };
 
   const sendReply = async () => {
-    const text = reply.trim();
+    let text = reply.trim();
     if (!selectedPhone || (!text && !attachment) || sending || !connected) return;
+    
+    // If replying to a specific message, prepend quote header
+    if (replyingTo) {
+      const originalText = replyingTo.text || (replyingTo.mediaType === 'image' ? '📷 Photo' : 'Attachment');
+      const snippet = originalText.length > 60 ? originalText.slice(0, 60) + '…' : originalText;
+      const quoteHeader = `> 💬 Replying to: "${snippet}"\n\n`;
+      text = quoteHeader + text;
+    }
+
     setSending(true);
     keepMessagesAtBottomRef.current = true;
     setNotice('');
@@ -20133,7 +20316,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
       if (attachment) {
         encodedAttachment = await new Promise((resolve, reject) => {
           const reader = new FileReader();
-          reader.onerror = () => reject(new Error('Could not read this file'));
+          reader.onerror = () => reject(new Error('ফাইলটি পড়া সম্ভব হয়নি'));
           reader.onload = () => resolve({ name: attachment.name, mimeType: attachment.type || 'application/octet-stream', data: String(reader.result || '') });
           reader.readAsDataURL(attachment);
         });
@@ -20141,28 +20324,32 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
       if (encodedAttachment) encodedAttachment.isVoiceNote = voiceNoteAttachment;
       const r = await aFetch('/admin/whatsapp/inbox/send', { method: 'POST', body: JSON.stringify({ phone: selectedPhone, remoteJid: contactRemoteJid, text, attachment: encodedAttachment }) });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok || !d?.sent && !d?.ok) throw new Error(d?.error || 'Message was not sent');
+      if (!r.ok || (!d?.sent && !d?.ok)) throw new Error(d?.error || 'মেসেজটি পাঠানো সম্ভব হয়নি');
       setReply('');
       setAttachment(null);
       setVoiceNoteAttachment(false);
+      setReplyingTo(null);
+      setShowEmojiPicker(false);
+      setShowTemplates(false);
+      setShowAttachMenu(false);
       const refreshed = await aFetch(messagesUrl(selectedPhone, contactRemoteJid));
       const next = refreshed.ok ? await refreshed.json() : null;
       if (next) setChatData({ messages: Array.isArray(next.messages) ? next.messages : [], orders: Array.isArray(next.orders) ? next.orders : [] });
       void loadThreads();
     } catch (e: any) {
-      setNotice(e?.message || 'Could not send the message');
+      setNotice(e?.message || 'মেসেজটি পাঠানো যায়নি');
     } finally {
       setSending(false);
     }
   };
 
-  const visibleThreads = threads.filter((t) => `${t.name || ''} ${t.phone || ''} ${t.lastMessage || ''}`.toLowerCase().includes(search.trim().toLowerCase()));
   const displayPhone = (value: string) => {
     const digits = String(value || '').replace(/\D/g, '');
     if (digits.startsWith('8801') && digits.length === 13) return `+880 ${digits.slice(3, 7)}-${digits.slice(7)}`;
     if (digits.startsWith('01') && digits.length === 11) return `+880 ${digits.slice(1, 5)}-${digits.slice(5)}`;
     return digits ? `+${digits}` : value;
   };
+
   const rawContactName = String(activeThread?.name || '').trim();
   const contactIsPhone = rawContactName.replace(/\D/g, '') === String(selectedPhone || '').replace(/\D/g, '');
   const isLidContact = /@(?:lid|hosted\.lid)$/.test(String(contactRemoteJid || ''));
@@ -20170,31 +20357,71 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
   const callDigits = String(callPhone || '').replace(/\D/g, '').replace(/^0/, '880');
   const contactName = rawContactName && !contactIsPhone ? rawContactName : 'WhatsApp contact';
   const initials = contactIsPhone ? 'W' : String(rawContactName || 'W').trim().slice(0, 1).toUpperCase();
+
   const chooseAttachment = (file?: File) => {
     if (!file) return;
     const isApk = /\.apk$/i.test(file.name) || file.type.toLowerCase() === 'application/vnd.android.package-archive';
     if (file.size > (isApk ? 35 : 16) * 1024 * 1024) { setNotice(isApk ? 'Choose an APK smaller than 35 MB.' : 'Choose a file smaller than 16 MB.'); return; }
     if (!isApk && (!file.type || !/^(image\/(jpeg|png|webp|gif)|video\/(mp4|3gpp|quicktime)|audio\/(mpeg|ogg|webm|wav|amr|mp4)|application\/pdf|text\/plain|application\/vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet))$/i.test(file.type))) {
-      setNotice('Supported: photos, MP4 videos, audio, PDF, TXT, DOCX, XLSX and APK.'); return;
+      setNotice('সমর্থিত ফরম্যাট: Photos, MP4 Videos, Audio, PDF, TXT, DOCX, XLSX এবং APK।'); return;
     }
     setNotice('');
     setVoiceNoteAttachment(false);
     setAttachment(file);
+    setShowAttachMenu(false);
   };
 
+  // Clipboard paste support (Ctrl+V)
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          chooseAttachment(file);
+          e.preventDefault();
+          break;
+        }
+      }
+    }
+  };
+
+  // Drag and drop handlers
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true); };
+  const handleDragLeave = () => { setIsDragOver(false); };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (e.dataTransfer?.files?.[0]) {
+      chooseAttachment(e.dataTransfer.files[0]);
+    }
+  };
+
+  // Voice note recorder
   const stopVoiceStream = () => {
+    if (voiceTimerRef.current) clearInterval(voiceTimerRef.current);
     voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
     voiceStreamRef.current = null;
     voiceRecorderRef.current = null;
     setRecordingVoiceNote(false);
+    setRecordingSeconds(0);
   };
+
+  const cancelVoiceRecording = () => {
+    stopVoiceStream();
+    setAttachment(null);
+    setVoiceNoteAttachment(false);
+    setNotice('ভয়েস রেকর্ড বাতিল করা হয়েছে।');
+  };
+
   const toggleVoiceNoteRecording = async () => {
     if (voiceRecorderRef.current?.state === 'recording') {
       voiceRecorderRef.current.stop();
       return;
     }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-      setNotice('Voice recording is not supported in this browser. Try a recent Chrome browser.');
+      setNotice('ভয়েস রেকর্ডিং এই ব্রাউজারে সাপোর্ট করছে না। Chrome ব্রাউজার ব্যবহার করুন।');
       return;
     }
     try {
@@ -20204,125 +20431,742 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
       const preferred = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm'].find((mime) => MediaRecorder.isTypeSupported(mime));
       const recorder = new MediaRecorder(stream, preferred ? { mimeType: preferred } : undefined);
       recorder.ondataavailable = (event) => { if (event.data?.size) voiceChunksRef.current.push(event.data); };
-      recorder.onerror = () => { stopVoiceStream(); setNotice('Voice note recording stopped unexpectedly. Please try again.'); };
+      recorder.onerror = () => { stopVoiceStream(); setNotice('ভয়েস রেকর্ডিং অপ্রত্যাশিতভাবে বন্ধ হয়েছে। পুনরায় চেষ্টা করুন।'); };
       recorder.onstop = () => {
         const blob = new Blob(voiceChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
         if (blob.size > 0) {
           const extension = blob.type.includes('ogg') ? 'ogg' : 'webm';
           setAttachment(new File([blob], `voice-note-${Date.now()}.${extension}`, { type: blob.type }));
           setVoiceNoteAttachment(true);
-          setNotice('Voice note ready. Press send when you are ready.');
+          setNotice('ভয়েস নোট প্রস্তুত। পাঠানোর জন্য Send বাটনে চাপ দিন।');
         }
         stopVoiceStream();
       };
       recorder.start(250);
       voiceRecorderRef.current = recorder;
       setRecordingVoiceNote(true);
+      setRecordingSeconds(0);
       setAttachment(null);
       setVoiceNoteAttachment(false);
-      setNotice('Recording voice note… press the microphone again to finish.');
+      voiceTimerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+      setNotice('');
     } catch (error: any) {
       stopVoiceStream();
-      setNotice(error?.name === 'NotAllowedError' ? 'Allow microphone access in your browser to record a voice note.' : 'Could not start voice recording. Check that a microphone is connected.');
+      setNotice(error?.name === 'NotAllowedError' ? 'ভয়েস নোটের জন্য ব্রাউজারে মাইক্রোফোন পারমিশন এলাও করুন।' : 'মাইক্রোফোন সক্রিয় করা সম্ভব হয়নি।');
     }
   };
 
   useEffect(() => () => {
     if (voiceRecorderRef.current?.state === 'recording') voiceRecorderRef.current.stop();
-    voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+    stopVoiceStream();
   }, []);
 
+  // Filter threads by search and filter tab
+  const visibleThreads = threads.filter((t) => {
+    const matchesSearch = `${t.name || ''} ${t.phone || ''} ${t.lastMessage || ''}`.toLowerCase().includes(search.trim().toLowerCase());
+    if (!matchesSearch) return false;
+    if (threadFilter === 'unread') return (t.unreadCount > 0) || (t.unread);
+    if (threadFilter === 'orders') return (t.orderCount > 0);
+    if (threadFilter === 'risk') return (t.cancelCount > 0);
+    return true;
+  });
+
+  // In-chat search filter
+  const filteredMessages = inChatSearchQuery.trim()
+    ? chatData.messages.filter((m) => String(m.text || '').toLowerCase().includes(inChatSearchQuery.trim().toLowerCase()))
+    : chatData.messages;
+
+  // Insert emoji or template
+  const insertEmoji = (emoji: string) => {
+    setReply((prev) => prev + emoji);
+    textareaRef.current?.focus();
+  };
+
+  const applyTemplate = (tplText: string) => {
+    const latestOrder = chatData.orders?.[0];
+    const orderId = latestOrder?.id ? String(latestOrder.id).replace(/^DOT-/, '') : '';
+    setReply(tplText);
+    setShowTemplates(false);
+    textareaRef.current?.focus();
+  };
+
+  const copyTextToClipboard = (txt: string) => {
+    void navigator.clipboard.writeText(txt);
+    setCopiedToast('ক্লিপবোর্ডে কপি করা হয়েছে!');
+    setTimeout(() => setCopiedToast(''), 2500);
+  };
+
+  const formatMessageDate = (timestamp: string | number) => {
+    if (!timestamp) return '';
+    const d = new Date(timestamp);
+    const today = new Date();
+    const isToday = d.toDateString() === today.toDateString();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    const isYesterday = d.toDateString() === yesterday.toDateString();
+    if (isToday) return 'আজ (TODAY)';
+    if (isYesterday) return 'গতকাল (YESTERDAY)';
+    return d.toLocaleDateString('bn-BD', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
   return (
-    <section className="wa-inbox-page">
+    <section className="wa-inbox-page" onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+      {/* Lightbox Modal for high-res images */}
+      {lightboxImage && (
+        <div className="wa-lightbox-overlay" onClick={() => setLightboxImage(null)}>
+          <div className="wa-lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <img src={lightboxImage} alt="Fullscreen preview" />
+            <div className="wa-lightbox-bar">
+              <a href={lightboxImage} download="whatsapp-image.jpg" className="wa-lightbox-download">↓ ডাউনলোড</a>
+              <button type="button" className="wa-lightbox-close" onClick={() => setLightboxImage(null)}>✕ বন্ধ করুন</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Copy Toast */}
+      {copiedToast && <div className="wa-toast">{copiedToast}</div>}
+
       <header className="wa-inbox-heading">
         <div>
-          <span className="wa-inbox-eyebrow"><WhatsAppIcon /> WHATSAPP BUSINESS</span>
-          <h2>Inbox</h2>
-          <p>Customer conversations, attachments and replies in one place.</p>
+          <span className="wa-inbox-eyebrow"><WhatsAppIcon /> WHATSAPP BUSINESS WEB</span>
+          <h2>লাইভ ইনবক্স ও চ্যাট ক্যানভাস</h2>
+          <p>অফিসিয়াল হোয়াটসঅ্যাপ পিসি স্টাইল লাইভ মেসেজিং, কাস্টমার প্রোফাইল এবং অর্ডার ইন্টেলিজেন্স।</p>
         </div>
         <div className="wa-inbox-head-actions">
-          <span className={`wa-inbox-connection ${connected ? 'is-connected' : 'is-offline'}`}><i />{connected ? 'WhatsApp connected' : 'WhatsApp disconnected'}</span>
-          <button type="button" className="sa-btn ghost" onClick={() => void refresh()} disabled={loadingThreads}>↻ Refresh</button>
+          <span className={`wa-inbox-connection ${connected ? 'is-connected' : 'is-offline'}`}>
+            <i />{connected ? 'WhatsApp Connected' : 'WhatsApp Disconnected'}
+          </span>
+          <button type="button" className="sa-btn ghost" onClick={() => void refresh()} disabled={loadingThreads}>↻ রিফ্রেশ</button>
         </div>
       </header>
 
-      {notice && <div className="wa-inbox-notice" role="status">{notice}<button type="button" onClick={() => setNotice('')} aria-label="Dismiss">×</button></div>}
+      {notice && (
+        <div className="wa-inbox-notice" role="status">
+          <span>{notice}</span>
+          <button type="button" onClick={() => setNotice('')} aria-label="Dismiss">×</button>
+        </div>
+      )}
+
+      {isDragOver && (
+        <div className="wa-drag-overlay">
+          <div className="wa-drag-box">
+            <span className="wa-drag-icon">📁</span>
+            <strong>ফাইল বা ছবি ড্রপ করুন</strong>
+            <p>অটোমেটিক অ্যাটাচমেন্ট হিসেবে মেসেজে যুক্ত হবে</p>
+          </div>
+        </div>
+      )}
 
       <div className={`wa-inbox-workspace ${contextOpen ? 'with-context' : ''} ${selectedPhone ? 'is-chat-open' : ''}`}>
+        {/* Left Sidebar: Threads Panel */}
         <aside className="wa-inbox-threads">
           <div className="wa-inbox-list-head">
-            <div><strong>Chats</strong><span>{threads.length.toLocaleString()}</span></div>
-            <span className="wa-inbox-list-live"><i /> Live</span>
+            <div className="wa-user-bar">
+              <span className="wa-user-avatar-ring">
+                <span className="wa-user-avatar-dot" />
+                <WhatsAppInboxAvatar phone="store-owner" name="Secrate" />
+              </span>
+              <div>
+                <strong>চ্যাট লিস্ট</strong>
+                <span className="wa-thread-count">{threads.length.toLocaleString()} টি চ্যাট</span>
+              </div>
+            </div>
+            <div className="wa-head-tools">
+              <span className="wa-inbox-list-live"><i /> লাইভ</span>
+              <button type="button" className="wa-icon-btn" onClick={() => void refresh()} title="রিফ্রেশ">↻</button>
+            </div>
           </div>
-          <label className="wa-inbox-search"><span>⌕</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, number, message" /></label>
+
+          {/* Search bar */}
+          <div className="wa-inbox-search-wrap">
+            <label className="wa-inbox-search">
+              <span className="wa-search-lens">⌕</span>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="চ্যাট বা নম্বর খুঁজুন…"
+              />
+              {search && <button type="button" className="wa-search-clear" onClick={() => setSearch('')}>×</button>}
+            </label>
+          </div>
+
+          {/* Filter Chips */}
+          <div className="wa-filter-chips">
+            <button
+              type="button"
+              className={`wa-filter-chip ${threadFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setThreadFilter('all')}
+            >
+              সব ({threads.length})
+            </button>
+            <button
+              type="button"
+              className={`wa-filter-chip ${threadFilter === 'unread' ? 'active' : ''}`}
+              onClick={() => setThreadFilter('unread')}
+            >
+              আনরিড
+            </button>
+            <button
+              type="button"
+              className={`wa-filter-chip ${threadFilter === 'orders' ? 'active' : ''}`}
+              onClick={() => setThreadFilter('orders')}
+            >
+              অর্ডার কাস্টমার
+            </button>
+            <button
+              type="button"
+              className={`wa-filter-chip ${threadFilter === 'risk' ? 'active' : ''}`}
+              onClick={() => setThreadFilter('risk')}
+            >
+              ঝুঁকিপূর্ণ
+            </button>
+          </div>
+
+          {/* Thread List */}
           <div className="wa-inbox-thread-list">
-            {loadingThreads && threads.length === 0 ? <div className="wa-inbox-empty">Loading conversations…</div>
-              : visibleThreads.length === 0 ? <div className="wa-inbox-empty">{search ? 'No matching conversations' : 'No WhatsApp conversations yet'}</div>
-              : visibleThreads.map((t) => {
+            {loadingThreads && threads.length === 0 ? (
+              <div className="wa-inbox-empty"><span className="wa-spinner" /> কথোপকথন লোড হচ্ছে…</div>
+            ) : visibleThreads.length === 0 ? (
+              <div className="wa-inbox-empty">{search ? 'কোনো চ্যাট খুঁজে পাওয়া যায়নি' : 'এখনও কোনো মেসেজ নেই'}</div>
+            ) : (
+              visibleThreads.map((t) => {
                 const threadLidJid = t.remoteJid || inferLidJid(t.phone);
                 const isLid = /@(?:lid|hosted\.lid)$/.test(String(threadLidJid || ''));
                 const nameIsPhone = String(t.name || '').replace(/\D/g, '') === String(t.phone || '').replace(/\D/g, '');
-                const title = nameIsPhone ? (isLid ? 'WhatsApp contact' : displayPhone(t.phone)) : (t.name || displayPhone(t.phone));
-                return <button type="button" key={t.phone} className={`wa-inbox-thread ${selectedPhone === t.phone ? 'is-active' : ''}`} onClick={() => setSelectedPhone(t.phone)}>
-                  <WhatsAppInboxAvatar phone={t.phone} remoteJid={threadLidJid} name={nameIsPhone ? 'W' : t.name} />
-                  <span className="wa-inbox-thread-copy"><span className="wa-inbox-thread-top"><strong>{title}</strong><time>{t.lastAt ? new Date(t.lastAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</time></span><span className="wa-inbox-thread-phone">{isLid ? '' : nameIsPhone ? '' : displayPhone(t.phone)}</span><span className="wa-inbox-preview">{t.lastMessage || 'No message preview'}</span></span>
-                  {t.cancelCount > 0 && <span className="wa-inbox-risk" title={`${t.cancelCount} cancelled orders`}>!</span>}
-                </button>;
-              })}
+                const title = nameIsPhone ? (isLid ? 'WhatsApp Contact' : displayPhone(t.phone)) : (t.name || displayPhone(t.phone));
+                const isSelected = selectedPhone === t.phone;
+
+                return (
+                  <button
+                    type="button"
+                    key={t.phone}
+                    className={`wa-inbox-thread ${isSelected ? 'is-active' : ''}`}
+                    onClick={() => setSelectedPhone(t.phone)}
+                  >
+                    <div className="wa-thread-avatar-wrap">
+                      <WhatsAppInboxAvatar phone={t.phone} remoteJid={threadLidJid} name={nameIsPhone ? 'W' : t.name} />
+                      <span className="wa-online-dot" />
+                    </div>
+                    <span className="wa-inbox-thread-copy">
+                      <span className="wa-inbox-thread-top">
+                        <strong title={title}>{title}</strong>
+                        <time>{t.lastAt ? new Date(t.lastAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</time>
+                      </span>
+                      <span className="wa-inbox-thread-phone">{isLid ? '' : nameIsPhone ? '' : displayPhone(t.phone)}</span>
+                      <span className="wa-inbox-preview-row">
+                        <span className="wa-inbox-preview">
+                          {t.lastDirection === 'out' && <span className="wa-preview-tick">✓✓ </span>}
+                          {t.lastMessage || 'কোনো মেসেজ প্রিভিউ নেই'}
+                        </span>
+                        <div className="wa-thread-badges">
+                          {t.orderCount > 0 && <span className="wa-badge-order" title={`${t.orderCount} টি অর্ডার`}>🛍️ {t.orderCount}</span>}
+                          {t.cancelCount > 0 && <span className="wa-inbox-risk" title={`${t.cancelCount} টি বাতিল অর্ডার`}>!</span>}
+                        </div>
+                      </span>
+                    </span>
+                  </button>
+                );
+              })
+            )}
           </div>
-          <div className="wa-inbox-list-foot">Recent synced conversations</div>
+          <div className="wa-inbox-list-foot">রিয়েল-টাইম সিঙ্ক • সিক্রেট শপ এডমিন</div>
         </aside>
 
+        {/* Main Chat Canvas */}
         <main className="wa-inbox-chat">
-          {selectedPhone ? <>
-            <header className="wa-inbox-chat-head">
-              <button type="button" className="wa-inbox-mobile-back" onClick={() => setSelectedPhone('')} aria-label="Back to conversations">‹</button>
-              <WhatsAppInboxAvatar phone={selectedPhone} remoteJid={contactRemoteJid} name={initials} large />
-              <div className="wa-inbox-contact"><strong>{contactName}</strong><span>{profilePhone ? displayPhone(profilePhone) : isLidContact ? 'WhatsApp number unavailable' : displayPhone(selectedPhone)} · WhatsApp</span></div>
-              <button type="button" className={`wa-inbox-detail-toggle ${contextOpen ? 'is-active' : ''}`} onClick={() => setContextOpen((v) => !v)} title="Show order details">ⓘ <span>Details</span></button>
-              <button type="button" className="wa-inbox-call-action" disabled={!callDigits} onClick={() => setBrowserCallMode('audio')} title="Start a secure voice call here"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.34 1.78.65 2.62a2 2 0 0 1-.45 2.11L8.04 9.72a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.84.31 1.72.53 2.62.65A2 2 0 0 1 22 16.92z" /></svg><span>Voice</span></button>
-              <button type="button" className="wa-inbox-call-action" disabled={!callDigits} onClick={() => setBrowserCallMode('video')} title="Start a secure video call here"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2" /><path d="m16 10 5-3v10l-5-3z" /></svg><span>Video</span></button>
-            </header>
+          {selectedPhone ? (
+            <>
+              {/* Chat Header */}
+              <header className="wa-inbox-chat-head">
+                <button type="button" className="wa-inbox-mobile-back" onClick={() => setSelectedPhone('')} aria-label="Back">‹</button>
+                <div className="wa-head-avatar-col" onClick={() => setContextOpen((v) => !v)} style={{ cursor: 'pointer' }}>
+                  <WhatsAppInboxAvatar phone={selectedPhone} remoteJid={contactRemoteJid} name={initials} large />
+                </div>
+                <div className="wa-inbox-contact" onClick={() => setContextOpen((v) => !v)} style={{ cursor: 'pointer' }}>
+                  <strong>{contactName}</strong>
+                  <span>
+                    {profilePhone ? displayPhone(profilePhone) : isLidContact ? 'WhatsApp Contact' : displayPhone(selectedPhone)}
+                    <span className="wa-contact-status-dot"> · </span>
+                    <span className="wa-contact-status-text">সক্রিয় (Active)</span>
+                  </span>
+                </div>
 
-            <div ref={messagesAreaRef} className="wa-inbox-message-area" onScroll={(e) => {
-              const node = e.currentTarget;
-              keepMessagesAtBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100;
-            }}>
-              {chatData.messages.length === 0 && !loadingMessages ? <div className="wa-inbox-empty">No messages are available for this chat yet.</div> : null}
-              {loadingMessages && chatData.messages.length === 0 ? <div className="wa-inbox-empty">Loading conversation…</div> : null}
-              {chatData.messages.map((m) => <article key={m.id} className={`wa-inbox-message ${m.direction === 'out' ? 'outgoing' : 'incoming'} ${m.mediaType === 'call' ? 'call-event' : ''}`}>
-                <div className="wa-inbox-media-slot"><WhatsAppInboxMedia message={m} /></div>
-                {m.mediaExpired && <div className="wa-inbox-media-expired">Attachment removed after storage retention.</div>}
-                <div className="wa-inbox-message-text">{String(m.text || (m.mediaType === 'image' ? '📷 Photo' : m.mediaType === 'audio' ? '🎤 Voice note' : 'Attachment')).replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, '\n\n').trim()}</div>
-                <footer><span>{m.timestamp ? new Date(m.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}{m.direction === 'out' && m.byStaff ? ` · ${m.byStaff.replace(/_/g, ' ')}` : ''}</span>{m.direction === 'out' && <span className={`wa-inbox-ticks ${m.deliveryStatus === 'read' ? 'is-read' : ''} ${m.deliveryStatus === 'failed' ? 'is-failed' : ''}`} title={m.deliveryStatus === 'read' ? 'Seen' : m.deliveryStatus === 'delivered' ? 'Delivered' : m.deliveryStatus === 'failed' ? 'Not sent' : 'Sent'}>{m.deliveryStatus === 'failed' ? '!' : m.deliveryStatus === 'delivered' || m.deliveryStatus === 'read' ? '✓✓' : '✓'}</span>}</footer>
-              </article>)}
-            </div>
+                {/* In-chat search toggle */}
+                <button
+                  type="button"
+                  className={`wa-icon-btn ${showInChatSearch ? 'is-active' : ''}`}
+                  onClick={() => setShowInChatSearch((v) => !v)}
+                  title="মেসেজ সার্চ করুন"
+                >
+                  🔍
+                </button>
 
-            <div className="wa-inbox-composer">
-              {!connected && <div className="wa-inbox-composer-hint">Reconnect WhatsApp to send replies.</div>}
-              <input ref={attachmentInputRef} className="wa-inbox-file-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/3gpp,video/quicktime,audio/mpeg,audio/ogg,audio/webm,audio/wav,audio/amr,audio/mp4,application/pdf,application/vnd.android.package-archive,text/plain,.docx,.xlsx,.apk" onChange={(e) => { chooseAttachment(e.target.files?.[0]); e.currentTarget.value = ''; }} />
-              {attachment && <div className="wa-inbox-attachment-preview">
-                {attachment.type.startsWith('image/') ? <img src={attachmentPreview} alt="Attachment preview" /> : attachment.type.startsWith('video/') ? <video src={attachmentPreview} controls /> : attachment.type.startsWith('audio/') ? <><span>{voiceNoteAttachment ? '🎤 Voice note' : `♫ ${attachment.name}`}</span><audio src={attachmentPreview} controls /></> : <span>▤ {attachment.name.toLowerCase().endsWith('.apk') ? 'Android app · ' : ''}{attachment.name}</span>}
-                <button type="button" onClick={() => setAttachment(null)} aria-label="Remove attachment">×</button>
-              </div>}
-              <div className="wa-inbox-composer-row">
-                <button type="button" className="wa-inbox-attach" onClick={() => attachmentInputRef.current?.click()} disabled={!connected || sending} title="Attach photo, video, audio or document" aria-label="Attach media">＋</button>
-                <button type="button" className={`wa-inbox-mic ${recordingVoiceNote ? 'is-recording' : ''}`} onClick={() => void toggleVoiceNoteRecording()} disabled={!connected || sending} title={recordingVoiceNote ? 'Finish voice note' : 'Record voice note'} aria-label={recordingVoiceNote ? 'Finish voice note' : 'Record voice note'}>{recordingVoiceNote ? '■' : '🎙'}</button>
-                <textarea value={reply} onChange={(e) => setReply(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendReply(); } }} placeholder={connected ? 'Type a message' : 'WhatsApp is disconnected'} disabled={!connected || sending} rows={1} />
-                <button type="button" className="wa-inbox-send" onClick={() => void sendReply()} disabled={!connected || sending || recordingVoiceNote || (!reply.trim() && !attachment)} title="Send message" aria-label="Send message">{sending ? '…' : '➤'}</button>
+                {/* Call actions */}
+                <button
+                  type="button"
+                  className="wa-inbox-call-action"
+                  disabled={!callDigits}
+                  onClick={() => setBrowserCallMode('audio')}
+                  title="ব্রাউজার আইপি ভয়েস কল"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.34 1.78.65 2.62a2 2 0 0 1-.45 2.11L8.04 9.72a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.84.31 1.72.53 2.62.65A2 2 0 0 1 22 16.92z" />
+                  </svg>
+                  <span>ভয়েস</span>
+                </button>
+                <button
+                  type="button"
+                  className="wa-inbox-call-action"
+                  disabled={!callDigits}
+                  onClick={() => setBrowserCallMode('video')}
+                  title="ভিডিও কল লিংক"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="3" y="6" width="13" height="12" rx="2" />
+                    <path d="m16 10 5-3v10l-5-3z" />
+                  </svg>
+                  <span>ভিডিও</span>
+                </button>
+
+                {/* Details toggle */}
+                <button
+                  type="button"
+                  className={`wa-inbox-detail-toggle ${contextOpen ? 'is-active' : ''}`}
+                  onClick={() => setContextOpen((v) => !v)}
+                  title="অর্ডার ডিটেইলস প্যানেল"
+                >
+                  ⓘ <span>ডিটেইলস</span>
+                </button>
+              </header>
+
+              {/* In-Chat Search Bar */}
+              {showInChatSearch && (
+                <div className="wa-inchat-search-bar">
+                  <span className="wa-inchat-search-lens">⌕</span>
+                  <input
+                    value={inChatSearchQuery}
+                    onChange={(e) => setInChatSearchQuery(e.target.value)}
+                    placeholder="এই চ্যাটের নির্দিষ্ট কোনো মেসেজ খুঁজুন…"
+                    autoFocus
+                  />
+                  {inChatSearchQuery && (
+                    <span className="wa-inchat-matches">
+                      {filteredMessages.length} টি মিল পাওয়া গেছে
+                    </span>
+                  )}
+                  <button type="button" className="wa-inchat-search-close" onClick={() => { setShowInChatSearch(false); setInChatSearchQuery(''); }}>✕</button>
+                </div>
+              )}
+
+              {/* Message Canvas */}
+              <div
+                ref={messagesAreaRef}
+                className="wa-inbox-message-area"
+                onScroll={(e) => {
+                  const node = e.currentTarget;
+                  keepMessagesAtBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 120;
+                }}
+              >
+                {/* Date stamp banner */}
+                <div className="wa-date-divider">
+                  <span>{formatMessageDate(chatData.messages[chatData.messages.length - 1]?.timestamp || Date.now())}</span>
+                </div>
+
+                {chatData.messages.length === 0 && !loadingMessages ? (
+                  <div className="wa-inbox-empty">এই কথোপকথনে এখনও কোনো মেসেজ নেই। নিচে মেসেজ টাইপ করুন।</div>
+                ) : null}
+
+                {loadingMessages && chatData.messages.length === 0 ? (
+                  <div className="wa-inbox-empty"><span className="wa-spinner" /> মেসেজগুলো লোড হচ্ছে…</div>
+                ) : null}
+
+                {filteredMessages.map((m) => {
+                  const isOut = m.direction === 'out';
+                  const isMenuOpen = activeBubbleMenuId === m.id;
+                  const messageText = String(m.text || '').replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, '\n\n').trim();
+
+                  return (
+                    <article
+                      key={m.id}
+                      className={`wa-inbox-message ${isOut ? 'outgoing' : 'incoming'} ${m.mediaType === 'call' ? 'call-event' : ''}`}
+                      onMouseLeave={() => { if (isMenuOpen) setActiveBubbleMenuId(null); }}
+                    >
+                      {/* Bubble action trigger chevron */}
+                      <div className="wa-bubble-actions">
+                        <button
+                          type="button"
+                          className="wa-bubble-menu-trigger"
+                          onClick={() => setActiveBubbleMenuId(isMenuOpen ? null : m.id)}
+                          title="মেসেজ অপশন"
+                        >
+                          ⌄
+                        </button>
+                        {isMenuOpen && (
+                          <div className="wa-bubble-dropdown">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReplyingTo(m);
+                                setActiveBubbleMenuId(null);
+                                textareaRef.current?.focus();
+                              }}
+                            >
+                              ↩️ রিপ্লাই (Reply)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                copyTextToClipboard(messageText || m.mediaUrl || '');
+                                setActiveBubbleMenuId(null);
+                              }}
+                            >
+                              📋 কপি টেক্সট
+                            </button>
+                            {m.mediaUrl && (
+                              <a
+                                href={m.mediaUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={() => setActiveBubbleMenuId(null)}
+                              >
+                                🔗 নতুন ট্যাবে খুলুন
+                              </a>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Quoted preview if message has a quote */}
+                      {messageText.startsWith('> 💬 Replying to:') && (
+                        <div className="wa-quoted-inside">
+                          <div className="wa-quoted-bar" />
+                          <div className="wa-quoted-text">
+                            {messageText.split('\n\n')[0].replace('> 💬 Replying to: ', '')}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Media Slot */}
+                      <div className="wa-inbox-media-slot">
+                        <WhatsAppInboxMedia message={m} onOpenImage={(imgUrl) => setLightboxImage(imgUrl)} />
+                      </div>
+
+                      {m.mediaExpired && <div className="wa-inbox-media-expired">সংরক্ষণ মেয়াদ উত্তীর্ণ হওয়ায় ফাইলটি আর পাওয়া যাচ্ছে না।</div>}
+
+                      {/* Message Text */}
+                      {messageText && (
+                        <div className="wa-inbox-message-text">
+                          {messageText.startsWith('> 💬 Replying to:') ? messageText.split('\n\n').slice(1).join('\n\n') : messageText}
+                        </div>
+                      )}
+
+                      {/* Footer: Time + Delivery Status */}
+                      <footer>
+                        <span className="wa-msg-time">
+                          {m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                          {isOut && m.byStaff ? ` · ${m.byStaff.replace(/_/g, ' ')}` : ''}
+                        </span>
+                        {isOut && (
+                          <span
+                            className={`wa-inbox-ticks ${m.deliveryStatus === 'read' ? 'is-read' : ''} ${m.deliveryStatus === 'failed' ? 'is-failed' : ''}`}
+                            title={m.deliveryStatus === 'read' ? 'পড়া হয়েছে (Seen)' : m.deliveryStatus === 'delivered' ? 'পৌঁছেছে (Delivered)' : m.deliveryStatus === 'failed' ? 'ব্যর্থ হয়েছে' : 'পাঠানো হয়েছে (Sent)'}
+                          >
+                            {m.deliveryStatus === 'failed' ? '!' : m.deliveryStatus === 'delivered' || m.deliveryStatus === 'read' ? '✓✓' : '✓'}
+                          </span>
+                        )}
+                      </footer>
+                    </article>
+                  );
+                })}
               </div>
+
+              {/* Composer */}
+              <div className="wa-inbox-composer">
+                {!connected && <div className="wa-inbox-composer-hint">মেসেজ পাঠাতে হোয়াটসঅ্যাপ পুনরায় কানেক্ট করুন।</div>}
+
+                {/* Quoted Reply Banner */}
+                {replyingTo && (
+                  <div className="wa-reply-quote-banner">
+                    <div className="wa-reply-bar-accent" />
+                    <div className="wa-reply-content">
+                      <strong>{replyingTo.direction === 'out' ? 'আপনি (You)' : contactName}</strong>
+                      <p>{replyingTo.text || (replyingTo.mediaType === 'image' ? '📷 ছবি (Photo)' : replyingTo.mediaType === 'audio' ? '🎤 ভয়েস মেসেজ' : 'ফাইল অ্যাটাচমেন্ট')}</p>
+                    </div>
+                    <button type="button" className="wa-reply-dismiss" onClick={() => setReplyingTo(null)} title="রিপ্লাই বাতিল">✕</button>
+                  </div>
+                )}
+
+                {/* Quick Templates Drawer */}
+                {showTemplates && (
+                  <div className="wa-templates-panel">
+                    <div className="wa-templates-head">
+                      <strong>⚡ দ্রুত উত্তর (Quick Templates)</strong>
+                      <button type="button" onClick={() => setShowTemplates(false)}>✕</button>
+                    </div>
+                    <div className="wa-templates-list">
+                      {WA_QUICK_TEMPLATES.map((tpl) => (
+                        <button
+                          key={tpl.title}
+                          type="button"
+                          className="wa-template-item"
+                          onClick={() => applyTemplate(tpl.text(contactName, chatData.orders?.[0]?.id))}
+                        >
+                          <span className="wa-template-badge">{tpl.badge}</span>
+                          <strong>{tpl.title}</strong>
+                          <p>{tpl.text(contactName, chatData.orders?.[0]?.id).slice(0, 90)}…</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Emoji Tray */}
+                {showEmojiPicker && (
+                  <div className="wa-emoji-panel">
+                    <div className="wa-emoji-grid">
+                      {WA_POPULAR_EMOJIS.map((emoji) => (
+                        <button key={emoji} type="button" className="wa-emoji-btn" onClick={() => insertEmoji(emoji)}>
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Hidden File Inputs */}
+                <input
+                  ref={attachmentInputRef}
+                  className="wa-inbox-file-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/3gpp,video/quicktime,audio/mpeg,audio/ogg,audio/webm,audio/wav,audio/amr,audio/mp4"
+                  onChange={(e) => { chooseAttachment(e.target.files?.[0]); e.currentTarget.value = ''; }}
+                />
+                <input
+                  ref={docInputRef}
+                  className="wa-inbox-file-input"
+                  type="file"
+                  accept="application/pdf,application/vnd.android.package-archive,text/plain,.docx,.xlsx,.apk"
+                  onChange={(e) => { chooseAttachment(e.target.files?.[0]); e.currentTarget.value = ''; }}
+                />
+
+                {/* Attachment Menu Popup */}
+                {showAttachMenu && (
+                  <div className="wa-attach-menu">
+                    <button type="button" onClick={() => { attachmentInputRef.current?.click(); setShowAttachMenu(false); }}>
+                      <span className="wa-attach-icon photo">📷</span>
+                      <span>ছবি ও ভিডিও</span>
+                    </button>
+                    <button type="button" onClick={() => { docInputRef.current?.click(); setShowAttachMenu(false); }}>
+                      <span className="wa-attach-icon doc">📄</span>
+                      <span>ডকুমেন্ট ও ফাইল</span>
+                    </button>
+                    <button type="button" onClick={() => { setShowTemplates(true); setShowAttachMenu(false); }}>
+                      <span className="wa-attach-icon tpl">⚡</span>
+                      <span>কুইক টেমপ্লেট</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Attachment Preview Card */}
+                {attachment && (
+                  <div className="wa-inbox-attachment-preview">
+                    {attachment.type.startsWith('image/') ? (
+                      <img src={attachmentPreview} alt="Preview" />
+                    ) : attachment.type.startsWith('video/') ? (
+                      <video src={attachmentPreview} controls />
+                    ) : attachment.type.startsWith('audio/') ? (
+                      <div className="wa-audio-preview-chip">
+                        <span>{voiceNoteAttachment ? '🎤 রেকর্ড করা ভয়েস নোট' : `♫ ${attachment.name}`}</span>
+                      </div>
+                    ) : (
+                      <span className="wa-doc-preview-chip">📄 {attachment.name}</span>
+                    )}
+                    <button type="button" onClick={() => setAttachment(null)} title="ফাইল মুছুন">×</button>
+                  </div>
+                )}
+
+                {/* Recording Live Indicator */}
+                {recordingVoiceNote && (
+                  <div className="wa-recording-banner">
+                    <span className="wa-rec-pulse" />
+                    <span className="wa-rec-timer">
+                      🔴 রেকর্ডিং চলছে… {Math.floor(recordingSeconds / 60)}:{(recordingSeconds % 60 < 10 ? '0' : '')}{recordingSeconds % 60}
+                    </span>
+                    <button type="button" className="wa-rec-cancel" onClick={cancelVoiceRecording}>
+                      🗑️ বাতিল
+                    </button>
+                    <button type="button" className="wa-rec-done" onClick={() => void toggleVoiceNoteRecording()}>
+                      ✓ শেষ করুন
+                    </button>
+                  </div>
+                )}
+
+                {/* Main Composer Row */}
+                <div className="wa-inbox-composer-row">
+                  {/* Emoji Picker Toggle */}
+                  <button
+                    type="button"
+                    className={`wa-composer-icon-btn ${showEmojiPicker ? 'active' : ''}`}
+                    onClick={() => { setShowEmojiPicker((v) => !v); setShowTemplates(false); setShowAttachMenu(false); }}
+                    title="ইমোজি"
+                  >
+                    😊
+                  </button>
+
+                  {/* Attachment Toggle */}
+                  <button
+                    type="button"
+                    className={`wa-composer-icon-btn ${showAttachMenu ? 'active' : ''}`}
+                    onClick={() => { setShowAttachMenu((v) => !v); setShowEmojiPicker(false); }}
+                    disabled={!connected || sending}
+                    title="ফাইল ও ছবি যুক্ত করুন"
+                  >
+                    📎
+                  </button>
+
+                  {/* Quick Templates Toggle */}
+                  <button
+                    type="button"
+                    className={`wa-composer-icon-btn ${showTemplates ? 'active' : ''}`}
+                    onClick={() => { setShowTemplates((v) => !v); setShowEmojiPicker(false); setShowAttachMenu(false); }}
+                    title="কুইক বিজনেস রিপ্লাই"
+                  >
+                    ⚡
+                  </button>
+
+                  {/* Auto-growing Textarea */}
+                  <textarea
+                    ref={textareaRef}
+                    value={reply}
+                    onChange={(e) => setReply(e.target.value)}
+                    onPaste={handlePaste}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        void sendReply();
+                      }
+                    }}
+                    placeholder={connected ? 'মেসেজ টাইপ করুন (Enter চাপলে সেন্ড হবে, Ctrl+V দিয়ে ছবি পেস্ট করুন)…' : 'WhatsApp ডিসকানেক্টেড'}
+                    disabled={!connected || sending || recordingVoiceNote}
+                    rows={1}
+                  />
+
+                  {/* Mic / Send Button */}
+                  {reply.trim() || attachment ? (
+                    <button
+                      type="button"
+                      className="wa-inbox-send"
+                      onClick={() => void sendReply()}
+                      disabled={!connected || sending || recordingVoiceNote}
+                      title="মেসেজ পাঠান (Enter)"
+                    >
+                      {sending ? '…' : '➤'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`wa-inbox-mic ${recordingVoiceNote ? 'is-recording' : ''}`}
+                      onClick={() => void toggleVoiceNoteRecording()}
+                      disabled={!connected || sending}
+                      title={recordingVoiceNote ? 'ভয়েস নোট শেষ করুন' : 'ভয়েস নোট রেকর্ড করুন'}
+                    >
+                      {recordingVoiceNote ? '■' : '🎙'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="wa-inbox-no-chat">
+              <span className="wa-no-chat-icon">💬</span>
+              <strong>একটি কথোপকথন নির্বাচন করুন</strong>
+              <p>বামপাশের লিস্ট থেকে যেকোনো কাস্টমার সিলেক্ট করলেই অফিসিয়াল হোয়াটসঅ্যাপ পিসির মতো ফুল চ্যাট ও কুরিয়ার তথ্য প্রদর্শিত হবে।</p>
             </div>
-          </> : <div className="wa-inbox-no-chat"><span>◌</span><strong>Select a conversation</strong><p>Customer messages and order context will appear here.</p></div>}
+          )}
         </main>
 
-        {contextOpen && <aside className="wa-inbox-context">
-          <div className="wa-inbox-context-head"><span>ORDER CONTEXT</span><strong>{chatData.orders.length} orders</strong></div>
-          {!selectedPhone ? <div className="wa-inbox-context-empty">Select a chat to view customer orders.</div>
-            : chatData.orders.length === 0 ? <div className="wa-inbox-context-empty">No matching store orders for this number.</div>
-            : chatData.orders.map((o) => <article className="wa-inbox-order" key={o.id}><span className="wa-inbox-order-id">#{String(o.id).replace(/^DOT-/, '')}</span><span className={`wa-inbox-order-status status-${String(o.status || '').toLowerCase()}`}>{o.status || 'Unknown'}</span><strong>৳{Number(o.total || 0).toLocaleString()}</strong><small>{o.createdAt ? new Date(o.createdAt).toLocaleDateString() : ''}</small>{o.items && <p>{o.items}</p>}</article>)}
-        </aside>}
+        {/* Right Drawer: Customer & Order Intelligence */}
+        {contextOpen && (
+          <aside className="wa-inbox-context">
+            <div className="wa-inbox-context-head">
+              <div className="wa-context-title-row">
+                <span>CUSTOMER & ORDER CONTEXT</span>
+                <button type="button" className="wa-context-close" onClick={() => setContextOpen(false)}>✕</button>
+              </div>
+              <strong>{contactName}</strong>
+              <small>{callDigits ? displayPhone(callDigits) : selectedPhone}</small>
+            </div>
+
+            <div className="wa-context-scroll">
+              {/* Courier intelligence stats card */}
+              <div className="wa-context-card">
+                <div className="wa-card-heading">
+                  <span className="wa-heading-icon">🛡️</span>
+                  <strong>কুরিয়ার ইন্টেলিজেন্স রেকর্ড</strong>
+                </div>
+                <div className="wa-courier-stats">
+                  <div className="wa-stat-box">
+                    <span>মোট অর্ডার</span>
+                    <strong>{chatData.orders.length}</strong>
+                  </div>
+                  <div className="wa-stat-box success">
+                    <span>ডেলিভারি রেট</span>
+                    <strong>
+                      {chatData.orders.length > 0
+                        ? `${Math.round((chatData.orders.filter((o) => String(o.status || '').toLowerCase() === 'delivered').length / chatData.orders.length) * 100)}%`
+                        : '100%'}
+                    </strong>
+                  </div>
+                  <div className="wa-stat-box danger">
+                    <span>বাতিল</span>
+                    <strong>{chatData.orders.filter((o) => ['cancelled', 'returned'].includes(String(o.status || '').toLowerCase())).length}</strong>
+                  </div>
+                </div>
+                <div className="wa-courier-providers">
+                  <span>Steadfast & Pathao Verified</span>
+                </div>
+              </div>
+
+              {/* Order history */}
+              <div className="wa-context-card">
+                <div className="wa-card-heading">
+                  <span className="wa-heading-icon">🛍️</span>
+                  <strong>স্টোর অর্ডার সমূহ ({chatData.orders.length})</strong>
+                </div>
+                {chatData.orders.length === 0 ? (
+                  <div className="wa-inbox-context-empty">এই মোবাইল নম্বরে কোনো স্টোর অর্ডার পাওয়া যায়নি।</div>
+                ) : (
+                  chatData.orders.map((o) => (
+                    <article className="wa-inbox-order" key={o.id}>
+                      <span className="wa-inbox-order-id">#{String(o.id).replace(/^DOT-/, '')}</span>
+                      <span className={`wa-inbox-order-status status-${String(o.status || '').toLowerCase()}`}>
+                        {o.status || 'Pending'}
+                      </span>
+                      <strong>৳{Number(o.total || 0).toLocaleString()}</strong>
+                      <small>{o.createdAt ? new Date(o.createdAt).toLocaleDateString('bn-BD') : ''}</small>
+                      {o.items && <p>{o.items}</p>}
+                    </article>
+                  ))
+                )}
+              </div>
+            </div>
+          </aside>
+        )}
       </div>
-      {browserCallMode && selectedPhone && <AdminBrowserCall phone={callDigits} name={contactName} mode={browserCallMode} onClose={() => setBrowserCallMode(null)} onInvite={(url) => setReply((current) => current.includes(url) ? current : `${current}${current ? '\n' : ''}Join our ${browserCallMode === 'video' ? 'video' : 'voice'} call: ${url}`)} />}
+
+      {/* Browser voice & video call overlay */}
+      {browserCallMode && selectedPhone && (
+        <AdminBrowserCall
+          phone={callDigits}
+          name={contactName}
+          mode={browserCallMode}
+          onClose={() => setBrowserCallMode(null)}
+          onInvite={(url) => setReply((current) => current.includes(url) ? current : `${current}${current ? '\n' : ''}আমাদের ${browserCallMode === 'video' ? 'ভিডিও' : 'ভয়েস'} কলে জয়েন করুন: ${url}`)}
+        />
+      )}
     </section>
   );
 }
