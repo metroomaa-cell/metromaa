@@ -485,8 +485,11 @@ export function SaikaAiAdmin({
   const handleAddApiKey = async (skipVerify = false) => {
     if (!newApiKey.trim()) return;
     setKeyBusy(true);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('TIMEOUT')), 6500)
+    );
     try {
-      const res = await saikaFetch('/admin/saika/keys', {
+      const fetchPromise = saikaFetch('/admin/saika/keys', {
         method: 'POST',
         body: JSON.stringify({
           action: 'add',
@@ -495,15 +498,20 @@ export function SaikaAiAdmin({
           skipVerify,
         }),
       });
+      const res: any = await Promise.race([fetchPromise, timeoutPromise]);
       if (res?.ok) {
         setNewApiKey('');
         if (res.config) setConfig((prev) => ({ ...prev, ...res.config }));
         showNotice(res.message || '✅ অ্যাডমিন প্যানেলের Saika AI Key সেভ হয়েছে!');
       } else {
-        showNotice(res?.error || 'API Key সঠিক নয় বা সংযোগে সমস্যা। "সরাসরি সেভ করুন" বাটন দিয়ে চেষ্টা করতে পারেন।', 'err');
+        showNotice(res?.error || 'API Key সঠিক নয়। পাশে থাকা "⚡ সরাসরি সেভ করুন" বাটনে ক্লিক করে সেভ করতে পারেন।', 'err');
       }
-    } catch {
-      showNotice('সার্ভারের সাথে সংযোগে সমস্যা হয়েছে। "সরাসরি সেভ করুন" দিয়ে চেষ্টা করুন।', 'err');
+    } catch (err: any) {
+      if (err?.message === 'TIMEOUT') {
+        showNotice('Google ভেরিফিকেশনে বিলম্ব হচ্ছে। আপনি "⚡ সরাসরি সেভ করুন" বাটনে ক্লিক করে সরাসরি সেভ করতে পারেন।', 'err');
+      } else {
+        showNotice('সার্ভারের সাথে সংযোগে সমস্যা হয়েছে। "⚡ সরাসরি সেভ করুন" দিয়ে চেষ্টা করুন।', 'err');
+      }
     } finally {
       setKeyBusy(false);
     }
@@ -1213,10 +1221,10 @@ export function SaikaAiAdmin({
                   <button
                     type="button"
                     className="sa-btn ghost"
-                    disabled={keyBusy || !newApiKey.trim()}
+                    disabled={!newApiKey.trim()}
                     onClick={() => handleAddApiKey(true)}
                     title="Google ভেরিফিকেশন ছাড়াও সরাসরি সেভ করতে পারেন"
-                    style={{ borderColor: 'rgba(56, 189, 248, 0.45)', color: '#38bdf8', fontWeight: 600 }}
+                    style={{ borderColor: '#38bdf8', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', fontWeight: 700 }}
                   >
                     ⚡ সরাসরি সেভ করুন (Skip Verify)
                   </button>
@@ -1238,6 +1246,11 @@ export function SaikaAiAdmin({
                     ↗ ফ্রি API Key নিন
                   </a>
                 </div>
+                {keyBusy && (
+                  <div style={{ marginTop: 8, fontSize: '0.85rem', color: '#c4b5fd' }}>
+                    ⏳ Google ভেরিফিকেশন চলছে... অপেক্ষা করতে না চাইলে এখনই <b>"⚡ সরাসরি সেভ করুন (Skip Verify)"</b> বাটনে ক্লিক করুন।
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

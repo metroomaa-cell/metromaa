@@ -7171,6 +7171,9 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
       }
 
       if (isAdminPath) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         html = html.replace('<head>', '<head>\n    <script>window.__IS_ADMIN__ = true; window.__AUTO_BRAIN__ = {"mode":"admin","strictIsolation":true,"allowedPixels":[],"gtmId":null,"blockGtm":true}; window.dataLayer = []; try { var noop = function(){}; Object.defineProperty(window, "fbq", { get: function(){ return noop; }, set: function(){}, configurable: false }); Object.defineProperty(window, "_fbq", { get: function(){ return noop; }, set: function(){}, configurable: false }); Object.defineProperty(window, "ttq", { get: function(){ return { track: noop, page: noop, identify: noop }; }, set: function(){}, configurable: false }); Object.defineProperty(window, "gtag", { get: function(){ return noop; }, set: function(){}, configurable: false }); } catch(_){} </script>');
       }
       res.setHeader('Content-Type', 'text/html; charset=UTF-8');
@@ -7283,65 +7286,61 @@ export async function verifyGeminiApiKeyLive(rawKey) {
   const key = String(rawKey || '').trim();
   if (!key) return { ok: false, error: 'অনুগ্রহ করে একটি বৈধ Gemini API Key দিন।' };
 
-  // 1. Direct fast test against Gemini Flash models with strict 4.5s timeout per request
-  const testModels = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.7-flash'];
-  let sawQuota429 = false;
-  let lastErr = '';
-
-  for (const m of testModels) {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 4500);
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(key)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 5 } }),
-        signal: controller.signal
-      });
-      clearTimeout(timer);
-
-      if (r.ok) {
-        return { ok: true, model: m, availableModels: CURRENT_GEMINI_FLASH_MODELS };
-      }
-      if (r.status === 429) {
-        // HTTP 429 proves Google accepted and authenticated the API Key!
-        sawQuota429 = true;
-        return { ok: true, model: m, quotaNote: true, availableModels: CURRENT_GEMINI_FLASH_MODELS };
-      }
-      const errJson = await r.json().catch(() => ({}));
-      const msg = errJson?.error?.message || `HTTP ${r.status}`;
-      if (r.status === 400 || r.status === 401 || r.status === 403) {
-        if (/API_KEY_INVALID|key not valid|API key not valid/i.test(msg)) {
-          return { ok: false, error: 'আপনার দেওয়া Google Gemini API Key-টি সঠিক নয়।' };
-        }
-      }
-      lastErr = msg;
-    } catch (err) {
-      lastErr = err?.name === 'AbortError' ? 'Google API সংযোগের সময় অতিক্রম হয়েছে (Timeout)' : (err?.message || '');
-    }
-  }
-
-  if (sawQuota429) {
-    return { ok: true, model: 'gemini-2.5-flash', quotaNote: true, availableModels: CURRENT_GEMINI_FLASH_MODELS };
-  }
-
-  // 2. Fast fallback GET /v1beta/models with 3.5s timeout
+  // 1. Ultra-fast direct check via GET /v1beta/models (typical latency: 200-400ms)
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 3500);
     const listResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`, {
+      method: 'GET',
       signal: controller.signal
     });
     clearTimeout(timer);
+
     if (listResp.ok) {
-      return { ok: true, model: 'gemini-2.5-flash', availableModels: CURRENT_GEMINI_FLASH_MODELS };
+      const data = await listResp.json().catch(() => ({}));
+      const models = Array.isArray(data?.models) ? data.models.map(m => (m?.name || '').replace(/^models\//, '')) : [];
+      const matched = models.find(m => m === 'gemini-2.5-flash' || m === 'gemini-3.8-flash' || m === 'gemini-3.7-flash') || 'gemini-2.5-flash';
+      return { ok: true, model: matched, availableModels: models.length ? models : CURRENT_GEMINI_FLASH_MODELS };
     }
+
     if (listResp.status === 429) {
+      // HTTP 429 proves Google accepted and authenticated the API Key!
       return { ok: true, model: 'gemini-2.5-flash', quotaNote: true, availableModels: CURRENT_GEMINI_FLASH_MODELS };
+    }
+
+    const errJson = await listResp.json().catch(() => ({}));
+    const msg = errJson?.error?.message || `HTTP ${listResp.status}`;
+    if (listResp.status === 400 || listResp.status === 401 || listResp.status === 403) {
+      if (/API_KEY_INVALID|key not valid|API key not valid/i.test(msg)) {
+        return { ok: false, error: 'আপনার দেওয়া Google Gemini API Key-টি সঠিক নয়।' };
+      }
     }
   } catch (_) {}
 
-  return { ok: false, error: lastErr || 'Google API সংযোগে সমস্যা হয়েছে। "সরাসরি সেভ করুন" বাটনটি ব্যবহার করুন।' };
+  // 2. Direct single fast POST ping with 3s timeout as fallback
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 5 } }),
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+
+    if (r.ok || r.status === 429) {
+      return { ok: true, model: 'gemini-2.5-flash', availableModels: CURRENT_GEMINI_FLASH_MODELS };
+    }
+    const errJson = await r.json().catch(() => ({}));
+    const msg = errJson?.error?.message || '';
+    if (/API_KEY_INVALID|key not valid|API key not valid/i.test(msg)) {
+      return { ok: false, error: 'আপনার দেওয়া Google Gemini API Key-টি সঠিক নয়।' };
+    }
+  } catch (_) {}
+
+  // 3. Fallback message pointing user to the bypass button
+  return { ok: false, error: 'Google API যাচাইয়ে বিলম্ব হয়েছে। আপনি "⚡ সরাসরি সেভ করুন (Skip Verify)" বাটনে ক্লিক করে সাথে সাথে যুক্ত করতে পারেন।' };
 }
 
 export function getUnifiedSaikaControlConfig() {
