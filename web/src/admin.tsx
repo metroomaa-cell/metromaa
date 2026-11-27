@@ -9916,7 +9916,11 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
     try {
       const r = await aFetch('/admin/fraud/check', { method: 'POST', body: JSON.stringify({ phone: custPhone, force: !!force }) }).then((x) => x.json());
       if (r.error) setFraudMsg(r.error);
-      else { setFraud(r); setFraudMsg(''); }
+      else {
+        setFraud(r);
+        setFraudMsg('');
+        try { window.dispatchEvent(new CustomEvent('courier-intelligence-refresh')); } catch (_) {}
+      }
     } catch { setFraudMsg('check failed'); }
   };
 
@@ -31292,6 +31296,8 @@ function CourierIntelligenceAdmin() {
   const [q, setQ] = useState('');
   const [riskFilter, setRiskFilter] = useState<'all' | 'safe' | 'moderate' | 'high'>('all');
   const [toast, setToast] = useState('');
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [lastUpdatedTime, setLastUpdatedTime] = useState<string>('');
 
   // Modals state
   const [showImportModal, setShowImportModal] = useState(false);
@@ -31309,8 +31315,8 @@ function CourierIntelligenceAdmin() {
     setTimeout(() => setToast(''), 3000);
   };
 
-  const loadData = (searchVal = q, riskVal = riskFilter, pageNum = page) => {
-    setLoading(true);
+  const loadData = (searchVal = q, riskVal = riskFilter, pageNum = page, silent = false) => {
+    if (!silent) setLoading(true);
     const params = new URLSearchParams();
     if (searchVal.trim()) params.set('q', searchVal.trim());
     if (riskVal !== 'all') params.set('risk', riskVal);
@@ -31324,22 +31330,57 @@ function CourierIntelligenceAdmin() {
           setProfiles(Array.isArray(d.profiles) ? d.profiles : []);
           setTotal(Number(d.total) || 0);
           if (d.stats) setStats(d.stats);
-        } else {
+          try {
+            const now = new Date();
+            setLastUpdatedTime(now.toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }) || now.toLocaleTimeString());
+          } catch (_) {}
+        } else if (!silent) {
           setProfiles([]);
         }
       })
-      .catch(() => setProfiles([]))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!silent) setProfiles([]);
+      })
+      .finally(() => {
+        if (!silent) setLoading(false);
+      });
   };
 
   useEffect(() => {
-    loadData(q, riskFilter, page);
+    loadData(q, riskFilter, page, false);
   }, [riskFilter, page]);
+
+  // Real-time Silent Auto Refresh (Interval + Window Events)
+  useEffect(() => {
+    if (!autoRefresh) return;
+
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (showImportModal || selectedDetailProfile) return;
+      const activeEl = document.activeElement;
+      if (activeEl && ['INPUT', 'TEXTAREA'].includes(activeEl.tagName)) return;
+
+      loadData(q, riskFilter, page, true);
+    }, 8000);
+
+    const onLiveRefresh = () => {
+      loadData(q, riskFilter, page, true);
+    };
+
+    window.addEventListener('admin-orders-updated', onLiveRefresh);
+    window.addEventListener('courier-intelligence-refresh', onLiveRefresh);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('admin-orders-updated', onLiveRefresh);
+      window.removeEventListener('courier-intelligence-refresh', onLiveRefresh);
+    };
+  }, [q, riskFilter, page, autoRefresh, showImportModal, selectedDetailProfile]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
-    loadData(q, riskFilter, 1);
+    loadData(q, riskFilter, 1, false);
   };
 
   const handleManualCheck = async (e: React.FormEvent) => {
@@ -31357,7 +31398,8 @@ function CourierIntelligenceAdmin() {
       if (res.ok && data.ok) {
         setManualResult(data.profile || data.result);
         showToast(manualForce ? 'API থেকে নতুন ডাটা ফেচ করে সেভ করা হয়েছে ✓' : 'কুরিয়ার ডেটাবেজ চেক সম্পন্ন ✓');
-        loadData(q, riskFilter, page);
+        loadData(q, riskFilter, page, true);
+        try { window.dispatchEvent(new CustomEvent('courier-intelligence-refresh')); } catch (_) {}
       } else {
         showToast(data.error || 'চেক করতে ব্যর্থ হয়েছে');
       }
@@ -31381,6 +31423,7 @@ function CourierIntelligenceAdmin() {
         if (data.profile) {
           setProfiles((prev) => prev.map((p) => (p.phone === phone ? data.profile : p)));
         }
+        try { window.dispatchEvent(new CustomEvent('courier-intelligence-refresh')); } catch (_) {}
       } else {
         showToast(data.error || 'রি-চেক ব্যর্থ হয়েছে');
       }
@@ -31430,7 +31473,45 @@ function CourierIntelligenceAdmin() {
               সকল কাস্টমারের স্থায়ী পার্সেল হিস্ট্রি (Pathao, Steadfast, RedX, Store) — অটোমেটিক যোগ হবে, কিন্তু পূর্বের কোনো ডাটা কখনোই মুছবে না
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '6px 12px',
+                borderRadius: 20,
+                background: autoRefresh ? 'rgba(52, 211, 153, 0.12)' : 'rgba(148, 163, 184, 0.1)',
+                border: `1px solid ${autoRefresh ? 'rgba(52, 211, 153, 0.35)' : 'rgba(148, 163, 184, 0.2)'}`,
+                fontSize: 12,
+                color: autoRefresh ? '#34d399' : '#94a3b8',
+                cursor: 'pointer',
+                userSelect: 'none',
+                transition: 'all 0.2s ease'
+              }}
+              onClick={() => setAutoRefresh(!autoRefresh)}
+              title={autoRefresh ? 'ক্লিক করে অটো-রিফ্রেশ সাময়িক বন্ধ করুন' : 'ক্লিক করে লাইভ অটো-রিফ্রেশ চালু করুন'}
+            >
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: autoRefresh ? '#10b981' : '#64748b',
+                  boxShadow: autoRefresh ? '0 0 8px #10b981' : 'none',
+                  display: 'inline-block'
+                }}
+              />
+              <span style={{ fontWeight: 600 }}>
+                {autoRefresh ? 'লাইভ অটো-রিফ্রেশ (৮ সে.)' : 'অটো-রিফ্রেশ বন্ধ'}
+              </span>
+              {lastUpdatedTime && (
+                <span style={{ fontSize: 11, opacity: 0.8, color: autoRefresh ? '#a7f3d0' : '#94a3b8' }}>
+                  ({lastUpdatedTime})
+                </span>
+              )}
+            </div>
+
             <button
               type="button"
               className="sa-btn primary"
@@ -31443,7 +31524,7 @@ function CourierIntelligenceAdmin() {
             <button type="button" className="sa-btn ghost" onClick={exportCSV} title="সম্পূর্ণ ডেটাবেজ CSV ফরম্যাটে ডাউনলোড করুন">
               📥 Export CSV
             </button>
-            <button type="button" className="sa-btn ghost" onClick={() => loadData(q, riskFilter, page)} title="রিলোড করুন">
+            <button type="button" className="sa-btn ghost" onClick={() => loadData(q, riskFilter, page, false)} title="ম্যানুয়াল রিলোড করুন">
               🔄 রিফ্রেশ
             </button>
           </div>
@@ -31858,6 +31939,7 @@ function CourierIntelligenceAdmin() {
           onImportSuccess={() => {
             showToast('ডাটা সফলভাবে ইমপোর্ট ও মার্জ হয়েছে ✓');
             loadData(q, riskFilter, 1);
+            try { window.dispatchEvent(new CustomEvent('courier-intelligence-refresh')); } catch (_) {}
           }}
         />
       )}
