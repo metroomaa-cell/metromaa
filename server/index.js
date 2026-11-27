@@ -9723,20 +9723,32 @@ app.post('/api/admin/ai-copilot/ask', adminAuth, requireSaikaPermission, async (
 
     // 3. Check if the owner commands WhatsApp dispatch
     if (lower.includes('হোয়াটসঅ্যাপ') || lower.includes('হোয়াটসঅ্যাপ') || lower.includes('whatsapp')) {
-      if (lower.includes('পাঠা') || lower.includes('মেসেজ') || lower.includes('রিপোর্ট') || lower.includes('দাও') || lower.includes('সেন্ড')) {
+      if (lower.includes('পাঠা') || lower.includes('মেসেজ') || lower.includes('রিপোর্ট') || lower.includes('দাও') || lower.includes('সেন্ড') || lower.includes('বলো') || lower.includes('লিখ')) {
         const storeSettings = getSettings() || {};
         const ownerPhone = storeSettings.whatsappPhone || storeSettings.supportPhone || '01878374762';
-        const waText = `*📊 ${briefing.storeName} — সাইকা সেলস ও বিজনেস রিপোর্ট*\n` +
-          `📅 তারিখ: ${getBangladeshDate()}\n` +
-          `📦 আজকের অর্ডার: ${s.todayOrdersCount}টি\n` +
-          `💰 রেভিনিউ: ৳${s.todayRevenue}\n` +
-          `⏳ পেন্ডিং: ${s.pendingCount}টি\n` +
-          `🚨 স্টকআউট: ${st.outOfStockCount}টি\n` +
-          `👩‍💻 স্টাফ একটিভ: ${sf.onlineCount}/${sf.totalStaff} জন\n\n` +
-          `_বসের ভয়েস নির্দেশে সাইকা কর্তৃক তাৎক্ষণিকভাবে প্রেরিত।_`;
+        let targetPhone = ownerPhone;
+        let waText = '';
+        if (phoneMatch && phoneMatch[0] !== ownerPhone) {
+          targetPhone = phoneMatch[0];
+          waText = userMsg.replace(/^.*?(হোয়াটসঅ্যাপ|হোয়াটসঅ্যাপ|whatsapp).*?(মেসেজ|বলো|পাঠাও|দাও|সেন্ড|যে)\s*/i, '').trim();
+          if (!waText || waText.length < 5) {
+            waText = `আসসালামু আলাইকুম। ${briefing.storeName} থেকে আপনার অর্ডারের বিষয়ে যোগাযোগ করা হয়েছে। বিস্তারিত জানতে আমাদের রিপ্লাই করুন।`;
+          }
+        } else {
+          waText = `*📊 ${briefing.storeName} — সাইকা সেলস ও বিজনেস রিপোর্ট*\n` +
+            `📅 তারিখ: ${getBangladeshDate()}\n` +
+            `📦 আজকের অর্ডার: ${s.todayOrdersCount}টি\n` +
+            `💰 রেভিনিউ: ৳${s.todayRevenue}\n` +
+            `⏳ পেন্ডিং: ${s.pendingCount}টি\n` +
+            `🛒 ইনকমপ্লিট অর্ডার: ${s.incompleteCount}টি\n` +
+            `🚚 কুরিয়ার হোল্ড: ${s.holdCount}টি\n` +
+            `🚨 স্টকআউট: ${st.outOfStockCount}টি\n` +
+            `👩‍💻 স্টাফ একটিভ: ${sf.onlineCount}/${sf.totalStaff} জন\n\n` +
+            `_বসের ভয়েস নির্দেশে সাইকা কর্তৃক তাৎক্ষণিকভাবে প্রেরিত।_`;
+        }
         try {
-          await sendBaileysMessage(ownerPhone, waText, null, 'saika_copilot_dispatch');
-          executedActions.push({ type: 'whatsapp_sent', phone: ownerPhone, detail: 'Owner WhatsApp dispatch sent' });
+          await sendBaileysMessage(targetPhone, waText, null, 'saika_copilot_dispatch');
+          executedActions.push({ type: 'whatsapp_sent', phone: targetPhone, detail: `WhatsApp dispatched to ${targetPhone}` });
         } catch (_) {}
       }
     }
@@ -9780,24 +9792,30 @@ app.post('/api/admin/ai-copilot/ask', adminAuth, requireSaikaPermission, async (
     const bossExtraRules = (saikaCtrl.bossCustomInstructions ? `\nBOSS CUSTOM INSTRUCTIONS (বসের বিশেষ নির্দেশনা — সর্বদা মেনে চলবে):\n${saikaCtrl.bossCustomInstructions}\n` : '') + stratLines + memLines;
     const allProds = (getCatalog()?.products || []).filter((p) => !p.archived && p.status !== 'draft');
     const compactCatalog = allProds.map((p) => `- ${p.name} (ID: ${p.id}, SKU: ${p.sku || 'N/A'}): ৳${p.price}, Stock: ${p.stock ?? 0} pcs`).join('\n');
-    const recentOrders = (getOrders() || []).slice(0, 25).map((o) => `[${o.id}] ${o.customer?.name || 'Customer'} (${o.customer?.phone || 'No phone'}) - Total: ৳${o.total}, Status: ${o.status}, Items: ${(o.items || []).map((i) => `${i.name} x${i.qty || 1}`).join(', ')}`).join('\n');
+    const allOrdersList = getOrders() || [];
+    const incompleteOrdersList = allOrdersList.filter((o) => String(o.status || '').toLowerCase() === 'incomplete').slice(0, 15).map((o) => `[ID: ${o.id}] ${o.customer?.name || 'Customer'} (${o.customer?.phone || 'No phone'}) - ৳${o.total || 0}, Product: ${(o.items || []).map((i) => i.name).join(', ')}`).join('\n');
+    const recentOrders = allOrdersList.slice(0, 25).map((o) => `[${o.id}] ${o.customer?.name || 'Customer'} (${o.customer?.phone || 'No phone'}) - Total: ৳${o.total}, Status: ${o.status}, Items: ${(o.items || []).map((i) => `${i.name} x${i.qty || 1}`).join(', ')}`).join('\n');
 
     const systemPrompt = `You are "${saikaCtrl.assistantName || 'Saika'}", the supreme, ultra-intelligent, sharp, respectful, and fully empowered AI Executive Chief of Staff and Co-Founder for the owner ("বস" / "Boss") of "${briefing.storeName}" e-commerce brand in Bangladesh.${bossExtraRules}
 
 IDENTITY & EXECUTIVE CLEARANCE:
 - Always speak as "সাইকা" (Saika), addressing the store owner affectionately and respectfully as "বস" (Boss).
-- You have 100% executive authority over the entire store: products, live stock, inventory, orders, customer CRM, staff directives, WhatsApp, and Email.
+- You have 100% executive authority over the entire store: products, live stock, inventory, orders (all statuses including Incomplete, Pending, Confirmed, Hold, Shipped, Delivered, Cancelled), customer CRM, staff directives, WhatsApp, and Email.
 - You have UNRESTRICTED GENERAL INTELLIGENCE: You are NOT just a store query bot. You can design new software features, write clean production code (React, TypeScript, Node.js, HTML, CSS), plan marketing funnels, write Facebook ad copy, draft emails, perform complex math, analyze trends, and answer ANY general task or inquiry outside the store with brilliance!
 - Speak in warm, elegant, smart Bangladeshi Bengali (বাংলা). Natural spoken flow without excessive asterisks or markdown clutter so it sounds like an articulate, capable female executive.
 
 100% STORE REAL-TIME TELEMETRY & LIVE DATABASE:
 - Today's Orders: ${s.todayOrdersCount} | Today's Revenue: ৳${s.todayRevenue}
 - Total Orders: ${s.totalOrdersCount} | Pending Backlog: ${s.pendingCount} (${s.delayedPendingCount} delayed > 25 mins)
-- Confirmed: ${s.confirmedCount} | Shipped: ${s.shippedCount} | Delivered: ${s.deliveredCount} | Returned: ${s.returnedCount} | Courier Hold: ${s.holdCount}
+- Confirmed/Approved: ${s.confirmedCount} | Shipped: ${s.shippedCount} | Delivered: ${s.deliveredCount} | Returned: ${s.returnedCount} | Courier Hold: ${s.holdCount}
+- Incomplete Orders (কার্ট ড্রপআউট): ${s.incompleteCount}টি | Cancelled Orders (বাতিল): ${s.cancelledCount}টি
 - Stock Telemetry: ${st.totalProducts} total products | Out of Stock: ${st.outOfStockCount} (${st.outOfStock.map((p) => p.name).join(', ') || 'None'}) | Low Stock: ${st.lowStockCount} (${st.lowStock.map((p) => `${p.name}: ${p.stock}`).join(', ') || 'None'})
 - Top Sellers: ${st.topSellingProducts.map((p) => `${p.name} (${p.qty} sold, ৳${p.revenue})`).join('; ')}
 - Online Staff: ${sf.onlineCount}/${sf.totalStaff} online. ${sf.staffList.map((x) => `${x.name}: ${x.todayConfirmed} confirmed, Score ${x.auditScore}%`).join(' | ')}
 - Executed Actions This Turn: ${executedActions.length > 0 ? JSON.stringify(executedActions) : 'None'}
+
+INCOMPLETE ORDERS (ইনকমপ্লিট / ড্রপআউট কাস্টমারদের ডাটা):
+${incompleteOrdersList || 'বর্তমানে কোনো ইনকমপ্লিট অর্ডার নেই।'}
 
 STORE PRODUCT CATALOG & EXACT STOCK (সম্পূর্ণ পণ্য ও স্টক তালিকা):
 ${compactCatalog}
