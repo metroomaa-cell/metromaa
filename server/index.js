@@ -4285,6 +4285,7 @@ async function fraudCheck(phone, customFraudConfig, options = {}) {
   const fr = customFraudConfig || ig.fraud || {};
   let aggregatorSummary = null;
   let riskVerdict = null;
+  let matchedCustomerMeta = {};
 
   // 1. Internal Store Order Records
   try {
@@ -4296,6 +4297,11 @@ async function fraudCheck(phone, customFraudConfig, options = {}) {
     });
 
     if (custOrders.length > 0) {
+      matchedCustomerMeta = {
+        name: custOrders[0]?.customer?.name || '',
+        district: custOrders[0]?.customer?.district || '',
+        address: custOrders[0]?.customer?.address || ''
+      };
       let storeDelivered = 0;
       let storeCancelled = 0;
       let storeInTransit = 0;
@@ -4673,11 +4679,7 @@ async function fraudCheck(phone, customFraudConfig, options = {}) {
 
   // Persist & non-destructively merge into permanent Courier Intelligence database
   try {
-    mergeCourierProfile(p0, { couriers: couriersList }, {
-      name: custOrders[0]?.customer?.name,
-      district: custOrders[0]?.customer?.district,
-      address: custOrders[0]?.customer?.address
-    });
+    mergeCourierProfile(p0, { couriers: couriersList }, matchedCustomerMeta);
   } catch (saveErr) {
     console.error('Failed to save courier intelligence profile:', saveErr.message);
   }
