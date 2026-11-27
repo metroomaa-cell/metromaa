@@ -31298,6 +31298,7 @@ function CourierIntelligenceAdmin() {
   const [toast, setToast] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdatedTime, setLastUpdatedTime] = useState<string>('');
+  const [batchSync, setBatchSync] = useState<any>({ running: false, total: 0, processed: 0 });
 
   // Modals state
   const [showImportModal, setShowImportModal] = useState(false);
@@ -31314,6 +31315,41 @@ function CourierIntelligenceAdmin() {
     setToast(msg);
     setTimeout(() => setToast(''), 3000);
   };
+
+  const loadBatchSyncStatus = () => {
+    aFetch('/admin/courier-intelligence/batch-sync')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && d.ok && d.sync) {
+          setBatchSync(d.sync);
+        }
+      })
+      .catch(() => {});
+  };
+
+  const triggerBatchSync = (action: 'start' | 'stop') => {
+    aFetch('/admin/courier-intelligence/batch-sync', {
+      method: 'POST',
+      body: JSON.stringify({ action })
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d && d.ok && d.sync) {
+          setBatchSync(d.sync);
+          showToast(d.message || (action === 'start' ? 'অটো-আপগ্রেড শুরু হয়েছে' : 'থামানো হয়েছে'));
+          loadData(q, riskFilter, page, true);
+        }
+      })
+      .catch((err) => showToast(err.message || 'Error'));
+  };
+
+  useEffect(() => {
+    loadBatchSyncStatus();
+    const t = setInterval(() => {
+      loadBatchSyncStatus();
+    }, 3000);
+    return () => clearInterval(t);
+  }, []);
 
   const loadData = (searchVal = q, riskVal = riskFilter, pageNum = page, silent = false) => {
     if (!silent) setLoading(true);
@@ -31528,6 +31564,89 @@ function CourierIntelligenceAdmin() {
               🔄 রিফ্রেশ
             </button>
           </div>
+        </div>
+
+        {/* Bulk Courier API Auto-Upgrade Banner */}
+        <div
+          style={{
+            marginBottom: 20,
+            padding: '16px 20px',
+            background: batchSync.running
+              ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%)'
+              : 'linear-gradient(135deg, rgba(139, 92, 246, 0.12) 0%, rgba(59, 130, 246, 0.08) 100%)',
+            border: `1px solid ${batchSync.running ? 'rgba(16, 185, 129, 0.4)' : 'rgba(139, 92, 246, 0.3)'}`,
+            borderRadius: 12
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 24 }}>⚡</span>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9' }}>
+                  কুরিয়ার API অটো-আপগ্রেড (Steadfast, Pathao &amp; BD Courier Bulk Sync)
+                </div>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
+                  সিঙ্গেল সিঙ্গেল ক্লিক ছাড়াই সকল কাস্টমারের পার্সেল হিস্ট্রি কুরিয়ার সার্ভার থেকে ফেচ করে ডাটাবেজ স্বয়ংক্রিয়ভাবে আপগ্রেড করুন
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {batchSync.running ? (
+                <button
+                  type="button"
+                  className="sa-btn ghost"
+                  onClick={() => triggerBatchSync('stop')}
+                  style={{ borderColor: '#ef4444', color: '#ef4444', fontSize: 12.5 }}
+                >
+                  ⏸️ পজ / সাময়িক থামান
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="sa-btn primary"
+                  onClick={() => triggerBatchSync('start')}
+                  style={{
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    border: 'none',
+                    color: '#fff',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <span>🚀</span> সকল কাস্টমার এক ক্লিকে অটো-আপগ্রেড করুন
+                </button>
+              )}
+            </div>
+          </div>
+
+          {batchSync.running && (
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6, color: '#c4b5fd' }}>
+                <span>
+                  🔄 কুরিয়ার API থেকে আপগ্রেড হচ্ছে: <strong>{batchSync.processed}</strong> / <strong>{batchSync.total}</strong> কাস্টমার ({batchSync.currentPhone || 'প্রসেসিং...'})
+                </span>
+                <span style={{ fontWeight: 700, color: '#34d399' }}>
+                  {batchSync.total > 0 ? Math.round((batchSync.processed / batchSync.total) * 100) : 0}% সম্পন্ন
+                </span>
+              </div>
+              <div style={{ width: '100%', height: 7, background: 'rgba(255, 255, 255, 0.08)', borderRadius: 4, overflow: 'hidden' }}>
+                <div
+                  style={{
+                    width: `${batchSync.total > 0 ? (batchSync.processed / batchSync.total) * 100 : 0}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #8b5cf6, #10b981)',
+                    transition: 'width 0.3s ease'
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* KPI Stat Cards (Dark Violet Theme) */}

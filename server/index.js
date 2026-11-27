@@ -4911,6 +4911,103 @@ app.post('/api/admin/courier-intelligence/check', adminAuth, requireRole('owner'
   res.json({ ok: true, result, profile });
 });
 
+// ========================================================
+// Bulk Batch Auto-Upgrade Engine for Courier Intelligence
+// ========================================================
+let courierBatchSync = {
+  running: false,
+  total: 0,
+  processed: 0,
+  updated: 0,
+  currentPhone: '',
+  errors: 0,
+  startedAt: null,
+  completedAt: null,
+  shouldStop: false
+};
+
+async function runCourierBatchSync() {
+  if (courierBatchSync.running) return;
+  const map = getCourierIntelligenceMap();
+  const allProfiles = Object.values(map);
+
+  // Target profiles that have no external courier data (only Store Internal) or haven't been checked
+  let targets = allProfiles.filter((p) => {
+    const ext = (p.couriers || []).filter(
+      (c) => c.source !== 'internal' && c.courier !== 'Store Internal' && c.courier !== 'Store Internal Orders'
+    );
+    return ext.length === 0;
+  });
+
+  if (targets.length === 0) {
+    // If all have some courier data, check those not checked in the last 24h
+    const now = Date.now();
+    targets = allProfiles.filter(
+      (p) => !p.lastCheckedAt || now - new Date(p.lastCheckedAt).getTime() > 24 * 60 * 60 * 1000
+    );
+  }
+
+  if (targets.length === 0) {
+    courierBatchSync = { ...courierBatchSync, running: false, total: 0, processed: 0, completedAt: new Date().toISOString() };
+    return;
+  }
+
+  courierBatchSync = {
+    running: true,
+    total: targets.length,
+    processed: 0,
+    updated: 0,
+    currentPhone: '',
+    errors: 0,
+    startedAt: new Date().toISOString(),
+    completedAt: null,
+    shouldStop: false
+  };
+
+  (async () => {
+    for (const target of targets) {
+      if (courierBatchSync.shouldStop) {
+        courierBatchSync.running = false;
+        break;
+      }
+      courierBatchSync.currentPhone = target.phone;
+      try {
+        await fraudCheck(target.phone, null, { forceRefresh: true });
+        courierBatchSync.updated++;
+      } catch (err) {
+        courierBatchSync.errors++;
+      }
+      courierBatchSync.processed++;
+      // Safe 400ms delay between API queries to avoid rate limits
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    courierBatchSync.running = false;
+    courierBatchSync.completedAt = new Date().toISOString();
+  })().catch(() => {
+    courierBatchSync.running = false;
+  });
+}
+
+// Check batch sync status
+app.get('/api/admin/courier-intelligence/batch-sync', adminAuth, (req, res) => {
+  res.json({ ok: true, sync: courierBatchSync });
+});
+
+// Trigger or stop batch sync
+app.post('/api/admin/courier-intelligence/batch-sync', adminAuth, requireRole('owner', 'manager', 'staff'), (req, res) => {
+  const action = req.body?.action || 'start';
+  if (action === 'stop') {
+    courierBatchSync.shouldStop = true;
+    courierBatchSync.running = false;
+    return res.json({ ok: true, message: 'অটো-আপগ্রেড থামানো হয়েছে', sync: courierBatchSync });
+  }
+
+  if (!courierBatchSync.running) {
+    runCourierBatchSync();
+  }
+  res.json({ ok: true, message: 'কুরিয়ার API থেকে অটো-আপগ্রেড শুরু হয়েছে', sync: courierBatchSync });
+});
+
 app.get('/api/admin/courier-intelligence/export', adminAuth, requireRole('owner', 'manager'), (req, res) => {
   try {
     const map = getCourierIntelligenceMap();
