@@ -238,7 +238,7 @@ export function SecrateAiAssistant() {
     fetch('/api/admin/me', { headers: { 'x-admin-token': tok } })
       .then((r) => r.json())
       .then((u) => {
-        if (u?.role === 'owner' || u?.permissions?.canAccessSaika === true) {
+        if (u?.role === 'owner' || u?.canAccessSaika === true || u?.permissions?.canAccessSaika === true) {
           setHasAccess(true);
         } else {
           setHasAccess(false);
@@ -247,6 +247,10 @@ export function SecrateAiAssistant() {
       .catch(() => setHasAccess(false));
   }, []);
   const [open, setOpen] = useState(false);
+  const [assistantName, setAssistantName] = useState('Saika Executive AI');
+  const [showFloatingOrb, setShowFloatingOrb] = useState<boolean>(() => {
+    try { return localStorage.getItem('saika_show_floating') !== 'false'; } catch { return true; }
+  });
   const [viewMode, setViewMode] = useState<'mini' | 'popup' | 'drawer'>(() => {
     try { return (localStorage.getItem('saika_view_mode') as any) || 'popup'; } catch { return 'popup'; }
   });
@@ -335,12 +339,45 @@ export function SecrateAiAssistant() {
   const [keyMsg, setKeyMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   // Bengali Best Human Voice (Gemini Live Call Center Tech)
-  const [selectedLiveVoice, setSelectedLiveVoice] = useState<'Aoede' | 'Leda'>(() => {
+  const [selectedLiveVoice, setSelectedLiveVoice] = useState<'Aoede' | 'Leda' | 'Kore' | 'Zephyr' | 'Puck'>(() => {
     try { return (localStorage.getItem('saika_live_voice') as any) || 'Aoede'; } catch { return 'Aoede'; }
   });
   const [micPermissionGranted, setMicPermissionGranted] = useState(false);
   const [latestLiveRole, setLatestLiveRole] = useState<'user' | 'ai' | null>(null);
   const [latestLiveText, setLatestLiveText] = useState('');
+
+  // Sync with Unified Saika Control Center settings in real time
+  useEffect(() => {
+    if (!hasAccess) return;
+    aiFetch('/admin/saika/control')
+      .then((d) => {
+        const c = d?.config;
+        if (!c) return;
+        if (typeof c.showFloatingOrb === 'boolean') {
+          setShowFloatingOrb(c.showFloatingOrb);
+          try { localStorage.setItem('saika_show_floating', String(c.showFloatingOrb)); } catch {}
+        }
+        if (typeof c.wakeWordEnabled === 'boolean') setWakeWordEnabled(c.wakeWordEnabled);
+        if (typeof c.proactiveVoiceAlert === 'boolean') setProactiveVoiceAlert(c.proactiveVoiceAlert);
+        if (c.liveVoiceName) setSelectedLiveVoice(c.liveVoiceName);
+        if (c.ttsVoiceName) setSelectedVoice(c.ttsVoiceName);
+        if (c.assistantName) setAssistantName(c.assistantName);
+      })
+      .catch(() => {});
+
+    const onCfgUpdate = (ev: any) => {
+      const c = ev?.detail;
+      if (!c) return;
+      if (typeof c.showFloatingOrb === 'boolean') setShowFloatingOrb(c.showFloatingOrb);
+      if (typeof c.wakeWordEnabled === 'boolean') setWakeWordEnabled(c.wakeWordEnabled);
+      if (typeof c.proactiveVoiceAlert === 'boolean') setProactiveVoiceAlert(c.proactiveVoiceAlert);
+      if (c.liveVoiceName) setSelectedLiveVoice(c.liveVoiceName);
+      if (c.ttsVoiceName) setSelectedVoice(c.ttsVoiceName);
+      if (c.assistantName) setAssistantName(c.assistantName);
+    };
+    window.addEventListener('saika-config-updated', onCfgUpdate);
+    return () => window.removeEventListener('saika-config-updated', onCfgUpdate);
+  }, [hasAccess]);
 
   const fetchKeyStatus = useCallback(async () => {
     try {
@@ -677,6 +714,8 @@ export function SecrateAiAssistant() {
 
       if (res && res.ok) {
         const botReply = res.reply || 'বস, আমি তথ্য বিশ্লেষণ করেছি কিন্তু কোনো মন্তব্য নেই।';
+        setLatestLiveRole('ai');
+        setLatestLiveText(botReply);
         setMessages((prev) => [
           ...prev,
           {
@@ -931,7 +970,7 @@ export function SecrateAiAssistant() {
           ALWAYS-ON FLOATING SAIKA CAPSULE (WHEN CLOSED)
           Allows hands-free "Hello Saika" wake-up without clicking
          ========================================================================= */}
-      {!open && (
+      {!open && showFloatingOrb && (
         <div
           onClick={async () => {
             playWakeChime();
@@ -1027,7 +1066,7 @@ export function SecrateAiAssistant() {
           {/* Center Transcription & Status */}
           <div style={{ flex: 1, minWidth: 150, display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#f3e8ff', letterSpacing: '0.2px' }}>Saika Executive AI</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#f3e8ff', letterSpacing: '0.2px' }}>{assistantName}</span>
               <span style={{
                 fontSize: 10,
                 fontWeight: 700,
@@ -1069,7 +1108,7 @@ export function SecrateAiAssistant() {
             onSubmit={(e) => {
               e.preventDefault();
               if (inputText.trim()) {
-                askQuestion(inputText.trim());
+                sendMessage(inputText.trim());
                 setInputText('');
               }
             }}
@@ -1111,6 +1150,30 @@ export function SecrateAiAssistant() {
               {asking ? '...' : 'পাঠান'}
             </button>
           </form>
+
+          {/* Open Full Saika AI Control Center Button */}
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('admin-navigate-saika'));
+            }}
+            title="Saika AI Full Control Center খুলুন"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              background: 'rgba(139, 92, 246, 0.16)',
+              border: '1px solid rgba(167, 139, 250, 0.32)',
+              color: '#ddd6fe',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 13
+            }}
+          >
+            ⚙️
+          </button>
 
           {/* Voice Mute Toggle */}
           <button

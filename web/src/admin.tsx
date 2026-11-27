@@ -13,6 +13,7 @@ import { LiveAiCallClient } from './liveAiCall';
 import { AdminBrowserCall } from './WebCall';
 import { AdminTopNavbar } from './AdminTopNavbar';
 import { SecrateAiAssistant } from './SecrateAiAssistant';
+import { SaikaAiAdmin, type SaikaSection } from './SaikaAiAdmin';
 import { EcomDriveDashboard } from './EcomDriveDashboard';
 
 const KEY = 'dot_admin';
@@ -2447,11 +2448,13 @@ export function Admin() {
 
   const role = me?.role || 'owner';
   const perms = me?.permissions || {};
+  const canUseSaika = role === 'owner' || !!me?.canAccessSaika || !!perms.canAccessSaika;
   const allowed = role === 'owner'
-    ? ['dashboard', 'orders', 'scanner', 'campaigns', 'finance', 'reports', 'payment_gateways', 'whatsapp', 'message_marketing', 'calls', 'emails', 'push_popups', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings']
+    ? ['dashboard', 'saika', 'orders', 'scanner', 'campaigns', 'finance', 'reports', 'payment_gateways', 'whatsapp', 'message_marketing', 'calls', 'emails', 'push_popups', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings']
     : role === 'manager'
       ? [
           'dashboard', 'orders', 'scanner', 'calls', 'emails', 'push_popups', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings',
+          ...(canUseSaika ? ['saika'] : []),
           ...(perms.canViewCampaigns !== false ? ['campaigns'] : []),
           ...(perms.canViewWhatsApp !== false ? ['whatsapp'] : []),
           ...(perms.canViewWhatsApp !== false ? ['message_marketing'] : []),
@@ -2459,6 +2462,7 @@ export function Admin() {
         ]
       : [
           'dashboard', 'orders', 'scanner', 'customers', 'calls', 'emails',
+          ...(canUseSaika ? ['saika'] : []),
           ...(perms.canViewCampaigns ? ['campaigns'] : []),
           ...(perms.canViewWhatsApp ? ['whatsapp'] : []),
           ...(perms.canViewWhatsApp ? ['message_marketing'] : []),
@@ -2522,6 +2526,7 @@ export function Admin() {
   };
 
   const [activeSubItem, setActiveSubItem] = useState<string>(() => ({
+    saika: 'Command Center',
     orders: 'Order List', scanner: 'Scan To Update', fraud: 'Fraud & Risk Protection',
     campaigns: 'Ad Profit Analysis', products: 'Product List', categories: 'Categories',
     colors: 'Color Palette', landings: 'Landing Pages', media: 'Media Library',
@@ -2537,6 +2542,7 @@ export function Admin() {
       return Array.isArray(parsed) ? parsed.filter((p) => p && typeof p.id === 'string' && typeof p.label === 'string').slice(0, 8) : [];
     } catch { return []; }
   });
+  const [saikaSection, setSaikaSection] = useState<SaikaSection>('overview');
   const [adsSubTab, setAdsSubTab] = useState<'dashboard' | 'meta' | 'spend' | 'profit' | 'tiktok' | 'google'>('profit');
   const [financeSection, setFinanceSection] = useState<'dashboard' | 'accounts' | 'income' | 'courier' | 'cashflow' | 'assets'>('dashboard');
   const [reportSection, setReportSection] = useState('profit_loss');
@@ -2544,6 +2550,7 @@ export function Admin() {
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     const groupForNav: Record<string, string> = {
+      saika: 'saika_ai',
       orders: 'approved_orders', scanner: 'approved_orders', fraud: 'approved_orders',
       campaigns: 'ads', products: 'inventory', categories: 'inventory', colors: 'inventory', landings: 'inventory', media: 'inventory',
       whatsapp: 'messages', message_marketing: 'messages', emails: 'messages', push_popups: 'messages', finance: 'finance', reports: 'reports', payment_gateways: 'purchase', coupons: 'purchase',
@@ -2552,7 +2559,7 @@ export function Admin() {
     const currentGroup = cur === 'integrations' && activeSubItem === 'Courier API Setup'
       ? 'approved_orders'
       : cur === 'finance' && activeSubItem === 'Courier Invoice Upload' ? 'approved_orders' : groupForNav[cur];
-    const groups = ['approved_orders', 'ads', 'web_orders', 'inventory', 'messages', 'purchase', 'finance', 'reports', 'task_followup', 'call_center', 'store_settings', 'work_inbox'];
+    const groups = ['saika_ai', 'approved_orders', 'ads', 'web_orders', 'inventory', 'messages', 'purchase', 'finance', 'reports', 'task_followup', 'call_center', 'store_settings', 'work_inbox'];
     let savedGroup = '';
     try {
       const saved = sessionStorage.getItem('sa_sidebar_open_groups');
@@ -2589,6 +2596,7 @@ export function Admin() {
 
   useEffect(() => {
     const navToGroup: Record<string, string> = {
+      saika: 'saika_ai',
       orders: 'approved_orders',
       scanner: 'approved_orders',
       fraud: 'approved_orders',
@@ -2705,6 +2713,17 @@ export function Admin() {
       navigateToCourierReconcile();
       return;
     }
+    if (page.id === 'saika') {
+      const secMap: Record<string, SaikaSection> = {
+        'Command Center': 'overview',
+        'API & Model Setup': 'api',
+        'Voice & Widget Studio': 'voice',
+        'Channel Controls': 'channels',
+        'Knowledge & Training': 'knowledge',
+        'Staff Access & Logs': 'access',
+      };
+      setSaikaSection(secMap[page.label] || 'overview');
+    }
     if (page.id === 'campaigns') {
       const tab = page.label === 'Meta Ads' ? 'meta' : page.label === 'Ads Dashboard' ? 'dashboard' : page.label === 'Record Ad Spend' ? 'spend' : page.label === 'TikTok Ads' ? 'tiktok' : page.label === 'Google Ads' ? 'google' : 'profit';
       setAdsSubTab(tab as any);
@@ -2781,6 +2800,27 @@ export function Admin() {
     setNavq('');
     setMobileMenuOpen(false);
   };
+
+  const navigateSaikaSection = (sec: SaikaSection, label: string) => {
+    setSaikaSection(sec);
+    setActiveSubItem(label);
+    setNav('saika');
+    setNavq('');
+    setMobileMenuOpen(false);
+  };
+
+  useEffect(() => {
+    const onGoSaika = (e: any) => {
+      const sec: SaikaSection = e?.detail?.section || 'overview';
+      const lbl = e?.detail?.label || 'Command Center';
+      setOpenGroups((prev) => Object.fromEntries(Object.keys(prev).map((g) => [g, g === 'saika_ai'])));
+      setSaikaSection(sec);
+      setActiveSubItem(lbl);
+      setNav('saika');
+    };
+    window.addEventListener('admin-navigate-saika', onGoSaika);
+    return () => window.removeEventListener('admin-navigate-saika', onGoSaika);
+  }, []);
 
   const renderGroup = (
     groupId: string,
@@ -3060,6 +3100,25 @@ export function Admin() {
           )}
           {/* Section: OPERATIONS */}
           <div className="sa-sec-label">OPERATIONS</div>
+
+          {/* 0. Saika AI — Dedicated Full Control Column */}
+          {renderGroup(
+            'saika_ai',
+            'Saika AI',
+            <svg className="sa-grp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18, flexShrink: 0, color: '#c4b5fd' }}>
+              <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z" />
+              <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z" />
+              <path d="M5 17l.6 1.4L7 19l-1.4.6L5 21l-.6-1.4L3 19l1.4-.6L5 17z" />
+            </svg>,
+            [
+              { id: 'saika', label: 'Command Center', action: () => navigateSaikaSection('overview', 'Command Center') },
+              { id: 'saika', label: 'API & Model Setup', action: () => navigateSaikaSection('api', 'API & Model Setup') },
+              { id: 'saika', label: 'Voice & Widget Studio', action: () => navigateSaikaSection('voice', 'Voice & Widget Studio') },
+              { id: 'saika', label: 'Channel Controls', action: () => navigateSaikaSection('channels', 'Channel Controls') },
+              { id: 'saika', label: 'Knowledge & Training', action: () => navigateSaikaSection('knowledge', 'Knowledge & Training') },
+              { id: 'saika', label: 'Staff Access & Logs', action: () => navigateSaikaSection('access', 'Staff Access & Logs') },
+            ]
+          )}
 
           {/* 1. Web Orders */}
           {renderGroup(
@@ -3361,6 +3420,16 @@ export function Admin() {
           setActiveSubItem(label);
           setNav(tab);
         }} onOrdersView={(label, filter, search = '', range = 'all') => navigateOrders(label, filter, search, false, range)} />}
+        {cur === 'saika' && (
+          <SaikaAiAdmin
+            activeSection={saikaSection}
+            userRole={role}
+            onSectionChange={(sec, lbl) => {
+              setSaikaSection(sec);
+              if (lbl) setActiveSubItem(lbl);
+            }}
+          />
+        )}
         {cur === 'orders' && (
           <OrdersAdmin
             searchQuery={ordersSearch}

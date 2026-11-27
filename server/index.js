@@ -1962,9 +1962,12 @@ app.put('/api/admin/security-email', adminAuth, requireRole('owner'), (req, res)
 app.get('/api/admin/me', adminAuth, (req, res) => {
   const admin = req.admin || {};
   const isOwner = admin.role === 'owner';
+  const freshUser = admin.username ? getUsers().find((u) => u.username === admin.username) : null;
+  const hasSaika = isOwner || !!(freshUser ? (freshUser.canAccessSaika || freshUser.permissions?.canAccessSaika) : (admin.canAccessSaika || admin.permissions?.canAccessSaika));
   res.json({
     ...admin,
-    canAccessSaika: isOwner ? true : !!admin.canAccessSaika
+    canAccessSaika: hasSaika,
+    permissions: { ...(admin.permissions || {}), ...(freshUser?.permissions || {}), canAccessSaika: hasSaika }
   });
 });
 app.post('/api/admin/logout', adminAuth, (req, res) => {
@@ -2031,6 +2034,14 @@ app.patch('/api/admin/users/:id', adminAuth, requireRole('owner'), (req, res) =>
   if (b.email != null) u.email = String(b.email).trim().toLowerCase();
   if (b.role && ['manager', 'staff'].includes(b.role)) u.role = b.role;
   if (b.skipOtp != null) u.skipOtp = !!b.skipOtp;
+  if (b.canAccessSaika != null) {
+    u.canAccessSaika = !!b.canAccessSaika;
+    u.permissions = { ...(u.permissions || {}), canAccessSaika: !!b.canAccessSaika };
+  }
+  if (b.permissions && typeof b.permissions === 'object') {
+    u.permissions = { ...(u.permissions || {}), ...b.permissions };
+    if (b.permissions.canAccessSaika != null) u.canAccessSaika = !!b.permissions.canAccessSaika;
+  }
   if (Array.isArray(b.allowedProducts)) u.allowedProducts = b.allowedProducts.map(String);
   if (!u.skipOtp && (!u.email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(u.email))) {
     return res.status(400).json({ error: '2FA OTP চালু রাখতে স্টাফের নিজস্ব ইমেইল ঠিকানা অবশ্যই দিতে হবে।' });
@@ -7176,34 +7187,107 @@ const HOST = process.env.HOST || '0.0.0.0';
 // ==========================================
 
 // ==========================================
-// STORE GEMINI API KEY HELPERS & TEST ENDPOINTS
+// STORE GEMINI API KEY HELPERS & TEST ENDPOINTS (Multi-Key Auto-Failover)
 // ==========================================
-export function getStoreGeminiApiKey() {
+const failedGeminiKeysCooldown = new Map(); // key -> timestamp
+
+export function getStoreGeminiApiKeysList() {
   const ig = getIntegrations() || {};
   const wa = getWhatsAppSettings() || {};
+  const tel = getTelephonySettings() || {};
   const settings = getSettings() || {};
-  const key = String(
-    ig.geminiApiKey ||
-    ig.ai?.geminiApiKey ||
-    wa.geminiApiKey ||
-    settings.geminiApiKey ||
-    process.env.GEMINI_API_KEY ||
-    ''
-  ).trim();
-  return key;
+  const rawList = [
+    ...(Array.isArray(ig.saikaConfig?.geminiApiKeys) ? ig.saikaConfig.geminiApiKeys : []),
+    ig.geminiApiKey,
+    ig.ai?.geminiApiKey,
+    wa.geminiApiKey,
+    tel.aiCalling?.geminiApiKey,
+    settings.geminiApiKey,
+    process.env.GEMINI_API_KEY,
+  ];
+  const unique = [];
+  for (const k of rawList) {
+    const clean = String(k || '').trim();
+    if (clean && !unique.includes(clean)) unique.push(clean);
+  }
+  return unique;
 }
 
-export function saveStoreGeminiApiKey(rawKey) {
+export function markGeminiKeyCooldown(key) {
+  if (key) failedGeminiKeysCooldown.set(String(key).trim(), Date.now() + 5 * 60 * 1000);
+}
+
+export function getStoreGeminiApiKey() {
+  const all = getStoreGeminiApiKeysList();
+  const now = Date.now();
+  for (const k of all) {
+    const until = failedGeminiKeysCooldown.get(k) || 0;
+    if (until <= now) return k;
+  }
+  return all[0] || '';
+}
+
+export function saveStoreGeminiApiKey(rawKey, backupKeys = null) {
   const key = String(rawKey || '').trim();
   const ig = getIntegrations() || {};
   ig.geminiApiKey = key;
   if (!ig.whatsapp) ig.whatsapp = {};
   ig.whatsapp.geminiApiKey = key;
+  if (!ig.saikaConfig) ig.saikaConfig = {};
+  if (Array.isArray(backupKeys)) {
+    const merged = [key, ...backupKeys.map((x) => String(x || '').trim())].filter(Boolean);
+    ig.saikaConfig.geminiApiKeys = [...new Set(merged)];
+  } else if (key) {
+    const prev = Array.isArray(ig.saikaConfig.geminiApiKeys) ? ig.saikaConfig.geminiApiKeys : [];
+    ig.saikaConfig.geminiApiKeys = [key, ...prev.filter((x) => x && x !== key)];
+  }
   saveIntegrations(ig);
   try {
     saveWhatsAppSettings({ geminiApiKey: key });
   } catch (_) {}
+  try {
+    const tel = getTelephonySettings() || {};
+    if (!tel.aiCalling) tel.aiCalling = {};
+    tel.aiCalling.geminiApiKey = key;
+    saveTelephonySettings(tel);
+  } catch (_) {}
   return key;
+}
+
+export function getUnifiedSaikaControlConfig() {
+  const ig = getIntegrations() || {};
+  const sc = ig.saikaConfig || {};
+  const tel = getTelephonySettings() || {};
+  const aiCall = tel.aiCalling || {};
+  const waAi = getWaAiConfig();
+  const keys = getStoreGeminiApiKeysList();
+  const mask = (k) => (k && k.length > 10 ? `${k.slice(0, 6)}••••${k.slice(-4)}` : (k ? '••••••' : ''));
+  return {
+    assistantName: sc.assistantName || 'Saika (সাইকা)',
+    preferredModel: sc.preferredModel || 'gemini-2.5-flash',
+    liveVoiceModel: sc.liveVoiceModel || 'gemini-3.8-live',
+    liveVoiceName: ['Aoede', 'Leda', 'Kore', 'Zephyr', 'Puck'].includes(sc.liveVoiceName || aiCall.voiceName) ? (sc.liveVoiceName || aiCall.voiceName) : 'Aoede',
+    ttsVoiceName: sc.ttsVoiceName || 'bn-BD-NabanitaNeural',
+    showFloatingOrb: sc.showFloatingOrb !== false,
+    wakeWordEnabled: !!sc.wakeWordEnabled,
+    proactiveVoiceAlert: sc.proactiveVoiceAlert !== false,
+    adminAssistantEnabled: sc.adminAssistantEnabled !== false,
+    autopilotEnabled: sc.autopilotEnabled !== undefined ? !!sc.autopilotEnabled : !!aiCopilotAutopilot.enabled,
+    autopilotIntervalMins: Math.max(5, Math.min(120, Number(sc.autopilotIntervalMins) || 15)),
+    delayedPendingMins: Math.max(10, Math.min(180, Number(sc.delayedPendingMins) || 25)),
+    bossCustomInstructions: String(sc.bossCustomInstructions || ''),
+    customerCallInstructions: String(aiCall.aiPersonaPrompt || sc.customerCallInstructions || ''),
+    websiteVoiceCallEnabled: aiCall.enabled !== false && aiCall.websiteInboundAi !== false,
+    outboundConfirmCallEnabled: aiCall.enabled !== false && aiCall.outboundConfirmEnabled !== false,
+    marketingCallEnabled: aiCall.marketingModeEnabled !== false,
+    quietHoursEnabled: !!aiCall.quietHoursEnabled,
+    quietStartHour: Number.isFinite(Number(aiCall.quietStartHour)) ? Number(aiCall.quietStartHour) : 22,
+    quietEndHour: Number.isFinite(Number(aiCall.quietEndHour)) ? Number(aiCall.quietEndHour) : 9,
+    whatsappAi: waAi,
+    keysCount: keys.length,
+    maskedKeys: keys.map((k, idx) => ({ index: idx, masked: mask(k), isPrimary: idx === 0 })),
+    hasApiKey: keys.length > 0,
+  };
 }
 
 app.post('/api/ai-call/test-key', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
@@ -9632,11 +9716,15 @@ app.post('/api/admin/ai-copilot/ask', adminAuth, requireSaikaPermission, async (
 
     // 5. Build 100% Grounded Full-Store Intelligence Context
     const apiKey = getStoreGeminiApiKey();
+    const saikaCtrl = getUnifiedSaikaControlConfig();
+    const bossExtraRules = saikaCtrl.bossCustomInstructions
+      ? `\nBOSS CUSTOM INSTRUCTIONS (বসের বিশেষ নির্দেশনা — সর্বদা মেনে চলবে):\n${saikaCtrl.bossCustomInstructions}\n`
+      : '';
     const allProds = (getCatalog()?.products || []).filter((p) => !p.archived && p.status !== 'draft');
     const compactCatalog = allProds.map((p) => `- ${p.name} (ID: ${p.id}, SKU: ${p.sku || 'N/A'}): ৳${p.price}, Stock: ${p.stock ?? 0} pcs`).join('\n');
     const recentOrders = (getOrders() || []).slice(0, 25).map((o) => `[${o.id}] ${o.customer?.name || 'Customer'} (${o.customer?.phone || 'No phone'}) - Total: ৳${o.total}, Status: ${o.status}, Items: ${(o.items || []).map((i) => `${i.name} x${i.qty || 1}`).join(', ')}`).join('\n');
 
-    const systemPrompt = `You are "Saika" (সাইকা), the supreme, ultra-intelligent, sharp, respectful, and fully empowered AI Executive Chief of Staff and Co-Founder for the owner ("বস" / "Boss") of "${briefing.storeName}" e-commerce brand in Bangladesh.
+    const systemPrompt = `You are "${saikaCtrl.assistantName || 'Saika'}", the supreme, ultra-intelligent, sharp, respectful, and fully empowered AI Executive Chief of Staff and Co-Founder for the owner ("বস" / "Boss") of "${briefing.storeName}" e-commerce brand in Bangladesh.${bossExtraRules}
 
 IDENTITY & EXECUTIVE CLEARANCE:
 - Always speak as "সাইকা" (Saika), addressing the store owner affectionately and respectfully as "বস" (Boss).
@@ -9664,39 +9752,47 @@ COMMAND EXECUTION & STORE ACTIONS:
 - If the Boss asks to build a feature or write code, provide direct, ready-to-use, clean code and architecture.
 - Always be truthful to actual numbers. If something is out of stock, warn the Boss immediately.`;
 
-    if (apiKey) {
-      const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
-      for (const model of models) {
-        try {
-          const contents = [
-            ...history.slice(-6).map((h) => ({
-              role: h.role === 'assistant' ? 'model' : 'user',
-              parts: [{ text: String(h.text || '') }]
-            })),
-            { role: 'user', parts: [{ text: userMsg }] }
-          ];
-          const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              systemInstruction: { parts: [{ text: systemPrompt }] },
-              contents,
-              generationConfig: { temperature: 0.65, maxOutputTokens: 1000 }
-            })
-          });
-          if (resp.ok) {
-            const data = await resp.json();
-            const replyText = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-            if (replyText) {
-              return res.json({
-                ok: true,
-                reply: replyText,
-                executedActions,
-                briefing: buildAiCopilotBriefing()
-              });
+    const allApiKeys = getStoreGeminiApiKeysList();
+    if (allApiKeys.length > 0 && saikaCtrl.adminAssistantEnabled !== false) {
+      const pref = saikaCtrl.preferredModel || 'gemini-2.5-flash';
+      const models = [...new Set([pref, 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'])];
+      for (const candidateKey of allApiKeys) {
+        for (const model of models) {
+          try {
+            const contents = [
+              ...history.slice(-6).map((h) => ({
+                role: h.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: String(h.text || '') }]
+              })),
+              { role: 'user', parts: [{ text: userMsg }] }
+            ];
+            const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(candidateKey)}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                contents,
+                generationConfig: { temperature: 0.65, maxOutputTokens: 1000 }
+              })
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              const replyText = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+              if (replyText) {
+                return res.json({
+                  ok: true,
+                  model,
+                  reply: replyText,
+                  executedActions,
+                  briefing: buildAiCopilotBriefing()
+                });
+              }
+            } else if (resp.status === 429 || resp.status === 403 || resp.status === 401) {
+              markGeminiKeyCooldown(candidateKey);
+              break;
             }
-          }
-        } catch (_) {}
+          } catch (_) {}
+        }
       }
     }
 
@@ -9746,6 +9842,210 @@ COMMAND EXECUTION & STORE ACTIONS:
       executedActions,
       briefing: buildAiCopilotBriefing()
     });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
+// ============================================================================
+// ---- UNIFIED SAIKA AI COMMAND CENTER CONTROL ENDPOINTS ----
+// ============================================================================
+app.get('/api/admin/saika/control', adminAuth, requireSaikaPermission, (_req, res) => {
+  try {
+    const config = getUnifiedSaikaControlConfig();
+    const faqs = getWaAiFaqs();
+    const users = getUsers().map((u) => ({
+      id: u.id,
+      username: u.username,
+      name: u.name || u.username,
+      role: u.role || 'staff',
+      canAccessSaika: u.role === 'owner' ? true : !!(u.canAccessSaika || u.permissions?.canAccessSaika),
+    }));
+    const aiCalls = getCalls({}).filter((c) => c.staff?.role === 'ai' || String(c.notes || '').includes('[AI') || String(c.notes || '').includes('[Live AI')).slice(0, 30);
+    const aiNotifs = getStaffNotifications('owner').filter((n) => n.fromUsername === 'saika_ai' || n.fromUsername === 'ai-agent' || String(n.type || '').startsWith('ai_')).slice(0, 30);
+    res.json({
+      ok: true,
+      config,
+      faqs,
+      users,
+      logs: {
+        calls: aiCalls,
+        directives: aiNotifs,
+      },
+      storeSummary: {
+        productsCount: (getCatalog()?.products || []).filter((p) => !p.archived).length,
+        landingsCount: (getLandings() || []).filter((l) => l.status === 'live').length,
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
+app.put('/api/admin/saika/control', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  try {
+    const b = req.body || {};
+    const ig = getIntegrations() || {};
+    if (!ig.saikaConfig) ig.saikaConfig = {};
+    const sc = ig.saikaConfig;
+
+    if (typeof b.assistantName === 'string' && b.assistantName.trim()) sc.assistantName = b.assistantName.trim().slice(0, 60);
+    if (typeof b.preferredModel === 'string' && b.preferredModel.trim()) sc.preferredModel = b.preferredModel.trim();
+    if (typeof b.liveVoiceModel === 'string' && b.liveVoiceModel.trim()) sc.liveVoiceModel = b.liveVoiceModel.trim();
+    if (typeof b.liveVoiceName === 'string' && ['Aoede', 'Leda', 'Kore', 'Zephyr', 'Puck'].includes(b.liveVoiceName)) sc.liveVoiceName = b.liveVoiceName;
+    if (typeof b.ttsVoiceName === 'string' && b.ttsVoiceName.trim()) sc.ttsVoiceName = b.ttsVoiceName.trim();
+    if (typeof b.showFloatingOrb === 'boolean') sc.showFloatingOrb = b.showFloatingOrb;
+    if (typeof b.wakeWordEnabled === 'boolean') sc.wakeWordEnabled = b.wakeWordEnabled;
+    if (typeof b.proactiveVoiceAlert === 'boolean') sc.proactiveVoiceAlert = b.proactiveVoiceAlert;
+    if (typeof b.adminAssistantEnabled === 'boolean') sc.adminAssistantEnabled = b.adminAssistantEnabled;
+    if (typeof b.autopilotEnabled === 'boolean') {
+      sc.autopilotEnabled = b.autopilotEnabled;
+      aiCopilotAutopilot.enabled = b.autopilotEnabled;
+    }
+    if (b.autopilotIntervalMins !== undefined) sc.autopilotIntervalMins = Math.max(5, Math.min(120, Number(b.autopilotIntervalMins) || 15));
+    if (b.delayedPendingMins !== undefined) sc.delayedPendingMins = Math.max(10, Math.min(180, Number(b.delayedPendingMins) || 25));
+    if (typeof b.bossCustomInstructions === 'string') sc.bossCustomInstructions = b.bossCustomInstructions.slice(0, 4000);
+    if (typeof b.customerCallInstructions === 'string') sc.customerCallInstructions = b.customerCallInstructions.slice(0, 4000);
+
+    saveIntegrations(ig);
+
+    // Sync Telephony AI Call Settings
+    const tel = getTelephonySettings() || {};
+    if (!tel.aiCalling) tel.aiCalling = {};
+    if (typeof b.websiteVoiceCallEnabled === 'boolean') {
+      tel.aiCalling.websiteInboundAi = b.websiteVoiceCallEnabled;
+      if (b.websiteVoiceCallEnabled) tel.aiCalling.enabled = true;
+    }
+    if (typeof b.outboundConfirmCallEnabled === 'boolean') {
+      tel.aiCalling.outboundConfirmEnabled = b.outboundConfirmCallEnabled;
+    }
+    if (typeof b.marketingCallEnabled === 'boolean') {
+      tel.aiCalling.marketingModeEnabled = b.marketingCallEnabled;
+    }
+    if (typeof b.websiteVoiceCallEnabled === 'boolean' && typeof b.outboundConfirmCallEnabled === 'boolean' && !b.websiteVoiceCallEnabled && !b.outboundConfirmCallEnabled) {
+      tel.aiCalling.enabled = false;
+    } else if (b.websiteVoiceCallEnabled || b.outboundConfirmCallEnabled) {
+      tel.aiCalling.enabled = true;
+    }
+    if (typeof b.liveVoiceName === 'string') tel.aiCalling.voiceName = sc.liveVoiceName;
+    if (typeof b.customerCallInstructions === 'string') tel.aiCalling.aiPersonaPrompt = sc.customerCallInstructions;
+    if (typeof b.quietHoursEnabled === 'boolean') tel.aiCalling.quietHoursEnabled = b.quietHoursEnabled;
+    if (b.quietStartHour !== undefined) tel.aiCalling.quietStartHour = Math.max(0, Math.min(23, Number(b.quietStartHour) || 22));
+    if (b.quietEndHour !== undefined) tel.aiCalling.quietEndHour = Math.max(0, Math.min(23, Number(b.quietEndHour) || 9));
+    saveTelephonySettings(tel);
+
+    // Sync WhatsApp Smart AI Settings if provided
+    if (b.whatsappAi && typeof b.whatsappAi === 'object') {
+      saveWaAiConfig(b.whatsappAi);
+    }
+
+    res.json({ ok: true, config: getUnifiedSaikaControlConfig() });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
+app.post('/api/admin/saika/keys', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
+  try {
+    const action = String(req.body?.action || 'add');
+    const ig = getIntegrations() || {};
+    if (!ig.saikaConfig) ig.saikaConfig = {};
+    let keys = getStoreGeminiApiKeysList();
+
+    if (action === 'remove') {
+      const idx = Number(req.body?.index);
+      if (Number.isInteger(idx) && idx >= 0 && idx < keys.length) {
+        keys.splice(idx, 1);
+      }
+      ig.saikaConfig.geminiApiKeys = keys;
+      ig.geminiApiKey = keys[0] || '';
+      if (ig.whatsapp) ig.whatsapp.geminiApiKey = keys[0] || '';
+      saveIntegrations(ig);
+      try { saveWhatsAppSettings({ geminiApiKey: keys[0] || '' }); } catch (_) {}
+      try {
+        const tel = getTelephonySettings() || {};
+        if (!tel.aiCalling) tel.aiCalling = {};
+        tel.aiCalling.geminiApiKey = keys[0] || '';
+        saveTelephonySettings(tel);
+      } catch (_) {}
+      return res.json({ ok: true, config: getUnifiedSaikaControlConfig() });
+    }
+
+    if (action === 'promote') {
+      const idx = Number(req.body?.index);
+      if (Number.isInteger(idx) && idx > 0 && idx < keys.length) {
+        const [picked] = keys.splice(idx, 1);
+        keys.unshift(picked);
+        saveStoreGeminiApiKey(keys[0], keys.slice(1));
+      }
+      return res.json({ ok: true, config: getUnifiedSaikaControlConfig() });
+    }
+
+    const rawKey = String(req.body?.geminiApiKey || '').trim();
+    if (!rawKey) return res.status(400).json({ ok: false, error: 'অনুগ্রহ করে একটি বৈধ Gemini API Key দিন।' });
+
+    const testModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    let verified = false;
+    let activeModel = '';
+    let lastErr = '';
+    for (const m of testModels) {
+      try {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(rawKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Say OK' }] }], generationConfig: { maxOutputTokens: 10 } })
+        });
+        if (r.ok) {
+          verified = true;
+          activeModel = m;
+          break;
+        }
+        const errJson = await r.json().catch(() => ({}));
+        lastErr = errJson?.error?.message || `HTTP ${r.status}`;
+      } catch (err) {
+        lastErr = err?.message;
+      }
+    }
+    if (!verified) {
+      return res.status(400).json({ ok: false, error: lastErr || 'API Key সঠিক নয় বা কোটা শেষ।' });
+    }
+
+    aiKeyBlockedReason = '';
+    failedGeminiKeysCooldown.delete(rawKey);
+    const makePrimary = req.body?.makePrimary !== false;
+    const filtered = keys.filter((k) => k !== rawKey);
+    const nextKeys = makePrimary ? [rawKey, ...filtered] : [...filtered, rawKey];
+    saveStoreGeminiApiKey(nextKeys[0], nextKeys.slice(1));
+
+    res.json({
+      ok: true,
+      model: activeModel,
+      message: `✅ API Key ভেরিফাইড (${activeModel}) এবং সেভ হয়েছে! মোট সক্রিয় Key: ${nextKeys.length}টি`,
+      config: getUnifiedSaikaControlConfig()
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
+app.post('/api/admin/saika/staff-access', adminAuth, requireRole('owner'), (req, res) => {
+  try {
+    const { userId, canAccessSaika } = req.body || {};
+    const users = getUsers();
+    const target = users.find((u) => u.id === userId || u.username === userId);
+    if (!target) return res.status(404).json({ ok: false, error: 'স্টাফ খুঁজে পাওয়া যায়নি' });
+    target.canAccessSaika = !!canAccessSaika;
+    target.permissions = { ...(target.permissions || {}), canAccessSaika: !!canAccessSaika };
+    saveUsers(users);
+    // Update live sessions for this staff immediately
+    for (const [, sess] of sessions) {
+      if (sess.username === target.username) {
+        sess.canAccessSaika = !!canAccessSaika;
+        sess.permissions = { ...(sess.permissions || {}), canAccessSaika: !!canAccessSaika };
+      }
+    }
+    persistAdminSessions();
+    res.json({ ok: true, userId: target.id, canAccessSaika: !!canAccessSaika });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err?.message || err) });
   }
@@ -10101,9 +10401,12 @@ Use this memory naturally! If you know their name, greet them warmly and mention
       : '';
 
     const briefingData = mode === 'saika_assistant' ? buildAiCopilotBriefing() : null;
+    const saikaLiveCtrl = getUnifiedSaikaControlConfig();
+    const bossLiveRules = saikaLiveCtrl.bossCustomInstructions
+      ? `\nBOSS CUSTOM INSTRUCTIONS (বসের বিশেষ নির্দেশনা):\n${saikaLiveCtrl.bossCustomInstructions}\n`
+      : '';
     const sysPrompt = mode === 'saika_assistant'
-      ? `Your name is Saika (সাইকা). You are the personal, ultra-intelligent, real-time voice AI assistant and Chief of Staff for the owner/boss ("বস" / "Boss") of "${storeName}" in Bangladesh.
-You behave with 100% executive clearance and full administrative authority over the store's entire operations, database, orders, products, inventory, customers, staff, WhatsApp, and Email.
+      ? `Your name is ${saikaLiveCtrl.assistantName || 'Saika (সাইকা)'}. You are the personal, ultra-intelligent, real-time voice AI assistant and Chief of Staff for the owner/boss ("বস" / "Boss") of "${storeName}" in Bangladesh.${bossLiveRules}` + `\nYou behave with 100% executive clearance and full administrative authority over the store's entire operations, database, orders, products, inventory, customers, staff, WhatsApp, and Email.
 
 MANDATORY LANGUAGE LOCK (বাধ্যতামূলক বাংলা ভাষা লক):
 - You MUST speak, think, and reply ONLY in natural Bangladeshi Bengali (বাংলা) at all times.
