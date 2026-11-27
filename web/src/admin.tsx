@@ -10024,21 +10024,23 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
     }
   };
 
+  const isFreeDelivery = Number(o.delivery) === 0 || Number(delivery) === 0;
   const detectedFromAddr = detectDistrict(custAddress);
   const isDetectedOutside = !!(detectedFromAddr && !isDhakaZone(detectedFromAddr));
   const hasDistrictMismatch = isDetectedOutside && (
     custArea === 'inside' ||
-    delivery <= 80 ||
     String(custDistrict || '').toLowerCase().includes('dhaka') ||
-    String(custDistrict || '').toLowerCase() === 'bangladesh'
+    String(custDistrict || '').toLowerCase() === 'bangladesh' ||
+    (!isFreeDelivery && delivery <= 80)
   );
 
-  const handleFixDistrictMismatch = async () => {
+  const handleFixDistrictMismatch = async (forcedDelivery?: number) => {
     const targetDistrict = detectedFromAddr || 'Outside Dhaka';
+    const finalDelivery = typeof forcedDelivery === 'number' ? forcedDelivery : (isFreeDelivery ? 0 : 120);
     setCustDistrict(targetDistrict);
     setCustArea('outside');
-    setDelivery(120);
-    setSaveMsg(`✅ জেলা ও জোন ফিক্সড: ${targetDistrict} (Outside Dhaka ৳120)`);
+    setDelivery(finalDelivery);
+    setSaveMsg(`✅ জেলা ও জোন ফিক্সড: ${targetDistrict} (Outside Dhaka ${finalDelivery === 0 ? 'ফ্রি ডেলিভারি ৳0' : `৳${finalDelivery}`})`);
     try {
       await aFetch('/orders/' + o.id, {
         method: 'PATCH',
@@ -10054,8 +10056,8 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
             area: 'outside',
             note: custNote
           },
-          delivery: 120,
-          total: Math.max(0, computedItemsTotal + 120 - Number(discount || 0))
+          delivery: finalDelivery,
+          total: Math.max(0, computedItemsTotal + finalDelivery - Number(discount || 0))
         })
       });
       window.dispatchEvent(new CustomEvent('admin-orders-updated', { detail: { id: o.id } }));
@@ -10555,26 +10557,47 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                   </div>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleFixDistrictMismatch}
-                style={{
-                  background: '#ef4444',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: 6,
-                  padding: '7px 14px',
-                  fontWeight: 700,
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  boxShadow: '0 2px 8px rgba(239,68,68,0.3)'
-                }}
-              >
-                ⚡ অটো-ফিক্স: {detectedFromAddr} (Outside Dhaka ৳120)
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => handleFixDistrictMismatch(isFreeDelivery ? 0 : 120)}
+                  style={{
+                    background: '#ef4444',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 6,
+                    padding: '7px 14px',
+                    fontWeight: 700,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    boxShadow: '0 2px 8px rgba(239,68,68,0.3)'
+                  }}
+                >
+                  ⚡ অটো-ফিক্স: {detectedFromAddr} (Outside Dhaka {isFreeDelivery ? 'ফ্রি ডেলিভারি ৳0' : '৳120'})
+                </button>
+                {isFreeDelivery && (
+                  <button
+                    type="button"
+                    onClick={() => handleFixDistrictMismatch(120)}
+                    style={{
+                      background: 'rgba(255,255,255,0.08)',
+                      color: '#cbd5e1',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: 6,
+                      padding: '7px 12px',
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                    title="ফ্রি ডেলিভারি পরিবর্তন করে Outside Dhaka রেগুলার ৳120 চার্জ যোগ করুন"
+                  >
+                    + ৳120 চার্জ করুন
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -10920,23 +10943,44 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                           {custArea ? ` (${custArea} dhaka)` : ''}
                         </span>
                         {hasDistrictMismatch && (
-                          <button
-                            type="button"
-                            onClick={handleFixDistrictMismatch}
-                            style={{
-                              background: 'rgba(239, 68, 68, 0.16)',
-                              color: '#f87171',
-                              border: '1px solid rgba(239, 68, 68, 0.4)',
-                              borderRadius: 4,
-                              padding: '2px 7px',
-                              fontSize: 10.5,
-                              fontWeight: 700,
-                              cursor: 'pointer'
-                            }}
-                            title="ঠিকানায় ঢাকার বাইরের জেলা পাওয়া গেছে। ক্লিক করে Outside Dhaka ফিক্স করুন।"
-                          >
-                            ⚡ ফিক্স: {detectedFromAddr} (Outside Dhaka ৳120)
-                          </button>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleFixDistrictMismatch(isFreeDelivery ? 0 : 120)}
+                              style={{
+                                background: 'rgba(239, 68, 68, 0.16)',
+                                color: '#f87171',
+                                border: '1px solid rgba(239, 68, 68, 0.4)',
+                                borderRadius: 4,
+                                padding: '2px 7px',
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                              title="ঠিকানায় ঢাকার বাইরের জেলা পাওয়া গেছে। ক্লিক করে Outside Dhaka ফিক্স করুন।"
+                            >
+                              ⚡ ফিক্স: {detectedFromAddr} (Outside Dhaka {isFreeDelivery ? 'ফ্রি ৳0' : '৳120'})
+                            </button>
+                            {isFreeDelivery && (
+                              <button
+                                type="button"
+                                onClick={() => handleFixDistrictMismatch(120)}
+                                style={{
+                                  background: 'rgba(255, 255, 255, 0.08)',
+                                  color: '#cbd5e1',
+                                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                                  borderRadius: 4,
+                                  padding: '2px 6px',
+                                  fontSize: 10,
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                                title="Outside Dhaka ৳120 চার্জ সহ ফিক্স করুন"
+                              >
+                                + ৳120 চার্জ সহ
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                       {detectedFromAddr && !hasDistrictMismatch && !custDistrict && (
