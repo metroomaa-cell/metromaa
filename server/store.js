@@ -121,6 +121,11 @@ const PERSISTENT_CUSTOMERS = join(PERSISTENT_DIR, 'customers.json');
 const BACKUP_CUSTOMERS = join(DATA_DIR, 'customers.metrroma.backup.json');
 const EXT_CUSTOMERS = join(EXTERNAL_DIR, 'customers.json');
 
+const COURIER_INTELLIGENCE = join(DATA_DIR, 'courier_intelligence.json');
+const PERSISTENT_COURIER_INTELLIGENCE = join(PERSISTENT_DIR, 'courier_intelligence.json');
+const BACKUP_COURIER_INTELLIGENCE = join(DATA_DIR, 'courier_intelligence.metrroma.backup.json');
+const EXT_COURIER_INTELLIGENCE = join(EXTERNAL_DIR, 'courier_intelligence.json');
+
 const COUPONS = join(DATA_DIR, 'coupons.json');
 const PERSISTENT_COUPONS = join(PERSISTENT_DIR, 'coupons.json');
 const BACKUP_COUPONS = join(DATA_DIR, 'coupons.metrroma.backup.json');
@@ -569,8 +574,12 @@ export function updateOrderStatus(id, status) {
   const orders = getOrders();
   const o = orders.find((x) => x.id === id || x.id === 'DOT-' + id || 'DOT-' + x.id === id);
   if (!o) return null;
+  const prevStatus = o.status;
   o.status = status;
   saveOrders(orders);
+  if (status !== prevStatus) {
+    try { recordOrderCourierOutcome(o, status); } catch (_) {}
+  }
   return o;
 }
 
@@ -578,6 +587,7 @@ export function updateOrder(id, patch) {
   const orders = getOrders();
   const o = orders.find((x) => x.id === id || x.id === 'DOT-' + id || 'DOT-' + x.id === id);
   if (!o) return null;
+  const prevStatus = o.status;
   if (Array.isArray(patch.history)) {
     o.history = patch.history;
   }
@@ -660,6 +670,9 @@ export function updateOrder(id, patch) {
   if (patch.internalNotes !== undefined) o.internalNotes = patch.internalNotes;
 
   saveOrders(orders);
+  if (patch.status && patch.status !== prevStatus) {
+    try { recordOrderCourierOutcome(o, patch.status); } catch (_) {}
+  }
   return o;
 }
 
@@ -1140,6 +1153,278 @@ export function saveCustomer(cust) {
   }
 }
 
+// ========================================================
+// COURIER & CUSTOMER DELIVERY INTELLIGENCE (PERMANENT DB)
+// ========================================================
+
+function cleanBDMobile(phone) {
+  const banglaDigits = { '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9' };
+  let p = String(phone || '').replace(/[০-৯]/g, (d) => banglaDigits[d] || d).replace(/[^0-9]/g, '');
+  if (p.startsWith('880')) p = p.slice(2);
+  else if (p.startsWith('88')) p = p.slice(2);
+  if (!p.startsWith('0') && p.length === 10 && p.startsWith('1')) p = '0' + p;
+  return p;
+}
+
+export function getCourierIntelligenceMap() {
+  const map = readSafe(EXT_COURIER_INTELLIGENCE, PERSISTENT_COURIER_INTELLIGENCE, COURIER_INTELLIGENCE, {}, BACKUP_COURIER_INTELLIGENCE);
+  return (map && typeof map === 'object' && !Array.isArray(map)) ? map : {};
+}
+
+export function saveCourierIntelligenceMap(map) {
+  writeSafe(EXT_COURIER_INTELLIGENCE, PERSISTENT_COURIER_INTELLIGENCE, COURIER_INTELLIGENCE, map || {}, 'courier_intelligence', BACKUP_COURIER_INTELLIGENCE);
+  return map;
+}
+
+export function getCourierProfile(phone) {
+  const p0 = cleanBDMobile(phone);
+  if (!p0) return null;
+  const map = getCourierIntelligenceMap();
+  return map[p0] || null;
+}
+
+export function mergeCourierProfile(phone, incomingData = {}, meta = {}) {
+  const p0 = cleanBDMobile(phone);
+  if (!p0) return null;
+
+  const map = getCourierIntelligenceMap();
+  const existing = map[p0] || {
+    phone: p0,
+    name: meta.name || '',
+    district: meta.district || '',
+    address: meta.address || '',
+    totalOrders: 0,
+    delivered: 0,
+    cancelled: 0,
+    successRate: null,
+    returnRate: null,
+    risk: 'unknown',
+    couriers: [],
+    firstCheckedAt: new Date().toISOString(),
+    lastCheckedAt: new Date().toISOString()
+  };
+
+  const courierMap = {};
+  if (Array.isArray(existing.couriers)) {
+    existing.couriers.forEach((c) => {
+      if (c && c.courier) courierMap[String(c.courier).trim().toLowerCase()] = { ...c };
+    });
+  } else if (existing.couriers && typeof existing.couriers === 'object') {
+    Object.keys(existing.couriers).forEach((k) => {
+      const c = existing.couriers[k];
+      if (c && c.courier) courierMap[k.toLowerCase()] = { ...c };
+    });
+  }
+
+  const incomingCouriers = Array.isArray(incomingData.couriers)
+    ? incomingData.couriers
+    : (Array.isArray(incomingData.couriersList) ? incomingData.couriersList : []);
+
+  for (const inc of incomingCouriers) {
+    if (!inc || !inc.courier) continue;
+    const nameKey = String(inc.courier).trim().toLowerCase();
+    const prev = courierMap[nameKey] || {
+      courier: inc.courier,
+      source: inc.source || 'aggregator',
+      total: 0,
+      delivered: 0,
+      cancelled: 0,
+      rate: 0
+    };
+
+    const d = Math.max(Number(prev.delivered || 0), Number(inc.delivered || 0));
+    const c = Math.max(Number(prev.cancelled || 0), Number(inc.cancelled || 0));
+    const t = Math.max(Number(prev.total || 0), Number(inc.total || 0), d + c);
+    const rate = (d + c > 0) ? Math.round((d / (d + c)) * 100) : (inc.rate ?? prev.rate ?? (t > 0 ? 100 : 0));
+
+    courierMap[nameKey] = {
+      courier: inc.courier,
+      source: inc.source || prev.source || 'aggregator',
+      total: t,
+      delivered: d,
+      cancelled: c,
+      rate,
+      status: inc.status || prev.status || 'active',
+      notice: inc.notice || prev.notice || ''
+    };
+  }
+
+  if (meta.orderOutcome) {
+    const courierName = meta.courierName || 'Store Internal';
+    const nameKey = courierName.toLowerCase();
+    const prev = courierMap[nameKey] || {
+      courier: courierName,
+      source: 'internal',
+      total: 0,
+      delivered: 0,
+      cancelled: 0,
+      rate: 0
+    };
+
+    if (meta.orderOutcome === 'delivered') {
+      prev.delivered = (Number(prev.delivered) || 0) + 1;
+      prev.total = (Number(prev.total) || 0) + 1;
+    } else if (['cancelled', 'return', 'returned'].includes(meta.orderOutcome)) {
+      prev.cancelled = (Number(prev.cancelled) || 0) + 1;
+      prev.total = (Number(prev.total) || 0) + 1;
+    }
+    const d = Number(prev.delivered) || 0;
+    const c = Number(prev.cancelled) || 0;
+    prev.rate = (d + c > 0) ? Math.round((d / (d + c)) * 100) : 0;
+    courierMap[nameKey] = prev;
+  }
+
+  let grandTotal = 0;
+  let grandDelivered = 0;
+  let grandCancelled = 0;
+
+  const couriersList = Object.values(courierMap);
+  for (const item of couriersList) {
+    const d = Number(item.delivered) || 0;
+    const c = Number(item.cancelled) || 0;
+    const t = Math.max(Number(item.total) || 0, d + c);
+    grandDelivered += d;
+    grandCancelled += c;
+    grandTotal += t;
+  }
+
+  const finished = grandDelivered + grandCancelled;
+  const successRate = finished > 0 ? Math.round((grandDelivered / finished) * 100) : (grandTotal > 0 ? 100 : null);
+  const returnRate = finished > 0 ? Math.round((grandCancelled / finished) * 100) : (grandTotal > 0 ? 0 : null);
+
+  let risk = 'safe';
+  if (grandCancelled > 0 && successRate != null && successRate < 50 && finished >= 2) {
+    risk = 'high';
+  } else if (successRate != null && successRate < 80) {
+    risk = 'moderate';
+  } else if (finished === 0 && grandTotal === 0) {
+    risk = 'unknown';
+  }
+
+  const updatedProfile = {
+    phone: p0,
+    name: meta.name || existing.name || '',
+    district: meta.district || existing.district || '',
+    address: meta.address || existing.address || '',
+    totalOrders: grandTotal,
+    delivered: grandDelivered,
+    cancelled: grandCancelled,
+    successRate,
+    returnRate,
+    risk,
+    couriers: couriersList,
+    firstCheckedAt: existing.firstCheckedAt || new Date().toISOString(),
+    lastCheckedAt: new Date().toISOString()
+  };
+
+  map[p0] = updatedProfile;
+  saveCourierIntelligenceMap(map);
+  return updatedProfile;
+}
+
+export function recordOrderCourierOutcome(order, newStatus) {
+  if (!order || !order.customer?.phone) return;
+  const p = cleanBDMobile(order.customer.phone);
+  if (!p) return;
+  const st = String(newStatus || order.status || '').toLowerCase();
+  if (['delivered', 'completed'].includes(st)) {
+    mergeCourierProfile(p, {}, {
+      orderOutcome: 'delivered',
+      courierName: order.courier?.name || 'Store Internal',
+      name: order.customer?.name,
+      district: order.customer?.district,
+      address: order.customer?.address
+    });
+  } else if (['cancelled', 'return', 'returned'].includes(st)) {
+    mergeCourierProfile(p, {}, {
+      orderOutcome: 'cancelled',
+      courierName: order.courier?.name || 'Store Internal',
+      name: order.customer?.name,
+      district: order.customer?.district,
+      address: order.customer?.address
+    });
+  }
+}
+
+export function seedCourierIntelligenceFromOrders() {
+  try {
+    const map = getCourierIntelligenceMap();
+    const orders = getOrders() || [];
+    let updated = 0;
+
+    const byPhone = {};
+    for (const o of orders) {
+      const p = cleanBDMobile(o.customer?.phone);
+      if (!p || p.length < 10) continue;
+      if (!byPhone[p]) {
+        byPhone[p] = {
+          name: o.customer?.name || '',
+          district: o.customer?.district || '',
+          address: o.customer?.address || '',
+          delivered: 0,
+          cancelled: 0,
+          total: 0
+        };
+      }
+      const st = String(o.status || '').toLowerCase();
+      if (st === 'delivered' || st === 'completed') {
+        byPhone[p].delivered++;
+        byPhone[p].total++;
+      } else if (['cancelled', 'return', 'returned', 'failed'].includes(st)) {
+        byPhone[p].cancelled++;
+        byPhone[p].total++;
+      } else {
+        byPhone[p].total++;
+      }
+      if (!byPhone[p].name && o.customer?.name) byPhone[p].name = o.customer.name;
+      if (!byPhone[p].district && o.customer?.district) byPhone[p].district = o.customer.district;
+    }
+
+    for (const [phone, info] of Object.entries(byPhone)) {
+      if (!map[phone]) {
+        const couriers = [{
+          courier: 'Store Internal',
+          source: 'internal',
+          total: info.total,
+          delivered: info.delivered,
+          cancelled: info.cancelled,
+          rate: (info.delivered + info.cancelled > 0) ? Math.round((info.delivered / (info.delivered + info.cancelled)) * 100) : (info.total > 0 ? 100 : 0)
+        }];
+        const finished = info.delivered + info.cancelled;
+        const successRate = finished > 0 ? Math.round((info.delivered / finished) * 100) : (info.total > 0 ? 100 : null);
+        let risk = 'safe';
+        if (info.cancelled > 0 && successRate != null && successRate < 50 && finished >= 2) risk = 'high';
+        else if (successRate != null && successRate < 80) risk = 'moderate';
+        else if (finished === 0) risk = 'unknown';
+
+        map[phone] = {
+          phone,
+          name: info.name,
+          district: info.district,
+          address: info.address,
+          totalOrders: info.total,
+          delivered: info.delivered,
+          cancelled: info.cancelled,
+          successRate,
+          returnRate: finished > 0 ? 100 - (successRate || 0) : 0,
+          risk,
+          couriers,
+          firstCheckedAt: new Date().toISOString(),
+          lastCheckedAt: new Date().toISOString()
+        };
+        updated++;
+      }
+    }
+
+    if (updated > 0) {
+      saveCourierIntelligenceMap(map);
+      console.log(`[CourierIntelligence] Seeded ${updated} profiles from historical store orders (Total in DB: ${Object.keys(map).length}).`);
+    }
+  } catch (err) {
+    console.error('[CourierIntelligence] Seeding error:', err.message);
+  }
+}
+
 // Persistent Storage Protection Initializer (Called on server startup)
 export function initStorageProtection() {
   try {
@@ -1148,6 +1433,7 @@ export function initStorageProtection() {
     const settings = getSettings();
     syncCustomersFromOrders();
     const customers = getCustomers();
+    seedCourierIntelligenceFromOrders();
     console.log(`[StorageProtection] Live data secured. Safe directory: ${EXTERNAL_DIR}`);
     console.log(`[StorageProtection] Data counts: Products: ${(cat.products || []).length}, Categories: ${(cat.categories || []).length}, Orders: ${orders.length}, Customers: ${customers.length}, Store: ${settings.storeName}`);
     

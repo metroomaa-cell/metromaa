@@ -1860,6 +1860,7 @@ const I = {
   landings: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10 2.5c2.5 2 3.8 5 3.8 8.5A3.8 3.8 0 0 1 10 14.8 3.8 3.8 0 0 1 6.2 11c0-3.5 1.3-6.5 3.8-8.5z" /><path d="M6.5 13.5 4 16l2.5.3M13.5 13.5 16 16l-2.5.3" /></svg>,
   media: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="4" width="14" height="12" rx="2" /><circle cx="7.5" cy="8.5" r="1.4" /><path d="M4 14l4-3.5 3 2.5 3-3 2 2.5" /></svg>,
   emails: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2.5" y="4" width="15" height="12" rx="2" /><path d="M3 5l7 6 7-6" /></svg>,
+  courier_intelligence: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10 2l6 3v5c0 4.5-2.8 7.6-6 8.5-3.2-.9-6-4-6-8.5V5l6-3z"/><path d="M8 10l2 2 4-4"/></svg>,
 };
 
 export interface AdminWhatsAppTarget {
@@ -2485,10 +2486,10 @@ export function Admin() {
   const perms = me?.permissions || {};
   const canUseSaika = role === 'owner' || !!me?.canAccessSaika || !!perms.canAccessSaika;
   const allowed = role === 'owner'
-    ? ['dashboard', 'saika', 'orders', 'scanner', 'campaigns', 'finance', 'reports', 'payment_gateways', 'whatsapp', 'message_marketing', 'calls', 'emails', 'push_popups', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings']
+    ? ['dashboard', 'saika', 'orders', 'scanner', 'campaigns', 'finance', 'reports', 'payment_gateways', 'whatsapp', 'message_marketing', 'calls', 'emails', 'push_popups', 'backup', 'customers', 'courier_intelligence', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings']
     : role === 'manager'
       ? [
-          'dashboard', 'orders', 'scanner', 'calls', 'emails', 'push_popups', 'backup', 'customers', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings',
+          'dashboard', 'orders', 'scanner', 'calls', 'emails', 'push_popups', 'backup', 'customers', 'courier_intelligence', 'products', 'categories', 'colors', 'reviews', 'landings', 'media', 'coupons', 'fraud', 'staff', 'integrations', 'settings',
           ...(canUseSaika ? ['saika'] : []),
           ...(perms.canViewCampaigns !== false ? ['campaigns'] : []),
           ...(perms.canViewWhatsApp !== false ? ['whatsapp'] : []),
@@ -2496,7 +2497,7 @@ export function Admin() {
           ...(perms.canViewFinance !== false ? ['finance', 'reports'] : []),
         ]
       : [
-          'dashboard', 'orders', 'scanner', 'customers', 'calls', 'emails',
+          'dashboard', 'orders', 'scanner', 'customers', 'courier_intelligence', 'calls', 'emails',
           ...(canUseSaika ? ['saika'] : []),
           ...(perms.canViewCampaigns ? ['campaigns'] : []),
           ...(perms.canViewWhatsApp ? ['whatsapp'] : []),
@@ -2562,7 +2563,7 @@ export function Admin() {
 
   const [activeSubItem, setActiveSubItem] = useState<string>(() => ({
     saika: 'Command Center',
-    orders: 'Order List', scanner: 'Scan To Update', fraud: 'Fraud & Risk Protection',
+    orders: 'Order List', scanner: 'Scan To Update', fraud: 'Fraud & Risk Protection', courier_intelligence: 'Courier Intelligence DB',
     campaigns: 'Ad Profit Analysis', products: 'Product List', categories: 'Categories',
     colors: 'Color Palette', landings: 'Landing Pages', media: 'Media Library',
     whatsapp: 'WhatsApp Automation', emails: 'Business Webmail', push_popups: 'Push Notifications',
@@ -3203,6 +3204,7 @@ export function Admin() {
               { id: 'finance', label: 'Courier Invoice Upload', action: navigateToCourierReconcile },
               { id: 'integrations', label: 'Courier API Setup' },
               { id: 'fraud', label: 'Fraud & Risk Protection' },
+              { id: 'courier_intelligence', label: 'Courier Intelligence DB', action: () => { setNav('courier_intelligence'); setActiveSubItem('Courier Intelligence DB'); setMobileMenuOpen(false); } },
             ],
             newOrders
           )}
@@ -3514,6 +3516,7 @@ export function Admin() {
         {cur === 'media' && <MediaAdmin />}
         {cur === 'coupons' && <CouponsAdmin />}
         {cur === 'fraud' && <FraudDetectorAdmin />}
+        {cur === 'courier_intelligence' && <CourierIntelligenceAdmin />}
         {cur === 'staff' && <StaffAdmin />}
         {cur === 'integrations' && <IntegrationsAdmin focusCourier={activeSubItem === 'Courier API Setup'} />}
         {cur === 'settings' && <SettingsAdmin initialTab={settingsTab} />}
@@ -30663,6 +30666,532 @@ function CustomersAdmin() {
         </table>
         {loading && <div className="sa-empty">Loading customers…</div>}
         {!loading && filtered.length === 0 && <div className="sa-empty">No customers found.</div>}
+      </div>
+    </>
+  );
+}
+
+// ========================================================
+// COURIER INTELLIGENCE & FRAUD DATABASE (PERMANENT DB VIEW)
+// ========================================================
+
+function CourierIntelligenceAdmin() {
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>({
+    totalProfiles: 0,
+    safeCount: 0,
+    moderateCount: 0,
+    highRiskCount: 0,
+    totalDelivered: 0,
+    totalCancelled: 0,
+    avgSuccessRate: 100
+  });
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(50);
+  const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState('');
+  const [riskFilter, setRiskFilter] = useState<'all' | 'safe' | 'moderate' | 'high'>('all');
+  const [toast, setToast] = useState('');
+
+  // Manual Lookup states
+  const [manualPhone, setManualPhone] = useState('');
+  const [manualForce, setManualForce] = useState(false);
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualResult, setManualResult] = useState<any>(null);
+  const [recheckingPhone, setRecheckingPhone] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(''), 3000);
+  };
+
+  const loadData = (searchVal = q, riskVal = riskFilter, pageNum = page) => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (searchVal.trim()) params.set('q', searchVal.trim());
+    if (riskVal !== 'all') params.set('risk', riskVal);
+    params.set('page', String(pageNum));
+    params.set('limit', String(limit));
+
+    aFetch('/admin/courier-intelligence?' + params.toString())
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && d.ok) {
+          setProfiles(Array.isArray(d.profiles) ? d.profiles : []);
+          setTotal(Number(d.total) || 0);
+          if (d.stats) setStats(d.stats);
+        } else {
+          setProfiles([]);
+        }
+      })
+      .catch(() => setProfiles([]))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadData(q, riskFilter, page);
+  }, [riskFilter, page]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPage(1);
+    loadData(q, riskFilter, 1);
+  };
+
+  const handleManualCheck = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = manualPhone.trim();
+    if (!clean) return;
+    setManualBusy(true);
+    setManualResult(null);
+    try {
+      const res = await aFetch('/admin/courier-intelligence/check', {
+        method: 'POST',
+        body: JSON.stringify({ phone: clean, forceRefresh: manualForce })
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setManualResult(data.profile || data.result);
+        showToast(manualForce ? 'API থেকে নতুন ডাটা ফেচ করে সেভ করা হয়েছে ✓' : 'কুরিয়ার ডেটাবেজ চেক সম্পন্ন ✓');
+        loadData(q, riskFilter, page);
+      } else {
+        showToast(data.error || 'চেক করতে ব্যর্থ হয়েছে');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'নেটওয়ার্ক এরর');
+    } finally {
+      setManualBusy(false);
+    }
+  };
+
+  const handleRecheckRow = async (phone: string) => {
+    setRecheckingPhone(phone);
+    try {
+      const res = await aFetch('/admin/courier-intelligence/check', {
+        method: 'POST',
+        body: JSON.stringify({ phone, forceRefresh: true })
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        showToast(`📱 ${phone}: API থেকে নতুন ডাটা মার্জ করা হয়েছে ✓`);
+        if (data.profile) {
+          setProfiles((prev) => prev.map((p) => (p.phone === phone ? data.profile : p)));
+        }
+      } else {
+        showToast(data.error || 'রি-চেক ব্যর্থ হয়েছে');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'এরর ঘটেছে');
+    } finally {
+      setRecheckingPhone(null);
+    }
+  };
+
+  const exportCSV = () => {
+    window.open('/api/admin/courier-intelligence/export?token=' + encodeURIComponent(getTok() || ''), '_blank');
+  };
+
+  const totalPages = Math.ceil(total / limit) || 1;
+
+  return (
+    <>
+      <div className="sa-card" style={{ marginBottom: 20 }}>
+        {toast && (
+          <div
+            style={{
+              marginBottom: 16,
+              padding: '10px 16px',
+              borderRadius: 8,
+              background: 'rgba(139, 92, 246, 0.25)',
+              border: '1px solid #8b5cf6',
+              color: '#fff',
+              fontSize: 13,
+              fontWeight: 600
+            }}
+          >
+            {toast}
+          </div>
+        )}
+
+        {/* Header Title */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 24 }}>🛡️</span>
+              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#f1f5f9' }}>
+                কুরিয়ার ইন্টেলিজেন্স ও ফ্রড প্রোটেকশন ডেটাবেজ
+              </h2>
+            </div>
+            <p style={{ margin: '4px 0 0 34px', fontSize: 13, color: '#94a3b8' }}>
+              সকল কাস্টমারের স্থায়ী পার্সেল হিস্ট্রি (Pathao, Steadfast, Store) — অটোমেটিক যোগ হবে, কিন্তু পূর্বের কোনো ডাটা কখনোই মুছবে না
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="sa-btn ghost" onClick={exportCSV} title="সম্পূর্ণ ডেটাবেজ CSV ফরম্যাটে ডাউনলোড করুন">
+              📥 Export CSV
+            </button>
+            <button type="button" className="sa-btn ghost" onClick={() => loadData(q, riskFilter, page)} title="রিলোড করুন">
+              🔄 রিফ্রেশ
+            </button>
+          </div>
+        </div>
+
+        {/* KPI Stat Cards (Dark Violet Theme) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, marginBottom: 24 }}>
+          <div style={{ padding: '16px 18px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: 12 }}>
+            <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>
+              👥 মোট সেভ করা কাস্টমার
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: '#f1f5f9' }}>
+              {stats.totalProfiles ? stats.totalProfiles.toLocaleString() : profiles.length}
+            </div>
+            <div style={{ fontSize: 11.5, color: '#a78bfa', marginTop: 4 }}>
+              স্থায়ী ডেটাবেজে সংরক্ষিত
+            </div>
+          </div>
+
+          <div style={{ padding: '16px 18px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: 12 }}>
+            <div style={{ fontSize: 12, color: '#34d399', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>
+              🟢 নিরাপদ ক্রেতা (&gt;80%)
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: '#34d399' }}>
+              {(stats.safeCount || 0).toLocaleString()}
+            </div>
+            <div style={{ fontSize: 11.5, color: '#a7f3d0', marginTop: 4 }}>
+              উচ্চ সফলতার পার্সেল গ্রহীতা
+            </div>
+          </div>
+
+          <div style={{ padding: '16px 18px', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 12 }}>
+            <div style={{ fontSize: 12, color: '#f87171', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>
+              🔴 ঝুঁকিপূর্ণ / রিটার্ন প্রবণ (&lt;50%)
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: '#f87171' }}>
+              {(stats.highRiskCount || 0).toLocaleString()}
+            </div>
+            <div style={{ fontSize: 11.5, color: '#fecaca', marginTop: 4 }}>
+              ডেলিভারির পূর্বে কথা বলা আবশ্যক
+            </div>
+          </div>
+
+          <div style={{ padding: '16px 18px', background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.25)', borderRadius: 12 }}>
+            <div style={{ fontSize: 12, color: '#c4b5fd', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>
+              📦 মোট ভেরিফাইড ডেলিভারি
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: '#c4b5fd' }}>
+              {(stats.totalDelivered || 0).toLocaleString()}
+            </div>
+            <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 4 }}>
+              বাতিল: {(stats.totalCancelled || 0).toLocaleString()} · গড় সফলতা: {stats.avgSuccessRate || 100}%
+            </div>
+          </div>
+        </div>
+
+        {/* Manual Phone Lookup & Live Add Box */}
+        <div style={{ padding: '16px 20px', background: '#13111c', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: 12, marginBottom: 20 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#c4b5fd', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>⚡</span> ম্যানুয়াল নাম্বার চেক / লাইভ কুরিয়ার ফেচ:
+          </div>
+          <form onSubmit={handleManualCheck} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              placeholder="01XXXXXXXXX"
+              value={manualPhone}
+              onChange={(e) => setManualPhone(e.target.value)}
+              style={{
+                flex: '1 1 240px',
+                height: 38,
+                padding: '0 14px',
+                borderRadius: 8,
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                color: '#fff',
+                fontSize: 13
+              }}
+            />
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: '#cbd5e1', cursor: 'pointer' }}>
+              <input type="checkbox" checked={manualForce} onChange={(e) => setManualForce(e.target.checked)} />
+              <span>লাইভ কুরিয়ার API থেকে ফ্রেশ আপডেট আনুন (Force API Call)</span>
+            </label>
+            <button
+              type="submit"
+              disabled={manualBusy || !manualPhone.trim()}
+              className="sa-btn primary"
+              style={{ height: 38, padding: '0 18px', borderRadius: 8, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              {manualBusy ? 'চেক হচ্ছে…' : '🔍 চেক ও সেভ করুন'}
+            </button>
+          </form>
+
+          {manualResult && (
+            <div style={{ marginTop: 14, padding: '12px 16px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                <div>
+                  <span style={{ fontWeight: 700, color: '#f1f5f9', fontSize: 14 }}>{manualResult.phone}</span>
+                  {manualResult.name && <span style={{ marginLeft: 8, color: '#94a3b8', fontSize: 13 }}>({manualResult.name})</span>}
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span
+                    style={{
+                      padding: '3px 10px',
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      background: manualResult.risk === 'high' ? 'rgba(239, 68, 68, 0.2)' : manualResult.risk === 'moderate' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                      color: manualResult.risk === 'high' ? '#f87171' : manualResult.risk === 'moderate' ? '#fbbf24' : '#34d399',
+                      border: `1px solid ${manualResult.risk === 'high' ? 'rgba(239, 68, 68, 0.4)' : manualResult.risk === 'moderate' ? 'rgba(245, 158, 11, 0.4)' : 'rgba(16, 185, 129, 0.4)'}`
+                    }}
+                  >
+                    {manualResult.successRate != null ? `${manualResult.successRate}% সফলতা` : 'নতুন কাস্টমার'}
+                  </span>
+                  <span style={{ fontSize: 12, color: '#cbd5e1' }}>
+                    ({manualResult.delivered || 0} সফল · {manualResult.cancelled || 0} বাতিল)
+                  </span>
+                </div>
+              </div>
+              {Array.isArray(manualResult.couriers) && manualResult.couriers.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                  {manualResult.couriers.map((c: any, i: number) => (
+                    <span key={i} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', color: '#cbd5e1' }}>
+                      {c.courier}: {c.delivered || 0} dlvd / {c.cancelled || 0} cncl ({c.rate || 0}%)
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Filter and Search Bar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+          <form onSubmit={handleSearchSubmit} style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 280px' }}>
+            <input
+              type="text"
+              placeholder="ফোন নাম্বার, নাম বা এলাকা দিয়ে সার্চ…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              style={{
+                width: '100%',
+                maxWidth: 340,
+                height: 36,
+                padding: '0 12px',
+                borderRadius: 7,
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                color: '#fff',
+                fontSize: 12.5
+              }}
+            />
+            <button type="submit" className="sa-btn ghost sa-mini" style={{ height: 36 }}>
+              সার্চ
+            </button>
+            {q && (
+              <button
+                type="button"
+                className="sa-btn ghost sa-mini"
+                style={{ height: 36 }}
+                onClick={() => {
+                  setQ('');
+                  setPage(1);
+                  loadData('', riskFilter, 1);
+                }}
+              >
+                রিসেট
+              </button>
+            )}
+          </form>
+
+          {/* Risk Filter Buttons */}
+          <div style={{ display: 'flex', gap: 6 }}>
+            {(['all', 'safe', 'moderate', 'high'] as const).map((r) => {
+              const active = riskFilter === r;
+              const label = r === 'all' ? `সব (${total})` : r === 'safe' ? `🟢 নিরাপদ (${stats.safeCount || 0})` : r === 'moderate' ? `🟡 মাঝারি (${stats.moderateCount || 0})` : `🔴 ঝুঁকিপূর্ণ (${stats.highRiskCount || 0})`;
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => {
+                    setRiskFilter(r);
+                    setPage(1);
+                  }}
+                  className={`sa-btn sa-mini ${active ? 'primary' : 'ghost'}`}
+                  style={{
+                    height: 32,
+                    fontSize: 12,
+                    borderRadius: 6,
+                    background: active ? undefined : 'rgba(255, 255, 255, 0.03)'
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Database Table */}
+        <div style={{ overflowX: 'auto' }}>
+          <table className="sa-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: 'rgba(255, 255, 255, 0.02)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>কাস্টমার ও ফোন</th>
+                <th style={{ textAlign: 'center', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>সফলতার হার</th>
+                <th style={{ textAlign: 'center', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>অর্ডার হিস্ট্রি</th>
+                <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>কুরিয়ার ব্রেকডাউন</th>
+                <th style={{ textAlign: 'center', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>রিস্ক স্ট্যাটাস</th>
+                <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>সর্বশেষ ভেরিফাইড</th>
+                <th style={{ textAlign: 'right', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>অ্যাকশন</th>
+              </tr>
+            </thead>
+            <tbody>
+              {profiles.map((p) => {
+                const finished = (Number(p.delivered) || 0) + (Number(p.cancelled) || 0);
+                const rate = p.successRate != null ? p.successRate : (finished > 0 ? Math.round(((Number(p.delivered) || 0) / finished) * 100) : null);
+                const rateColor = rate == null ? '#94a3b8' : rate >= 80 ? '#34d399' : rate >= 50 ? '#fbbf24' : '#f87171';
+                const riskBadge = p.risk === 'high' ? (
+                  <span style={{ padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 700, background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#f87171' }}>
+                    ⛔ High Risk
+                  </span>
+                ) : p.risk === 'moderate' ? (
+                  <span style={{ padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 700, background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.35)', color: '#fbbf24' }}>
+                    ⚠️ Moderate
+                  </span>
+                ) : (
+                  <span style={{ padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 700, background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.35)', color: '#34d399' }}>
+                    ✓ Safe Buyer
+                  </span>
+                );
+
+                const isRecheckingThis = recheckingPhone === p.phone;
+
+                return (
+                  <tr key={p.phone} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                    <td style={{ padding: '12px 14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontWeight: 700, color: '#f1f5f9', fontSize: 13, letterSpacing: '0.3px' }}>
+                          {p.phone}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(p.phone);
+                            showToast(`Copied ${p.phone}`);
+                          }}
+                          style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', padding: 0 }}
+                          title="Copy Phone"
+                        >
+                          📋
+                        </button>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
+                        {p.name || 'Unknown Name'} {p.district ? `· ${p.district}` : ''}
+                      </div>
+                    </td>
+
+                    <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: rateColor }}>
+                        {rate != null ? `${rate}%` : '—'}
+                      </div>
+                      <div style={{ width: 60, height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, margin: '4px auto 0', overflow: 'hidden' }}>
+                        <div style={{ width: `${rate || 0}%`, height: '100%', background: rateColor }} />
+                      </div>
+                    </td>
+
+                    <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: '#e2e8f0' }}>
+                        {p.totalOrders || 0} Orders
+                      </div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                        <span style={{ color: '#34d399' }}>✓ {p.delivered || 0}</span> · <span style={{ color: '#f87171' }}>✕ {p.cancelled || 0}</span>
+                      </div>
+                    </td>
+
+                    <td style={{ padding: '12px 14px' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxWidth: 360 }}>
+                        {Array.isArray(p.couriers) && p.couriers.length > 0 ? (
+                          p.couriers.map((c: any, i: number) => (
+                            <span
+                              key={i}
+                              style={{
+                                fontSize: 11,
+                                padding: '2px 8px',
+                                borderRadius: 5,
+                                background: 'rgba(255, 255, 255, 0.04)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                color: '#cbd5e1',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              <strong style={{ color: '#c4b5fd' }}>{c.courier}:</strong> {c.delivered || 0} dlvd / {c.cancelled || 0} cncl
+                            </span>
+                          ))
+                        ) : (
+                          <span style={{ fontSize: 11.5, color: '#64748b' }}>Store Internal Only</span>
+                        )}
+                      </div>
+                    </td>
+
+                    <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                      {riskBadge}
+                    </td>
+
+                    <td style={{ padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>
+                      {p.lastCheckedAt ? timeAgo(p.lastCheckedAt) : '—'}
+                    </td>
+
+                    <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                      <button
+                        type="button"
+                        disabled={isRecheckingThis}
+                        onClick={() => handleRecheckRow(p.phone)}
+                        className="sa-btn ghost sa-mini"
+                        style={{ height: 28, fontSize: 11.5, borderRadius: 6 }}
+                        title="কুরিয়ার API থেকে সর্বশেষ ডাটা ফেচ করে মার্জ করুন"
+                      >
+                        {isRecheckingThis ? 'রিফ্রেশ হচ্ছে…' : '🔄 Re-Check'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {loading && <div className="sa-empty" style={{ padding: 24, textAlign: 'center', color: '#94a3b8' }}>কুরিয়ার ডেটাবেজ লোড হচ্ছে…</div>}
+          {!loading && profiles.length === 0 && (
+            <div className="sa-empty" style={{ padding: 36, textAlign: 'center', color: '#94a3b8' }}>
+              কোনো কুরিয়ার হিস্ট্রি রেকর্ড পাওয়া যায়নি।
+            </div>
+          )}
+        </div>
+
+        {/* Pagination footer */}
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, paddingTop: 12, borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>
+              পৃষ্ঠা {page} / {totalPages} (মোট {total} কাস্টমার)
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="sa-btn ghost sa-mini"
+              >
+                ‹ পূর্ববর্তী
+              </button>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="sa-btn ghost sa-mini"
+              >
+                পরবর্তী ›
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

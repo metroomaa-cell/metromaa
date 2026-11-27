@@ -23,7 +23,7 @@ try {
   GoogleGenAI = _genai.GoogleGenAI;
 } catch (_) {}
 try { dns.setDefaultResultOrder('ipv4first'); } catch {}
-import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, saveColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, getCustomerByEmail, saveCustomer, syncCustomersFromOrders, initStorageProtection, getPersistentDataDirectory, getAuditLogs, addAuditLog, getStaffActivity, updateStaffPresence, recordStaffKpiAction, getStaffMonitoringData, getBangladeshDate, getWaChatContacts, upsertWaChatContact, syncWhatsAppSessionContacts, getWaMessages, getWaInboxThreads, pruneWhatsAppInboxMedia, getWaAutoLogs, recordWaAutoLog, canSendAutoWa, getStaffNotifications, addStaffNotification, markStaffNotificationsRead, autoAssignOnlineStaff, getCalls, saveCall, deleteCall, getCallStats, getTelephonySettings, saveTelephonySettings, getCallTransfers, saveCallTransfer, updateCallTransfer, cleanupOldRecordings } from './store.js';
+import { getCatalog, getOrders, addOrder, updateOrder, deleteOrder, addProduct, updateProduct, deleteProduct, getSettings, saveSettings, saveCatalog, addCategory, updateCategory, deleteCategory, getCoupons, saveCoupons, getReviews, saveReviews, getUsers, saveUsers, getIntegrations, saveIntegrations, getLandings, saveLandings, getLandingBySlug, addLanding, updateLanding, deleteLanding, getColors, saveColors, addColor, deleteColor, getCustomers, saveCustomers, getCustomerByPhone, getCustomerByEmail, saveCustomer, syncCustomersFromOrders, initStorageProtection, getPersistentDataDirectory, getAuditLogs, addAuditLog, getStaffActivity, updateStaffPresence, recordStaffKpiAction, getStaffMonitoringData, getBangladeshDate, getWaChatContacts, upsertWaChatContact, syncWhatsAppSessionContacts, getWaMessages, getWaInboxThreads, pruneWhatsAppInboxMedia, getWaAutoLogs, recordWaAutoLog, canSendAutoWa, getStaffNotifications, addStaffNotification, markStaffNotificationsRead, autoAssignOnlineStaff, getCalls, saveCall, deleteCall, getCallStats, getTelephonySettings, saveTelephonySettings, getCallTransfers, saveCallTransfer, updateCallTransfer, cleanupOldRecordings, getCourierIntelligenceMap, getCourierProfile, mergeCourierProfile, recordOrderCourierOutcome } from './store.js';
 import { getWhatsAppSettings, saveWhatsAppSettings, sendWhatsAppNotification, formatWhatsAppMessage, isNightConfirmationTime } from './whatsapp_engine.js';
 import { startWhatsAppSocket, getWhatsAppLiveStatus, requestPairingCode, sendBaileysMessage, waitForQrCode, clearWhatsAppSession, getWhatsAppProfilePicture, resolveWhatsAppPhoneNumber } from './whatsapp_baileys.js';
 import { getWaAiConfig, saveWaAiConfig, getWaAiFaqs, addWaAiFaq, deleteWaAiFaq } from './whatsapp_ai_agent.js';
@@ -4237,10 +4237,47 @@ function fetchIPv4(url, options = {}) {
   });
 }
 
-async function fraudCheck(phone, customFraudConfig) {
+async function fraudCheck(phone, customFraudConfig, options = {}) {
   const p0 = cleanBDPhone(phone);
   const p88 = normPhone(phone);
   if (!p0) return { ok: false, error: 'Valid phone number is required (e.g. 01XXXXXXXXX)' };
+
+  // 0. Cache check: If not forceRefresh, return saved profile immediately from persistent DB!
+  if (!options.forceRefresh) {
+    try {
+      const savedProfile = getCourierProfile(p0);
+      if (savedProfile && Array.isArray(savedProfile.couriers) && savedProfile.couriers.length > 0) {
+        const grandDelivered = Number(savedProfile.delivered) || 0;
+        const grandCancelled = Number(savedProfile.cancelled) || 0;
+        const grandTotal = Number(savedProfile.totalOrders) || (grandDelivered + grandCancelled);
+        const successRate = savedProfile.successRate;
+        const returnRate = savedProfile.returnRate;
+        const riskLevel = savedProfile.risk === 'high' ? 'high_risk' : (savedProfile.risk === 'moderate' ? 'medium' : 'safe');
+        return {
+          ok: true,
+          cached: true,
+          phone: p0,
+          total: grandTotal,
+          success: grandDelivered,
+          cancel: grandCancelled,
+          delivered: grandDelivered,
+          cancelled: grandCancelled,
+          rate: successRate,
+          returnRate: returnRate,
+          risk: savedProfile.risk || 'unknown',
+          riskVerdict: {
+            level: riskLevel,
+            label: riskLevel === 'high_risk' ? 'High Return Alert' : (riskLevel === 'medium' ? 'Moderate Returns' : 'Safe Customer'),
+            action: riskLevel === 'high_risk' ? '⛔ Call customer before shipping' : '✓ OK to ship',
+            color: riskLevel === 'high_risk' ? 'red' : (riskLevel === 'medium' ? 'yellow' : 'green'),
+            reasons: [`Database Verified: ${successRate != null ? successRate + '%' : '100%'} Delivery Rate`]
+          },
+          couriers: savedProfile.couriers,
+          lastCheckedAt: savedProfile.lastCheckedAt
+        };
+      }
+    } catch (_) {}
+  }
 
   const couriersList = [];
   const ig = getIntegrations();
@@ -4634,6 +4671,17 @@ async function fraudCheck(phone, customFraudConfig) {
     };
   }
 
+  // Persist & non-destructively merge into permanent Courier Intelligence database
+  try {
+    mergeCourierProfile(p0, { couriers: couriersList }, {
+      name: custOrders[0]?.customer?.name,
+      district: custOrders[0]?.customer?.district,
+      address: custOrders[0]?.customer?.address
+    });
+  } catch (saveErr) {
+    console.error('Failed to save courier intelligence profile:', saveErr.message);
+  }
+
   return {
     ok: true,
     phone: p0,
@@ -4706,10 +4754,121 @@ app.put('/api/admin/integrations', adminAuth, requireRole('owner', 'manager'), (
   saveIntegrations({ email, sms, couriers, tracking, fraud });
   res.json(maskedIntegrations());
 });
-app.post('/api/admin/fraud/check', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
+app.post('/api/admin/fraud/check', adminAuth, requireRole('owner', 'manager', 'staff'), async (req, res) => {
   const phone = String(req.body?.phone || '').trim();
   if (!phone) return res.status(400).json({ error: 'phone required' });
-  res.json(await fraudCheck(phone, req.body?.fraudConfig));
+  const forceRefresh = !!req.body?.forceRefresh;
+  res.json(await fraudCheck(phone, req.body?.fraudConfig, { forceRefresh }));
+});
+
+// Dedicated Courier & Customer Delivery Intelligence Endpoints
+app.get('/api/admin/courier-intelligence', adminAuth, requireRole('owner', 'manager', 'staff'), (req, res) => {
+  try {
+    const map = getCourierIntelligenceMap();
+    let list = Object.values(map);
+
+    const totalProfiles = list.length;
+    let safeCount = 0;
+    let moderateCount = 0;
+    let highRiskCount = 0;
+    let totalDelivered = 0;
+    let totalCancelled = 0;
+
+    for (const p of list) {
+      if (p.risk === 'high') highRiskCount++;
+      else if (p.risk === 'moderate') moderateCount++;
+      else safeCount++;
+
+      totalDelivered += (Number(p.delivered) || 0);
+      totalCancelled += (Number(p.cancelled) || 0);
+    }
+
+    const totalFinished = totalDelivered + totalCancelled;
+    const avgSuccessRate = totalFinished > 0 ? Math.round((totalDelivered / totalFinished) * 100) : 100;
+
+    const q = String(req.query.q || '').trim().toLowerCase();
+    if (q) {
+      list = list.filter((p) =>
+        String(p.phone || '').includes(q) ||
+        String(p.name || '').toLowerCase().includes(q) ||
+        String(p.district || '').toLowerCase().includes(q) ||
+        String(p.address || '').toLowerCase().includes(q)
+      );
+    }
+
+    const riskFilter = String(req.query.risk || 'all').toLowerCase();
+    if (['safe', 'moderate', 'high'].includes(riskFilter)) {
+      list = list.filter((p) => p.risk === riskFilter);
+    }
+
+    list.sort((a, b) => new Date(b.lastCheckedAt || 0).getTime() - new Date(a.lastCheckedAt || 0).getTime());
+
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.max(10, Math.min(200, parseInt(req.query.limit, 10) || 50));
+    const total = list.length;
+    const paged = list.slice((page - 1) * limit, page * limit);
+
+    res.json({
+      ok: true,
+      profiles: paged,
+      total,
+      page,
+      limit,
+      stats: {
+        totalProfiles,
+        safeCount,
+        moderateCount,
+        highRiskCount,
+        totalDelivered,
+        totalCancelled,
+        avgSuccessRate
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/courier-intelligence/check', adminAuth, requireRole('owner', 'manager', 'staff'), async (req, res) => {
+  const phone = String(req.body?.phone || '').trim();
+  if (!phone) return res.status(400).json({ error: 'phone required' });
+  const forceRefresh = !!req.body?.forceRefresh;
+  const result = await fraudCheck(phone, req.body?.fraudConfig, { forceRefresh });
+  const profile = getCourierProfile(cleanBDPhone(phone));
+  res.json({ ok: true, result, profile });
+});
+
+app.get('/api/admin/courier-intelligence/export', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  try {
+    const map = getCourierIntelligenceMap();
+    const list = Object.values(map);
+    list.sort((a, b) => new Date(b.lastCheckedAt || 0).getTime() - new Date(a.lastCheckedAt || 0).getTime());
+
+    const headers = ['Phone', 'Name', 'District', 'Total Orders', 'Delivered', 'Cancelled', 'Success Rate %', 'Return Rate %', 'Risk', 'Couriers Breakdown', 'Last Verified'];
+    const rows = list.map((p) => {
+      const couriersText = (p.couriers || []).map((c) => `${c.courier}: ${c.delivered} delivered / ${c.cancelled} cancelled (${c.rate || 0}%)`).join('; ');
+      return [
+        `"${p.phone || ''}"`,
+        `"${(p.name || '').replace(/"/g, '""')}"`,
+        `"${(p.district || '').replace(/"/g, '""')}"`,
+        p.totalOrders || 0,
+        p.delivered || 0,
+        p.cancelled || 0,
+        p.successRate != null ? p.successRate + '%' : 'N/A',
+        p.returnRate != null ? p.returnRate + '%' : 'N/A',
+        `"${p.risk || 'unknown'}"`,
+        `"${couriersText.replace(/"/g, '""')}"`,
+        `"${p.lastCheckedAt ? new Date(p.lastCheckedAt).toLocaleString('en-GB') : ''}"`
+      ].join(',');
+    });
+
+    const csv = [headers.join(','), ...rows].join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="courier_intelligence_${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(csv);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 app.post('/api/admin/fraud/ping', adminAuth, requireRole('owner', 'manager'), async (req, res) => {
   const apiKey = String(req.body?.apiKey || '').trim();
