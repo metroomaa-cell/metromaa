@@ -3465,6 +3465,8 @@ export function Admin() {
             searchQuery={ordersSearch}
             onSearchChange={(q) => setOrdersSearch(q)}
             onNavigateIntegrations={() => setNav('integrations')}
+            me={me}
+            role={role}
           />
         )}
         {cur === 'scanner' && <ScannerAdmin />}
@@ -6649,11 +6651,134 @@ function OrdersAdmin({
   onNavigateIntegrations,
   searchQuery,
   onSearchChange,
+  me,
+  role,
 }: {
   onNavigateIntegrations: () => void;
   searchQuery?: string;
   onSearchChange?: (q: string) => void;
+  me?: any;
+  role?: string;
 }) {
+  const currentUsername = String(me?.username || '').trim().toLowerCase();
+  const currentName = String(me?.name || me?.username || 'Staff').trim();
+  const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'mine' | 'unassigned'>('all');
+  const [activeLocks, setActiveLocks] = useState<Record<string, any>>({});
+  const [collisionAlert, setCollisionAlert] = useState<{
+    isOpen: boolean;
+    order: any;
+    lock?: any;
+    type: 'in_call' | 'recent_call';
+    lastCall?: any;
+    onProceed?: () => void;
+  }>({ isOpen: false, order: null, type: 'in_call' });
+
+  useEffect(() => {
+    let active = true;
+    const pollLocks = () => {
+      aFetch('/admin/orders/active-locks')
+        .then((r) => r.json())
+        .then((d) => {
+          if (active && d?.ok && d.locks) setActiveLocks(d.locks);
+        })
+        .catch(() => {});
+    };
+    pollLocks();
+    const timer = setInterval(pollLocks, 5000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const checkOrderCollisionAndProceed = (order: any, actionType: 'call' | 'whatsapp' | 'edit', onSafeToProceed: () => void) => {
+    if (!order) return onSafeToProceed();
+    const lock = activeLocks[order.id] || order.activeLock;
+    const myUser = currentUsername;
+
+    // Check 1: In-call / Active lock by someone else
+    if (lock && lock.username && String(lock.username).toLowerCase() !== myUser && lock.expiresAt > Date.now()) {
+      setCollisionAlert({
+        isOpen: true,
+        order,
+        lock,
+        type: 'in_call',
+        onProceed: () => {
+          setCollisionAlert((prev) => ({ ...prev, isOpen: false }));
+          aFetch('/admin/orders/' + encodeURIComponent(order.id) + '/lock', {
+            method: 'POST',
+            body: JSON.stringify({ action: actionType, force: true })
+          }).catch(() => {});
+          onSafeToProceed();
+        }
+      });
+      return;
+    }
+
+    // Check 2: Recent call within 15 minutes by someone else
+    const lastCallTime = order.lastCall?.at || order.lastCalledAt;
+    if (lastCallTime && actionType === 'call') {
+      const diffMins = Math.floor((Date.now() - new Date(lastCallTime).getTime()) / 60000);
+      const lastCaller = order.lastCall?.by || order.lastCalledBy || 'Staff';
+      const lastCallerUser = String(order.lastCall?.username || '').trim().toLowerCase();
+      if (diffMins >= 0 && diffMins <= 15 && lastCallerUser !== myUser) {
+        setCollisionAlert({
+          isOpen: true,
+          order,
+          type: 'recent_call',
+          lastCall: { diffMins, lastCaller },
+          onProceed: () => {
+            setCollisionAlert((prev) => ({ ...prev, isOpen: false }));
+            aFetch('/admin/orders/' + encodeURIComponent(order.id) + '/lock', {
+              method: 'POST',
+              body: JSON.stringify({ action: actionType })
+            }).catch(() => {});
+            onSafeToProceed();
+          }
+        });
+        return;
+      }
+    }
+
+    // Safe to proceed -> acquire lock and proceed
+    aFetch('/admin/orders/' + encodeURIComponent(order.id) + '/lock', {
+      method: 'POST',
+      body: JSON.stringify({ action: actionType })
+    }).catch(() => {});
+    onSafeToProceed();
+  };
+
+  const handleClaimOrder = async (orderId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const res = await aFetch('/admin/orders/' + encodeURIComponent(orderId) + '/claim', { method: 'POST' }).then((r) => r.json());
+      if (res?.ok && res.order) {
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, ...res.order } : o)));
+        setToast('✅ অর্ডারটি আপনার জন্য লক ও নির্ধারণ করা হয়েছে!');
+        setTimeout(() => setToast(''), 3000);
+      }
+    } catch {}
+  };
+
+  const handleAutoAssignPending = async () => {
+    if (!confirm('আপনি কি সকল আন-অ্যাসাইনড পেন্ডিং অর্ডার সক্রিয় স্টাফদের মাঝে সমানভাগে ভাগ (Round-Robin) করতে চান?')) return;
+    setSyncingAll(true);
+    try {
+      const res = await aFetch('/admin/orders/auto-assign-pending', { method: 'POST' }).then((r) => r.json());
+      if (res?.ok) {
+        setToast(`✅ ${res.assignedCount}টি পেন্ডিং অর্ডার সফলভাবে স্টাফদের মাঝে ভাগ করে দেওয়া হয়েছে!`);
+        setTimeout(() => setToast(''), 4000);
+        load();
+      } else {
+        alert(res?.error || 'অটো-অ্যাসাইন ব্যর্থ হয়েছে');
+      }
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setSyncingAll(false);
+    }
+  };
+
   const [orders, setOrders] = useState<any[]>([]);
   const [savedCallSummaries, setSavedCallSummaries] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(true);
@@ -7185,6 +7310,11 @@ function OrdersAdmin({
       if (courierFilter && String(o?.courier?.name || 'Unassigned').trim().toLowerCase() !== courierFilter.toLowerCase()) return false;
       const itemsText = (Array.isArray(o?.items) ? o.items : []).map((it: any) => `${it?.sku || ''} ${it?.name || ''}`).join(' ');
       if (query && !(o.id + ' ' + (o.customer?.name || '') + ' ' + (o.customer?.phone || '') + ' ' + (o.source || '') + ' ' + (o.attribution?.campaign || '') + ' ' + (o.courier?.consignment || '') + ' ' + (o.courier?.riderNote || '') + ' ' + itemsText).toLowerCase().includes(query)) return false;
+      if (assignmentFilter === 'mine') {
+        if (!currentUsername || String(o?.assignedTo || '').trim().toLowerCase() !== currentUsername) return false;
+      } else if (assignmentFilter === 'unassigned') {
+        if (o?.assignedTo) return false;
+      }
       return true;
     });
     return list.sort((a, b) => {
@@ -7193,7 +7323,20 @@ function OrdersAdmin({
       const tB = getOrderEventTime(b, filter);
       return sort === 'old' ? (tA - tB) : (tB - tA);
     });
-  }, [orders, filter, lostViewMode, shippedViewMode, shippedLayout, courierStatusFilter, range, customDateFrom, customDateTo, sort, q, campaignFilter, skuFilter, courierFilter, landingFilter, landingMap]);
+  }, [orders, filter, assignmentFilter, currentUsername, lostViewMode, shippedViewMode, shippedLayout, courierStatusFilter, range, customDateFrom, customDateTo, sort, q, campaignFilter, skuFilter, courierFilter, landingFilter, landingMap]);
+
+  const myAssignedCount = useMemo(() => {
+    if (!currentUsername) return 0;
+    return (Array.isArray(orders) ? orders : []).filter(
+      (o) => String(o?.assignedTo || '').trim().toLowerCase() === currentUsername && !['cancelled', 'delivered'].includes(String(o?.status || '').toLowerCase())
+    ).length;
+  }, [orders, currentUsername]);
+
+  const unassignedCount = useMemo(() => {
+    return (Array.isArray(orders) ? orders : []).filter(
+      (o) => !o?.assignedTo && String(o?.status || '').toLowerCase() === 'pending'
+    ).length;
+  }, [orders]);
   const PAGE = 25;
   const [page, setPage] = useState(1);
   useEffect(() => { setPage(1); }, [filter, range, customDateFrom, customDateTo, sort, q, campaignFilter, skuFilter, courierFilter, courierStatusFilter, landingFilter]);
@@ -7437,6 +7580,100 @@ function OrdersAdmin({
         </div>
       )}
       <div className="sa-toolbar sa-orders-filter-panel">
+        {/* Anti-Collision & Staff Queue Control Bar */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '8px 14px',
+          marginBottom: 10,
+          background: 'rgba(30, 20, 56, 0.65)',
+          borderRadius: 10,
+          border: '1px solid rgba(139, 92, 246, 0.25)',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#c4b5fd', display: 'flex', alignItems: 'center', gap: 5 }}>
+              🛡️ কল গার্ড ও স্টাফ কিউ:
+            </span>
+            <button
+              type="button"
+              onClick={() => setAssignmentFilter('all')}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                background: assignmentFilter === 'all' ? '#8b5cf6' : 'rgba(255,255,255,0.06)',
+                color: assignmentFilter === 'all' ? '#fff' : '#cbd5e1',
+                border: assignmentFilter === 'all' ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.1)'
+              }}
+            >
+              🌐 সব অর্ডার
+            </button>
+            <button
+              type="button"
+              onClick={() => setAssignmentFilter('mine')}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                background: assignmentFilter === 'mine' ? '#10b981' : 'rgba(16, 185, 129, 0.12)',
+                color: assignmentFilter === 'mine' ? '#fff' : '#34d399',
+                border: assignmentFilter === 'mine' ? '1px solid #10b981' : '1px solid rgba(16, 185, 129, 0.3)'
+              }}
+              title="শুধু আপনার জন্য নির্ধারিত অর্ডারগুলো দেখুন"
+            >
+              👤 আমার দায়িত্ব ({myAssignedCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setAssignmentFilter('unassigned')}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                background: assignmentFilter === 'unassigned' ? '#f59e0b' : 'rgba(245, 158, 11, 0.12)',
+                color: assignmentFilter === 'unassigned' ? '#000' : '#fbbf24',
+                border: assignmentFilter === 'unassigned' ? '1px solid #f59e0b' : '1px solid rgba(245, 158, 11, 0.3)'
+              }}
+              title="যেসব পেন্ডিং অর্ডারে কোনো স্টাফ নির্ধারিত হয়নি"
+            >
+              ✋ আন-অ্যাসাইনড ({unassignedCount})
+            </button>
+          </div>
+
+          {(role === 'owner' || role === 'manager') && unassignedCount > 0 && (
+            <button
+              type="button"
+              onClick={handleAutoAssignPending}
+              disabled={syncingAll}
+              style={{
+                padding: '5px 12px',
+                borderRadius: 6,
+                fontSize: 11.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                background: 'rgba(56, 189, 248, 0.15)',
+                color: '#38bdf8',
+                border: '1px solid rgba(56, 189, 248, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5
+              }}
+              title="পেন্ডিং অর্ডারগুলো সকল সক্রিয় স্টাফদের মাঝে সমানভাগে ভাগ করে দিন"
+            >
+              ⚡ অটো-অ্যাসাইন করুন (Round-Robin)
+            </button>
+          )}
+        </div>
+
         <div className="sa-filters sa-orders-status-filters">
           <button
             type="button"
@@ -7916,8 +8153,20 @@ function OrdersAdmin({
           const isPaid = String(o.paymentStatus || '').toLowerCase() === 'paid';
           const paymentStateLabel = isPaid ? 'Paid' : isCodPayment ? 'Collect on delivery' : 'Unpaid';
 
+          const rowLock = activeLocks[o.id] || o.activeLock;
+          const isLockedByOther = !!(rowLock && rowLock.username && String(rowLock.username).toLowerCase() !== currentUsername && rowLock.expiresAt > Date.now());
+          const lastCallTime = o.lastCall?.at || o.lastCalledAt;
+          const diffMins = lastCallTime ? Math.floor((Date.now() - new Date(lastCallTime).getTime()) / 60000) : -1;
+          const isRecentCalledByOther = diffMins >= 0 && diffMins <= 15 && String(o.lastCall?.username || '').trim().toLowerCase() !== currentUsername;
+          const recentCallerName = o.lastCall?.by || o.lastCalledBy || 'Staff';
+
           return (
-            <div className="ogrid-row" key={o.id} onClick={() => setSel(o)}>
+            <div
+              className={`ogrid-row ${isLockedByOther ? 'is-locked-row' : ''}`}
+              key={o.id}
+              onClick={() => checkOrderCollisionAndProceed(o, 'edit', () => setSel(o))}
+              style={isLockedByOther ? { borderLeft: '3.5px solid #ef4444', background: 'rgba(239, 68, 68, 0.04)' } : undefined}
+            >
               {/* 1. Checkbox */}
               <span className="og-cell-check" onClick={(e) => e.stopPropagation()}>
                 <input type="checkbox" checked={!!picked[o.id]} onChange={(e) => setPicked((p) => ({ ...p, [o.id]: e.target.checked }))} />
@@ -8058,12 +8307,14 @@ function OrdersAdmin({
                       className="og-customer-ip-call"
                       onClick={(e) => {
                         e.stopPropagation();
-                        triggerAdminIPCall({
-                          order: o,
-                          phone: cleanPhone,
-                          name: o.customer?.name,
-                          orderId: o.id,
-                          product: o.items?.[0]?.name
+                        checkOrderCollisionAndProceed(o, 'call', () => {
+                          triggerAdminIPCall({
+                            order: o,
+                            phone: cleanPhone,
+                            name: o.customer?.name,
+                            orderId: o.id,
+                            product: o.items?.[0]?.name
+                          });
                         });
                       }}
                       style={{
@@ -8099,10 +8350,12 @@ function OrdersAdmin({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        triggerAdminWhatsApp({
-                          order: o,
-                          phone: cleanPhone,
-                          name: o.customer?.name,
+                        checkOrderCollisionAndProceed(o, 'whatsapp', () => {
+                          triggerAdminWhatsApp({
+                            order: o,
+                            phone: cleanPhone,
+                            name: o.customer?.name,
+                          });
                         });
                       }}
                       style={{ display: 'inline-flex', alignItems: 'center', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 1 }}
@@ -8112,6 +8365,52 @@ function OrdersAdmin({
                     </button>
                   </div>
                 )}
+
+                {/* Collision & Staff Locks */}
+                {isLockedByOther && (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(239, 68, 68, 0.16)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.35)', borderRadius: 4, padding: '2px 6px', fontSize: 10, fontWeight: 700, width: 'fit-content' }}>
+                    <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ef4444' }} />
+                    <span>🔴 {rowLock.name || rowLock.username} হ্যান্ডেল/কল করছেন</span>
+                  </div>
+                )}
+                {!isLockedByOther && isRecentCalledByOther && (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: 4, padding: '2px 6px', fontSize: 10, fontWeight: 600, width: 'fit-content' }}>
+                    <span>⚠️ {diffMins} মি. আগে {recentCallerName} কল করেছেন</span>
+                  </div>
+                )}
+
+                {/* Staff Assignment & Claim */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 1, flexWrap: 'wrap' }}>
+                  {o.assignedTo ? (
+                    <span style={{ fontSize: 10, color: String(o.assignedTo).toLowerCase() === currentUsername ? '#34d399' : '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: 3, background: String(o.assignedTo).toLowerCase() === currentUsername ? 'rgba(52, 211, 153, 0.12)' : 'rgba(255,255,255,0.05)', padding: '1px 5px', borderRadius: 4, border: String(o.assignedTo).toLowerCase() === currentUsername ? '1px solid rgba(52, 211, 153, 0.3)' : '1px solid rgba(255,255,255,0.08)' }}>
+                      <span>👤</span>
+                      <span style={{ fontWeight: 600 }}>{String(o.assignedTo).toLowerCase() === currentUsername ? 'আপনার' : (o.assignedName || o.assignedTo)}</span>
+                    </span>
+                  ) : (
+                    ['pending', 'incomplete'].includes(String(o.status || '').toLowerCase()) && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleClaimOrder(o.id, e)}
+                        style={{
+                          background: 'rgba(139, 92, 246, 0.16)',
+                          color: '#c4b5fd',
+                          border: '1px solid rgba(139, 92, 246, 0.35)',
+                          padding: '1px 6px',
+                          borderRadius: 4,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 3
+                        }}
+                        title="এই অর্ডারটি নিজের নামে নিয়ে নিন যাতে অন্য স্টাফ ভুল করে কল না দেয়"
+                      >
+                        ✋ আমি নিচ্ছি (Claim)
+                      </button>
+                    )
+                  )}
+                </div>
 
                 {district && (
                   <div style={{ fontSize: 11, color: '#64748b', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: 175 }} title={o.customer?.address}>
@@ -8456,7 +8755,141 @@ function OrdersAdmin({
           }}
         />
       )}
-      {sel && <OrderDrawer o={sel} orders={orders} onClose={() => setSel(null)} onSaved={() => { setSel(null); load(true); }} />}
+      {collisionAlert.isOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 99999,
+            background: 'rgba(10, 10, 20, 0.78)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16
+          }}
+          onClick={() => setCollisionAlert((prev) => ({ ...prev, isOpen: false }))}
+        >
+          <div
+            style={{
+              background: '#13111c',
+              border: `1px solid ${collisionAlert.type === 'in_call' ? 'rgba(239, 68, 68, 0.45)' : 'rgba(245, 158, 11, 0.45)'}`,
+              borderRadius: 14,
+              boxShadow: '0 20px 50px rgba(0,0,0,0.7), 0 0 30px rgba(139,92,246,0.15)',
+              width: '100%',
+              maxWidth: 480,
+              padding: '24px 22px',
+              color: '#f1f5f9',
+              position: 'relative'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 12,
+                  background: collisionAlert.type === 'in_call' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                  border: `1px solid ${collisionAlert.type === 'in_call' ? '#ef4444' : '#f59e0b'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 22,
+                  flexShrink: 0
+                }}
+              >
+                {collisionAlert.type === 'in_call' ? '🚨' : '⚠️'}
+              </div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: collisionAlert.type === 'in_call' ? '#f87171' : '#fbbf24' }}>
+                  {collisionAlert.type === 'in_call' ? 'কলিং কোলিশন অ্যালার্ট! (In-Call Lock)' : 'ডাবল-কল প্রতিরোধ অ্যালার্ট! (Duplicate Call Warning)'}
+                </h3>
+                <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 4 }}>
+                  অর্ডার: <strong style={{ color: '#c4b5fd' }}>#{String(collisionAlert.order?.orderNumber || collisionAlert.order?.id || '').replace(/^DOT-/i, '')}</strong> ({collisionAlert.order?.customer?.name || 'Customer'} - {collisionAlert.order?.customer?.phone || ''})
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 16, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 14, fontSize: 13, lineHeight: 1.55 }}>
+              {collisionAlert.type === 'in_call' ? (
+                <>
+                  <p style={{ margin: 0, color: '#fca5a5', fontWeight: 600 }}>
+                    🛑 স্টাফ <u>{collisionAlert.lock?.name || collisionAlert.lock?.username || 'অন্য একজন'}</u> বর্তমানে এই অর্ডারে সক্রিয় আছেন এবং কাস্টমারকে কল করছেন!
+                  </p>
+                  <p style={{ margin: '8px 0 0', color: '#94a3b8', fontSize: 12 }}>
+                    একই সাথে ২-৩ জন কল দিলে কাস্টমার বিরক্ত হবেন এবং দোকানের ইমেজ নষ্ট হবে। অনুগ্রহ করে কল শেষ হওয়া পর্যন্ত অপেক্ষা করুন অথবা অন্য পেন্ডিং অর্ডারটি পিক করুন।
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p style={{ margin: 0, color: '#fde68a', fontWeight: 600 }}>
+                    ⚠️ মাত্র <u>{collisionAlert.lastCall?.diffMins} মিনিট আগে</u> স্টাফ <u>{collisionAlert.lastCall?.lastCaller}</u> এই কাস্টমারকে কল করেছেন!
+                  </p>
+                  <p style={{ margin: '8px 0 0', color: '#94a3b8', fontSize: 12 }}>
+                    ১৫ মিনিটের মধ্যে একাধিক স্টাফ থেকে ঘনঘন কল দেওয়া এড়িয়ে চলা উত্তম। আপনি কি নিশ্চিত যে এই মুহূর্তে পুনরায় কল করতে চান?
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+              <button
+                type="button"
+                onClick={() => setCollisionAlert((prev) => ({ ...prev, isOpen: false }))}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: 8,
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  color: '#e2e8f0',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                ✕ অপেক্ষা করব / বাতিল
+              </button>
+              <button
+                type="button"
+                onClick={() => collisionAlert.onProceed && collisionAlert.onProceed()}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: collisionAlert.type === 'in_call' ? '#ef4444' : '#f59e0b',
+                  color: collisionAlert.type === 'in_call' ? '#fff' : '#000',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(0,0,0,0.3)'
+                }}
+              >
+                {collisionAlert.type === 'in_call' ? '⚠️ ওভাররাইড করে ওপেন/কল করুন' : '📞 হ্যাঁ, তবুও কল করব'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {sel && (
+        <OrderDrawer
+          o={sel}
+          orders={orders}
+          onClose={() => {
+            if (sel?.id) {
+              aFetch('/admin/orders/' + encodeURIComponent(sel.id) + '/unlock', { method: 'POST' }).catch(() => {});
+            }
+            setSel(null);
+          }}
+          onSaved={() => {
+            if (sel?.id) {
+              aFetch('/admin/orders/' + encodeURIComponent(sel.id) + '/unlock', { method: 'POST' }).catch(() => {});
+            }
+            setSel(null);
+            load(true);
+          }}
+        />
+      )}
     </>
   );
 }

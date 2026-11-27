@@ -2096,13 +2096,157 @@ app.delete('/api/admin/users/:id', adminAuth, requireRole('owner'), (req, res) =
   res.json({ ok: true });
 });
 
+// Real-time In-Call & Active-Handling Order Locks (Collision Prevention)
+const activeOrderLocks = new Map();
+
+function cleanExpiredOrderLocks() {
+  const now = Date.now();
+  for (const [orderId, lock] of activeOrderLocks.entries()) {
+    if (!lock || lock.expiresAt <= now) {
+      activeOrderLocks.delete(orderId);
+    }
+  }
+}
+setInterval(cleanExpiredOrderLocks, 10000);
+
 app.get('/api/orders', adminAuth, (req, res) => {
   let list = getOrders();
   if (req.admin.role === 'staff' && Array.isArray(req.admin.allowedProducts) && req.admin.allowedProducts.length > 0) {
     const allowed = req.admin.allowedProducts;
     list = list.filter((o) => (o.items || []).some((it) => allowed.includes(String(it.id)) || allowed.includes(String(it.slug))));
   }
-  res.json(list);
+  cleanExpiredOrderLocks();
+  const now = Date.now();
+  const enriched = list.map((o) => {
+    const l = activeOrderLocks.get(o.id);
+    return {
+      ...o,
+      activeLock: (l && l.expiresAt > now) ? l : null
+    };
+  });
+  res.json(enriched);
+});
+
+// Order Lock Endpoints (Prevent 2+ staff from calling or editing at the same time)
+app.get('/api/admin/orders/active-locks', adminAuth, (req, res) => {
+  cleanExpiredOrderLocks();
+  res.json({ ok: true, locks: Object.fromEntries(activeOrderLocks) });
+});
+
+app.post('/api/admin/orders/:id/lock', adminAuth, (req, res) => {
+  const orderId = String(req.params.id || '').trim();
+  cleanExpiredOrderLocks();
+  const user = req.adminUser || req.admin || { username: 'admin', name: 'Admin', role: 'owner' };
+  const existing = activeOrderLocks.get(orderId);
+  const now = Date.now();
+  if (existing && existing.username !== user.username && existing.expiresAt > now) {
+    if (!req.body?.force && user.role !== 'owner') {
+      return res.json({
+        ok: false,
+        locked: true,
+        lockedBy: existing,
+        remainingSecs: Math.ceil((existing.expiresAt - now) / 1000)
+      });
+    }
+  }
+  const ttl = Math.min(600, Math.max(30, Number(req.body?.ttlSecs) || 180)) * 1000;
+  const lockData = {
+    username: user.username,
+    name: user.name || user.username,
+    role: user.role || 'staff',
+    action: req.body?.action || 'call',
+    lockedAt: now,
+    expiresAt: now + ttl
+  };
+  activeOrderLocks.set(orderId, lockData);
+  res.json({ ok: true, locked: true, lock: lockData });
+});
+
+app.post('/api/admin/orders/:id/unlock', adminAuth, (req, res) => {
+  const orderId = String(req.params.id || '').trim();
+  activeOrderLocks.delete(orderId);
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/orders/:id/claim', adminAuth, (req, res) => {
+  const orderId = String(req.params.id || '').trim();
+  const user = req.adminUser || req.admin || { username: 'admin', name: 'Admin', role: 'owner' };
+  const orders = getOrders();
+  const ord = orders.find(o => o.id === orderId || o.id === 'DOT-' + orderId || 'DOT-' + o.id === orderId);
+  if (!ord) return res.status(404).json({ error: 'Order not found' });
+  const updated = updateOrder(ord.id, {
+    assignedTo: user.username,
+    assignedName: user.name || user.username
+  });
+  activeOrderLocks.set(ord.id, {
+    username: user.username,
+    name: user.name || user.username,
+    role: user.role || 'staff',
+    action: 'claimed',
+    lockedAt: Date.now(),
+    expiresAt: Date.now() + 180000
+  });
+  res.json({ ok: true, order: updated });
+});
+
+app.post('/api/admin/orders/auto-assign-pending', adminAuth, requireRole('owner', 'manager'), (req, res) => {
+  const orders = getOrders();
+  const users = getUsers().filter(u => u.status !== 'inactive' && u.role !== 'owner');
+  if (users.length === 0) return res.json({ ok: false, error: 'No active staff members found' });
+  let assignedCount = 0;
+  let userIdx = 0;
+  for (const o of orders) {
+    if (String(o.status || '').toLowerCase() === 'pending' && !o.assignedTo) {
+      const targetUser = users[userIdx % users.length];
+      userIdx++;
+      updateOrder(o.id, {
+        assignedTo: targetUser.username,
+        assignedName: targetUser.name || targetUser.username
+      });
+      assignedCount++;
+    }
+  }
+  res.json({ ok: true, assignedCount });
+});
+
+app.post('/api/orders/:id/manual-call', adminAuth, (req, res) => {
+  const orderId = String(req.params.id || '').trim();
+  const outcome = String(req.body?.outcome || 'talked').trim();
+  const orders = getOrders();
+  const ord = orders.find(o => o.id === orderId || o.id === 'DOT-' + orderId || 'DOT-' + o.id === orderId);
+  if (!ord) return res.status(404).json({ error: 'Order not found' });
+  const user = req.adminUser || req.admin || { username: 'admin', name: 'Staff', role: 'staff' };
+  const now = new Date().toISOString();
+  const callNote = outcome === 'talked' ? 'Talked to customer' : 'Tried · no answer';
+  if (!Array.isArray(ord.history)) ord.history = [];
+  ord.history.unshift({
+    at: now,
+    status: 'call',
+    direction: 'outbound',
+    note: `📞 Manual Call · Outcome: ${callNote}`,
+    staff: { username: user.username, name: user.name || user.username, role: user.role },
+    by: user.name || user.username,
+    outcome
+  });
+  ord.lastCall = {
+    at: now,
+    by: user.name || user.username,
+    username: user.username,
+    outcome,
+    type: 'manual'
+  };
+  ord.lastCalledAt = now;
+  ord.lastCalledBy = user.name || user.username;
+  ord.callCount = (Number(ord.callCount) || 0) + 1;
+  activeOrderLocks.delete(ord.id);
+  const updated = updateOrder(ord.id, {
+    history: ord.history,
+    lastCall: ord.lastCall,
+    lastCalledAt: ord.lastCalledAt,
+    lastCalledBy: ord.lastCalledBy,
+    callCount: ord.callCount
+  });
+  res.json(updated);
 });
 
 // Admin create manual order (Phone call, WhatsApp, Facebook Messenger, POS)

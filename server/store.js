@@ -651,6 +651,14 @@ export function updateOrder(id, patch) {
     o.total = Math.max(0, parseInt(patch.total, 10) || 0);
   }
 
+  if (patch.assignedTo !== undefined) o.assignedTo = patch.assignedTo ? String(patch.assignedTo).trim() : '';
+  if (patch.assignedName !== undefined) o.assignedName = patch.assignedName ? String(patch.assignedName).trim() : '';
+  if (patch.lastCall !== undefined) o.lastCall = patch.lastCall;
+  if (patch.lastCalledAt !== undefined) o.lastCalledAt = patch.lastCalledAt;
+  if (patch.lastCalledBy !== undefined) o.lastCalledBy = patch.lastCalledBy;
+  if (patch.callCount !== undefined) o.callCount = Number(patch.callCount) || 0;
+  if (patch.internalNotes !== undefined) o.internalNotes = patch.internalNotes;
+
   saveOrders(orders);
   return o;
 }
@@ -2337,6 +2345,16 @@ export function saveCall(callData) {
         });
         ord.lastUpdated = record.createdAt;
         ord.lastUpdatedBy = record.staff;
+        ord.lastCall = {
+          at: record.createdAt,
+          by: record.staff?.name || record.staff?.username || 'Staff',
+          username: record.staff?.username || '',
+          outcome: record.outcome,
+          duration: record.duration
+        };
+        ord.lastCalledAt = record.createdAt;
+        ord.lastCalledBy = record.staff?.name || record.staff?.username || 'Staff';
+        ord.callCount = (Number(ord.callCount) || 0) + 1;
         saveOrders(orders);
       }
     } catch (e) {
