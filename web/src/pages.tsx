@@ -2114,6 +2114,8 @@ function PdpDirectCodForm({
           />
         </div>
 
+        {nameFld?.helper && <div style={{ fontSize: 11, color: '#8c7d6b', marginTop: -4, marginBottom: 8 }}>{nameFld.helper}</div>}
+        {phoneFld?.helper && <div style={{ fontSize: 11, color: '#8c7d6b', marginTop: -4, marginBottom: 8 }}>{phoneFld.helper}</div>}
         {/* District & Thana (Searchable selection matching checkout) */}
         <div className="pdp-cod-row">
           <div>
@@ -4338,12 +4340,13 @@ export function Checkout() {
               <div className="pc-corner-bl" />
               <div className="cobox-h">
                 <span className="cobox-n">1</span>
-                <span>{tr('Contact & Personal Details', language)}</span>
+                <span>{storeCc.sectionTitleBilling || tr('Contact & Personal Details', language)}</span>
               </div>
               <div className="cobox-b">
                 <div>
                   <label>{nameFld?.label || tr('Full Name *', language)}</label>
                   <input className="field" value={f.name} onChange={set('name')} placeholder={nameFld?.placeholder || tr('Enter your full name', language)} />
+                  {nameFld?.helper && <div className="fieldhint">{nameFld.helper}</div>}
                 </div>
                 <div>
                   <label>{phoneFld?.label || tr('Mobile Number *', language)}</label>
@@ -4370,6 +4373,7 @@ export function Checkout() {
                       inputMode="tel"
                       maxLength={11}
                     />
+                    {altPhoneFld?.helper && <div className="fieldhint">{altPhoneFld.helper}</div>}
                   </div>
                 )}
               </div>
@@ -4381,7 +4385,7 @@ export function Checkout() {
               <div className="pc-corner-bl" />
               <div className="cobox-h">
                 <span className="cobox-n">2</span>
-                <span>{tr(isAllDigital ? 'Instant Digital Fulfillment' : 'Shipping & Doorstep Delivery Address', language)}</span>
+                <span>{storeCc.sectionTitleShipping || tr(isAllDigital ? 'Instant Digital Fulfillment' : 'Shipping & Doorstep Delivery Address', language)}</span>
               </div>
               {isAllDigital ? (
                 <div className="cobox-b">
@@ -4454,6 +4458,7 @@ export function Checkout() {
                   <div>
                     <label>{noteFld?.label || tr('Order Note (Optional)', language)}</label>
                     <input className="field" value={f.note} onChange={set('note')} placeholder={noteFld?.placeholder || 'Special delivery instructions, timing or landmarks'} />
+                    {noteFld?.helper && <div className="fieldhint">{noteFld.helper}</div>}
                   </div>
 
                   {/* Dynamic Custom Fields */}
@@ -4493,7 +4498,7 @@ export function Checkout() {
           <div className="summ">
             <div className="pc-corner-tr" />
             <div className="pc-corner-bl" />
-            <h3>{tr('Order Summary', language)} ({lines.reduce((s, l) => s + l.qty, 0)} {tr('Items', language)})</h3>
+            <h3>{storeCc.sectionTitleProducts || tr('Order Summary', language)} ({lines.reduce((s, l) => s + l.qty, 0)} {tr('Items', language)})</h3>
 
             <div className="summ-items">
               {lines.map((l) => (
@@ -4585,8 +4590,13 @@ export function Checkout() {
             </div>
 
             <div className="summ-cod">
-              💵 Cash on Delivery · Inspect Parcel Before Paying
+              💵 {storeCc.paymentTitle || 'Cash on Delivery'} · {storeCc.paymentDescription || 'Inspect Parcel Before Paying'}
             </div>
+            {storeCc.showPrivacyNotice !== false && (
+              <div style={{ fontSize: 11.5, color: '#64748b', textAlign: 'center', margin: '8px 0 12px', lineHeight: 1.4 }}>
+                {storeCc.privacyDisclaimer || '🔒 আপনার ব্যক্তিগত তথ্যের সর্বোচ্চ গোপনীয়তা রক্ষা করা হবে।'}
+              </div>
+            )}
 
             {err && (
               <div className="checkout-error" style={{ background: '#fee2e2', border: '1px solid #f87171', color: '#b91c1c', padding: '10px 14px', borderRadius: 2, fontSize: 13, marginTop: 14 }}>

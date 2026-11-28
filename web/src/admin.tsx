@@ -3549,7 +3549,7 @@ export function Admin() {
           onViewStore={() => window.open('/', '_blank')}
           onLogout={() => { localStorage.removeItem(KEY); setAuthed(false); }}
         />
-        <main className="sa-main">
+        <main className="sa-main" key={adminLanguage}>
         {cur === 'dashboard' && <Dashboard onNav={(tab) => {
           const label = tab === 'products' ? 'Product List' : tab === 'scanner' ? 'Scan To Update' : tab;
           setActiveSubItem(label);
@@ -14994,6 +14994,7 @@ export interface CheckoutFieldConfig {
   id: string;
   label: string;
   placeholder: string;
+  helper?: string;
   type: 'text' | 'tel' | 'textarea' | 'select' | 'number';
   required: boolean;
   enabled: boolean;
@@ -15065,7 +15066,7 @@ const DEFAULT_CHECKOUT_FIELDS: CheckoutFieldConfig[] = [
   },
 ];
 
-function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => void }) {
+function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (updater: any) => void; onSwitchTab?: (tab: string) => void }) {
   const [scope, setScope] = useState<'store' | 'landing'>('store');
   const [previewDevice, setPreviewDevice] = useState<'mobile' | 'desktop'>('mobile');
   const [showAddFieldModal, setShowAddFieldModal] = useState(false);
@@ -15073,6 +15074,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
     id: '',
     label: '',
     placeholder: '',
+    helper: '',
     type: 'text',
     required: false,
     enabled: true,
@@ -15098,9 +15100,24 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
         trustBadge1: '🔒 ১০০% নিরাপদ ক্যাশ অন ডেলিভারি (কোনো অগ্রিম টাকা ছাড়াই)',
         trustBadge2: '🚚 সারা দেশে ২-৩ দিনে দ্রুত ও নিশ্চিত হোম ডেলিভারি',
         trustBadge3: '📦 পার্সেল রিসিভ করার সময় চেক করে নেওয়ার সুযোগ',
-        deliveryInside: f?.deliveryInside ?? 60,
-        deliveryOutside: f?.deliveryOutside ?? 120,
-        freeShipThreshold: f?.freeShipThreshold ?? 1500,
+        trustBadge4: '🔄 ৭ দিনের সহজ ও দ্রুত রিপ্লেসমেন্ট ওয়ারেন্টি',
+        sectionTitleBilling: 'বিলিং ও ডেলিভারি তথ্য (Billing details)',
+        sectionTitleProducts: 'আপনার অর্ডারকৃত পণ্য (Order Summary)',
+        sectionTitleShipping: 'ডেলিভারি এলাকা ও চার্জ (Shipping Method)',
+        paymentTitle: 'ক্যাশ অন ডেলিভারি (Cash on Delivery)',
+        paymentDescription: 'পণ্য হাতে পেয়ে মূল্য পরিশোধ করুন। সারা দেশে দ্রুত হোম ডেলিভারি।',
+        showPrivacyNotice: true,
+        privacyDisclaimer: '🔒 আপনার ব্যক্তিগত তথ্যের সর্বোচ্চ গোপনীয়তা রক্ষা করা হবে।',
+        showOrderBump: false,
+        bumpHeadline: '🔥 বিশেষ অফার! এই অর্ডারে এক ক্লিকে যোগ করুন:',
+        bumpTitle: 'প্রিমিয়াম গিফট বক্স ও বিশেষ নিরাপত্তা প্যাকেজ',
+        bumpPrice: 190,
+        bumpDescription: 'আপনার পণ্যটি আরও সুরক্ষিত ও আকর্ষণীয় গিফট প্যাকেজে পেতে টিক দিন।',
+        showCoupon: false,
+        couponPlaceholder: 'কুপন কোড লিখুন (যদি থাকে)...',
+        couponBtnText: 'এপ্লাই করুন',
+        stickyMobileButton: true,
+        stickyButtonText: 'অর্ডার কনফার্ম করুন (ক্যাশ অন ডেলিভারি)',
         fields: DEFAULT_CHECKOUT_FIELDS,
       };
       return defaults[key] !== undefined ? defaults[key] : defVal;
@@ -15122,8 +15139,24 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
         trustBadge1: '⚡ প্রিমিয়াম কোয়ালিটি ও দ্রুততম ডেলিভারি গ্যারান্টি',
         trustBadge2: '💵 ক্যাশ অন ডেলিভারি - পণ্য হাতে পেয়ে মূল্য পরিশোধ',
         trustBadge3: '🔄 ৭ দিনের সহজ ও দ্রুত পরিবর্তন বা রিটার্ন সুবিধা',
-        deliveryInside: f?.deliveryInside ?? 60,
-        deliveryOutside: f?.deliveryOutside ?? 120,
+        trustBadge4: '🛡️ আসল ব্র্যান্ডের শতভাগ অরিজিনাল পণ্য',
+        sectionTitleBilling: 'আপনার তথ্য (Your details)',
+        sectionTitleProducts: 'আপনার পণ্য ও পরিমাণ (Your Products)',
+        sectionTitleShipping: 'Shipping (ডেলিভারি এলাকা)',
+        paymentTitle: 'ক্যাশ অন ডেলিভারি (Cash on Delivery)',
+        paymentDescription: 'কোনো অগ্রিম পেমেন্ট ছাড়াই পণ্য হাতে পেয়ে টাকা দিন।',
+        showPrivacyNotice: true,
+        privacyDisclaimer: '🔒 আপনার তথ্যের সর্বোচ্চ গোপনীয়তা রক্ষা করা হয়।',
+        showOrderBump: false,
+        bumpHeadline: '🔥 স্পেশাল অফার! এক ক্লিকে যুক্ত করুন:',
+        bumpTitle: 'এক্সট্রা এক্সেসরিজ / গিফট প্যাক',
+        bumpPrice: 190,
+        bumpDescription: 'মাত্র ৳১৯০ যুক্ত করে অর্ডারটি আরও আকর্ষণীয় করুন।',
+        showCoupon: false,
+        couponPlaceholder: 'প্রোমো কোড লিখুন...',
+        couponBtnText: 'প্রয়োগ করুন',
+        stickyMobileButton: true,
+        stickyButtonText: 'ক্যাশ অন ডেলিভারিতে অর্ডার করুন',
         fields: DEFAULT_CHECKOUT_FIELDS,
       };
       return defaults[key] !== undefined ? defaults[key] : defVal;
@@ -15156,7 +15189,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
   };
 
   const removeField = (id: string) => {
-    if (confirm(`Are you sure you want to delete this field? (${id})`)) {
+    if (confirm(adminTranslate(`Are you sure you want to delete this field? (${id})`))) {
       const updated = rawFields.filter((fld) => fld.id !== id);
       updateVal('fields', updated);
     }
@@ -15173,7 +15206,6 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
 
   const addPresetField = (preset: CheckoutFieldConfig) => {
     if (rawFields.some((fld) => fld.id === preset.id)) {
-      // If already exists but disabled, enable it
       updateField(preset.id, { enabled: true });
       return;
     }
@@ -15183,18 +15215,19 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
   const handleCreateField = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newField.id || !newField.label) {
-      alert('Field ID and Label are required.');
+      alert(adminTranslate('Field ID and Label are required.'));
       return;
     }
     const cleanId = String(newField.id).trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
     if (rawFields.some((f) => f.id === cleanId)) {
-      alert(`A field with ID "${cleanId}" already exists.`);
+      alert(adminTranslate(`A field with ID "${cleanId}" already exists.`));
       return;
     }
     const created: CheckoutFieldConfig = {
       id: cleanId,
       label: newField.label || cleanId,
       placeholder: newField.placeholder || '',
+      helper: newField.helper || '',
       type: newField.type || 'text',
       required: !!newField.required,
       enabled: true,
@@ -15203,13 +15236,13 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
     };
     updateVal('fields', [...rawFields, created]);
     setShowAddFieldModal(false);
-    setNewField({ id: '', label: '', placeholder: '', type: 'text', required: false, enabled: true, width: 'full' });
+    setNewField({ id: '', label: '', placeholder: '', helper: '', type: 'text', required: false, enabled: true, width: 'full' });
     setNewOptionsStr('');
   };
 
   const syncToOtherScope = () => {
     const otherScope = scope === 'store' ? 'landing' : 'store';
-    if (confirm(`Copy all ${scope === 'store' ? 'Main Store' : 'Landing Page'} checkout settings to ${otherScope === 'store' ? 'Main Store' : 'Landing Page'}?`)) {
+    if (confirm(adminTranslate(`Copy all ${scope === 'store' ? 'Main Store' : 'Landing Page'} checkout settings to ${otherScope === 'store' ? 'Main Store' : 'Landing Page'}?`))) {
       setF((cur: any) => {
         const prevCC = cur.checkoutCustomizer || {};
         return {
@@ -15220,7 +15253,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
           },
         };
       });
-      alert(`Successfully synchronized settings to ${otherScope === 'store' ? 'Main Store' : 'Landing Page'}!`);
+      alert(adminTranslate(`Successfully synchronized settings to ${otherScope === 'store' ? 'Main Store' : 'Landing Page'}!`));
     }
   };
 
@@ -15241,6 +15274,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
     'COMPLETE ORDER NOW',
   ];
 
+  // Config values
   const btnColor = getVal('buttonColor', scope === 'store' ? '#16a34a' : '#dc2626');
   const btnTextColor = getVal('buttonTextColor', '#ffffff');
   const btnText = getVal('buttonText', scope === 'store' ? 'অর্ডারটি কনফার্ম করুন' : 'ক্যাশ অন ডেলিভারিতে অর্ডার করুন');
@@ -15251,13 +15285,39 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
   const badge1 = getVal('trustBadge1', '🔒 ১০০% নিরাপদ ক্যাশ অন ডেলিভারি');
   const badge2 = getVal('trustBadge2', '🚚 সারা দেশে ২-৩ দিনে দ্রুত ডেলিভারি');
   const badge3 = getVal('trustBadge3', '📦 পণ্য চেক করে মূল্য পরিশোধের সুযোগ');
+  const badge4 = getVal('trustBadge4', '🔄 ৭ দিনের সহজ রিটার্ন বা এক্সচেঞ্জ সুবিধা');
   const showTimer = scope === 'landing' && getVal('showOfferTimer', true);
   const timerMins = getVal('timerMinutes', 15);
   const timerHeadline = getVal('timerHeadline', '🔥 বিশেষ অফার শেষ হতে বাকি:');
   const showScarcity = scope === 'landing' && getVal('showScarcity', true);
   const scarcityText = getVal('scarcityText', '⚡ আর মাত্র ৭টি পণ্য স্টকে আছে! দ্রুত অর্ডার করুন');
-  const insideFee = getVal('deliveryInside', 60);
-  const outsideFee = getVal('deliveryOutside', 120);
+
+  // Headings
+  const sectionTitleBilling = getVal('sectionTitleBilling', scope === 'store' ? 'বিলিং ও ডেলিভারি তথ্য (Billing details)' : 'আপনার তথ্য (Your details)');
+  const sectionTitleProducts = getVal('sectionTitleProducts', 'আপনার পণ্য ও পরিমাণ (Your Products)');
+  const sectionTitleShipping = getVal('sectionTitleShipping', 'ডেলিভারি এলাকা ও চার্জ (Shipping Method)');
+  const paymentTitle = getVal('paymentTitle', 'ক্যাশ অন ডেলিভারি (Cash on Delivery)');
+  const paymentDescription = getVal('paymentDescription', 'পণ্য হাতে পেয়ে মূল্য পরিশোধ করুন। সারা দেশে দ্রুত হোম ডেলিভারি।');
+  const showPrivacyNotice = getVal('showPrivacyNotice', true);
+  const privacyDisclaimer = getVal('privacyDisclaimer', '🔒 আপনার ব্যক্তিগত তথ্যের সর্বোচ্চ গোপনীয়তা রক্ষা করা হবে।');
+
+  // Order Bump
+  const showOrderBump = getVal('showOrderBump', false);
+  const bumpHeadline = getVal('bumpHeadline', '🔥 বিশেষ অফার! এই অর্ডারে এক ক্লিকে যোগ করুন:');
+  const bumpTitle = getVal('bumpTitle', 'প্রিমিয়াম গিফট বক্স ও বিশেষ নিরাপত্তা প্যাকেজ');
+  const bumpPrice = getVal('bumpPrice', 190);
+  const bumpDescription = getVal('bumpDescription', 'আপনার পণ্যটি আরও সুরক্ষিত ও আকর্ষণীয় গিফট প্যাকেজে পেতে টিক দিন।');
+
+  // Coupon & Mobile Sticky
+  const showCoupon = getVal('showCoupon', false);
+  const couponPlaceholder = getVal('couponPlaceholder', 'কুপন কোড লিখুন (যদি থাকে)...');
+  const couponBtnText = getVal('couponBtnText', 'এপ্লাই করুন');
+  const stickyMobileButton = getVal('stickyMobileButton', true);
+  const stickyButtonText = getVal('stickyButtonText', scope === 'store' ? 'অর্ডারটি কনফার্ম করুন (ক্যাশ অন ডেলিভারি)' : 'ক্যাশ অন ডেলিভারিতে অর্ডার করুন');
+
+  // Delivery Fees exclusively from Store Settings
+  const insideFee = Number(f?.deliveryInside ?? 60);
+  const outsideFee = Number(f?.deliveryOutside ?? 120);
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
@@ -15277,20 +15337,18 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
       >
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: 'rgba(139, 92, 246, 0.2)', color: '#a78bfa', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
-              ✦ DYNAMIC CHECKOUT BUILDER (CARTFLOWS STYLE)
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: 'rgba(139, 92, 246, 0.2)', color: '#a78bfa', border: '1px solid rgba(139, 92, 246, 0.4)' }}>
+              CARTFLOWS PRO
             </span>
-            <span style={{ fontSize: 11, color: '#34d399', fontWeight: 600 }}>● Live Sync</span>
+            <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, color: '#fff' }}>
+              {adminTranslate("Checkout Customizer")}
+            </h2>
           </div>
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>
-            Checkout &amp; Landing Page Experience
-          </h2>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>
-            Add, remove, reorder fields, edit placeholders, customize button colors and trust badges with full CartFlows flexibility.
+          <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>
+            {adminTranslate("Checkout & Landing Page Experience")} — {scope === 'store' ? adminTranslate("Main Store Checkout") : adminTranslate("Landing Page Funnel")}
           </p>
         </div>
 
-        {/* Scope Pill Toggle & Sync Button */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', background: '#0b0914', padding: 4, borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
             <button
@@ -15311,7 +15369,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                 color: scope === 'store' ? '#fff' : '#94a3b8',
               }}
             >
-              <span>🏪 Main Store Checkout</span>
+              <span>🏪 {adminTranslate("Main Store Checkout")}</span>
             </button>
             <button
               type="button"
@@ -15331,14 +15389,14 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                 color: scope === 'landing' ? '#fff' : '#94a3b8',
               }}
             >
-              <span>🚀 Landing Page Funnel</span>
+              <span>🚀 {adminTranslate("Landing Page Funnel")}</span>
             </button>
           </div>
 
           <button
             type="button"
             onClick={syncToOtherScope}
-            title="Copy settings to the other scope"
+            title={adminTranslate("Copy settings to the other scope")}
             style={{
               padding: '8px 14px',
               borderRadius: 8,
@@ -15353,7 +15411,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
               gap: 6,
             }}
           >
-            <span>⇄ Sync to {scope === 'store' ? 'Landing' : 'Store'}</span>
+            <span>⇄ {adminTranslate("Sync to")} {scope === 'store' ? adminTranslate("Landing") : adminTranslate("Store")}</span>
           </button>
         </div>
       </div>
@@ -15370,10 +15428,10 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                 <span style={{ fontSize: 18 }}>📋</span>
                 <div>
                   <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>
-                    Checkout Form Fields (CartFlows Style)
+                    {adminTranslate("Checkout Form Fields (CartFlows Style)")}
                   </h3>
                   <span style={{ fontSize: 12, color: '#94a3b8' }}>
-                    Add, edit placeholders, reorder or remove fields at will
+                    {adminTranslate("Add, edit placeholders, reorder or remove fields at will")}
                   </span>
                 </div>
               </div>
@@ -15382,7 +15440,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm('Reset fields to CartFlows default layout?')) {
+                    if (confirm(adminTranslate('Reset fields to CartFlows default layout?'))) {
                       updateVal('fields', DEFAULT_CHECKOUT_FIELDS);
                     }
                   }}
@@ -15396,7 +15454,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                     cursor: 'pointer',
                   }}
                 >
-                  ↺ Reset Defaults
+                  ↺ {adminTranslate("Reset Defaults")}
                 </button>
                 <button
                   type="button"
@@ -15415,7 +15473,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                     gap: 6,
                   }}
                 >
-                  <span>+ Add Field</span>
+                  <span>{adminTranslate("+ Add Field")}</span>
                 </button>
               </div>
             </div>
@@ -15423,7 +15481,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
             {/* Quick Add Presets Chips */}
             <div style={{ marginBottom: 16, padding: '10px 12px', background: '#0b0914', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                ⚡ Quick Presets (Click to add)
+                ⚡ {adminTranslate("Quick Presets (Click to add)")}
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <button
@@ -15432,6 +15490,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                     id: 'alt_phone',
                     label: 'বিকল্প মোবাইল নম্বর (Alternative Phone)',
                     placeholder: 'পরিবারের অন্য কারও ফোন নম্বর (ঐচ্ছিক)',
+                    helper: 'জরুরি যোগাযোগের জন্য বিকল্প নম্বর',
                     type: 'tel',
                     required: false,
                     enabled: true,
@@ -15439,7 +15498,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                   })}
                   style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(139, 92, 246, 0.3)', background: 'rgba(139, 92, 246, 0.1)', color: '#c4b5fd', fontSize: 11.5, cursor: 'pointer' }}
                 >
-                  + Alt Phone
+                  {adminTranslate("+ Alt Phone")}
                 </button>
                 <button
                   type="button"
@@ -15447,6 +15506,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                     id: 'landmark',
                     label: 'পরিচিত ল্যান্ডমার্ক (Nearby Landmark)',
                     placeholder: 'যেমন: স্কুলের পাশে / মসজিদের বিপরীতে',
+                    helper: 'কুরিয়ার সহজে খুঁজে পাওয়ার জন্য আশেপাশের পরিচিত স্থান',
                     type: 'text',
                     required: false,
                     enabled: true,
@@ -15454,7 +15514,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                   })}
                   style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(139, 92, 246, 0.3)', background: 'rgba(139, 92, 246, 0.1)', color: '#c4b5fd', fontSize: 11.5, cursor: 'pointer' }}
                 >
-                  + Landmark (ল্যান্ডমার্ক)
+                  {adminTranslate("+ Landmark (ল্যান্ডমার্ক)")}
                 </button>
                 <button
                   type="button"
@@ -15462,6 +15522,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                     id: 'delivery_time',
                     label: 'ডেলিভারির উপযুক্ত সময় (Preferred Time)',
                     placeholder: 'যেকোনো সময় / সকাল ১০টা - দুপুর ২টা / বিকাল ৪টা - রাত ৮টা',
+                    helper: 'আপনার সুবিধাজনক ডেলিভারি সময় নির্বাচন করুন',
                     type: 'select',
                     required: false,
                     enabled: true,
@@ -15470,7 +15531,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                   })}
                   style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(139, 92, 246, 0.3)', background: 'rgba(139, 92, 246, 0.1)', color: '#c4b5fd', fontSize: 11.5, cursor: 'pointer' }}
                 >
-                  + Delivery Time Slot
+                  {adminTranslate("+ Delivery Time Slot")}
                 </button>
                 <button
                   type="button"
@@ -15478,6 +15539,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                     id: 'email',
                     label: 'ইমেইল এড্রেস (Email Address)',
                     placeholder: 'আপনার ইমেইল এড্রেস লিখুন (ঐচ্ছিক)',
+                    helper: 'অর্ডার ইনভয়েস ও ট্র্যাকিং ইমেইল পেতে',
                     type: 'text',
                     required: false,
                     enabled: true,
@@ -15485,7 +15547,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                   })}
                   style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(139, 92, 246, 0.3)', background: 'rgba(139, 92, 246, 0.1)', color: '#c4b5fd', fontSize: 11.5, cursor: 'pointer' }}
                 >
-                  + Email Address
+                  {adminTranslate("+ Email Address")}
                 </button>
               </div>
             </div>
@@ -15493,7 +15555,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
             {/* Form Headline Input */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                Form Header Headline (ফর্মের শিরোনাম)
+                {adminTranslate("Form Header Headline (ফর্মের শিরোনাম)")}
               </label>
               <input
                 type="text"
@@ -15656,11 +15718,11 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                     </div>
                   </div>
 
-                  {/* Field Configuration Inputs: Label & Placeholder */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+                  {/* Field Configuration Inputs: Label, Placeholder & Helper */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
                     <div>
                       <label style={{ display: 'block', fontSize: 11.5, color: '#94a3b8', marginBottom: 4 }}>
-                        Field Label (লেবেল):
+                        {adminTranslate("Field Label")}:
                       </label>
                       <input
                         type="text"
@@ -15672,7 +15734,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                     </div>
                     <div>
                       <label style={{ display: 'block', fontSize: 11.5, color: '#94a3b8', marginBottom: 4 }}>
-                        Placeholder (প্লেসহোল্ডার — ইচ্ছামতো লিখুন):
+                        {adminTranslate("Placeholder (প্লেসহোল্ডার — ইচ্ছামতো লিখুন)")}:
                       </label>
                       <input
                         type="text"
@@ -15682,13 +15744,25 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                         style={{ width: '100%', height: 36, padding: '0 10px', background: '#08060f', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#38bdf8', fontSize: 12.5 }}
                       />
                     </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11.5, color: '#94a3b8', marginBottom: 4 }}>
+                        {adminTranslate("Helper Subtitle")}:
+                      </label>
+                      <input
+                        type="text"
+                        value={fld.helper || ''}
+                        onChange={(e) => updateField(fld.id, { helper: e.target.value })}
+                        placeholder="ফিল্ডের নিচে ছোট নির্দেশনা বার্তা"
+                        style={{ width: '100%', height: 36, padding: '0 10px', background: '#08060f', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#a78bfa', fontSize: 12.5 }}
+                      />
+                    </div>
                   </div>
 
                   {/* Dropdown Options if select type */}
                   {fld.type === 'select' && fld.id !== 'district_thana' && (
                     <div style={{ marginTop: 8 }}>
                       <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginBottom: 3 }}>
-                        Dropdown Options (comma separated):
+                        {adminTranslate("Dropdown Options (comma separated)")}:
                       </label>
                       <input
                         type="text"
@@ -15709,110 +15783,102 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
               <span style={{ fontSize: 18 }}>🎯</span>
               <div>
-                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>Order Button &amp; CTA Styler</h3>
-                <span style={{ fontSize: 12, color: '#94a3b8' }}>Change order button text, color, pulse animation and subtitle</span>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>{adminTranslate("Order Button & CTA Styler")}</h3>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>{adminTranslate("Change order button text, color, pulse animation and subtitle")}</span>
               </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                  Order Button Text (বাটন টেক্সট)
-                </label>
+                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>{adminTranslate("Order Button Text")}:</label>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                  {BUTTON_TEXT_PRESETS.map((txt) => (
+                    <button
+                      key={txt}
+                      type="button"
+                      onClick={() => updateVal('buttonText', txt)}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: 6,
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        background: btnText === txt ? '#8b5cf6' : 'rgba(255,255,255,0.05)',
+                        color: btnText === txt ? '#fff' : '#cbd5e1',
+                        fontSize: 11.5,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {txt}
+                    </button>
+                  ))}
+                </div>
                 <input
                   type="text"
                   value={btnText}
                   onChange={(e) => updateVal('buttonText', e.target.value)}
-                  placeholder="e.g. অর্ডারটি কনফার্ম করুন"
-                  style={{ width: '100%', height: 40, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13.5 }}
+                  style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
                 />
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                  {BUTTON_TEXT_PRESETS.map((pst) => (
-                    <button
-                      key={pst}
-                      type="button"
-                      onClick={() => updateVal('buttonText', pst)}
-                      style={{
-                        padding: '3px 9px',
-                        borderRadius: 6,
-                        border: '1px solid rgba(255,255,255,0.12)',
-                        background: btnText === pst ? 'rgba(139, 92, 246, 0.25)' : 'rgba(255,255,255,0.04)',
-                        color: btnText === pst ? '#a78bfa' : '#94a3b8',
-                        fontSize: 11,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {pst}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                  Button Background Color (বাটনের কালার)
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>{adminTranslate("Button Background Color")}:</label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+                  {COLOR_PRESETS.map((p) => (
+                    <button
+                      key={p.color}
+                      type="button"
+                      onClick={() => updateVal('buttonColor', p.color)}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: 6,
+                        border: btnColor === p.color ? '2px solid #fff' : '1px solid transparent',
+                        background: p.color,
+                        color: '#fff',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        boxShadow: btnColor === p.color ? '0 0 10px ' + p.color : 'none',
+                      }}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
                   <input
                     type="color"
                     value={btnColor}
                     onChange={(e) => updateVal('buttonColor', e.target.value)}
-                    style={{ width: 44, height: 40, border: 'none', borderRadius: 8, cursor: 'pointer', background: 'transparent' }}
+                    style={{ width: 34, height: 34, borderRadius: 6, border: 'none', cursor: 'pointer', background: 'none' }}
                   />
                   <input
                     type="text"
                     value={btnColor}
                     onChange={(e) => updateVal('buttonColor', e.target.value)}
-                    style={{ width: 110, height: 40, padding: '0 10px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                    style={{ width: 90, height: 34, padding: '0 8px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: 12 }}
                   />
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {COLOR_PRESETS.map((p) => (
-                      <button
-                        key={p.color}
-                        type="button"
-                        onClick={() => updateVal('buttonColor', p.color)}
-                        title={p.name}
-                        style={{
-                          width: 26,
-                          height: 26,
-                          borderRadius: '50%',
-                          background: p.color,
-                          border: btnColor === p.color ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)',
-                          cursor: 'pointer',
-                          boxShadow: btnColor === p.color ? '0 0 8px ' + p.color : 'none',
-                          transform: btnColor === p.color ? 'scale(1.15)' : 'scale(1)',
-                          transition: 'all 0.15s ease',
-                        }}
-                      />
-                    ))}
-                  </div>
                 </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                  Button Subtitle / Hint (বাটনের নিচের ছোট মেসেজ)
-                </label>
+                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>{adminTranslate("Button Subtitle / Hint")}:</label>
                 <input
                   type="text"
                   value={btnSub}
                   onChange={(e) => updateVal('buttonSubtitle', e.target.value)}
                   placeholder="e.g. ক্যাশ অন ডেলিভারি · পণ্য হাতে পেয়ে টাকা দিন"
-                  style={{ width: '100%', height: 40, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                  style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
                 />
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 8, background: '#0c0a15', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: '#fff' }}>⚡ Eye-Catching Pulse Effect</div>
-                  <div style={{ fontSize: 11.5, color: '#94a3b8' }}>Add smooth breathing animation to maximize order conversions</div>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <input
                   type="checkbox"
+                  id="btnPulseToggle"
                   checked={btnPulse}
                   onChange={(e) => updateVal('buttonPulse', e.target.checked)}
-                  style={{ width: 18, height: 18, cursor: 'pointer' }}
+                  style={{ width: 16, height: 16, cursor: 'pointer' }}
                 />
+                <label htmlFor="btnPulseToggle" style={{ fontSize: 13, color: '#e2e8f0', cursor: 'pointer' }}>
+                  {adminTranslate("Enable continuous pulsing animation (High Attention)")}
+                </label>
               </div>
             </div>
           </div>
@@ -15823,50 +15889,48 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 18 }}>🛡️</span>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>Trust Badges &amp; Guarantee</h3>
-                  <span style={{ fontSize: 12, color: '#94a3b8' }}>Reassure customers about safe Cash on Delivery</span>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>{adminTranslate("Trust Badges & Guarantee")}</h3>
+                  <span style={{ fontSize: 12, color: '#94a3b8' }}>{adminTranslate("Security assurances shown directly below the order form")}</span>
                 </div>
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12.5, color: '#cbd5e1' }}>
-                <input
-                  type="checkbox"
-                  checked={showBadges}
-                  onChange={(e) => updateVal('showTrustBadges', e.target.checked)}
-                  style={{ width: 16, height: 16 }}
-                />
-                <span>Active</span>
-              </label>
+              <input
+                type="checkbox"
+                checked={showBadges}
+                onChange={(e) => updateVal('showTrustBadges', e.target.checked)}
+                style={{ width: 18, height: 18, cursor: 'pointer' }}
+              />
             </div>
 
             {showBadges && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Badge 1 Text (নিরাপত্তা মেসেজ):</label>
-                  <input
-                    type="text"
-                    value={badge1}
-                    onChange={(e) => updateVal('trustBadge1', e.target.value)}
-                    style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 12.5 }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Badge 2 Text (ডেলিভারি মেসেজ):</label>
-                  <input
-                    type="text"
-                    value={badge2}
-                    onChange={(e) => updateVal('trustBadge2', e.target.value)}
-                    style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 12.5 }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Badge 3 Text (কোয়ালিটি/রিটার্ন পলিসি):</label>
-                  <input
-                    type="text"
-                    value={badge3}
-                    onChange={(e) => updateVal('trustBadge3', e.target.value)}
-                    style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 12.5 }}
-                  />
-                </div>
+                <input
+                  type="text"
+                  value={badge1}
+                  onChange={(e) => updateVal('trustBadge1', e.target.value)}
+                  placeholder="Trust Badge 1"
+                  style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
+                />
+                <input
+                  type="text"
+                  value={badge2}
+                  onChange={(e) => updateVal('trustBadge2', e.target.value)}
+                  placeholder="Trust Badge 2"
+                  style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
+                />
+                <input
+                  type="text"
+                  value={badge3}
+                  onChange={(e) => updateVal('trustBadge3', e.target.value)}
+                  placeholder="Trust Badge 3"
+                  style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
+                />
+                <input
+                  type="text"
+                  value={badge4}
+                  onChange={(e) => updateVal('trustBadge4', e.target.value)}
+                  placeholder="Trust Badge 4"
+                  style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
+                />
               </div>
             )}
           </div>
@@ -15874,58 +15938,50 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
           {/* CARD 4: LANDING PAGE SPECIAL (TIMER & SCARCITY) */}
           {scope === 'landing' && (
             <div className="sa-card" style={{ padding: 22, background: '#13111c' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 18 }}>⏳</span>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>Offer Countdown Timer &amp; Scarcity</h3>
-                    <span style={{ fontSize: 12, color: '#94a3b8' }}>Increase FOMO &amp; urgency on your landing page</span>
-                  </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                <span style={{ fontSize: 18 }}>⏳</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>{adminTranslate("Offer Countdown Timer & Scarcity")}</h3>
+                  <span style={{ fontSize: 12, color: '#94a3b8' }}>{adminTranslate("Conversion triggers exclusive to landing page checkouts")}</span>
                 </div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12.5, color: '#cbd5e1' }}>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: 13, color: '#e2e8f0' }}>{adminTranslate("Show Countdown Timer Banner")}</label>
                   <input
                     type="checkbox"
                     checked={showTimer}
                     onChange={(e) => updateVal('showOfferTimer', e.target.checked)}
-                    style={{ width: 16, height: 16 }}
+                    style={{ width: 16, height: 16, cursor: 'pointer' }}
                   />
-                  <span>Show Timer</span>
-                </label>
-              </div>
-
-              {showTimer && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 12, marginBottom: 12 }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Timer Headline (টাইমার শিরোনাম):</label>
+                </div>
+                {showTimer && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 10 }}>
                     <input
                       type="text"
                       value={timerHeadline}
                       onChange={(e) => updateVal('timerHeadline', e.target.value)}
-                      style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                      placeholder="e.g. 🔥 বিশেষ অফার শেষ হতে বাকি:"
+                      style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 12.5 }}
                     />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Minutes (মিনিট):</label>
                     <input
                       type="number"
-                      min={1}
-                      max={120}
                       value={timerMins}
-                      onChange={(e) => updateVal('timerMinutes', parseInt(e.target.value, 10) || 15)}
-                      style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                      onChange={(e) => updateVal('timerMinutes', Number(e.target.value) || 15)}
+                      placeholder="Mins"
+                      style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 12.5 }}
                     />
                   </div>
-                </div>
-              )}
+                )}
 
-              <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Stock Scarcity Notice</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: 13, color: '#e2e8f0' }}>{adminTranslate("Show Stock Scarcity Alert")}</label>
                   <input
                     type="checkbox"
                     checked={showScarcity}
                     onChange={(e) => updateVal('showScarcity', e.target.checked)}
-                    style={{ width: 16, height: 16 }}
+                    style={{ width: 16, height: 16, cursor: 'pointer' }}
                   />
                 </div>
                 {showScarcity && (
@@ -15941,43 +15997,278 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
             </div>
           )}
 
-          {/* CARD 5: DELIVERY RATES */}
+          {/* CARD 5: SECTION HEADINGS & PRIVACY NOTICE */}
           <div className="sa-card" style={{ padding: 22, background: '#13111c' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <span style={{ fontSize: 18 }}>🚚</span>
+              <span style={{ fontSize: 18 }}>🏷️</span>
               <div>
-                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>Delivery Fees &amp; Thresholds</h3>
-                <span style={{ fontSize: 12, color: '#94a3b8' }}>Synchronized with checkout calculations</span>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>{adminTranslate("Section Titles & Headings")}</h3>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>{adminTranslate("Customize headings for billing, product summary, shipping, payment and privacy")}</span>
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Inside Dhaka Fee (৳):</label>
+                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>
+                  {adminTranslate("Billing Details Heading")}:
+                </label>
                 <input
-                  type="number"
-                  value={insideFee}
-                  onChange={(e) => {
-                    const v = Number(e.target.value) || 0;
-                    updateVal('deliveryInside', v);
-                    setF((cur: any) => ({ ...cur, deliveryInside: v }));
-                  }}
-                  style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                  type="text"
+                  value={sectionTitleBilling}
+                  onChange={(e) => updateVal('sectionTitleBilling', e.target.value)}
+                  placeholder="e.g. বিলিং ও ডেলিভারি তথ্য (Billing details)"
+                  style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
                 />
               </div>
+
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Outside Dhaka Fee (৳):</label>
+                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>
+                  {adminTranslate("Order Summary Heading")}:
+                </label>
                 <input
-                  type="number"
-                  value={outsideFee}
-                  onChange={(e) => {
-                    const v = Number(e.target.value) || 0;
-                    updateVal('deliveryOutside', v);
-                    setF((cur: any) => ({ ...cur, deliveryOutside: v }));
-                  }}
-                  style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                  type="text"
+                  value={sectionTitleProducts}
+                  onChange={(e) => updateVal('sectionTitleProducts', e.target.value)}
+                  placeholder="e.g. আপনার অর্ডারকৃত পণ্য (Order Summary)"
+                  style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
                 />
               </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>
+                  {adminTranslate("Shipping Method Heading")}:
+                </label>
+                <input
+                  type="text"
+                  value={sectionTitleShipping}
+                  onChange={(e) => updateVal('sectionTitleShipping', e.target.value)}
+                  placeholder="e.g. ডেলিভারি এলাকা ও চার্জ (Shipping Method)"
+                  style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>
+                    {adminTranslate("Payment Method Title")}:
+                  </label>
+                  <input
+                    type="text"
+                    value={paymentTitle}
+                    onChange={(e) => updateVal('paymentTitle', e.target.value)}
+                    placeholder="e.g. ক্যাশ অন ডেলিভারি (Cash on Delivery)"
+                    style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>
+                    {adminTranslate("Payment Description")}:
+                  </label>
+                  <input
+                    type="text"
+                    value={paymentDescription}
+                    onChange={(e) => updateVal('paymentDescription', e.target.value)}
+                    placeholder="e.g. পণ্য হাতে পেয়ে মূল্য পরিশোধ করুন"
+                    style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <label style={{ fontSize: 12, color: '#94a3b8' }}>
+                    {adminTranslate("Privacy Notice & Guarantee")}
+                  </label>
+                  <input
+                    type="checkbox"
+                    checked={showPrivacyNotice}
+                    onChange={(e) => updateVal('showPrivacyNotice', e.target.checked)}
+                    style={{ width: 15, height: 15, cursor: 'pointer' }}
+                  />
+                </div>
+                {showPrivacyNotice && (
+                  <input
+                    type="text"
+                    value={privacyDisclaimer}
+                    onChange={(e) => updateVal('privacyDisclaimer', e.target.value)}
+                    placeholder="e.g. 🔒 আপনার ব্যক্তিগত তথ্যের সর্বোচ্চ গোপনীয়তা রক্ষা করা হবে।"
+                    style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* CARD 6: 1-CLICK ORDER BUMP OFFER */}
+          <div className="sa-card" style={{ padding: 22, background: '#13111c' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 18 }}>🎁</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>{adminTranslate("1-Click Order Bump Offer")}</h3>
+                  <span style={{ fontSize: 12, color: '#94a3b8' }}>{adminTranslate("High-converting add-on offer right before the order button")}</span>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={showOrderBump}
+                onChange={(e) => updateVal('showOrderBump', e.target.checked)}
+                style={{ width: 18, height: 18, cursor: 'pointer' }}
+              />
+            </div>
+
+            {showOrderBump && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>{adminTranslate("Bump Headline")}:</label>
+                  <input
+                    type="text"
+                    value={bumpHeadline}
+                    onChange={(e) => updateVal('bumpHeadline', e.target.value)}
+                    placeholder="e.g. 🔥 বিশেষ অফার! এই অর্ডারে এক ক্লিকে যোগ করুন:"
+                    style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
+                  />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: 10 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>{adminTranslate("Bump Product Title")}:</label>
+                    <input
+                      type="text"
+                      value={bumpTitle}
+                      onChange={(e) => updateVal('bumpTitle', e.target.value)}
+                      placeholder="e.g. প্রিমিয়াম গিফট বক্স / এক্সট্রা ব্যাটারি"
+                      style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>{adminTranslate("Bump Price (৳)")}:</label>
+                    <input
+                      type="number"
+                      value={bumpPrice}
+                      onChange={(e) => updateVal('bumpPrice', Number(e.target.value) || 0)}
+                      placeholder="190"
+                      style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#38bdf8', fontSize: 12.5, fontWeight: 700 }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>{adminTranslate("Bump Description")}:</label>
+                  <input
+                    type="text"
+                    value={bumpDescription}
+                    onChange={(e) => updateVal('bumpDescription', e.target.value)}
+                    placeholder="e.g. আপনার পণ্যটি আরও সুরক্ষিত ও আকর্ষণীয় গিফট প্যাকেজে পেতে টিক দিন।"
+                    style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* CARD 7: PROMO / COUPON BOX & MOBILE STICKY CTA */}
+          <div className="sa-card" style={{ padding: 22, background: '#13111c' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+              <span style={{ fontSize: 18 }}>🎟️</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>{adminTranslate("Promo / Coupon Box & Mobile Sticky Bar")}</h3>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>{adminTranslate("Optional discount promo field and persistent floating mobile checkout button")}</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <label style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 600 }}>{adminTranslate("Show Coupon Input")}</label>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>{adminTranslate("Allows customers to enter coupon codes during checkout")}</div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={showCoupon}
+                  onChange={(e) => updateVal('showCoupon', e.target.checked)}
+                  style={{ width: 17, height: 17, cursor: 'pointer' }}
+                />
+              </div>
+
+              {showCoupon && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: 10 }}>
+                  <input
+                    type="text"
+                    value={couponPlaceholder}
+                    onChange={(e) => updateVal('couponPlaceholder', e.target.value)}
+                    placeholder="e.g. কুপন কোড লিখুন..."
+                    style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
+                  />
+                  <input
+                    type="text"
+                    value={couponBtnText}
+                    onChange={(e) => updateVal('couponBtnText', e.target.value)}
+                    placeholder="e.g. প্রয়োগ করুন"
+                    style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
+                  />
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                <div>
+                  <label style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 600 }}>{adminTranslate("Mobile Sticky Order Button")}</label>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>{adminTranslate("Fixed bottom floating order button for mobile visitors")}</div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={stickyMobileButton}
+                  onChange={(e) => updateVal('stickyMobileButton', e.target.checked)}
+                  style={{ width: 17, height: 17, cursor: 'pointer' }}
+                />
+              </div>
+
+              {stickyMobileButton && (
+                <input
+                  type="text"
+                  value={stickyButtonText}
+                  onChange={(e) => updateVal('stickyButtonText', e.target.value)}
+                  placeholder="e.g. অর্ডার কনফার্ম করুন (ক্যাশ অন ডেলিভারি)"
+                  style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* CARD 8: DELIVERY RATES (EXCLUSIVE TO STORE SETTINGS) */}
+          <div className="sa-card" style={{ padding: 20, background: '#13111c', border: '1px solid rgba(56, 189, 248, 0.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 22 }}>🚚</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: '#38bdf8' }}>
+                    {adminTranslate("Delivery Fees Synced with Store Settings")}
+                  </h3>
+                  <span style={{ fontSize: 12, color: '#cbd5e1' }}>
+                    {adminTranslate("ঢাকার ভেতরে")} <strong>৳{insideFee}</strong>, {adminTranslate("বাইরে")} <strong>৳{outsideFee}</strong> ({adminTranslate("Store Settings থেকে নিয়ন্ত্রিত")})
+                  </span>
+                </div>
+              </div>
+
+              {onSwitchTab && (
+                <button
+                  type="button"
+                  onClick={() => onSwitchTab('store')}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    border: '1px solid rgba(56, 189, 248, 0.4)',
+                    background: 'rgba(56, 189, 248, 0.12)',
+                    color: '#38bdf8',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <span>⚙️ {adminTranslate("Go to Store Settings")}</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -15987,7 +16278,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
           <div className="sa-card" style={{ padding: 20, background: '#0e0c17', border: '1px solid rgba(255,255,255,0.12)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>👁️ Live Preview</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>👁️ {adminTranslate("Live Preview")}</span>
                 <span style={{ fontSize: 10.5, background: 'rgba(52, 211, 153, 0.15)', color: '#34d399', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
                   CARTFLOWS LIVE
                 </span>
@@ -16038,6 +16329,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                 margin: '0 auto',
                 maxWidth: previewDevice === 'mobile' ? 360 : 540,
                 transition: 'max-width 0.25s ease',
+                position: 'relative',
               }}
             >
               {/* Device Header Bar */}
@@ -16069,11 +16361,15 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                   {headerTitle}
                 </h4>
 
-                {/* Dynamic Fields Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+                {/* Section Title Billing */}
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 10, paddingBottom: 4, borderBottom: '2px solid #e2e8f0' }}>
+                  {sectionTitleBilling}
+                </div>
+
+                {/* Render Fields in Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: previewDevice === 'mobile' ? '1fr' : 'repeat(2, 1fr)', gap: 10 }}>
                   {rawFields.filter((fld) => fld.enabled).map((fld) => {
-                    const isHalf = fld.width === 'half' && previewDevice === 'desktop';
-                    const colSpan = isHalf ? 'span 1' : '1 / -1';
+                    const colSpan = (previewDevice === 'desktop' && fld.width === 'half') ? 'span 1' : '1 / -1';
 
                     if (fld.id === 'district_thana') {
                       return (
@@ -16094,6 +16390,9 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                               <option>ধানমন্ডি (Dhanmondi)</option>
                             </select>
                           </div>
+                          {fld.helper && (
+                            <small style={{ gridColumn: '1 / -1', fontSize: 10, color: '#64748b', marginTop: -4 }}>{fld.helper}</small>
+                          )}
                         </div>
                       );
                     }
@@ -16109,6 +16408,9 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                               <option key={i}>{opt}</option>
                             ))}
                           </select>
+                          {fld.helper && (
+                            <small style={{ display: 'block', fontSize: 10, color: '#64748b', marginTop: 2 }}>{fld.helper}</small>
+                          )}
                         </div>
                       );
                     }
@@ -16125,6 +16427,9 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                             placeholder={fld.placeholder || 'আপনার সম্পূর্ণ ডেলিভারি ঠিকানা লিখুন...'}
                             style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: 12, resize: 'none' }}
                           />
+                          {fld.helper && (
+                            <small style={{ display: 'block', fontSize: 10, color: '#64748b', marginTop: 2 }}>{fld.helper}</small>
+                          )}
                         </div>
                       );
                     }
@@ -16139,16 +16444,50 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                           placeholder={fld.placeholder || `Enter ${fld.label}`}
                           style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: 12 }}
                         />
+                        {fld.helper && (
+                          <small style={{ display: 'block', fontSize: 10, color: '#64748b', marginTop: 2 }}>{fld.helper}</small>
+                        )}
                       </div>
                     );
                   })}
                 </div>
 
-                {/* Delivery Selection */}
-                <div style={{ marginTop: 12 }}>
-                  <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
-                    ডেলিভারি এরিয়া নির্বাচন করুন:
-                  </label>
+                {/* Section Title Products */}
+                <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>
+                    {sectionTitleProducts}
+                  </div>
+                  <div style={{ padding: '8px 10px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+                    <span>স্মার্ট ওয়াচ প্রো (1×)</span>
+                    <strong>৳১,৪৫০</strong>
+                  </div>
+                </div>
+
+                {/* 1-Click Order Bump Offer Box */}
+                {showOrderBump && (
+                  <div style={{ marginTop: 12, padding: '10px 12px', background: '#fffbeb', borderRadius: 8, border: '2px dashed #f59e0b' }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#b45309', marginBottom: 4 }}>
+                      {bumpHeadline}
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
+                      <input type="checkbox" defaultChecked style={{ marginTop: 3, accentColor: '#d97706' }} />
+                      <div>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: '#92400e' }}>
+                          {bumpTitle} (+৳{bumpPrice})
+                        </div>
+                        <div style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>
+                          {bumpDescription}
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
+                {/* Section Title Shipping */}
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>
+                    {sectionTitleShipping}
+                  </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     <div style={{ padding: '8px 10px', borderRadius: 6, border: '2px solid #16a34a', background: '#f0fdf4', fontSize: 11.5, fontWeight: 600, color: '#166534' }}>
                       <span>✓ ঢাকার ভিতরে</span>
@@ -16158,6 +16497,35 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                       <span>ঢাকার বাইরে</span>
                       <div style={{ fontSize: 10.5, color: '#64748b' }}>৳{outsideFee}</div>
                     </div>
+                  </div>
+                </div>
+
+                {/* Coupon Box Preview */}
+                {showCoupon && (
+                  <div style={{ marginTop: 12, display: 'flex', gap: 6 }}>
+                    <input
+                      disabled
+                      placeholder={couponPlaceholder}
+                      style={{ flex: 1, height: 34, padding: '0 10px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: 11.5 }}
+                    />
+                    <button
+                      type="button"
+                      disabled
+                      style={{ padding: '0 12px', height: 34, borderRadius: 6, border: 'none', background: '#334155', color: '#fff', fontSize: 11, fontWeight: 700 }}
+                    >
+                      {couponBtnText}
+                    </button>
+                  </div>
+                )}
+
+                {/* Payment Option */}
+                <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #cbd5e1' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: '#1e293b' }}>
+                    <span>💵</span>
+                    <span>{paymentTitle}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 3 }}>
+                    {paymentDescription}
                   </div>
                 </div>
 
@@ -16185,10 +16553,17 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                       transition: 'all 0.2s',
                     }}
                   >
-                    <span>{btnText} · ৳১,৪৫০</span>
+                    <span>{btnText} · ৳{1450 + insideFee + (showOrderBump ? Number(bumpPrice) : 0)}</span>
                     {btnSub && <span style={{ fontSize: 10.5, opacity: 0.9, fontWeight: 500 }}>{btnSub}</span>}
                   </button>
                 </div>
+
+                {/* Privacy Notice */}
+                {showPrivacyNotice && (
+                  <div style={{ marginTop: 10, textAlign: 'center', fontSize: 11, color: '#64748b', lineHeight: 1.4 }}>
+                    {privacyDisclaimer}
+                  </div>
+                )}
 
                 {/* Trust Badges */}
                 {showBadges && (
@@ -16205,9 +16580,42 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
                       <span>✓</span>
                       <span>{badge3}</span>
                     </div>
+                    <div style={{ fontSize: 11, color: '#6d28d9', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>✓</span>
+                      <span>{badge4}</span>
+                    </div>
                   </div>
                 )}
               </div>
+
+              {/* Mobile Sticky Order Bar Simulation */}
+              {previewDevice === 'mobile' && stickyMobileButton && (
+                <div style={{ position: 'sticky', bottom: 0, left: 0, right: 0, padding: '10px 14px', background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(6px)', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, boxShadow: '0 -4px 12px rgba(0,0,0,0.08)' }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: '#64748b' }}>সর্বমোট</div>
+                    <strong style={{ fontSize: 13, color: '#0f172a' }}>৳{1450 + insideFee + (showOrderBump ? Number(bumpPrice) : 0)}</strong>
+                  </div>
+                  <button
+                    type="button"
+                    style={{
+                      flex: 1,
+                      padding: '9px 12px',
+                      borderRadius: 6,
+                      border: 'none',
+                      background: btnColor,
+                      color: btnTextColor,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {stickyButtonText}
+                  </button>
+                </div>
+              )}
             </div>
 
             <style>{`
@@ -16250,7 +16658,7 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#fff' }}>
-                + Add Custom Checkout Field
+                {adminTranslate("+ Add Custom Checkout Field")}
               </h3>
               <button
                 type="button"
@@ -16263,120 +16671,132 @@ function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => 
 
             <form onSubmit={handleCreateField} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 4 }}>
-                  Field ID / Variable (e.g. `apartment`, `landmark`, `time_slot`):
+                <label style={{ display: 'block', fontSize: 12, color: '#cbd5e1', marginBottom: 4 }}>
+                  {adminTranslate("Field ID / Variable")} (e.g. alt_phone, delivery_time, notes):
                 </label>
                 <input
-                  type="text"
                   required
+                  type="text"
                   value={newField.id || ''}
-                  onChange={(e) => setNewField({ ...newField, id: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
-                  placeholder="e.g. alt_phone, delivery_slot, landmark"
-                  style={{ width: '100%', height: 38, padding: '0 12px', background: '#0a0814', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                  onChange={(e) => setNewField({ ...newField, id: e.target.value })}
+                  placeholder="e.g. customer_note"
+                  style={{ width: '100%', height: 38, padding: '0 12px', background: '#0b0914', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 4 }}>
-                  Field Label (ফর্মের ওপরে প্রদর্শিত নাম):
+                <label style={{ display: 'block', fontSize: 12, color: '#cbd5e1', marginBottom: 4 }}>
+                  {adminTranslate("Field Label")} (ফর্মের উপর যে শিরোনাম দেখাবে):
                 </label>
                 <input
-                  type="text"
                   required
+                  type="text"
                   value={newField.label || ''}
                   onChange={(e) => setNewField({ ...newField, label: e.target.value })}
-                  placeholder="e.g. বাড়ি বা ফ্ল্যাট নম্বর / ল্যান্ডমার্ক"
-                  style={{ width: '100%', height: 38, padding: '0 12px', background: '#0a0814', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                  placeholder="e.g. অতিরিক্ত ডেলিভারি নোট"
+                  style={{ width: '100%', height: 38, padding: '0 12px', background: '#0b0914', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 4 }}>
-                  Placeholder (বক্সের ভেতরের ইঙ্গিত টেক্সট):
+                <label style={{ display: 'block', fontSize: 12, color: '#cbd5e1', marginBottom: 4 }}>
+                  {adminTranslate("Placeholder")} (বক্সের ভেতরের হালকা নির্দেশনা লেখা):
                 </label>
                 <input
                   type="text"
                   value={newField.placeholder || ''}
                   onChange={(e) => setNewField({ ...newField, placeholder: e.target.value })}
-                  placeholder="e.g. ফ্ল্যাট নং ৪বি, ৩য় তলা..."
-                  style={{ width: '100%', height: 38, padding: '0 12px', background: '#0a0814', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#38bdf8', fontSize: 13 }}
+                  placeholder="e.g. এখানে বিস্তারিত লিখুন..."
+                  style={{ width: '100%', height: 38, padding: '0 12px', background: '#0b0914', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#cbd5e1', marginBottom: 4 }}>
+                  {adminTranslate("Helper Subtitle")} (ফিল্ডের নিচের ছোট বার্তা / ঐচ্ছিক):
+                </label>
+                <input
+                  type="text"
+                  value={newField.helper || ''}
+                  onChange={(e) => setNewField({ ...newField, helper: e.target.value })}
+                  placeholder="e.g. সঠিক ১১ ডিজিট লিখুন"
+                  style={{ width: '100%', height: 38, padding: '0 12px', background: '#0b0914', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
                 />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 4 }}>
-                    Field Type (ধরনের নির্বাচন):
+                  <label style={{ display: 'block', fontSize: 12, color: '#cbd5e1', marginBottom: 4 }}>
+                    {adminTranslate("Field Type")}:
                   </label>
                   <select
                     value={newField.type || 'text'}
-                    onChange={(e) => setNewField({ ...newField, type: e.target.value as any })}
-                    style={{ width: '100%', height: 38, padding: '0 10px', background: '#0a0814', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                    onChange={(e: any) => setNewField({ ...newField, type: e.target.value })}
+                    style={{ width: '100%', height: 38, padding: '0 10px', background: '#0b0914', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
                   >
-                    <option value="text">Text (লেখা)</option>
-                    <option value="tel">Phone / Mobile (ফোন)</option>
+                    <option value="text">Text (এক লাইনের লেখা)</option>
+                    <option value="tel">Telephone / Mobile (ফোন নম্বর)</option>
+                    <option value="textarea">Textarea (বড় প্যারাগ্রাফ ঠিকানা/নোট)</option>
+                    <option value="select">Dropdown Select (ড্রপডাউন অপশন)</option>
                     <option value="number">Number (সংখ্যা)</option>
-                    <option value="textarea">Textarea (বড় বক্স)</option>
-                    <option value="select">Dropdown (তালিকা নির্বাচন)</option>
                   </select>
                 </div>
-
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 4 }}>
-                    Width (সাইজ):
+                  <label style={{ display: 'block', fontSize: 12, color: '#cbd5e1', marginBottom: 4 }}>
+                    {adminTranslate("Width")}:
                   </label>
                   <select
                     value={newField.width || 'full'}
-                    onChange={(e) => setNewField({ ...newField, width: e.target.value as any })}
-                    style={{ width: '100%', height: 38, padding: '0 10px', background: '#0a0814', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                    onChange={(e: any) => setNewField({ ...newField, width: e.target.value })}
+                    style={{ width: '100%', height: 38, padding: '0 10px', background: '#0b0914', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
                   >
-                    <option value="full">100% Full Width</option>
-                    <option value="half">50% Half Width (2-in-a-row)</option>
+                    <option value="full">Full Width (১০০% পুরো লাইন)</option>
+                    <option value="half">Half Width (৫০% অর্ধেক লাইন)</option>
                   </select>
                 </div>
               </div>
 
               {newField.type === 'select' && (
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 4 }}>
-                    Options (কমা দিয়ে আলাদা করুন):
+                  <label style={{ display: 'block', fontSize: 12, color: '#cbd5e1', marginBottom: 4 }}>
+                    {adminTranslate("Dropdown Options (comma separated)")}:
                   </label>
                   <input
                     type="text"
                     value={newOptionsStr}
                     onChange={(e) => setNewOptionsStr(e.target.value)}
-                    placeholder="সকাল, দুপুর, বিকাল, রাত"
-                    style={{ width: '100%', height: 38, padding: '0 12px', background: '#0a0814', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                    placeholder="সকাল ১০টা - দুপুর ২টা, বিকাল ৪টা - রাত ৮টা"
+                    style={{ width: '100%', height: 38, padding: '0 12px', background: '#0b0914', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
                   />
                 </div>
               )}
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <input
                   type="checkbox"
-                  id="chkReq"
+                  id="reqToggle"
                   checked={!!newField.required}
                   onChange={(e) => setNewField({ ...newField, required: e.target.checked })}
-                  style={{ width: 18, height: 18, cursor: 'pointer' }}
+                  style={{ width: 16, height: 16, cursor: 'pointer' }}
                 />
-                <label htmlFor="chkReq" style={{ fontSize: 13, color: '#fff', cursor: 'pointer' }}>
-                  Mark as Required (পূরণ করা বাধ্যতামূলক)
+                <label htmlFor="reqToggle" style={{ fontSize: 13, color: '#e2e8f0', cursor: 'pointer' }}>
+                  {adminTranslate("Mark as Required")} (পূরণ করা বাধ্যতামূলক করুন)
                 </label>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
                 <button
                   type="button"
                   onClick={() => setShowAddFieldModal(false)}
                   style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}
                 >
-                  Cancel
+                  {adminTranslate("Cancel")}
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#8b5cf6', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                  style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#8b5cf6', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
                 >
-                  Add Field
+                  {adminTranslate("+ Add Field")}
                 </button>
               </div>
             </form>
@@ -18994,7 +19414,7 @@ function SettingsAdmin({ initialTab = 'store' }: { initialTab?: 'brand' | 'slide
         </div>
       </div>}
 
-      {tab === 'checkout' && <CheckoutCustomizerAdmin f={f} setF={setF} />}
+      {tab === 'checkout' && <CheckoutCustomizerAdmin f={f} setF={setF} onSwitchTab={setTab} />}
 
       {/* Slide Add/Edit Modal */}
       {showSlideModal && (
@@ -21982,8 +22402,8 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
           <div className="wa-lightbox-content" onClick={(e) => e.stopPropagation()}>
             <img src={lightboxImage} alt="Fullscreen preview" />
             <div className="wa-lightbox-bar">
-              <a href={lightboxImage} download="whatsapp-image.jpg" className="wa-lightbox-download">↓ ডাউনলোড</a>
-              <button type="button" className="wa-lightbox-close" onClick={() => setLightboxImage(null)}>✕ বন্ধ করুন</button>
+              <a href={lightboxImage} download="whatsapp-image.jpg" className="wa-lightbox-download">{adminTranslate("↓ Download")}</a>
+              <button type="button" className="wa-lightbox-close" onClick={() => setLightboxImage(null)}>{adminTranslate("✕ Close")}</button>
             </div>
           </div>
         </div>
@@ -22039,7 +22459,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
             </div>
             <div className="wa-head-tools">
               <span className="wa-inbox-list-live"><i /> {adminTranslate("Live")}</span>
-              <button type="button" className="wa-icon-btn" onClick={() => void refresh()} title="রিফ্রেশ">↻</button>
+              <button type="button" className="wa-icon-btn" onClick={() => void refresh()} title={adminTranslate("Refresh")}>↻</button>
             </div>
           </div>
 
@@ -22173,7 +22593,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                   className="wa-inbox-call-action"
                   disabled={!callDigits}
                   onClick={() => setBrowserCallMode('audio')}
-                  title="ব্রাউজার আইপি ভয়েস কল"
+                  title={adminTranslate("Browser IP Voice Call")}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.34 1.78.65 2.62a2 2 0 0 1-.45 2.11L8.04 9.72a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.84.31 1.72.53 2.62.65A2 2 0 0 1 22 16.92z" />
@@ -22185,7 +22605,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                   className="wa-inbox-call-action"
                   disabled={!callDigits}
                   onClick={() => setBrowserCallMode('video')}
-                  title="ভিডিও কল লিংক"
+                  title={adminTranslate("Video Call Link")}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <rect x="3" y="6" width="13" height="12" rx="2" />
@@ -22199,7 +22619,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                   type="button"
                   className={`wa-inbox-detail-toggle ${contextOpen ? 'is-active' : ''}`}
                   onClick={() => setContextOpen((v) => !v)}
-                  title="অর্ডার ডিটেইলস প্যানেল"
+                  title={adminTranslate("Order Details Panel")}
                 >
                   ⓘ <span>{adminTranslate("Details")}</span>
                 </button>
@@ -22334,7 +22754,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                           {isOut && (
                             <span
                               className={`wa-inbox-ticks ${m.deliveryStatus === 'read' ? 'is-read' : ''} ${m.deliveryStatus === 'failed' ? 'is-failed' : ''}`}
-                              title={m.deliveryStatus === 'read' ? 'পড়া হয়েছে (Seen)' : m.deliveryStatus === 'delivered' ? 'পৌঁছেছে (Delivered)' : m.deliveryStatus === 'failed' ? 'ব্যর্থ হয়েছে' : 'পাঠানো হয়েছে (Sent)'}
+                              title={m.deliveryStatus === 'read' ? adminTranslate("Seen") : m.deliveryStatus === 'delivered' ? adminTranslate("Delivered") : m.deliveryStatus === 'failed' ? adminTranslate("Failed") : adminTranslate("Sent")}
                             >
                               {m.deliveryStatus === 'failed' ? '!' : m.deliveryStatus === 'delivered' || m.deliveryStatus === 'read' ? '✓✓' : '✓'}
                             </span>
@@ -22348,7 +22768,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
 
               {/* Composer */}
               <div className="wa-inbox-composer">
-                {!connected && <div className="wa-inbox-composer-hint">মেসেজ পাঠাতে হোয়াটসঅ্যাপ পুনরায় কানেক্ট করুন।</div>}
+                {!connected && <div className="wa-inbox-composer-hint">{adminTranslate("Reconnect WhatsApp to send messages.")}</div>}
 
                 {/* Quoted Reply Banner */}
                 {replyingTo && (
@@ -22358,7 +22778,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                       <strong>{replyingTo.direction === 'out' ? 'আপনি (You)' : contactName}</strong>
                       <p>{replyingTo.text || (replyingTo.mediaType === 'image' ? '📷 ছবি (Photo)' : replyingTo.mediaType === 'audio' ? '🎤 ভয়েস মেসেজ' : 'ফাইল অ্যাটাচমেন্ট')}</p>
                     </div>
-                    <button type="button" className="wa-reply-dismiss" onClick={() => setReplyingTo(null)} title="রিপ্লাই বাতিল">✕</button>
+                    <button type="button" className="wa-reply-dismiss" onClick={() => setReplyingTo(null)} title={adminTranslate("Dismiss reply")}>✕</button>
                   </div>
                 )}
 
@@ -22420,15 +22840,15 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                   <div className="wa-attach-menu">
                     <button type="button" onClick={() => { attachmentInputRef.current?.click(); setShowAttachMenu(false); }}>
                       <span className="wa-attach-icon photo">📷</span>
-                      <span>ছবি ও ভিডিও</span>
+                      <span>{adminTranslate("Photos & Videos")}</span>
                     </button>
                     <button type="button" onClick={() => { docInputRef.current?.click(); setShowAttachMenu(false); }}>
                       <span className="wa-attach-icon doc">📄</span>
-                      <span>ডকুমেন্ট ও ফাইল</span>
+                      <span>{adminTranslate("Documents & Files")}</span>
                     </button>
                     <button type="button" onClick={() => { setShowTemplates(true); setShowAttachMenu(false); }}>
                       <span className="wa-attach-icon tpl">⚡</span>
-                      <span>কুইক টেমপ্লেট</span>
+                      <span>{adminTranslate("Quick Templates")}</span>
                     </button>
                   </div>
                 )}
@@ -22447,7 +22867,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                     ) : (
                       <span className="wa-doc-preview-chip">📄 {attachment.name}</span>
                     )}
-                    <button type="button" onClick={() => setAttachment(null)} title="ফাইল মুছুন">×</button>
+                    <button type="button" onClick={() => setAttachment(null)} title={adminTranslate("Remove file")}>×</button>
                   </div>
                 )}
 
@@ -22456,10 +22876,10 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                   <div className="wa-recording-banner">
                     <span className="wa-rec-pulse" />
                     <span className="wa-rec-timer">
-                      🔴 রেকর্ডিং চলছে… {Math.floor(recordingSeconds / 60)}:{(recordingSeconds % 60 < 10 ? '0' : '')}{recordingSeconds % 60}
+                      🔴 {adminTranslate("Recording in progress…")} {Math.floor(recordingSeconds / 60)}:{(recordingSeconds % 60 < 10 ? '0' : '')}{recordingSeconds % 60}
                     </span>
                     <button type="button" className="wa-rec-cancel" onClick={cancelVoiceRecording}>
-                      🗑️ বাতিল
+                      🗑️ {adminTranslate("Cancel")}
                     </button>
                     <button type="button" className="wa-rec-done" onClick={() => void toggleVoiceNoteRecording()}>
                       {adminTranslate("✓ Done")}
@@ -22474,7 +22894,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                     type="button"
                     className={`wa-composer-icon-btn ${showEmojiPicker ? 'active' : ''}`}
                     onClick={() => { setShowEmojiPicker((v) => !v); setShowTemplates(false); setShowAttachMenu(false); }}
-                    title="ইমোজি"
+                    title={adminTranslate("Emoji")}
                   >
                     😊
                   </button>
@@ -22485,7 +22905,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                     className={`wa-composer-icon-btn ${showAttachMenu ? 'active' : ''}`}
                     onClick={() => { setShowAttachMenu((v) => !v); setShowEmojiPicker(false); }}
                     disabled={!connected || sending}
-                    title="ফাইল ও ছবি যুক্ত করুন"
+                    title={adminTranslate("Attach files & photos")}
                   >
                     📎
                   </button>
@@ -22495,7 +22915,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                     type="button"
                     className={`wa-composer-icon-btn ${showTemplates ? 'active' : ''}`}
                     onClick={() => { setShowTemplates((v) => !v); setShowEmojiPicker(false); setShowAttachMenu(false); }}
-                    title="কুইক বিজনেস রিপ্লাই"
+                    title={adminTranslate("Quick Business Templates")}
                   >
                     ⚡
                   </button>
@@ -22524,7 +22944,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                       className="wa-inbox-send"
                       onClick={() => void sendReply()}
                       disabled={!connected || sending || recordingVoiceNote}
-                      title="মেসেজ পাঠান (Enter)"
+                      title={adminTranslate("Send Message (Enter)")}
                     >
                       {sending ? '…' : '➤'}
                     </button>
@@ -22534,7 +22954,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                       className={`wa-inbox-mic ${recordingVoiceNote ? 'is-recording' : ''}`}
                       onClick={() => void toggleVoiceNoteRecording()}
                       disabled={!connected || sending}
-                      title={recordingVoiceNote ? 'ভয়েস নোট শেষ করুন' : 'ভয়েস নোট রেকর্ড করুন'}
+                      title={recordingVoiceNote ? adminTranslate("Stop voice note") : adminTranslate("Record voice note")}
                     >
                       {recordingVoiceNote ? '■' : '🎙'}
                     </button>
@@ -22545,8 +22965,8 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
           ) : (
             <div className="wa-inbox-no-chat">
               <span className="wa-no-chat-icon">💬</span>
-              <strong>একটি কথোপকথন নির্বাচন করুন</strong>
-              <p>বামপাশের লিস্ট থেকে যেকোনো কাস্টমার সিলেক্ট করলেই অফিসিয়াল হোয়াটসঅ্যাপ পিসির মতো ফুল চ্যাট ও কুরিয়ার তথ্য প্রদর্শিত হবে।</p>
+              <strong>{adminTranslate("Select a conversation")}</strong>
+              <p>{adminTranslate("Select any customer from the list on the left to see full WhatsApp PC style chats and courier intelligence.")}</p>
             </div>
           )}
         </main>
@@ -31109,9 +31529,9 @@ function CallsAdmin() {
       {(() => {
         const ai = settings.aiCalling || {};
         const toggles = [
-          { key: 'enabled', label: '🤖 AI Calling চালু', desc: 'সিস্টেম অ্যাক্টিভ রাখুন', on: ai.enabled !== false },
-          { key: 'marketingModeEnabled', label: '📣 Marketing & New Order', desc: 'অফার ও কলের ভেতর নতুন অর্ডার', on: ai.marketingModeEnabled !== false },
-          { key: 'websiteInboundAi', label: '🌐 Website Inbound AI', desc: 'সাইটের কলে AI আগে কথা বলবে', on: ai.websiteInboundAi !== false }
+          { key: 'enabled', label: adminTranslate("🤖 AI Calling Active"), desc: adminTranslate("Keep system active"), on: ai.enabled !== false },
+          { key: 'marketingModeEnabled', label: adminTranslate("📣 Marketing & New Order"), desc: adminTranslate("Offers and new orders inside calls"), on: ai.marketingModeEnabled !== false },
+          { key: 'websiteInboundAi', label: adminTranslate("🌐 Website Inbound AI"), desc: adminTranslate("AI speaks first on site calls"), on: ai.websiteInboundAi !== false }
         ];
         return (
           <div className="call-center-ai-panel" style={{ marginTop: 16, padding: 18, borderRadius: 16, background: 'linear-gradient(135deg, rgba(17, 24, 39, 0.96) 0%, rgba(28, 25, 55, 0.94) 100%)', border: '1px solid rgba(56, 189, 248, 0.22)' }}>
@@ -31256,7 +31676,7 @@ function CallsAdmin() {
               return <g key={d.key}><circle cx={x} cy={y} r="4" /><text x={x} y="151" textAnchor="middle">{d.label}</text></g>;
             })}
           </svg>
-          <div className="cc-trend-summary"><span>এই সময়ের মোট কল</span><strong>{callTrend.reduce((sum, d) => sum + d.count, 0)}</strong></div>
+          <div className="cc-trend-summary"><span>{adminTranslate("Total Calls This Period")}</span><strong>{callTrend.reduce((sum, d) => sum + d.count, 0)}</strong></div>
         </section>
         <section className="sa-card cc-insight-card cc-outcome-card">
           <div className="cc-insight-heading"><div><span className="cc-section-eyebrow">OUTCOME OVERVIEW</span><h2>{adminTranslate("Outcome Overview")}</h2></div></div>
@@ -31282,7 +31702,7 @@ function CallsAdmin() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') loadData(); }}
-            placeholder="ফোন নম্বর, কাস্টমার, অর্ডার বা স্টাফ খুঁজুন..."
+            placeholder={adminTranslate("Search phone, customer, order or staff...")}
             style={{ flex: 1, minWidth: 180, height: 38, padding: '0 14px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 9, fontSize: 13 }}
           />
           <button
@@ -31325,7 +31745,7 @@ function CallsAdmin() {
           <option value="all">{adminTranslate("All Time")}</option>
           <option value="today">{adminTranslate("Today")}</option>
           <option value="7d">{adminTranslate("Last 7 Days")}</option>
-          <option value="30d">গত ৩০ দিন (Last 30 Days)</option>
+          <option value="30d">{adminTranslate("Last 30 Days")}</option>
         </select>
 
         <button
@@ -31342,7 +31762,7 @@ function CallsAdmin() {
       {/* Calls Table */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '0 2px 9px', color: '#94a3b8', fontSize: 12 }}>
         <span>{adminTranslate("Showing")} <strong style={{ color: '#e2e8f0' }}>{filteredCalls.length}</strong> / {calls.length} {adminTranslate("call logs")}</span>
-        <span>{dateFilter === 'today' ? 'আজ · ঢাকা সময়' : dateFilter === '7d' ? 'গত ৭ দিন' : dateFilter === '30d' ? 'গত ৩০ দিন' : 'সব সময়'}</span>
+        <span>{dateFilter === 'today' ? adminTranslate("Today · Dhaka Time") : dateFilter === '7d' ? adminTranslate("Last 7 Days") : dateFilter === '30d' ? adminTranslate("Last 30 Days") : adminTranslate("All Time")}</span>
       </div>
       <div id="calls-records" className="sa-card call-center-table-wrap" style={{ padding: 0, overflowX: 'auto' }}>
         <table className="sa-table call-center-table" style={{ width: '100%', minWidth: 1420 }}>
@@ -31532,9 +31952,9 @@ function CallsAdmin() {
         {filteredCalls.length === 0 && !loading && (
           <div style={{ padding: '50px 20px', textAlign: 'center', color: '#94a3b8' }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>🎧</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>কোনো কল রেকর্ড পাওয়া যায়নি</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{adminTranslate("No call records found")}</div>
             <div style={{ fontSize: 12, marginTop: 4 }}>
-              অর্ডার লিস্ট থেকে "📞 IP Call" বাটনে ক্লিক করে কাস্টমারদের সাথে কল রেকর্ড শুরু করুন।
+              {adminTranslate("Click '📞 IP Call' button from order list to start recording calls with customers.")}
             </div>
           </div>
         )}
@@ -31553,7 +31973,7 @@ function CallsAdmin() {
               <input
                 value={manualName}
                 onChange={(e) => setManualName(e.target.value)}
-                placeholder="যেমন: Shakil Ahmed"
+                placeholder={adminTranslate("e.g. Shakil Ahmed")}
                 style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
               />
             </div>
@@ -31625,7 +32045,7 @@ function CallsAdmin() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>অফিসিয়াল কলার আইডি (Caller ID)</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>{adminTranslate("Official Caller ID")}</label>
                 <input
                   value={settings.callerId || ''}
                   onChange={(e) => setSettings({ ...settings, callerId: e.target.value })}
@@ -31639,7 +32059,7 @@ function CallsAdmin() {
                 <input
                   value={settings.sipServer || ''}
                   onChange={(e) => setSettings({ ...settings, sipServer: e.target.value })}
-                  placeholder="sip.amberit.com.bd বা PBX IP"
+                  placeholder={adminTranslate("sip.amberit.com.bd or PBX IP")}
                   style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13 }}
                 />
               </div>
@@ -31677,7 +32097,7 @@ function CallsAdmin() {
 
               <div style={{ gridColumn: '1 / -1' }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
-                  অডিও রেকর্ডিং সংরক্ষণের মেয়াদ (Retention Period)
+                  {adminTranslate("Audio Recording Retention Period")}
                 </label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <input
@@ -31689,13 +32109,13 @@ function CallsAdmin() {
                     style={{ width: 90, padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 13, fontWeight: 700 }}
                   />
                   <span style={{ fontSize: 13, color: '#94a3b8' }}>
-                    দিন পর পুরনো অডিও ফাইল স্বয়ংক্রিয়ভাবে মুছে যাবে (মেটাডাটা ও অডিট হিস্ট্রি স্থায়ীভাবে থাকবে)।
+                    {adminTranslate("days after which old audio files are automatically purged (metadata and audit history remain permanently).")}
                   </span>
                 </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>ElevenLabs API Key (ঐচ্ছিক - ন্যাচারাল ভয়েস)</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>{adminTranslate("ElevenLabs API Key (Optional - Natural Voice)")}</label>
                 <input
                   type="password"
                   value={settings.aiCalling?.elevenLabsKey || ''}
@@ -31724,7 +32144,7 @@ function CallsAdmin() {
                     type="password"
                     value={settings.geminiApiKey || ''}
                     onChange={(e) => setSettings({ ...settings, geminiApiKey: e.target.value })}
-                    placeholder="নতুন Gemini API Key (AIzaSy...) এখানে পেস্ট করুন"
+                    placeholder={adminTranslate("Paste new Gemini API Key (AIzaSy...) here")}
                     style={{ flex: 1, padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(56, 189, 248, 0.35)', borderRadius: 6, fontSize: 13 }}
                   />
                   <button
@@ -31755,19 +32175,19 @@ function CallsAdmin() {
               </div>
 
               <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>কাস্টম AI আচরণ / স্ক্রিপ্ট নির্দেশনা (ঐচ্ছিক)</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>{adminTranslate("Custom AI Persona / Prompt Instructions (Optional)")}</label>
                 <textarea
                   rows={2}
                   value={settings.aiCalling?.aiPersonaPrompt || ''}
                   onChange={(e) => setSettings({ ...settings, aiCalling: { ...(settings.aiCalling || {}), aiPersonaPrompt: e.target.value } })}
-                  placeholder="যেমন: প্রতিটি অর্ডারে ডেলিভারি চার্জ ও ব্যবহারের নিয়ম সংক্ষেপে বলবে..."
+                  placeholder={adminTranslate("e.g. Briefly explain delivery charges and product usage for every order...")}
                   style={{ width: '100%', padding: '9px 12px', background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 12.5, boxSizing: 'border-box' }}
                 />
               </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 14 }}>
-              <button type="button" className="sa-btn ghost" onClick={() => setSettingsOpen(false)}>বাতিল</button>
+              <button type="button" className="sa-btn ghost" onClick={() => setSettingsOpen(false)}>{adminTranslate("Cancel")}</button>
               <button
                 type="button"
                 className="sa-btn primary"
@@ -31775,7 +32195,7 @@ function CallsAdmin() {
                 disabled={savingSettings}
                 style={{ minWidth: 140, fontWeight: 700, background: '#8b5cf6', borderColor: '#8b5cf6' }}
               >
-                {savingSettings ? 'সেভ হচ্ছে...' : '💾 সেটিংস সংরক্ষণ করুন'}
+                {savingSettings ? adminTranslate("Saving...") : adminTranslate("💾 Save Settings")}
               </button>
             </div>
           </div>
@@ -31820,7 +32240,7 @@ function CallsAdmin() {
                 <input
                   value={aiTestPhone}
                   onChange={(e) => setAiTestPhone(e.target.value)}
-                  placeholder="কাস্টমার ফোন নম্বর (অর্ডার ও ঠিকানা চেকের জন্য, ঐচ্ছিক)"
+                  placeholder={adminTranslate("Customer phone number (for order & address check, optional)")}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', fontSize: 13, boxSizing: 'border-box' }}
                 />
                 <button
@@ -31852,10 +32272,10 @@ function CallsAdmin() {
                     </div>
                     <div>
                       <div style={{ fontSize: 13.5, fontWeight: 800, color: '#fff' }}>
-                        {aiTestCallStatus === 'connecting' ? 'সংযুক্ত হচ্ছে...' : aiTestCallStatus === 'ringing' ? 'রিং হচ্ছে (Ringing)...' : aiTestCallStatus === 'connected' ? 'লাইভ এআই কল চলছে' : aiTestCallStatus === 'error' ? 'কল ত্রুটি' : 'কল শেষ'}
+                        {aiTestCallStatus === 'connecting' ? adminTranslate("Connecting...") : aiTestCallStatus === 'ringing' ? adminTranslate("Ringing...") : aiTestCallStatus === 'connected' ? adminTranslate("Live AI call in progress") : aiTestCallStatus === 'error' ? adminTranslate("Call error") : adminTranslate("Call ended")}
                       </div>
                       <div style={{ fontSize: 11.5, color: '#94a3b8' }}>
-                        {aiTestCallStatus === 'connected' ? `⏱️ ${String(Math.floor(aiTestSeconds / 60)).padStart(2, '0')}:${String(aiTestSeconds % 60).padStart(2, '0')} · হ্যান্ডস-ফ্রি সরাসরি কথা বলুন` : 'Gemini 3.8 Live Audio'}
+                        {aiTestCallStatus === 'connected' ? `⏱️ ${String(Math.floor(aiTestSeconds / 60)).padStart(2, '0')}:${String(aiTestSeconds % 60).padStart(2, '0')} · ${adminTranslate("Hands-free direct speech")}` : 'Gemini 3.8 Live Audio'}
                       </div>
                     </div>
                   </div>
@@ -31917,7 +32337,7 @@ function CallsAdmin() {
                     value={aiTestInput}
                     onChange={(e) => setAiTestInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') sendAiTestTurn(); }}
-                    placeholder="চাইলে টেক্সট পাঠান (ঐচ্ছিক)..."
+                    placeholder={adminTranslate("Send text if needed (optional)...")}
                     style={{ flex: 1, padding: '9px 12px', borderRadius: 8, background: '#0e0c18', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', fontSize: 12.5 }}
                   />
                   <button

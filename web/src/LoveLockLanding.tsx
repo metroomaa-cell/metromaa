@@ -1130,7 +1130,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
             <form onSubmit={handleOrder} className="ll-form">
               {/* Product Selection */}
               <div className="ll-card ll-product-options-wrap">
-                <h3 className="ll-checkout-heading">Your Products</h3>
+                <h3 className="ll-checkout-heading">{landingCc.sectionTitleProducts || 'Your Products'}</h3>
 
               <div className="ll-qty-options">
                 {packagesList.map((prod: any) => {
@@ -1245,7 +1245,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
             {/* Billing Details */}
             <div className="ll-card ll-billing-details-wrap">
-              <h3 className="ll-checkout-heading">Billing details</h3>
+              <h3 className="ll-checkout-heading">{landingCc.sectionTitleBilling || 'Billing details'}</h3>
 
               <div className="ll-field-group">
                 <label className="ll-label">
@@ -1260,6 +1260,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
                   onFocus={triggerInitiateCheckout}
                   onChange={(e) => setName(e.target.value)}
                 />
+                {nameFld?.helper && <small style={{ display: 'block', fontSize: 11, color: '#6b7280', marginTop: 4 }}>{nameFld.helper}</small>}
               </div>
 
               <div className="ll-field-group">
@@ -1275,6 +1276,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
                   onFocus={triggerInitiateCheckout}
                   onChange={(e) => setAddress(e.target.value)}
                 />
+                {addrFld?.helper && <small style={{ display: 'block', fontSize: 11, color: '#6b7280', marginTop: 4 }}>{addrFld.helper}</small>}
               </div>
 
               <div className="ll-field-group">
@@ -1321,6 +1323,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
                     value={altPhone}
                     onChange={(e) => setAltPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
                   />
+                  {altPhoneFld?.helper && <small style={{ display: 'block', fontSize: 11, color: '#6b7280', marginTop: 4 }}>{altPhoneFld.helper}</small>}
                 </div>
               )}
 
@@ -1356,7 +1359,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
             {/* Shipping */}
             <div className="ll-card ll-shipping-wrap">
-              <h3 className="ll-checkout-heading">Shipping (ডেলিভারি এলাকা)</h3>
+              <h3 className="ll-checkout-heading">{landingCc.sectionTitleShipping || 'Shipping (ডেলিভারি এলাকা)'}</h3>
               {isFreeDelivery ? (
                 <div className="ll-shipping-option">
                   <input type="radio" checked readOnly id="free-ship" />
@@ -1469,7 +1472,32 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
                 </tfoot>
               </table>
 
-              {/* Payment Method */}
+              {/* 1-Click Order Bump Offer */}
+            {landingCc.showOrderBump && (
+              <div className="ll-card" style={{ background: '#fffbeb', border: '2px dashed #f59e0b', marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#b45309', marginBottom: 6 }}>
+                  {landingCc.bumpHeadline || '🔥 বিশেষ অফার! এই অর্ডারে এক ক্লিকে যোগ করুন:'}
+                </div>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!bumpAccepted}
+                    onChange={(e) => setBumpAccepted(e.target.checked)}
+                    style={{ marginTop: 3, width: 18, height: 18, accentColor: '#d97706' }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#92400e' }}>
+                      {landingCc.bumpTitle || 'প্রিমিয়াম গিফট বক্স'} (+৳{landingCc.bumpPrice || 190})
+                    </div>
+                    <div style={{ fontSize: 12, color: '#b45309', marginTop: 2 }}>
+                      {landingCc.bumpDescription || 'আপনার পণ্যটি আরও সুরক্ষিত ও আকর্ষণীয় গিফট প্যাকেজে পেতে টিক দিন।'}
+                    </div>
+                  </div>
+                </label>
+              </div>
+            )}
+
+            {/* Payment Method */}
               <div className="ll-payment-method">
                 <div className="ll-payment-title">
                   <input type="radio" checked readOnly id="pay-cod" />

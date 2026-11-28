@@ -424,9 +424,10 @@ export function AdminTopNavbar({
           type="button"
           className="sa-nav-lang-btn"
           onClick={onLanguageToggle}
-          title={adminLanguage === 'en' ? 'বাংলা ভাষায় পরিবর্তন করুন' : 'Switch to English'}
+          title={adminLanguage === 'en' ? 'Switch to Bangla (বাংলায় পরিবর্তন করুন)' : 'Switch to English (ইংরেজিতে পরিবর্তন করুন)'}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 10px', height: 34, borderRadius: 20, cursor: 'pointer' }}
         >
-          <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="m5 8 6 6" />
             <path d="m4 14 6-6 2-3" />
             <path d="M2 5h12" />
@@ -434,7 +435,11 @@ export function AdminTopNavbar({
             <path d="m22 22-5-10-5 10" />
             <path d="M14 18h6" />
           </svg>
-          <span>{adminLanguage === 'bn' ? 'BN' : 'EN'}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.02em', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ color: adminLanguage === 'en' ? '#38bdf8' : '#64748b', fontWeight: adminLanguage === 'en' ? 800 : 500 }}>EN</span>
+            <span style={{ opacity: 0.35, fontSize: 10 }}>/</span>
+            <span style={{ color: adminLanguage === 'bn' ? '#38bdf8' : '#64748b', fontWeight: adminLanguage === 'bn' ? 800 : 500 }}>বাংলা</span>
+          </span>
         </button>
 
         {/* Ask Saika AI Command Pill */}
