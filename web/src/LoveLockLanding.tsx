@@ -1255,7 +1255,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
                   type="text"
                   required
                   className="ll-input"
-                  placeholder={nameFld?.placeholder || 'আপনার সম্পূর্ণ নাম লিখুন'}
+                  placeholder={nameFld ? (nameFld.placeholder !== undefined ? nameFld.placeholder : 'আপনার সম্পূর্ণ নাম লিখুন') : 'আপনার সম্পূর্ণ নাম লিখুন'}
                   value={name}
                   onFocus={triggerInitiateCheckout}
                   onChange={(e) => setName(e.target.value)}
@@ -1271,7 +1271,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
                   type="text"
                   required
                   className="ll-input"
-                  placeholder={addrFld?.placeholder || 'জেলা, থানা, এলাকা ও বাসার ঠিকানা লিখুন'}
+                  placeholder={addrFld ? (addrFld.placeholder !== undefined ? addrFld.placeholder : 'জেলা, থানা, এলাকা ও বাসার ঠিকানা লিখুন') : 'জেলা, থানা, এলাকা ও বাসার ঠিকানা লিখুন'}
                   value={address}
                   onFocus={triggerInitiateCheckout}
                   onChange={(e) => setAddress(e.target.value)}
@@ -1296,7 +1296,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
                     autoComplete="tel"
                     maxLength={11}
                     className={`ll-input ll-phone-input ${phoneValidation.state === 'valid' ? 'll-input-valid' : phoneValidation.state === 'invalid' ? 'll-input-invalid' : ''}`}
-                    placeholder={phoneFld?.placeholder || '01XXXXXXXXX'}
+                    placeholder={phoneFld ? (phoneFld.placeholder !== undefined ? phoneFld.placeholder : '01XXXXXXXXX') : '01XXXXXXXXX'}
                     value={phone}
                     onFocus={triggerInitiateCheckout}
                     onChange={(e) => handlePhoneChange(e.target.value)}
@@ -1319,7 +1319,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
                     inputMode="numeric"
                     maxLength={11}
                     className="ll-input"
-                    placeholder={altPhoneFld.placeholder || 'পরিবারের অন্য কারও ফোন নম্বর (ঐচ্ছিক)'}
+                    placeholder={altPhoneFld.placeholder !== undefined ? altPhoneFld.placeholder : ''}
                     value={altPhone}
                     onChange={(e) => setAltPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
                   />
@@ -1348,7 +1348,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
                     <input
                       type={cf.type === 'number' ? 'number' : cf.type === 'tel' ? 'tel' : 'text'}
                       className="ll-input"
-                      placeholder={cf.placeholder || `Enter ${cf.label}`}
+                      placeholder={cf.placeholder !== undefined ? cf.placeholder : ''}
                       value={extraValues[cf.id] || ''}
                       onChange={(e) => setExtraValues({ ...extraValues, [cf.id]: e.target.value })}
                     />

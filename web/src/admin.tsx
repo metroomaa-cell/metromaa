@@ -15734,13 +15734,13 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                     </div>
                     <div>
                       <label style={{ display: 'block', fontSize: 11.5, color: '#94a3b8', marginBottom: 4 }}>
-                        {adminTranslate("Placeholder (প্লেসহোল্ডার — ইচ্ছামতো লিখুন)")}:
+                        {adminTranslate("Placeholder (ঐচ্ছিক — না চাইলে সম্পূর্ণ ফাঁকা রাখুন)")}:
                       </label>
                       <input
                         type="text"
                         value={fld.placeholder}
                         onChange={(e) => updateField(fld.id, { placeholder: e.target.value })}
-                        placeholder="বক্সের ভেতরে যে লেখা দেখাবে"
+                        placeholder={adminTranslate("ইচ্ছা হলে লিখুন, না চাইলে সম্পূর্ণ ফাঁকা রাখুন")}
                         style={{ width: '100%', height: 36, padding: '0 10px', background: '#08060f', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#38bdf8', fontSize: 12.5 }}
                       />
                     </div>
@@ -16424,7 +16424,7 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                           <textarea
                             readOnly
                             rows={2}
-                            placeholder={fld.placeholder || 'আপনার সম্পূর্ণ ডেলিভারি ঠিকানা লিখুন...'}
+                            placeholder={fld.placeholder !== undefined ? fld.placeholder : ''}
                             style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: 12, resize: 'none' }}
                           />
                           {fld.helper && (
@@ -16441,7 +16441,7 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                         </label>
                         <input
                           readOnly
-                          placeholder={fld.placeholder || `Enter ${fld.label}`}
+                          placeholder={fld.placeholder !== undefined ? fld.placeholder : ''}
                           style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: 12 }}
                         />
                         {fld.helper && (

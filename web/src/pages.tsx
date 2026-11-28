@@ -2099,7 +2099,7 @@ function PdpDirectCodForm({
           <input
             type="text"
             className="pdp-cod-input"
-            placeholder={nameFld?.placeholder || (language === 'bn' ? 'আপনার নাম *' : 'Your Full Name *')}
+            placeholder={nameFld ? (nameFld.placeholder !== undefined ? nameFld.placeholder : (language === 'bn' ? 'আপনার নাম *' : 'Your Full Name *')) : (language === 'bn' ? 'আপনার নাম *' : 'Your Full Name *')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
@@ -2107,7 +2107,7 @@ function PdpDirectCodForm({
           <input
             type="tel"
             className="pdp-cod-input"
-            placeholder={phoneFld?.placeholder || (language === 'bn' ? '১১ ডিজিটের মোবাইল নম্বর *' : 'Mobile Number (01XXXXXXXXX) *')}
+            placeholder={phoneFld ? (phoneFld.placeholder !== undefined ? phoneFld.placeholder : (language === 'bn' ? '১১ ডিজিটের মোবাইল নম্বর *' : 'Mobile Number (01XXXXXXXXX) *')) : (language === 'bn' ? '১১ ডিজিটের মোবাইল নম্বর *' : 'Mobile Number (01XXXXXXXXX) *')}
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             required
@@ -2155,7 +2155,7 @@ function PdpDirectCodForm({
           <input
             type="text"
             className="pdp-cod-input"
-            placeholder={addrFld?.placeholder || (language === 'bn' ? 'বাসা নং, রোড নং, এলাকা / গ্রাম *' : 'House, Road, Area / Village *')}
+            placeholder={addrFld ? (addrFld.placeholder !== undefined ? addrFld.placeholder : (language === 'bn' ? 'বাসা নং, রোড নং, এলাকা / গ্রাম *' : 'House, Road, Area / Village *')) : (language === 'bn' ? 'বাসা নং, রোড নং, এলাকা / গ্রাম *' : 'House, Road, Area / Village *')}
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             required
@@ -4345,7 +4345,7 @@ export function Checkout() {
               <div className="cobox-b">
                 <div>
                   <label>{nameFld?.label || tr('Full Name *', language)}</label>
-                  <input className="field" value={f.name} onChange={set('name')} placeholder={nameFld?.placeholder || tr('Enter your full name', language)} />
+                  <input className="field" value={f.name} onChange={set('name')} placeholder={nameFld ? (nameFld.placeholder !== undefined ? nameFld.placeholder : tr('Enter your full name', language)) : tr('Enter your full name', language)} />
                   {nameFld?.helper && <div className="fieldhint">{nameFld.helper}</div>}
                 </div>
                 <div>
@@ -4354,7 +4354,7 @@ export function Checkout() {
                     className="field checkout-phone-input"
                     value={f.phone}
                     onChange={(e) => setF((s) => ({ ...s, phone: e.target.value.replace(/\D/g, '').slice(0, 11) }))}
-                    placeholder={phoneFld?.placeholder || '01XXXXXXXXX'}
+                    placeholder={phoneFld ? (phoneFld.placeholder !== undefined ? phoneFld.placeholder : '01XXXXXXXXX') : '01XXXXXXXXX'}
                     inputMode="tel"
                     maxLength={11}
                   />
@@ -4369,7 +4369,7 @@ export function Checkout() {
                       className="field"
                       value={altPhone}
                       onChange={(e) => setAltPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                      placeholder={altPhoneFld.placeholder || 'পরিবারের অন্য কারও ফোন নম্বর (ঐচ্ছিক)'}
+                      placeholder={altPhoneFld.placeholder !== undefined ? altPhoneFld.placeholder : ''}
                       inputMode="tel"
                       maxLength={11}
                     />
@@ -4424,7 +4424,7 @@ export function Checkout() {
 
                   <div className="checkout-address-field">
                     <label>{addrFld?.label || tr('Detailed Street Address *', language)}</label>
-                    <textarea className="field" value={f.address} onChange={set('address')} placeholder={addrFld?.placeholder || 'House / Flat / Road, Village, Landmark or Area description'} />
+                    <textarea className="field" value={f.address} onChange={set('address')} placeholder={addrFld ? (addrFld.placeholder !== undefined ? addrFld.placeholder : 'House / Flat / Road, Village, Landmark or Area description') : 'House / Flat / Road, Village, Landmark or Area description'} />
                   </div>
 
                   <div>
@@ -4457,7 +4457,7 @@ export function Checkout() {
 
                   <div>
                     <label>{noteFld?.label || tr('Order Note (Optional)', language)}</label>
-                    <input className="field" value={f.note} onChange={set('note')} placeholder={noteFld?.placeholder || 'Special delivery instructions, timing or landmarks'} />
+                    <input className="field" value={f.note} onChange={set('note')} placeholder={noteFld ? (noteFld.placeholder !== undefined ? noteFld.placeholder : 'Special delivery instructions, timing or landmarks') : 'Special delivery instructions, timing or landmarks'} />
                     {noteFld?.helper && <div className="fieldhint">{noteFld.helper}</div>}
                   </div>
 
@@ -4484,7 +4484,7 @@ export function Checkout() {
                           type={cf.type === 'number' ? 'number' : cf.type === 'tel' ? 'tel' : 'text'}
                           value={extraValues[cf.id] || ''}
                           onChange={(e) => setExtraValues({ ...extraValues, [cf.id]: e.target.value })}
-                          placeholder={cf.placeholder || `Enter ${cf.label}`}
+                          placeholder={cf.placeholder !== undefined ? cf.placeholder : ''}
                         />
                       )}
                     </div>
