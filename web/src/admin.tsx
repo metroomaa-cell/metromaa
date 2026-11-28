@@ -16913,7 +16913,7 @@ function SettingsAdmin({ initialTab = 'store' }: { initialTab?: 'brand' | 'slide
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                  Store Name (দোকানের নাম)
+                  Store Name
                 </label>
                 <input
                   type="text"
@@ -16926,7 +16926,7 @@ function SettingsAdmin({ initialTab = 'store' }: { initialTab?: 'brand' | 'slide
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                  Site Title (ব্রাউজার ট্যাব ও গুগল SEO)
+                  Site Title (Browser Tab & SEO)
                 </label>
                 <input
                   type="text"
@@ -16942,7 +16942,7 @@ function SettingsAdmin({ initialTab = 'store' }: { initialTab?: 'brand' | 'slide
 
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                  Announcement Banner (হেডার অফার বার)
+                  Announcement Banner
                 </label>
                 <input
                   type="text"
@@ -17011,7 +17011,7 @@ function SettingsAdmin({ initialTab = 'store' }: { initialTab?: 'brand' | 'slide
                     placeholder="60"
                     style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 8, background: '#16132b', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 13 }}
                   />
-                  <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>ঢাকার ভিতরে ডেলিভারি ফি</span>
+                  <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>{adminTranslate("Delivery fee inside Dhaka")}</span>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
@@ -17024,7 +17024,7 @@ function SettingsAdmin({ initialTab = 'store' }: { initialTab?: 'brand' | 'slide
                     placeholder="120"
                     style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 8, background: '#16132b', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', fontSize: 13 }}
                   />
-                  <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>ঢাকার বাইরে ডেলিভারি ফি</span>
+                  <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>{adminTranslate("Delivery fee outside Dhaka")}</span>
                 </div>
               </div>
 
@@ -17204,7 +17204,7 @@ function SettingsAdmin({ initialTab = 'store' }: { initialTab?: 'brand' | 'slide
         <div className="sa-card" style={{ padding: 24, display: 'grid', gap: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
             <div>
-              <h2 style={{ margin: '0 0 6px', color: '#fff' }}>হোমপেজ ক্যাটাগরি ও ফ্ল্যাশ সেল সাজানো (Category Shelves)</h2>
+              <h2 style={{ margin: '0 0 6px', color: '#fff' }}>{adminTranslate("Homepage Category Shelves & Flash Sales")}</h2>
               <p style={{ margin: 0, color: '#94a3b8' }}>
                 এডমিন থেকে যে যে ক্যাটাগরি সিলেক্ট করবেন সেগুলো হোমপেজে নির্দিষ্ট সেকশন হিসেবে প্রদর্শিত হবে। ফ্ল্যাশ সেল টাইমার ও সেকশনগুলোর ক্রম (Order) পরিবর্তন করতে পারবেন।
               </p>
@@ -17438,7 +17438,7 @@ function SettingsAdmin({ initialTab = 'store' }: { initialTab?: 'brand' | 'slide
                           }}
                           style={{ width: '100%', padding: '8px 12px', borderRadius: 6, background: '#0f0c1b', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', fontSize: 13 }}
                         >
-                          <option value="all">All Products (সকল পণ্য)</option>
+                          <option value="all">{adminTranslate("All Products")}</option>
                           {storeCats.map((c: any) => (
                             <option key={c.slug} value={c.slug}>{c.name} ({c.slug})</option>
                           ))}
@@ -17488,7 +17488,7 @@ function SettingsAdmin({ initialTab = 'store' }: { initialTab?: 'brand' | 'slide
                             setF((cur: any) => ({ ...cur, homepageSections: updated }));
                           }}
                         />
-                        <span>⚡ Enable Flash Sale Countdown Timer (ঘড়ির টাইমার চালু করুন)</span>
+                        <span>⚡ {adminTranslate("Enable Flash Sale Countdown Timer")}</span>
                       </label>
                     </div>
                   </div>
@@ -29368,7 +29368,7 @@ function CallsAdmin() {
             <span>Call Center Dashboard</span>
           </h1>
           <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 4 }}>
-            কল অপারেশন, এজেন্ট উপস্থিতি, কাস্টমার ফলো-আপ ও কল রেকর্ড এক জায়গায়।
+            {adminTranslate("Call operations, agent presence, customer follow-up and recordings in one desk.")}
           </div>
         </div>
 
@@ -29439,7 +29439,7 @@ function CallsAdmin() {
             className="sa-btn ghost"
             onClick={() => window.dispatchEvent(new CustomEvent('simulate-incoming-ip-call', { detail: { phone: '01711223344', name: 'Demo Incoming Customer' } }))}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderColor: 'rgba(16, 185, 129, 0.45)', color: '#34d399' }}
-            title="ইনকামিং কল রিং ও অটো-রেকর্ড টেস্ট করুন"
+            title={adminTranslate("Test incoming call ringing and auto-recording")}
           >
             <span>📲</span>
             <span>Test Incoming</span>
@@ -29457,7 +29457,7 @@ function CallsAdmin() {
               background: powerActive ? 'rgba(239, 68, 68, 0.12)' : 'rgba(168, 85, 247, 0.12)',
               fontWeight: 700
             }}
-            title="Pending অর্ডারগুলো একের পর এক অটো-কল করুন"
+            title={adminTranslate("Auto-dial pending orders sequentially")}
           >
             <span>{powerActive ? '⏹️' : '🚀'}</span>
             <span>{powerActive ? `Stop Dialer (${powerIdx + 1}/${powerQueue.length})` : 'Start Power Dialer'}</span>
@@ -29513,7 +29513,7 @@ function CallsAdmin() {
               <span>●</span> LIVE CALL CENTER
             </span>
             <span style={{ fontSize: 13.5, fontWeight: 700, color: '#f8fafc' }}>
-              লাইভ এজেন্ট স্ট্যাটাস · প্রতি ৮ সেকেন্ডে আপডেট
+              {adminTranslate("Live Agent Status · Updated every 8s")}
             </span>
           </div>
           <div className="call-center-live-metrics" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 11.5, fontWeight: 700 }}>
@@ -29589,7 +29589,7 @@ function CallsAdmin() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
             <div>
               <strong style={{ color: '#e0f2fe', fontSize: 13 }}>🤖 AI callback approval queue</strong>
-              <div style={{ color: '#94a3b8', fontSize: 11, marginTop: 3 }}>AI থেকে আসা কলের অনুরোধ এখানে অনুমোদন করে গ্রাহককে সরাসরি call দিন। এগুলো live-call bridge নয়—নিরাপদ callback request।</div>
+              <div style={{ color: '#94a3b8', fontSize: 11, marginTop: 3 }}>{adminTranslate("Approve AI-requested calls here to contact customers directly — secure callback requests, not unmonitored live bridges.")}</div>
             </div>
             <span style={{ borderRadius: 999, padding: '4px 9px', background: 'rgba(56,189,248,.12)', color: '#7dd3fc', fontSize: 11, fontWeight: 800 }}>
               {(wallboard.pendingTransfers || []).length} open
@@ -29601,14 +29601,14 @@ function CallsAdmin() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                   <div style={{ minWidth: 0 }}>
                     <strong style={{ display: 'block', color: '#f8fafc', fontSize: 13 }}>{transfer.customerName || 'Website Visitor'}</strong>
-                    <span style={{ display: 'block', color: '#7dd3fc', fontSize: 12, marginTop: 2 }}>{transfer.customerPhone || 'ফোন নম্বর নেই'}</span>
+                    <span style={{ display: 'block', color: '#7dd3fc', fontSize: 12, marginTop: 2 }}>{transfer.customerPhone || adminTranslate("No phone number")}</span>
                   </div>
                   <span style={{ flexShrink: 0, color: transfer.status === 'pending' ? '#fbbf24' : transfer.status === 'calling' ? '#34d399' : '#c4b5fd', fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>
                     {transfer.status === 'pending' ? 'Approval needed' : transfer.status === 'calling' ? 'Calling' : 'Approved'}
                   </span>
                 </div>
                 {transfer.orderId && <div style={{ color: '#c4b5fd', fontSize: 11, marginTop: 5 }}>Order #{String(transfer.orderId).replace('DOT-', '')}{transfer.productName ? ` · ${transfer.productName}` : ''}</div>}
-                <div style={{ color: '#cbd5e1', fontSize: 11, lineHeight: 1.5, marginTop: 7, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{transfer.note || transfer.reason || 'গ্রাহক মানব প্রতিনিধির সাথে কথা বলতে চেয়েছেন।'}</div>
+                <div style={{ color: '#cbd5e1', fontSize: 11, lineHeight: 1.5, marginTop: 7, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{transfer.note || transfer.reason || adminTranslate("Customer requested to speak with a human agent.")}</div>
                 <div style={{ color: '#64748b', fontSize: 10, marginTop: 7 }}>{transfer.assignedName ? `Assigned: ${transfer.assignedName} · ` : ''}{transfer.createdAt ? new Date(transfer.createdAt).toLocaleString('en-BD', { timeZone: 'Asia/Dhaka' }) : ''}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 10 }}>
                   {transfer.status === 'pending' && <>
@@ -29620,7 +29620,7 @@ function CallsAdmin() {
                 </div>
               </article>
             ))}
-            {!(wallboard.pendingTransfers || []).length && <div style={{ color: '#64748b', fontSize: 11.5, padding: '9px 2px' }}>এখনো কোনো AI callback approval বাকি নেই।</div>}
+            {!(wallboard.pendingTransfers || []).length && <div style={{ color: '#64748b', fontSize: 11.5, padding: '9px 2px' }}>{adminTranslate("No pending AI callback approvals.")}</div>}
           </div>
         </div>
 
@@ -29660,7 +29660,7 @@ function CallsAdmin() {
                   {aiSaving && <span style={{ fontSize: 11, color: '#38bdf8' }}>Saving...</span>}
                 </div>
                 <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
-                  ইনকামিং ওয়েব কল ও অ্যাডমিনের ভয়েস টেস্ট এখানে চালু/বন্ধ করতে পারবেন। স্বয়ংক্রিয় আউটবাউন্ড কল এখনো টেলিফোনি কিউয়ের সঙ্গে যুক্ত নয়।
+                  {adminTranslate("Toggle inbound web calls and admin voice test here. Automated outbound dialing runs through the call desk.")}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -29782,8 +29782,8 @@ function CallsAdmin() {
       <div className="cc-insights-grid">
         <section className="sa-card cc-insight-card cc-trend-card">
           <div className="cc-insight-heading">
-            <div><span className="cc-section-eyebrow">CALL ACTIVITY</span><h2>কলের প্রবাহ</h2></div>
-            <span className="cc-insight-range">শেষ ৭ দিন · ঢাকা সময়</span>
+            <div><span className="cc-section-eyebrow">CALL ACTIVITY</span><h2>{adminTranslate("Call Activity")}</h2></div>
+            <span className="cc-insight-range">{adminTranslate("Last 7 Days · Dhaka Time")}</span>
           </div>
           <svg className="cc-trend-chart" viewBox="0 0 696 158" role="img" aria-label="Last seven days call activity chart">
             {[30, 70, 110, 150].map((y) => <line key={y} x1="30" x2="666" y1={y} y2={y} />)}
@@ -29797,7 +29797,7 @@ function CallsAdmin() {
           <div className="cc-trend-summary"><span>এই সময়ের মোট কল</span><strong>{callTrend.reduce((sum, d) => sum + d.count, 0)}</strong></div>
         </section>
         <section className="sa-card cc-insight-card cc-outcome-card">
-          <div className="cc-insight-heading"><div><span className="cc-section-eyebrow">OUTCOME OVERVIEW</span><h2>কলের ফলাফল</h2></div></div>
+          <div className="cc-insight-heading"><div><span className="cc-section-eyebrow">OUTCOME OVERVIEW</span><h2>{adminTranslate("Outcome Overview")}</h2></div></div>
           {[
             { label: 'Confirmed', count: confirmedCount, tone: 'green' },
             { label: 'Missed / No answer', count: missedCount, tone: 'amber' },
@@ -29838,7 +29838,7 @@ function CallsAdmin() {
           onChange={(e) => setOutcomeFilter(e.target.value)}
           style={{ width: 'auto', minWidth: 175, height: 38, padding: '0 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 9, fontSize: 12.5, fontWeight: 600 }}
         >
-          <option value="all">সকল ফলাফল (All Outcomes)</option>
+          <option value="all">{adminTranslate("All Outcomes")}</option>
           <option value="confirmed">✅ Confirmed</option>
           <option value="missed">📵 Missed</option>
           <option value="call_later">⏰ Call Later</option>
@@ -29851,7 +29851,7 @@ function CallsAdmin() {
           onChange={(e) => setStaffFilter(e.target.value)}
           style={{ width: 'auto', minWidth: 165, height: 38, padding: '0 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 9, fontSize: 12.5, fontWeight: 600 }}
         >
-          <option value="all">সকল স্টাফ (All Staff)</option>
+          <option value="all">{adminTranslate("All Staff")}</option>
           {allStaffNames.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
 
@@ -29860,9 +29860,9 @@ function CallsAdmin() {
           onChange={(e) => setDateFilter(e.target.value)}
           style={{ width: 'auto', minWidth: 155, height: 38, padding: '0 12px', background: '#13111f', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 9, fontSize: 12.5, fontWeight: 600 }}
         >
-          <option value="all">সব সময় (All Time)</option>
-          <option value="today">আজকে (Today)</option>
-          <option value="7d">গত ৭ দিন (Last 7 Days)</option>
+          <option value="all">{adminTranslate("All Time")}</option>
+          <option value="today">{adminTranslate("Today")}</option>
+          <option value="7d">{adminTranslate("Last 7 Days")}</option>
           <option value="30d">গত ৩০ দিন (Last 30 Days)</option>
         </select>
 
@@ -29879,22 +29879,22 @@ function CallsAdmin() {
 
       {/* Calls Table */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '0 2px 9px', color: '#94a3b8', fontSize: 12 }}>
-        <span>দেখানো হচ্ছে <strong style={{ color: '#e2e8f0' }}>{filteredCalls.length}</strong> / {calls.length}টি কল রেকর্ড</span>
+        <span>{adminTranslate("Showing")} <strong style={{ color: '#e2e8f0' }}>{filteredCalls.length}</strong> / {calls.length} {adminTranslate("call logs")}</span>
         <span>{dateFilter === 'today' ? 'আজ · ঢাকা সময়' : dateFilter === '7d' ? 'গত ৭ দিন' : dateFilter === '30d' ? 'গত ৩০ দিন' : 'সব সময়'}</span>
       </div>
       <div id="calls-records" className="sa-card call-center-table-wrap" style={{ padding: 0, overflowX: 'auto' }}>
         <table className="sa-table call-center-table" style={{ width: '100%', minWidth: 1420 }}>
           <thead>
             <tr>
-              <th style={{ width: 140 }}>তারিখ ও সময়</th>
-              <th style={{ width: 130 }}>অর্ডার আইডি</th>
-              <th>কাস্টমার ও নম্বর</th>
-              <th style={{ width: 130 }}>স্টাফ</th>
-              <th style={{ width: 90 }}>স্থিতিকাল</th>
-              <th style={{ width: 120 }}>ফলাফল</th>
-              <th style={{ minWidth: 260 }}>অডিও রেকর্ডিং (Audio Player)</th>
-              <th style={{ minWidth: 210 }}>AI অডিট ও নোট</th>
-              <th className="r" style={{ width: 60 }}>অ্যাকশন</th>
+              <th style={{ width: 140 }}>{adminTranslate("Date & Time")}</th>
+              <th style={{ width: 130 }}>{adminTranslate("Order ID")}</th>
+              <th>{adminTranslate("Customer & Phone")}</th>
+              <th style={{ width: 130 }}>{adminTranslate("Staff")}</th>
+              <th style={{ width: 90 }}>{adminTranslate("Duration")}</th>
+              <th style={{ width: 120 }}>{adminTranslate("Outcome")}</th>
+              <th style={{ minWidth: 260 }}>{adminTranslate("Audio Recording (Audio Player)")}</th>
+              <th style={{ minWidth: 210 }}>{adminTranslate("AI Audit & Notes")}</th>
+              <th className="r" style={{ width: 60 }}>{adminTranslate("Actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -30084,10 +30084,10 @@ function CallsAdmin() {
           <div style={{ background: '#161326', borderRadius: 14, border: '1px solid rgba(139, 92, 246, 0.4)', padding: 24, width: 'min(420px, 95%)' }}>
             <h3 style={{ margin: '0 0 14px', fontSize: 16, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
               <span>📞</span>
-              <span>নতুন ম্যানুয়াল আইপি কল করুন</span>
+              <span>{adminTranslate("New Manual IP Call")}</span>
             </h3>
             <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>কাস্টমারের নাম</label>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>{adminTranslate("Customer Name")}</label>
               <input
                 value={manualName}
                 onChange={(e) => setManualName(e.target.value)}
@@ -30096,7 +30096,7 @@ function CallsAdmin() {
               />
             </div>
             <div style={{ marginBottom: 18 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>ফোন নম্বর *</label>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>{adminTranslate("Phone Number")} *</label>
               <input
                 value={manualPhone}
                 onChange={(e) => setManualPhone(e.target.value)}
@@ -30105,7 +30105,7 @@ function CallsAdmin() {
               />
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button type="button" className="sa-btn ghost" onClick={() => setManualCallOpen(false)}>বাতিল</button>
+              <button type="button" className="sa-btn ghost" onClick={() => setManualCallOpen(false)}>{adminTranslate("Cancel")}</button>
               <button
                 type="button"
                 className="sa-btn primary"
@@ -30118,7 +30118,7 @@ function CallsAdmin() {
                 }}
                 style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', border: 'none', fontWeight: 700 }}
               >
-                📞 কল শুরু করুন
+                📞 {adminTranslate("Start Call")}
               </button>
             </div>
           </div>
@@ -31743,7 +31743,7 @@ function CustomerCourierDetailModal({
                   {rate != null ? `${rate}%` : '—'}
                 </div>
                 <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
-                  সার্বিক সফলতা ({current.delivered || 0} সফল · {current.cancelled || 0} বাতিল)
+                  {adminTranslate("Overall Success")} ({current.delivered || 0} {adminTranslate("delivered")} · {current.cancelled || 0} {adminTranslate("cancelled")})
                 </div>
                 <div style={{ marginTop: 6 }}>
                   {current.risk === 'high' ? (
@@ -31767,7 +31767,7 @@ function CustomerCourierDetailModal({
           {/* Detailed Courier Table */}
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#c4b5fd', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>🚚</span> কুরিয়ারভিত্তিক পার্সেল রেকর্ড (Courier-Wise Details):
+              <span>🚚</span> {adminTranslate("Courier-Wise Details:")}
             </div>
             <div style={{ overflowX: 'auto', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: 10 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
@@ -31812,7 +31812,7 @@ function CustomerCourierDetailModal({
                   ) : (
                     <tr>
                       <td colSpan={6} style={{ padding: 18, textAlign: 'center', color: '#94a3b8' }}>
-                        কোনো পৃথক কুরিয়ার রেকর্ড নেই (শুধুমাত্র স্টোর ইন্টারনাল রেকর্ড বিদ্যমান)
+                        {adminTranslate("No individual courier records (only internal store records exist)")}
                       </td>
                     </tr>
                   )}
@@ -31820,7 +31820,7 @@ function CustomerCourierDetailModal({
               </table>
             </div>
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>
-              সর্বশেষ যাচাই: {current.lastCheckedAt ? new Date(current.lastCheckedAt).toLocaleString('en-GB') : '—'} · প্রথম ভেরিফিকেশন: {current.firstCheckedAt ? new Date(current.firstCheckedAt).toLocaleDateString('en-GB') : '—'}
+              {adminTranslate("Last Checked:")} {current.lastCheckedAt ? new Date(current.lastCheckedAt).toLocaleString('en-GB') : '—'} · {adminTranslate("First Verified:")} {current.firstCheckedAt ? new Date(current.firstCheckedAt).toLocaleDateString('en-GB') : '—'}
             </div>
           </div>
         </div>
@@ -32063,7 +32063,7 @@ function CourierIntelligenceImportModal({
           {/* Configuration Row */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12.5, color: '#94a3b8' }}>কুরিয়ার প্রোভাইডার:</span>
+              <span style={{ fontSize: 12.5, color: '#94a3b8' }}>{adminTranslate("Courier Provider:")}</span>
               <select
                 value={selectedCourier}
                 onChange={(e) => setSelectedCourier(e.target.value)}
@@ -32077,7 +32077,7 @@ function CourierIntelligenceImportModal({
                   fontSize: 12.5
                 }}
               >
-                <option value="Auto-Detect">Auto-Detect (ফাইল কলাম থেকে)</option>
+                <option value="Auto-Detect">{adminTranslate("Auto-Detect (from file columns)")}</option>
                 <option value="Pathao">Pathao</option>
                 <option value="Steadfast">Steadfast</option>
                 <option value="RedX">RedX</option>
@@ -32093,7 +32093,7 @@ function CourierIntelligenceImportModal({
               className="sa-btn ghost sa-mini"
               style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.3)' }}
             >
-              📊 Sample Excel (.xlsx) ডাউনলোড
+              📊 {adminTranslate("Download Sample Excel (.xlsx)")}
             </button>
           </div>
 
@@ -32118,14 +32118,14 @@ function CourierIntelligenceImportModal({
             />
             <div style={{ fontSize: 32, marginBottom: 6 }}>📁</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: '#f1f5f9' }}>
-              {fileName ? fileName : 'ক্লিক করে ফাইল সিলেক্ট করুন বা ড্র্যাগ করে ছাড়ুন'}
+              {fileName ? fileName : adminTranslate("Click to select file or drag & drop here")}
             </div>
             <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
-              সাপোর্টেড ফরম্যাট: .xlsx, .xls, .csv (Phone, Customer Name, Delivered, Cancelled ইত্যাদি)
+              {adminTranslate("Supported formats: .xlsx, .xls, .csv (Phone, Customer Name, Delivered, Cancelled etc.)")}
             </div>
             {loading && (
               <div style={{ marginTop: 10, color: '#c4b5fd', fontSize: 13, fontWeight: 600 }}>
-                ডাটা পার্স করা হচ্ছে… ⏳
+                {adminTranslate("Parsing data… ⏳")}
               </div>
             )}
           </div>
@@ -32135,10 +32135,10 @@ function CourierIntelligenceImportModal({
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: '#34d399' }}>
-                  ✓ {parsedRows.length}টি কাস্টমার রেকর্ড সনাক্ত হয়েছে
+                  ✓ {parsedRows.length} {adminTranslate("customer records detected")}
                 </span>
                 <span style={{ fontSize: 11.5, color: '#94a3b8' }}>
-                  প্রথম ৫টি রেকর্ডের প্রিভিউ:
+                  {adminTranslate("Preview of first 5 records:")}
                 </span>
               </div>
               <div style={{ overflowX: 'auto', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8 }}>
@@ -32180,7 +32180,7 @@ function CourierIntelligenceImportModal({
             className="sa-btn primary"
             style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)', border: 'none', color: '#fff', fontWeight: 600 }}
           >
-            {submitting ? 'মার্জ হচ্ছে…' : `✓ ${parsedRows.length}টি রেকর্ড ডেটাবেজে যুক্ত করুন`}
+            {submitting ? adminTranslate("Merging…") : `✓ ${parsedRows.length} ${adminTranslate("Add records to database")}`}
           </button>
         </div>
       </div>
@@ -33721,7 +33721,7 @@ function StaffAdmin() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
             <div>
               <h3 style={{ margin: 0, fontSize: 16, color: '#fff', fontWeight: 700 }}>📜 Staff Actions &amp; System Audit Trail</h3>
-              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>কোন স্টাফ কখন কোন অর্ডারে কী কাজ করেছে তার সম্পূর্ণ লগ</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{adminTranslate("Complete record of actions taken on orders by team members and system")}</div>
             </div>
 
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
