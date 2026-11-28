@@ -1972,6 +1972,12 @@ function PdpDirectCodForm({
   language: 'en' | 'bn';
   onQtyChange?: (n: number) => void;
 }) {
+  const storeCc = settings?.checkoutCustomizer?.store || {};
+  const storeFields: any[] = Array.isArray(storeCc.fields) && storeCc.fields.length > 0 ? storeCc.fields : [];
+  const nameFld = storeFields.find((f: any) => f.id === 'name');
+  const phoneFld = storeFields.find((f: any) => f.id === 'phone');
+  const addrFld = storeFields.find((f: any) => f.id === 'address');
+
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [district, setDistrict] = useState('Dhaka');
@@ -2072,12 +2078,12 @@ function PdpDirectCodForm({
         <span style={{ fontSize: 24 }}>⚡</span>
         <div>
           <div className="pdp-cod-title">
-            {language === 'bn' ? 'সরাসরি ক্যাশ অন ডেলিভারিতে অর্ডার করুন' : 'Express Cash on Delivery Order'}
+            {storeCc.headerTitle || (language === 'bn' ? 'সরাসরি ক্যাশ অন ডেলিভারিতে অর্ডার করুন' : 'Express Cash on Delivery Order')}
           </div>
           <div className="pdp-cod-sub">
-            {language === 'bn'
+            {storeCc.buttonSubtitle || (language === 'bn'
               ? 'অগ্রিম কোনো টাকা দিতে হবে না — পার্সেল হাতে পেয়ে মূল্য পরিশোধ করুন'
-              : 'No advance payment needed — Pay in cash upon doorstep delivery'}
+              : 'No advance payment needed — Pay in cash upon doorstep delivery')}
           </div>
         </div>
       </div>
@@ -2093,7 +2099,7 @@ function PdpDirectCodForm({
           <input
             type="text"
             className="pdp-cod-input"
-            placeholder={language === 'bn' ? 'আপনার নাম *' : 'Your Full Name *'}
+            placeholder={nameFld?.placeholder || (language === 'bn' ? 'আপনার নাম *' : 'Your Full Name *')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
@@ -2101,7 +2107,7 @@ function PdpDirectCodForm({
           <input
             type="tel"
             className="pdp-cod-input"
-            placeholder={language === 'bn' ? '১১ ডিজিটের মোবাইল নম্বর *' : 'Mobile Number (01XXXXXXXXX) *'}
+            placeholder={phoneFld?.placeholder || (language === 'bn' ? '১১ ডিজিটের মোবাইল নম্বর *' : 'Mobile Number (01XXXXXXXXX) *')}
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             required
@@ -2147,7 +2153,7 @@ function PdpDirectCodForm({
           <input
             type="text"
             className="pdp-cod-input"
-            placeholder={language === 'bn' ? 'বাসা নং, রোড নং, এলাকা / গ্রাম *' : 'House, Road, Area / Village *'}
+            placeholder={addrFld?.placeholder || (language === 'bn' ? 'বাসা নং, রোড নং, এলাকা / গ্রাম *' : 'House, Road, Area / Village *')}
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             required
@@ -2282,22 +2288,37 @@ function PdpDirectCodForm({
           </div>
         </div>
 
-        <button type="submit" className="pdp-cod-submit-btn" disabled={busy}>
+        <button
+          type="submit"
+          className="pdp-cod-submit-btn"
+          disabled={busy}
+          style={{
+            background: storeCc.buttonColor || undefined,
+            color: storeCc.buttonTextColor || undefined,
+            boxShadow: storeCc.buttonColor ? `0 6px 20px ${storeCc.buttonColor}44` : undefined,
+            animation: storeCc.buttonPulse ? 'saPulsePreview 1.8s infinite' : undefined,
+          }}
+        >
           {busy ? (
             <span>⏳ {language === 'bn' ? 'অর্ডার সাবমিট হচ্ছে…' : 'Processing Order…'}</span>
           ) : (
             <>
               <span>🛍️</span>
               <span>
-                {language === 'bn' ? `অর্ডার নিশ্চিত করুন — ${taka(grandTotal)}` : `Confirm Order — ${taka(grandTotal)}`}
+                {storeCc.buttonText
+                  ? `${storeCc.buttonText} — ${taka(grandTotal)}`
+                  : (language === 'bn' ? `অর্ডার নিশ্চিত করুন — ${taka(grandTotal)}` : `Confirm Order — ${taka(grandTotal)}`)}
               </span>
             </>
           )}
         </button>
 
-        <div style={{ textAlign: 'center', fontSize: 11, color: '#8c7d6b', marginTop: 4 }}>
-          🔒 {language === 'bn' ? 'ক্যাশ অন ডেলিভারি · শতভাগ সুরক্ষিত ও প্রাইভেট ডেলিভারি' : 'Cash on Delivery · 100% Secure & Discreet Nationwide Delivery'}
-        </div>
+        {storeCc.showTrustBadges !== false && (
+          <div style={{ textAlign: 'center', fontSize: 11, color: '#8c7d6b', marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div>{storeCc.trustBadge1 || (language === 'bn' ? '🔒 ক্যাশ অন ডেলিভারি · শতভাগ সুরক্ষিত ও প্রাইভেট ডেলিভারি' : 'Cash on Delivery · 100% Secure & Discreet Nationwide Delivery')}</div>
+            {storeCc.trustBadge2 && <div>{storeCc.trustBadge2}</div>}
+          </div>
+        )}
       </form>
     </div>
   );
@@ -4040,6 +4061,8 @@ export function Checkout() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [area, setArea] = useState<'inside' | 'outside'>('inside');
   const [f, setF] = useState({ name: '', phone: '', address: '', note: '', email: '' });
+  const [altPhone, setAltPhone] = useState('');
+  const [extraValues, setExtraValues] = useState<Record<string, string>>({});
   const [district, setDistrict] = useState('');
   const [thana, setThana] = useState('');
   const [coupon, setCoupon] = useState('');
@@ -4048,6 +4071,15 @@ export function Checkout() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const isSkin = isSkincareSite();
+
+  const storeCc = settings?.checkoutCustomizer?.store || {};
+  const storeFields: any[] = Array.isArray(storeCc.fields) && storeCc.fields.length > 0 ? storeCc.fields : [];
+  const nameFld = storeFields.find((f: any) => f.id === 'name');
+  const phoneFld = storeFields.find((f: any) => f.id === 'phone');
+  const altPhoneFld = storeFields.find((f: any) => f.id === 'alt_phone');
+  const addrFld = storeFields.find((f: any) => f.id === 'address');
+  const noteFld = storeFields.find((f: any) => f.id === 'note');
+  const customExtraFields = storeFields.filter((f: any) => f.enabled && !['name', 'phone', 'alt_phone', 'address', 'district_thana', 'note'].includes(f.id));
 
   useEffect(() => { getSettings().then(setSettings).catch(() => {}); }, []);
   useEffect(() => { if (lines.length) ecBeginCheckout(subtotal, lines.map((l) => ({ id: l.id, name: l.name, price: l.price, qty: l.qty }))); }, []); // eslint-disable-line
@@ -4178,6 +4210,12 @@ export function Checkout() {
         })),
         customer: {
           ...f,
+          note: [
+            f.note.trim(),
+            altPhone.trim() ? `বিকল্প ফোন: ${altPhone.trim()}` : '',
+            ...Object.entries(extraValues).map(([k, v]) => `${k}: ${v}`)
+          ].filter(Boolean).join(' | '),
+          secondaryPhone: altPhone.trim() || undefined,
           address: isAllDigital ? (f.email ? `Digital Access / Email: ${f.email}` : 'Instant Digital Access via WhatsApp') : fullAddress,
           area: isAllDigital ? 'inside' : area,
           district: isAllDigital ? 'Digital' : district,
@@ -4304,16 +4342,16 @@ export function Checkout() {
               </div>
               <div className="cobox-b">
                 <div>
-                  <label>{tr('Full Name *', language)}</label>
-                  <input className="field" value={f.name} onChange={set('name')} placeholder={tr('Enter your full name', language)} />
+                  <label>{nameFld?.label || tr('Full Name *', language)}</label>
+                  <input className="field" value={f.name} onChange={set('name')} placeholder={nameFld?.placeholder || tr('Enter your full name', language)} />
                 </div>
                 <div>
-                  <label>{tr('Mobile Number *', language)}</label>
+                  <label>{phoneFld?.label || tr('Mobile Number *', language)}</label>
                   <input
                     className="field checkout-phone-input"
                     value={f.phone}
                     onChange={(e) => setF((s) => ({ ...s, phone: e.target.value.replace(/\D/g, '').slice(0, 11) }))}
-                    placeholder="01XXXXXXXXX"
+                    placeholder={phoneFld?.placeholder || '01XXXXXXXXX'}
                     inputMode="tel"
                     maxLength={11}
                   />
@@ -4321,6 +4359,19 @@ export function Checkout() {
                     <div className="fieldhint">{tr('Please enter a valid 11-digit mobile number (e.g. 017XXXXXXXX)', language)}</div>
                   )}
                 </div>
+                {altPhoneFld?.enabled && (
+                  <div>
+                    <label>{altPhoneFld.label || 'বিকল্প মোবাইল নম্বর (ঐচ্ছিক)'}</label>
+                    <input
+                      className="field"
+                      value={altPhone}
+                      onChange={(e) => setAltPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                      placeholder={altPhoneFld.placeholder || 'পরিবারের অন্য কারও ফোন নম্বর (ঐচ্ছিক)'}
+                      inputMode="tel"
+                      maxLength={11}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -4368,8 +4419,8 @@ export function Checkout() {
                   </div>
 
                   <div className="checkout-address-field">
-                    <label>{tr('Detailed Street Address *', language)}</label>
-                    <textarea className="field" value={f.address} onChange={set('address')} placeholder="House / Flat / Road, Village, Landmark or Area description" />
+                    <label>{addrFld?.label || tr('Detailed Street Address *', language)}</label>
+                    <textarea className="field" value={f.address} onChange={set('address')} placeholder={addrFld?.placeholder || 'House / Flat / Road, Village, Landmark or Area description'} />
                   </div>
 
                   <div>
@@ -4401,9 +4452,38 @@ export function Checkout() {
                   </div>
 
                   <div>
-                    <label>{tr('Order Note (Optional)', language)}</label>
-                    <input className="field" value={f.note} onChange={set('note')} placeholder="Special delivery instructions, timing or landmarks" />
+                    <label>{noteFld?.label || tr('Order Note (Optional)', language)}</label>
+                    <input className="field" value={f.note} onChange={set('note')} placeholder={noteFld?.placeholder || 'Special delivery instructions, timing or landmarks'} />
                   </div>
+
+                  {/* Dynamic Custom Fields */}
+                  {customExtraFields.map((cf: any) => (
+                    <div key={cf.id} style={{ marginTop: 12 }}>
+                      <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
+                        {cf.label} {cf.required && '*'}
+                      </label>
+                      {cf.type === 'select' && cf.options && cf.options.length > 0 ? (
+                        <select
+                          className="field"
+                          value={extraValues[cf.id] || ''}
+                          onChange={(e) => setExtraValues({ ...extraValues, [cf.id]: e.target.value })}
+                        >
+                          <option value="">{cf.placeholder || `Select ${cf.label}`}</option>
+                          {cf.options.map((opt: string, i: number) => (
+                            <option key={i} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          className="field"
+                          type={cf.type === 'number' ? 'number' : cf.type === 'tel' ? 'tel' : 'text'}
+                          value={extraValues[cf.id] || ''}
+                          onChange={(e) => setExtraValues({ ...extraValues, [cf.id]: e.target.value })}
+                          placeholder={cf.placeholder || `Enter ${cf.label}`}
+                        />
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -4518,15 +4598,35 @@ export function Checkout() {
               className="checkout-submit-btn"
               disabled={busy}
               onClick={submit}
-              style={{ marginTop: 18 }}
+              style={{
+                marginTop: 18,
+                background: storeCc.buttonColor || undefined,
+                color: storeCc.buttonTextColor || undefined,
+                boxShadow: storeCc.buttonColor ? `0 6px 20px ${storeCc.buttonColor}44` : undefined,
+                animation: storeCc.buttonPulse ? 'saPulsePreview 1.8s infinite' : undefined,
+              }}
             >
-              <span>{busy ? tr('PROCESSING ORDER…', language) : `${tr('PLACE ORDER', language)} · ${taka(grand)}`}</span>
+              <span>
+                {busy
+                  ? tr('PROCESSING ORDER…', language)
+                  : (storeCc.buttonText
+                      ? `${storeCc.buttonText} · ${taka(grand)}`
+                      : `${tr('PLACE ORDER', language)} · ${taka(grand)}`)}
+              </span>
+              {storeCc.buttonSubtitle && (
+                <span style={{ display: 'block', fontSize: 11, fontWeight: 500, opacity: 0.9, marginTop: 2 }}>
+                  {storeCc.buttonSubtitle}
+                </span>
+              )}
             </button>
 
-            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: '#6b645c', textAlign: 'center' }}>
-              <div>🔒 Secure Checkout · No Advance Payment Required</div>
-              <div>📦 {tr('Courier inspection policy applies', language)}</div>
-            </div>
+            {storeCc.showTrustBadges !== false && (
+              <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: '#6b645c', textAlign: 'center' }}>
+                <div>{storeCc.trustBadge1 || '🔒 Secure Checkout · No Advance Payment Required'}</div>
+                <div>{storeCc.trustBadge2 || '🚚 Fast Doorstep Delivery Across Bangladesh'}</div>
+                <div>{storeCc.trustBadge3 || tr('Courier inspection policy applies', language)}</div>
+              </div>
+            )}
           </div>
         </div>
       </div>

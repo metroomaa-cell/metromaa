@@ -141,6 +141,9 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
   const [reviewIdx, setReviewIdx] = useState(0);
 
   // Store-level defaults
+  const [storeSettings, setStoreSettings] = useState<any>(null);
+  const [altPhone, setAltPhone] = useState('');
+  const [extraValues, setExtraValues] = useState<Record<string, string>>({});
   const [phoneNum, setPhoneNum] = useState('');
   const [waNum, setWaNum] = useState('');
   const [storeDelInside, setStoreDelInside] = useState(80);
@@ -189,6 +192,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
   useEffect(() => {
     getSettings()
       .then((s) => {
+        setStoreSettings(s);
         if (s.deliveryInside != null) setStoreDelInside(Number(s.deliveryInside) || 80);
         if (s.deliveryOutside != null) setStoreDelOutside(Number(s.deliveryOutside) || 130);
         if (s.phone) setPhoneNum((prev) => prev || s.phone);
@@ -506,6 +510,11 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
         customer: {
           name: name.trim(),
           phone: cleanPhone,
+          secondaryPhone: altPhone.trim() || undefined,
+          note: [
+            altPhone.trim() ? `বিকল্প ফোন: ${altPhone.trim()}` : '',
+            ...Object.entries(extraValues).map(([k, v]) => `${k}: ${v}`)
+          ].filter(Boolean).join(' | '),
           address: address.trim(),
           area: shippingZone,
           landing: cfg?.slug || slug,
@@ -1089,16 +1098,39 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
     );
   };
 
-  const renderCheckoutForm = () => (
-    <section className="ll-sec ll-sec-light ll-sec-order" id="order">
-      <div className="ll-inner">
-        <h2 className="ll-order-form-title">অর্ডার করতে নিচের ফর্মটি পূরন করুন</h2>
+  const renderCheckoutForm = () => {
+    const landingCc = (cfg as any)?.checkoutCustomizer?.landing || storeSettings?.checkoutCustomizer?.landing || storeSettings?.checkoutCustomizer?.store || {};
+    const landingFields: any[] = Array.isArray(landingCc.fields) && landingCc.fields.length > 0 ? landingCc.fields : [];
+    const nameFld = landingFields.find((f: any) => f.id === 'name');
+    const phoneFld = landingFields.find((f: any) => f.id === 'phone');
+    const altPhoneFld = landingFields.find((f: any) => f.id === 'alt_phone');
+    const addrFld = landingFields.find((f: any) => f.id === 'address');
+    const noteFld = landingFields.find((f: any) => f.id === 'note');
+    const customExtraFields = landingFields.filter((f: any) => f.enabled && !['name', 'phone', 'alt_phone', 'address', 'district_thana', 'note'].includes(f.id));
 
-        <div className="ll-checkout-container">
-          <form onSubmit={handleOrder} className="ll-form">
-            {/* Product Selection */}
-            <div className="ll-card ll-product-options-wrap">
-              <h3 className="ll-checkout-heading">Your Products</h3>
+    return (
+      <section className="ll-sec ll-sec-light ll-sec-order" id="order">
+        <div className="ll-inner">
+          {landingCc.showOfferTimer && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#dc2626', fontSize: 13, fontWeight: 700 }}>
+              <span>{landingCc.timerHeadline || '🔥 বিশেষ অফার শেষ হতে বাকি:'}</span>
+              <span style={{ background: '#dc2626', color: '#fff', padding: '2px 8px', borderRadius: 4, fontVariantNumeric: 'tabular-nums' }}>
+                {landingCc.timerMinutes || 15}:00
+              </span>
+            </div>
+          )}
+          {landingCc.showScarcity && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: 8, padding: '8px 12px', marginBottom: 16, textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: '#b45309' }}>
+              {landingCc.scarcityText || '⚡ আর মাত্র ৭টি পণ্য স্টকে আছে! দ্রুত অর্ডার করুন'}
+            </div>
+          )}
+          <h2 className="ll-order-form-title">{landingCc.headerTitle || 'অর্ডার করতে নিচের ফর্মটি পূরন করুন'}</h2>
+
+          <div className="ll-checkout-container">
+            <form onSubmit={handleOrder} className="ll-form">
+              {/* Product Selection */}
+              <div className="ll-card ll-product-options-wrap">
+                <h3 className="ll-checkout-heading">Your Products</h3>
 
               <div className="ll-qty-options">
                 {packagesList.map((prod: any) => {
@@ -1217,13 +1249,13 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
               <div className="ll-field-group">
                 <label className="ll-label">
-                  আপনার নাম <span className="ll-req">*</span>
+                  {nameFld?.label || 'আপনার নাম'} <span className="ll-req">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   className="ll-input"
-                  placeholder="আপনার সম্পূর্ণ নাম লিখুন"
+                  placeholder={nameFld?.placeholder || 'আপনার সম্পূর্ণ নাম লিখুন'}
                   value={name}
                   onFocus={triggerInitiateCheckout}
                   onChange={(e) => setName(e.target.value)}
@@ -1232,13 +1264,13 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
               <div className="ll-field-group">
                 <label className="ll-label">
-                  আপনার সম্পূর্ণ ঠিকানা <span className="ll-req">*</span>
+                  {addrFld?.label || 'আপনার সম্পূর্ণ ঠিকানা'} <span className="ll-req">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   className="ll-input"
-                  placeholder="জেলা, থানা, এলাকা ও বাসার ঠিকানা লিখুন"
+                  placeholder={addrFld?.placeholder || 'জেলা, থানা, এলাকা ও বাসার ঠিকানা লিখুন'}
                   value={address}
                   onFocus={triggerInitiateCheckout}
                   onChange={(e) => setAddress(e.target.value)}
@@ -1247,7 +1279,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
 
               <div className="ll-field-group">
                 <label className="ll-label" htmlFor="ll-phone-input">
-                  আপনার ফোন নাম্বার <span className="ll-req">*</span>
+                  {phoneFld?.label || 'আপনার ফোন নাম্বার'} <span className="ll-req">*</span>
                 </label>
                 <div className="ll-phone-input-wrap">
                   <div className="ll-phone-flag" aria-hidden="true">
@@ -1262,7 +1294,7 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
                     autoComplete="tel"
                     maxLength={11}
                     className={`ll-input ll-phone-input ${phoneValidation.state === 'valid' ? 'll-input-valid' : phoneValidation.state === 'invalid' ? 'll-input-invalid' : ''}`}
-                    placeholder="01XXXXXXXXX"
+                    placeholder={phoneFld?.placeholder || '01XXXXXXXXX'}
                     value={phone}
                     onFocus={triggerInitiateCheckout}
                     onChange={(e) => handlePhoneChange(e.target.value)}
@@ -1274,6 +1306,52 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
                   </div>
                 )}
               </div>
+
+              {altPhoneFld?.enabled && (
+                <div className="ll-field-group" style={{ marginTop: 12 }}>
+                  <label className="ll-label">
+                    {altPhoneFld.label || 'বিকল্প মোবাইল নম্বর (ঐচ্ছিক)'}
+                  </label>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={11}
+                    className="ll-input"
+                    placeholder={altPhoneFld.placeholder || 'পরিবারের অন্য কারও ফোন নম্বর (ঐচ্ছিক)'}
+                    value={altPhone}
+                    onChange={(e) => setAltPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                  />
+                </div>
+              )}
+
+              {/* Dynamic Custom Fields */}
+              {customExtraFields.map((cf: any) => (
+                <div key={cf.id} className="ll-field-group" style={{ marginTop: 12 }}>
+                  <label className="ll-label">
+                    {cf.label} {cf.required && <span className="ll-req">*</span>}
+                  </label>
+                  {cf.type === 'select' && cf.options && cf.options.length > 0 ? (
+                    <select
+                      className="ll-input"
+                      value={extraValues[cf.id] || ''}
+                      onChange={(e) => setExtraValues({ ...extraValues, [cf.id]: e.target.value })}
+                    >
+                      <option value="">{cf.placeholder || `Select ${cf.label}`}</option>
+                      {cf.options.map((opt: string, i: number) => (
+                        <option key={i} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={cf.type === 'number' ? 'number' : cf.type === 'tel' ? 'tel' : 'text'}
+                      className="ll-input"
+                      placeholder={cf.placeholder || `Enter ${cf.label}`}
+                      value={extraValues[cf.id] || ''}
+                      onChange={(e) => setExtraValues({ ...extraValues, [cf.id]: e.target.value })}
+                    />
+                  )}
+                </div>
+              ))}
             </div>
 
             {/* Shipping */}
@@ -1413,15 +1491,41 @@ export function LoveLockLanding({ slug = '' }: { slug?: string }) {
                 disabled={loading}
                 className="ll-submit-order-btn"
                 id="place_order"
+                style={{
+                  background: landingCc.buttonColor || primaryHex,
+                  color: landingCc.buttonTextColor || '#ffffff',
+                  boxShadow: landingCc.buttonColor ? `0 6px 20px ${landingCc.buttonColor}55` : undefined,
+                  animation: landingCc.buttonPulse ? 'saPulsePreview 1.8s infinite' : undefined,
+                }}
               >
-                {loading ? 'অর্ডার প্রসেস হচ্ছে...' : `Place Order  ${total}.00 ৳`}
+                <span>
+                  {loading
+                    ? 'অর্ডার প্রসেস হচ্ছে...'
+                    : (landingCc.buttonText
+                        ? `${landingCc.buttonText}  ${total}.00 ৳`
+                        : `Place Order  ${total}.00 ৳`)}
+                </span>
+                {landingCc.buttonSubtitle && (
+                  <span style={{ display: 'block', fontSize: 11, fontWeight: 500, opacity: 0.9, marginTop: 2 }}>
+                    {landingCc.buttonSubtitle}
+                  </span>
+                )}
               </button>
+
+              {landingCc.showTrustBadges !== false && (
+                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: '#4b5563', textAlign: 'center' }}>
+                  <div>{landingCc.trustBadge1 || '🔒 ১০০% নিরাপদ ক্যাশ অন ডেলিভারি (কোনো অগ্রিম টাকা ছাড়াই)'}</div>
+                  <div>{landingCc.trustBadge2 || '🚚 সারা দেশে ২-৩ দিনে দ্রুত ও নিশ্চিত হোম ডেলিভারি'}</div>
+                  <div>{landingCc.trustBadge3 || '📦 পার্সেল রিসিভ করার সময় চেক করে নেওয়ার সুযোগ'}</div>
+                </div>
+              )}
             </div>
           </form>
         </div>
       </div>
     </section>
   );
+};
 
   // If page is set to Custom HTML mode, render custom HTML with embedded or custom checkout form
   if (cfg.mode === 'html' && cfg.customHtml) {

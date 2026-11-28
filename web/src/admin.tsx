@@ -2645,7 +2645,7 @@ export function Admin() {
   const [adsSubTab, setAdsSubTab] = useState<'dashboard' | 'meta' | 'spend' | 'profit' | 'tiktok' | 'google'>('profit');
   const [financeSection, setFinanceSection] = useState<'dashboard' | 'accounts' | 'income' | 'courier' | 'cashflow' | 'assets'>('dashboard');
   const [reportSection, setReportSection] = useState('profit_loss');
-  const [settingsTab, setSettingsTab] = useState<'brand' | 'slider' | 'footer' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend'>('store');
+  const [settingsTab, setSettingsTab] = useState<'brand' | 'slider' | 'footer' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend' | 'checkout'>('store');
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     const groupForNav: Record<string, string> = {
@@ -2904,7 +2904,7 @@ export function Admin() {
     setMobileMenuOpen(false);
   };
 
-  const navigateSettingsTab = (tab: 'brand' | 'slider' | 'footer' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend', label: string) => {
+  const navigateSettingsTab = (tab: 'brand' | 'slider' | 'footer' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend' | 'checkout', label: string) => {
     setSettingsTab(tab);
     setActiveSubItem(label);
     setNav('settings');
@@ -3440,6 +3440,7 @@ export function Admin() {
               { id: 'settings', label: 'Homepage Sliders', action: () => navigateSettingsTab('slider', 'Homepage Sliders') },
               { id: 'settings', label: 'Storefront Design', action: () => navigateSettingsTab('appearance', 'Storefront Design') },
               { id: 'settings', label: 'Fraud Shield', action: () => navigateSettingsTab('fraud', 'Fraud Shield') },
+              { id: 'settings', label: 'Checkout Customizer', action: () => navigateSettingsTab('checkout', 'Checkout Customizer') },
             ]
           )}
 
@@ -14988,13 +14989,1411 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
   );
 }
 
-function SettingsAdmin({ initialTab = 'store' }: { initialTab?: 'brand' | 'slider' | 'footer' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend' }) {
+
+export interface CheckoutFieldConfig {
+  id: string;
+  label: string;
+  placeholder: string;
+  type: 'text' | 'tel' | 'textarea' | 'select' | 'number';
+  required: boolean;
+  enabled: boolean;
+  width: 'full' | 'half';
+  isSystem?: boolean;
+  options?: string[];
+}
+
+const DEFAULT_CHECKOUT_FIELDS: CheckoutFieldConfig[] = [
+  {
+    id: 'name',
+    label: 'আপনার নাম (Full Name)',
+    placeholder: 'আপনার সম্পূর্ণ নাম লিখুন',
+    type: 'text',
+    required: true,
+    enabled: true,
+    width: 'half',
+    isSystem: true,
+  },
+  {
+    id: 'phone',
+    label: 'মোবাইল নম্বর (Phone Number)',
+    placeholder: '১১ ডিজিটের সঠিক মোবাইল নম্বর দিন (01XXXXXXXXX)',
+    type: 'tel',
+    required: true,
+    enabled: true,
+    width: 'half',
+    isSystem: true,
+  },
+  {
+    id: 'alt_phone',
+    label: 'বিকল্প মোবাইল নম্বর (Alternative Phone)',
+    placeholder: 'পরিবারের অন্য কারও ফোন নম্বর (ঐচ্ছিক)',
+    type: 'tel',
+    required: false,
+    enabled: false,
+    width: 'full',
+    isSystem: false,
+  },
+  {
+    id: 'district_thana',
+    label: 'জেলা ও থানা (District & Thana)',
+    placeholder: 'জেলা এবং থানা নির্বাচন করুন',
+    type: 'select',
+    required: true,
+    enabled: true,
+    width: 'full',
+    isSystem: true,
+  },
+  {
+    id: 'address',
+    label: 'সম্পূর্ণ ডেলিভারি ঠিকানা (Full Address)',
+    placeholder: 'বাসা নং, রোড নং, এলাকা বা গ্রামের নাম লিখুন',
+    type: 'textarea',
+    required: true,
+    enabled: true,
+    width: 'full',
+    isSystem: true,
+  },
+  {
+    id: 'note',
+    label: 'অর্ডার নোট (Special Note)',
+    placeholder: 'ডেলিভারির জন্য কোনো বিশেষ নির্দেশ থাকলে লিখুন (ঐচ্ছিক)',
+    type: 'text',
+    required: false,
+    enabled: true,
+    width: 'full',
+    isSystem: false,
+  },
+];
+
+function CheckoutCustomizerAdmin({ f, setF }: { f: any; setF: (updater: any) => void }) {
+  const [scope, setScope] = useState<'store' | 'landing'>('store');
+  const [previewDevice, setPreviewDevice] = useState<'mobile' | 'desktop'>('mobile');
+  const [showAddFieldModal, setShowAddFieldModal] = useState(false);
+  const [newField, setNewField] = useState<Partial<CheckoutFieldConfig>>({
+    id: '',
+    label: '',
+    placeholder: '',
+    type: 'text',
+    required: false,
+    enabled: true,
+    width: 'full',
+    options: [],
+  });
+  const [newOptionsStr, setNewOptionsStr] = useState('');
+
+  const cc = f?.checkoutCustomizer || {};
+  const currentConfig = cc[scope] || {};
+
+  const getVal = (key: string, defVal: any) => {
+    if (currentConfig[key] !== undefined) return currentConfig[key];
+    if (scope === 'store') {
+      const defaults: Record<string, any> = {
+        headerTitle: 'ক্যাশ অন ডেলিভারিতে অর্ডার করতে নিচের ফর্মটি পূরণ করুন',
+        buttonText: 'অর্ডারটি কনফার্ম করুন',
+        buttonColor: '#16a34a',
+        buttonTextColor: '#ffffff',
+        buttonPulse: true,
+        buttonSubtitle: 'ক্যাশ অন ডেলিভারি · পণ্য হাতে পেয়ে টাকা দিন',
+        showTrustBadges: true,
+        trustBadge1: '🔒 ১০০% নিরাপদ ক্যাশ অন ডেলিভারি (কোনো অগ্রিম টাকা ছাড়াই)',
+        trustBadge2: '🚚 সারা দেশে ২-৩ দিনে দ্রুত ও নিশ্চিত হোম ডেলিভারি',
+        trustBadge3: '📦 পার্সেল রিসিভ করার সময় চেক করে নেওয়ার সুযোগ',
+        deliveryInside: f?.deliveryInside ?? 60,
+        deliveryOutside: f?.deliveryOutside ?? 120,
+        freeShipThreshold: f?.freeShipThreshold ?? 1500,
+        fields: DEFAULT_CHECKOUT_FIELDS,
+      };
+      return defaults[key] !== undefined ? defaults[key] : defVal;
+    } else {
+      const defaults: Record<string, any> = {
+        layout: 'single',
+        headerTitle: 'অর্ডার সম্পন্ন করতে নিচের সঠিক তথ্য প্রদান করুন',
+        buttonText: 'ক্যাশ অন ডেলিভারিতে অর্ডার করুন',
+        buttonColor: '#dc2626',
+        buttonTextColor: '#ffffff',
+        buttonPulse: true,
+        buttonSubtitle: 'কোনো অগ্রিম পেমেন্ট ছাড়াই সরাসরি ক্যাশ অন ডেলিভারি',
+        showOfferTimer: true,
+        timerMinutes: 15,
+        timerHeadline: '🔥 বিশেষ অফার শেষ হতে বাকি:',
+        showScarcity: true,
+        scarcityText: '⚡ আর মাত্র ৭টি পণ্য স্টকে আছে! দ্রুত অর্ডার করুন',
+        showTrustBadges: true,
+        trustBadge1: '⚡ প্রিমিয়াম কোয়ালিটি ও দ্রুততম ডেলিভারি গ্যারান্টি',
+        trustBadge2: '💵 ক্যাশ অন ডেলিভারি - পণ্য হাতে পেয়ে মূল্য পরিশোধ',
+        trustBadge3: '🔄 ৭ দিনের সহজ ও দ্রুত পরিবর্তন বা রিটার্ন সুবিধা',
+        deliveryInside: f?.deliveryInside ?? 60,
+        deliveryOutside: f?.deliveryOutside ?? 120,
+        fields: DEFAULT_CHECKOUT_FIELDS,
+      };
+      return defaults[key] !== undefined ? defaults[key] : defVal;
+    }
+  };
+
+  const updateVal = (key: string, val: any) => {
+    setF((cur: any) => {
+      const prevCC = cur.checkoutCustomizer || {};
+      const prevScope = prevCC[scope] || {};
+      return {
+        ...cur,
+        checkoutCustomizer: {
+          ...prevCC,
+          [scope]: {
+            ...prevScope,
+            [key]: val,
+          },
+        },
+      };
+    });
+  };
+
+  // Fields handling
+  const rawFields: CheckoutFieldConfig[] = currentConfig.fields || DEFAULT_CHECKOUT_FIELDS;
+
+  const updateField = (id: string, updates: Partial<CheckoutFieldConfig>) => {
+    const updated = rawFields.map((fld) => (fld.id === id ? { ...fld, ...updates } : fld));
+    updateVal('fields', updated);
+  };
+
+  const removeField = (id: string) => {
+    if (confirm(`Are you sure you want to delete this field? (${id})`)) {
+      const updated = rawFields.filter((fld) => fld.id !== id);
+      updateVal('fields', updated);
+    }
+  };
+
+  const moveField = (index: number, dir: 'up' | 'down') => {
+    const targetIdx = dir === 'up' ? index - 1 : index + 1;
+    if (targetIdx < 0 || targetIdx >= rawFields.length) return;
+    const next = [...rawFields];
+    const [moved] = next.splice(index, 1);
+    next.splice(targetIdx, 0, moved);
+    updateVal('fields', next);
+  };
+
+  const addPresetField = (preset: CheckoutFieldConfig) => {
+    if (rawFields.some((fld) => fld.id === preset.id)) {
+      // If already exists but disabled, enable it
+      updateField(preset.id, { enabled: true });
+      return;
+    }
+    updateVal('fields', [...rawFields, preset]);
+  };
+
+  const handleCreateField = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newField.id || !newField.label) {
+      alert('Field ID and Label are required.');
+      return;
+    }
+    const cleanId = String(newField.id).trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    if (rawFields.some((f) => f.id === cleanId)) {
+      alert(`A field with ID "${cleanId}" already exists.`);
+      return;
+    }
+    const created: CheckoutFieldConfig = {
+      id: cleanId,
+      label: newField.label || cleanId,
+      placeholder: newField.placeholder || '',
+      type: newField.type || 'text',
+      required: !!newField.required,
+      enabled: true,
+      width: newField.width || 'full',
+      options: newOptionsStr ? newOptionsStr.split(',').map((s) => s.trim()).filter(Boolean) : [],
+    };
+    updateVal('fields', [...rawFields, created]);
+    setShowAddFieldModal(false);
+    setNewField({ id: '', label: '', placeholder: '', type: 'text', required: false, enabled: true, width: 'full' });
+    setNewOptionsStr('');
+  };
+
+  const syncToOtherScope = () => {
+    const otherScope = scope === 'store' ? 'landing' : 'store';
+    if (confirm(`Copy all ${scope === 'store' ? 'Main Store' : 'Landing Page'} checkout settings to ${otherScope === 'store' ? 'Main Store' : 'Landing Page'}?`)) {
+      setF((cur: any) => {
+        const prevCC = cur.checkoutCustomizer || {};
+        return {
+          ...cur,
+          checkoutCustomizer: {
+            ...prevCC,
+            [otherScope]: { ...currentConfig },
+          },
+        };
+      });
+      alert(`Successfully synchronized settings to ${otherScope === 'store' ? 'Main Store' : 'Landing Page'}!`);
+    }
+  };
+
+  const COLOR_PRESETS = [
+    { name: 'Emerald', color: '#16a34a' },
+    { name: 'Crimson', color: '#dc2626' },
+    { name: 'Royal Blue', color: '#2563eb' },
+    { name: 'Luxury Gold', color: '#b48e4c' },
+    { name: 'Violet', color: '#7c3aed' },
+    { name: 'High-Conv Orange', color: '#ea580c' },
+    { name: 'Dark Slate', color: '#0f172a' },
+  ];
+
+  const BUTTON_TEXT_PRESETS = [
+    'অর্ডারটি কনফার্ম করুন',
+    'ক্যাশ অন ডেলিভারিতে অর্ডার করুন',
+    'পণ্যটি অর্ডার করতে ক্লিক করুন',
+    'COMPLETE ORDER NOW',
+  ];
+
+  const btnColor = getVal('buttonColor', scope === 'store' ? '#16a34a' : '#dc2626');
+  const btnTextColor = getVal('buttonTextColor', '#ffffff');
+  const btnText = getVal('buttonText', scope === 'store' ? 'অর্ডারটি কনফার্ম করুন' : 'ক্যাশ অন ডেলিভারিতে অর্ডার করুন');
+  const btnPulse = getVal('buttonPulse', true);
+  const btnSub = getVal('buttonSubtitle', 'ক্যাশ অন ডেলিভারি · পণ্য হাতে পেয়ে টাকা দিন');
+  const headerTitle = getVal('headerTitle', 'ক্যাশ অন ডেলিভারিতে অর্ডার করতে নিচের ফর্মটি পূরণ করুন');
+  const showBadges = getVal('showTrustBadges', true);
+  const badge1 = getVal('trustBadge1', '🔒 ১০০% নিরাপদ ক্যাশ অন ডেলিভারি');
+  const badge2 = getVal('trustBadge2', '🚚 সারা দেশে ২-৩ দিনে দ্রুত ডেলিভারি');
+  const badge3 = getVal('trustBadge3', '📦 পণ্য চেক করে মূল্য পরিশোধের সুযোগ');
+  const showTimer = scope === 'landing' && getVal('showOfferTimer', true);
+  const timerMins = getVal('timerMinutes', 15);
+  const timerHeadline = getVal('timerHeadline', '🔥 বিশেষ অফার শেষ হতে বাকি:');
+  const showScarcity = scope === 'landing' && getVal('showScarcity', true);
+  const scarcityText = getVal('scarcityText', '⚡ আর মাত্র ৭টি পণ্য স্টকে আছে! দ্রুত অর্ডার করুন');
+  const insideFee = getVal('deliveryInside', 60);
+  const outsideFee = getVal('deliveryOutside', 120);
+
+  return (
+    <div style={{ display: 'grid', gap: 20 }}>
+      {/* Banner & Scope Switcher */}
+      <div
+        className="sa-card"
+        style={{
+          padding: '22px 24px',
+          background: 'linear-gradient(135deg, #151221 0%, #1e1730 100%)',
+          border: '1px solid rgba(139, 92, 246, 0.25)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 16,
+        }}
+      >
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: 'rgba(139, 92, 246, 0.2)', color: '#a78bfa', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
+              ✦ DYNAMIC CHECKOUT BUILDER (CARTFLOWS STYLE)
+            </span>
+            <span style={{ fontSize: 11, color: '#34d399', fontWeight: 600 }}>● Live Sync</span>
+          </div>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>
+            Checkout &amp; Landing Page Experience
+          </h2>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>
+            Add, remove, reorder fields, edit placeholders, customize button colors and trust badges with full CartFlows flexibility.
+          </p>
+        </div>
+
+        {/* Scope Pill Toggle & Sync Button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', background: '#0b0914', padding: 4, borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
+            <button
+              type="button"
+              onClick={() => setScope('store')}
+              style={{
+                padding: '8px 18px',
+                borderRadius: 8,
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: 13,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                transition: 'all 0.2s',
+                background: scope === 'store' ? '#8b5cf6' : 'transparent',
+                color: scope === 'store' ? '#fff' : '#94a3b8',
+              }}
+            >
+              <span>🏪 Main Store Checkout</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setScope('landing')}
+              style={{
+                padding: '8px 18px',
+                borderRadius: 8,
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: 13,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                transition: 'all 0.2s',
+                background: scope === 'landing' ? '#8b5cf6' : 'transparent',
+                color: scope === 'landing' ? '#fff' : '#94a3b8',
+              }}
+            >
+              <span>🚀 Landing Page Funnel</span>
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={syncToOtherScope}
+            title="Copy settings to the other scope"
+            style={{
+              padding: '8px 14px',
+              borderRadius: 8,
+              border: '1px solid rgba(139, 92, 246, 0.4)',
+              background: 'rgba(139, 92, 246, 0.15)',
+              color: '#c4b5fd',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span>⇄ Sync to {scope === 'store' ? 'Landing' : 'Store'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Grid: Settings on Left, Interactive Preview on Right */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: 20, alignItems: 'start' }}>
+        {/* Left Column: Customization Controls */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+
+          {/* CARD 1: WORDPRESS CARTFLOWS DYNAMIC FIELDS MANAGER */}
+          <div className="sa-card" style={{ padding: 22, background: '#13111c', border: '1px solid rgba(139, 92, 246, 0.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 18 }}>📋</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>
+                    Checkout Form Fields (CartFlows Style)
+                  </h3>
+                  <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                    Add, edit placeholders, reorder or remove fields at will
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm('Reset fields to CartFlows default layout?')) {
+                      updateVal('fields', DEFAULT_CHECKOUT_FIELDS);
+                    }
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    background: 'rgba(255,255,255,0.05)',
+                    color: '#94a3b8',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                  }}
+                >
+                  ↺ Reset Defaults
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddFieldModal(true)}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: 6,
+                    border: 'none',
+                    background: '#8b5cf6',
+                    color: '#fff',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <span>+ Add Field</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Add Presets Chips */}
+            <div style={{ marginBottom: 16, padding: '10px 12px', background: '#0b0914', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                ⚡ Quick Presets (Click to add)
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => addPresetField({
+                    id: 'alt_phone',
+                    label: 'বিকল্প মোবাইল নম্বর (Alternative Phone)',
+                    placeholder: 'পরিবারের অন্য কারও ফোন নম্বর (ঐচ্ছিক)',
+                    type: 'tel',
+                    required: false,
+                    enabled: true,
+                    width: 'half',
+                  })}
+                  style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(139, 92, 246, 0.3)', background: 'rgba(139, 92, 246, 0.1)', color: '#c4b5fd', fontSize: 11.5, cursor: 'pointer' }}
+                >
+                  + Alt Phone
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addPresetField({
+                    id: 'landmark',
+                    label: 'পরিচিত ল্যান্ডমার্ক (Nearby Landmark)',
+                    placeholder: 'যেমন: স্কুলের পাশে / মসজিদের বিপরীতে',
+                    type: 'text',
+                    required: false,
+                    enabled: true,
+                    width: 'full',
+                  })}
+                  style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(139, 92, 246, 0.3)', background: 'rgba(139, 92, 246, 0.1)', color: '#c4b5fd', fontSize: 11.5, cursor: 'pointer' }}
+                >
+                  + Landmark (ল্যান্ডমার্ক)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addPresetField({
+                    id: 'delivery_time',
+                    label: 'ডেলিভারির উপযুক্ত সময় (Preferred Time)',
+                    placeholder: 'যেকোনো সময় / সকাল ১০টা - দুপুর ২টা / বিকাল ৪টা - রাত ৮টা',
+                    type: 'select',
+                    required: false,
+                    enabled: true,
+                    width: 'half',
+                    options: ['যেকোনো সময় (Anytime)', 'সকাল ১০টা - দুপুর ২টা', 'বিকাল ৪টা - রাত ৮টা'],
+                  })}
+                  style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(139, 92, 246, 0.3)', background: 'rgba(139, 92, 246, 0.1)', color: '#c4b5fd', fontSize: 11.5, cursor: 'pointer' }}
+                >
+                  + Delivery Time Slot
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addPresetField({
+                    id: 'email',
+                    label: 'ইমেইল এড্রেস (Email Address)',
+                    placeholder: 'আপনার ইমেইল এড্রেস লিখুন (ঐচ্ছিক)',
+                    type: 'text',
+                    required: false,
+                    enabled: true,
+                    width: 'half',
+                  })}
+                  style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(139, 92, 246, 0.3)', background: 'rgba(139, 92, 246, 0.1)', color: '#c4b5fd', fontSize: 11.5, cursor: 'pointer' }}
+                >
+                  + Email Address
+                </button>
+              </div>
+            </div>
+
+            {/* Form Headline Input */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
+                Form Header Headline (ফর্মের শিরোনাম)
+              </label>
+              <input
+                type="text"
+                value={headerTitle}
+                onChange={(e) => updateVal('headerTitle', e.target.value)}
+                placeholder="e.g. ক্যাশ অন ডেলিভারিতে অর্ডার করতে নিচের ফর্মটি পূরণ করুন"
+                style={{ width: '100%', height: 40, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13.5 }}
+              />
+            </div>
+
+            {/* Dynamic Fields List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {rawFields.map((fld, idx) => (
+                <div
+                  key={fld.id}
+                  style={{
+                    background: fld.enabled ? '#0c0a15' : '#08060e',
+                    border: fld.enabled ? '1px solid rgba(255,255,255,0.1)' : '1px dashed rgba(255,255,255,0.06)',
+                    borderRadius: 10,
+                    padding: '14px 16px',
+                    opacity: fld.enabled ? 1 : 0.6,
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  {/* Field Top Row: Controls & Badges */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {/* Reorder Arrows */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => moveField(idx, 'up')}
+                          style={{
+                            width: 22,
+                            height: 16,
+                            padding: 0,
+                            borderRadius: 3,
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            background: 'rgba(255,255,255,0.05)',
+                            color: idx === 0 ? '#475569' : '#cbd5e1',
+                            cursor: idx === 0 ? 'default' : 'pointer',
+                            fontSize: 9,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === rawFields.length - 1}
+                          onClick={() => moveField(idx, 'down')}
+                          style={{
+                            width: 22,
+                            height: 16,
+                            padding: 0,
+                            borderRadius: 3,
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            background: 'rgba(255,255,255,0.05)',
+                            color: idx === rawFields.length - 1 ? '#475569' : '#cbd5e1',
+                            cursor: idx === rawFields.length - 1 ? 'default' : 'pointer',
+                            fontSize: 9,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          ▼
+                        </button>
+                      </div>
+
+                      {/* Field ID Tag & Type Badge */}
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#f8fafc', background: '#1e1a2e', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(139, 92, 246, 0.2)' }}>
+                        {fld.id}
+                      </span>
+                      <span style={{ fontSize: 10.5, color: '#a78bfa', background: 'rgba(139, 92, 246, 0.15)', padding: '2px 6px', borderRadius: 4, fontWeight: 600 }}>
+                        {fld.type}
+                      </span>
+                    </div>
+
+                    {/* Controls: Width, Required, Enabled, Delete */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {/* Width Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => updateField(fld.id, { width: fld.width === 'half' ? 'full' : 'half' })}
+                        title="Toggle Field Width (Half 50% vs Full 100%)"
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          background: fld.width === 'half' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.05)',
+                          color: fld.width === 'half' ? '#38bdf8' : '#94a3b8',
+                        }}
+                      >
+                        {fld.width === 'half' ? '½ Half (50%)' : '■ Full (100%)'}
+                      </button>
+
+                      {/* Required Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => updateField(fld.id, { required: !fld.required })}
+                        title="Toggle Required or Optional"
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          background: fld.required ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255,255,255,0.05)',
+                          color: fld.required ? '#f87171' : '#94a3b8',
+                        }}
+                      >
+                        {fld.required ? 'Required *' : 'Optional'}
+                      </button>
+
+                      {/* Enabled Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => updateField(fld.id, { enabled: !fld.enabled })}
+                        title={fld.enabled ? 'Click to Disable' : 'Click to Enable'}
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          background: fld.enabled ? 'rgba(34, 197, 94, 0.15)' : 'rgba(100, 116, 139, 0.15)',
+                          color: fld.enabled ? '#4ade80' : '#64748b',
+                        }}
+                      >
+                        {fld.enabled ? '👁️ On' : '🚫 Off'}
+                      </button>
+
+                      {/* Delete Button */}
+                      <button
+                        type="button"
+                        onClick={() => removeField(fld.id)}
+                        title="Delete this field"
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          border: '1px solid rgba(239, 68, 68, 0.25)',
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          color: '#f87171',
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Field Configuration Inputs: Label & Placeholder */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11.5, color: '#94a3b8', marginBottom: 4 }}>
+                        Field Label (লেবেল):
+                      </label>
+                      <input
+                        type="text"
+                        value={fld.label}
+                        onChange={(e) => updateField(fld.id, { label: e.target.value })}
+                        placeholder="e.g. আপনার নাম"
+                        style={{ width: '100%', height: 36, padding: '0 10px', background: '#08060f', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11.5, color: '#94a3b8', marginBottom: 4 }}>
+                        Placeholder (প্লেসহোল্ডার — ইচ্ছামতো লিখুন):
+                      </label>
+                      <input
+                        type="text"
+                        value={fld.placeholder}
+                        onChange={(e) => updateField(fld.id, { placeholder: e.target.value })}
+                        placeholder="বক্সের ভেতরে যে লেখা দেখাবে"
+                        style={{ width: '100%', height: 36, padding: '0 10px', background: '#08060f', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#38bdf8', fontSize: 12.5 }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Dropdown Options if select type */}
+                  {fld.type === 'select' && fld.id !== 'district_thana' && (
+                    <div style={{ marginTop: 8 }}>
+                      <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginBottom: 3 }}>
+                        Dropdown Options (comma separated):
+                      </label>
+                      <input
+                        type="text"
+                        value={(fld.options || []).join(', ')}
+                        onChange={(e) => updateField(fld.id, { options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
+                        placeholder="Option 1, Option 2, Option 3"
+                        style={{ width: '100%', height: 32, padding: '0 10px', background: '#08060f', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#cbd5e1', fontSize: 12 }}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* CARD 2: BUTTON & CTA CUSTOMIZATION */}
+          <div className="sa-card" style={{ padding: 22, background: '#13111c' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+              <span style={{ fontSize: 18 }}>🎯</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>Order Button &amp; CTA Styler</h3>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>Change order button text, color, pulse animation and subtitle</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
+                  Order Button Text (বাটন টেক্সট)
+                </label>
+                <input
+                  type="text"
+                  value={btnText}
+                  onChange={(e) => updateVal('buttonText', e.target.value)}
+                  placeholder="e.g. অর্ডারটি কনফার্ম করুন"
+                  style={{ width: '100%', height: 40, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13.5 }}
+                />
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                  {BUTTON_TEXT_PRESETS.map((pst) => (
+                    <button
+                      key={pst}
+                      type="button"
+                      onClick={() => updateVal('buttonText', pst)}
+                      style={{
+                        padding: '3px 9px',
+                        borderRadius: 6,
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        background: btnText === pst ? 'rgba(139, 92, 246, 0.25)' : 'rgba(255,255,255,0.04)',
+                        color: btnText === pst ? '#a78bfa' : '#94a3b8',
+                        fontSize: 11,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {pst}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
+                  Button Background Color (বাটনের কালার)
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <input
+                    type="color"
+                    value={btnColor}
+                    onChange={(e) => updateVal('buttonColor', e.target.value)}
+                    style={{ width: 44, height: 40, border: 'none', borderRadius: 8, cursor: 'pointer', background: 'transparent' }}
+                  />
+                  <input
+                    type="text"
+                    value={btnColor}
+                    onChange={(e) => updateVal('buttonColor', e.target.value)}
+                    style={{ width: 110, height: 40, padding: '0 10px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                  />
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {COLOR_PRESETS.map((p) => (
+                      <button
+                        key={p.color}
+                        type="button"
+                        onClick={() => updateVal('buttonColor', p.color)}
+                        title={p.name}
+                        style={{
+                          width: 26,
+                          height: 26,
+                          borderRadius: '50%',
+                          background: p.color,
+                          border: btnColor === p.color ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)',
+                          cursor: 'pointer',
+                          boxShadow: btnColor === p.color ? '0 0 8px ' + p.color : 'none',
+                          transform: btnColor === p.color ? 'scale(1.15)' : 'scale(1)',
+                          transition: 'all 0.15s ease',
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
+                  Button Subtitle / Hint (বাটনের নিচের ছোট মেসেজ)
+                </label>
+                <input
+                  type="text"
+                  value={btnSub}
+                  onChange={(e) => updateVal('buttonSubtitle', e.target.value)}
+                  placeholder="e.g. ক্যাশ অন ডেলিভারি · পণ্য হাতে পেয়ে টাকা দিন"
+                  style={{ width: '100%', height: 40, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 8, background: '#0c0a15', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#fff' }}>⚡ Eye-Catching Pulse Effect</div>
+                  <div style={{ fontSize: 11.5, color: '#94a3b8' }}>Add smooth breathing animation to maximize order conversions</div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={btnPulse}
+                  onChange={(e) => updateVal('buttonPulse', e.target.checked)}
+                  style={{ width: 18, height: 18, cursor: 'pointer' }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* CARD 3: TRUST BADGES & GUARANTEE POLICY */}
+          <div className="sa-card" style={{ padding: 22, background: '#13111c' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 18 }}>🛡️</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>Trust Badges &amp; Guarantee</h3>
+                  <span style={{ fontSize: 12, color: '#94a3b8' }}>Reassure customers about safe Cash on Delivery</span>
+                </div>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12.5, color: '#cbd5e1' }}>
+                <input
+                  type="checkbox"
+                  checked={showBadges}
+                  onChange={(e) => updateVal('showTrustBadges', e.target.checked)}
+                  style={{ width: 16, height: 16 }}
+                />
+                <span>Active</span>
+              </label>
+            </div>
+
+            {showBadges && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Badge 1 Text (নিরাপত্তা মেসেজ):</label>
+                  <input
+                    type="text"
+                    value={badge1}
+                    onChange={(e) => updateVal('trustBadge1', e.target.value)}
+                    style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 12.5 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Badge 2 Text (ডেলিভারি মেসেজ):</label>
+                  <input
+                    type="text"
+                    value={badge2}
+                    onChange={(e) => updateVal('trustBadge2', e.target.value)}
+                    style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 12.5 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Badge 3 Text (কোয়ালিটি/রিটার্ন পলিসি):</label>
+                  <input
+                    type="text"
+                    value={badge3}
+                    onChange={(e) => updateVal('trustBadge3', e.target.value)}
+                    style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 12.5 }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* CARD 4: LANDING PAGE SPECIAL (TIMER & SCARCITY) */}
+          {scope === 'landing' && (
+            <div className="sa-card" style={{ padding: 22, background: '#13111c' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 18 }}>⏳</span>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>Offer Countdown Timer &amp; Scarcity</h3>
+                    <span style={{ fontSize: 12, color: '#94a3b8' }}>Increase FOMO &amp; urgency on your landing page</span>
+                  </div>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12.5, color: '#cbd5e1' }}>
+                  <input
+                    type="checkbox"
+                    checked={showTimer}
+                    onChange={(e) => updateVal('showOfferTimer', e.target.checked)}
+                    style={{ width: 16, height: 16 }}
+                  />
+                  <span>Show Timer</span>
+                </label>
+              </div>
+
+              {showTimer && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 12, marginBottom: 12 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Timer Headline (টাইমার শিরোনাম):</label>
+                    <input
+                      type="text"
+                      value={timerHeadline}
+                      onChange={(e) => updateVal('timerHeadline', e.target.value)}
+                      style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Minutes (মিনিট):</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      value={timerMins}
+                      onChange={(e) => updateVal('timerMinutes', parseInt(e.target.value, 10) || 15)}
+                      style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Stock Scarcity Notice</div>
+                  <input
+                    type="checkbox"
+                    checked={showScarcity}
+                    onChange={(e) => updateVal('showScarcity', e.target.checked)}
+                    style={{ width: 16, height: 16 }}
+                  />
+                </div>
+                {showScarcity && (
+                  <input
+                    type="text"
+                    value={scarcityText}
+                    onChange={(e) => updateVal('scarcityText', e.target.value)}
+                    placeholder="e.g. ⚡ আর মাত্র ৭টি পণ্য স্টকে আছে! দ্রুত অর্ডার করুন"
+                    style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 12.5 }}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* CARD 5: DELIVERY RATES */}
+          <div className="sa-card" style={{ padding: 22, background: '#13111c' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+              <span style={{ fontSize: 18 }}>🚚</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>Delivery Fees &amp; Thresholds</h3>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>Synchronized with checkout calculations</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Inside Dhaka Fee (৳):</label>
+                <input
+                  type="number"
+                  value={insideFee}
+                  onChange={(e) => {
+                    const v = Number(e.target.value) || 0;
+                    updateVal('deliveryInside', v);
+                    setF((cur: any) => ({ ...cur, deliveryInside: v }));
+                  }}
+                  style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Outside Dhaka Fee (৳):</label>
+                <input
+                  type="number"
+                  value={outsideFee}
+                  onChange={(e) => {
+                    const v = Number(e.target.value) || 0;
+                    updateVal('deliveryOutside', v);
+                    setF((cur: any) => ({ ...cur, deliveryOutside: v }));
+                  }}
+                  style={{ width: '100%', height: 38, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Live Interactive Simulation Preview */}
+        <div style={{ position: 'sticky', top: 20 }}>
+          <div className="sa-card" style={{ padding: 20, background: '#0e0c17', border: '1px solid rgba(255,255,255,0.12)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>👁️ Live Preview</span>
+                <span style={{ fontSize: 10.5, background: 'rgba(52, 211, 153, 0.15)', color: '#34d399', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
+                  CARTFLOWS LIVE
+                </span>
+              </div>
+              <div style={{ display: 'flex', background: '#181427', borderRadius: 6, padding: 2 }}>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDevice('mobile')}
+                  style={{
+                    border: 'none',
+                    padding: '4px 10px',
+                    borderRadius: 4,
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    background: previewDevice === 'mobile' ? '#8b5cf6' : 'transparent',
+                    color: previewDevice === 'mobile' ? '#fff' : '#94a3b8',
+                  }}
+                >
+                  📱 Mobile
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDevice('desktop')}
+                  style={{
+                    border: 'none',
+                    padding: '4px 10px',
+                    borderRadius: 4,
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    background: previewDevice === 'desktop' ? '#8b5cf6' : 'transparent',
+                    color: previewDevice === 'desktop' ? '#fff' : '#94a3b8',
+                  }}
+                >
+                  💻 Desktop
+                </button>
+              </div>
+            </div>
+
+            {/* Simulated Frame */}
+            <div
+              style={{
+                background: '#ffffff',
+                color: '#0f172a',
+                borderRadius: 14,
+                overflow: 'hidden',
+                boxShadow: '0 12px 36px rgba(0,0,0,0.4)',
+                border: '1px solid rgba(0,0,0,0.1)',
+                margin: '0 auto',
+                maxWidth: previewDevice === 'mobile' ? 360 : 540,
+                transition: 'max-width 0.25s ease',
+              }}
+            >
+              {/* Device Header Bar */}
+              <div style={{ background: '#f8fafc', padding: '8px 14px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: '#64748b' }}>
+                <span style={{ fontWeight: 600 }}>{scope === 'store' ? 'store.com/checkout' : 'store.com/landing/order'}</span>
+                <span>🔒 SSL 256-Bit</span>
+              </div>
+
+              {/* Offer Timer Banner if Landing */}
+              {showTimer && (
+                <div style={{ background: '#fef2f2', borderBottom: '1px solid #fecaca', padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#dc2626', fontSize: 12, fontWeight: 700 }}>
+                  <span>{timerHeadline}</span>
+                  <span style={{ background: '#dc2626', color: '#fff', padding: '1px 6px', borderRadius: 4, fontVariantNumeric: 'tabular-nums' }}>
+                    {timerMins}:00
+                  </span>
+                </div>
+              )}
+
+              {/* Scarcity Banner if Landing */}
+              {showScarcity && (
+                <div style={{ background: '#fffbeb', borderBottom: '1px solid #fef3c7', padding: '6px 12px', textAlign: 'center', fontSize: 11.5, fontWeight: 700, color: '#b45309' }}>
+                  {scarcityText}
+                </div>
+              )}
+
+              {/* Simulated Form Body */}
+              <div style={{ padding: '18px 16px' }}>
+                <h4 style={{ margin: '0 0 14px', fontSize: 14.5, fontWeight: 700, color: '#0f172a', textAlign: 'center', lineHeight: 1.4 }}>
+                  {headerTitle}
+                </h4>
+
+                {/* Dynamic Fields Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+                  {rawFields.filter((fld) => fld.enabled).map((fld) => {
+                    const isHalf = fld.width === 'half' && previewDevice === 'desktop';
+                    const colSpan = isHalf ? 'span 1' : '1 / -1';
+
+                    if (fld.id === 'district_thana') {
+                      return (
+                        <div key={fld.id} style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#475569', marginBottom: 3 }}>
+                              জেলা (District) {fld.required && '*'}
+                            </label>
+                            <select disabled style={{ width: '100%', height: 36, padding: '0 6px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: 11.5 }}>
+                              <option>ঢাকা (Dhaka)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#475569', marginBottom: 3 }}>
+                              থানা / এরিয়া {fld.required && '*'}
+                            </label>
+                            <select disabled style={{ width: '100%', height: 36, padding: '0 6px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: 11.5 }}>
+                              <option>ধানমন্ডি (Dhanmondi)</option>
+                            </select>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    if (fld.type === 'select') {
+                      return (
+                        <div key={fld.id} style={{ gridColumn: colSpan }}>
+                          <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: '#475569', marginBottom: 3 }}>
+                            {fld.label} {fld.required && '*'}
+                          </label>
+                          <select disabled style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: 12 }}>
+                            {(fld.options && fld.options.length ? fld.options : [fld.placeholder || 'Select option']).map((opt, i) => (
+                              <option key={i}>{opt}</option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    }
+
+                    if (fld.type === 'textarea') {
+                      return (
+                        <div key={fld.id} style={{ gridColumn: '1 / -1' }}>
+                          <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: '#475569', marginBottom: 3 }}>
+                            {fld.label} {fld.required && '*'}
+                          </label>
+                          <textarea
+                            readOnly
+                            rows={2}
+                            placeholder={fld.placeholder || 'আপনার সম্পূর্ণ ডেলিভারি ঠিকানা লিখুন...'}
+                            style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: 12, resize: 'none' }}
+                          />
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div key={fld.id} style={{ gridColumn: colSpan }}>
+                        <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: '#475569', marginBottom: 3 }}>
+                          {fld.label} {fld.required && '*'}
+                        </label>
+                        <input
+                          readOnly
+                          placeholder={fld.placeholder || `Enter ${fld.label}`}
+                          style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: 12 }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Delivery Selection */}
+                <div style={{ marginTop: 12 }}>
+                  <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
+                    ডেলিভারি এরিয়া নির্বাচন করুন:
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div style={{ padding: '8px 10px', borderRadius: 6, border: '2px solid #16a34a', background: '#f0fdf4', fontSize: 11.5, fontWeight: 600, color: '#166534' }}>
+                      <span>✓ ঢাকার ভিতরে</span>
+                      <div style={{ fontSize: 10.5, color: '#15803d' }}>৳{insideFee}</div>
+                    </div>
+                    <div style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#fff', fontSize: 11.5, color: '#475569' }}>
+                      <span>ঢাকার বাইরে</span>
+                      <div style={{ fontSize: 10.5, color: '#64748b' }}>৳{outsideFee}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Styled Live CTA Button */}
+                <div style={{ marginTop: 14 }}>
+                  <button
+                    type="button"
+                    style={{
+                      width: '100%',
+                      padding: '13px 16px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: btnColor,
+                      color: btnTextColor,
+                      fontWeight: 700,
+                      fontSize: 14.5,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 2,
+                      boxShadow: '0 6px 20px ' + btnColor + '55',
+                      animation: btnPulse ? 'saPulsePreview 1.8s infinite' : 'none',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    <span>{btnText} · ৳১,৪৫০</span>
+                    {btnSub && <span style={{ fontSize: 10.5, opacity: 0.9, fontWeight: 500 }}>{btnSub}</span>}
+                  </button>
+                </div>
+
+                {/* Trust Badges */}
+                {showBadges && (
+                  <div style={{ marginTop: 12, padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ fontSize: 11, color: '#166534', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+                      <span>✓</span>
+                      <span>{badge1}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#0369a1', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+                      <span>✓</span>
+                      <span>{badge2}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>✓</span>
+                      <span>{badge3}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <style>{`
+              @keyframes saPulsePreview {
+                0%, 100% { transform: scale(1); }
+                50% { transform: scale(1.025); box-shadow: 0 10px 28px rgba(0,0,0,0.25); }
+              }
+            `}</style>
+          </div>
+        </div>
+      </div>
+
+      {/* MODAL: ADD CUSTOM FIELD */}
+      {showAddFieldModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: 16,
+          }}
+          onClick={() => setShowAddFieldModal(false)}
+        >
+          <div
+            style={{
+              background: '#151224',
+              border: '1px solid rgba(139, 92, 246, 0.3)',
+              borderRadius: 14,
+              width: '100%',
+              maxWidth: 480,
+              padding: 24,
+              boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#fff' }}>
+                + Add Custom Checkout Field
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddFieldModal(false)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 18, cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateField} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 4 }}>
+                  Field ID / Variable (e.g. `apartment`, `landmark`, `time_slot`):
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newField.id || ''}
+                  onChange={(e) => setNewField({ ...newField, id: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
+                  placeholder="e.g. alt_phone, delivery_slot, landmark"
+                  style={{ width: '100%', height: 38, padding: '0 12px', background: '#0a0814', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 4 }}>
+                  Field Label (ফর্মের ওপরে প্রদর্শিত নাম):
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newField.label || ''}
+                  onChange={(e) => setNewField({ ...newField, label: e.target.value })}
+                  placeholder="e.g. বাড়ি বা ফ্ল্যাট নম্বর / ল্যান্ডমার্ক"
+                  style={{ width: '100%', height: 38, padding: '0 12px', background: '#0a0814', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 4 }}>
+                  Placeholder (বক্সের ভেতরের ইঙ্গিত টেক্সট):
+                </label>
+                <input
+                  type="text"
+                  value={newField.placeholder || ''}
+                  onChange={(e) => setNewField({ ...newField, placeholder: e.target.value })}
+                  placeholder="e.g. ফ্ল্যাট নং ৪বি, ৩য় তলা..."
+                  style={{ width: '100%', height: 38, padding: '0 12px', background: '#0a0814', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#38bdf8', fontSize: 13 }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 4 }}>
+                    Field Type (ধরনের নির্বাচন):
+                  </label>
+                  <select
+                    value={newField.type || 'text'}
+                    onChange={(e) => setNewField({ ...newField, type: e.target.value as any })}
+                    style={{ width: '100%', height: 38, padding: '0 10px', background: '#0a0814', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                  >
+                    <option value="text">Text (লেখা)</option>
+                    <option value="tel">Phone / Mobile (ফোন)</option>
+                    <option value="number">Number (সংখ্যা)</option>
+                    <option value="textarea">Textarea (বড় বক্স)</option>
+                    <option value="select">Dropdown (তালিকা নির্বাচন)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 4 }}>
+                    Width (সাইজ):
+                  </label>
+                  <select
+                    value={newField.width || 'full'}
+                    onChange={(e) => setNewField({ ...newField, width: e.target.value as any })}
+                    style={{ width: '100%', height: 38, padding: '0 10px', background: '#0a0814', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                  >
+                    <option value="full">100% Full Width</option>
+                    <option value="half">50% Half Width (2-in-a-row)</option>
+                  </select>
+                </div>
+              </div>
+
+              {newField.type === 'select' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#cbd5e1', marginBottom: 4 }}>
+                    Options (কমা দিয়ে আলাদা করুন):
+                  </label>
+                  <input
+                    type="text"
+                    value={newOptionsStr}
+                    onChange={(e) => setNewOptionsStr(e.target.value)}
+                    placeholder="সকাল, দুপুর, বিকাল, রাত"
+                    style={{ width: '100%', height: 38, padding: '0 12px', background: '#0a0814', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                  />
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                <input
+                  type="checkbox"
+                  id="chkReq"
+                  checked={!!newField.required}
+                  onChange={(e) => setNewField({ ...newField, required: e.target.checked })}
+                  style={{ width: 18, height: 18, cursor: 'pointer' }}
+                />
+                <label htmlFor="chkReq" style={{ fontSize: 13, color: '#fff', cursor: 'pointer' }}>
+                  Mark as Required (পূরণ করা বাধ্যতামূলক)
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddFieldModal(false)}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#8b5cf6', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                >
+                  Add Field
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SettingsAdmin({ initialTab = 'store' }: { initialTab?: 'brand' | 'slider' | 'footer' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend' | 'checkout' }) {
   const [f, setF] = useState<any>(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [settingsLoadError, setSettingsLoadError] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState<'brand' | 'slider' | 'footer' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend'>(initialTab || 'store');
+  const [tab, setTab] = useState<'brand' | 'slider' | 'footer' | 'store' | 'fraud' | 'appearance' | 'content' | 'frontend' | 'checkout'>(initialTab || 'store');
 
   useEffect(() => {
     if (initialTab) {
@@ -15304,6 +16703,9 @@ function SettingsAdmin({ initialTab = 'store' }: { initialTab?: 'brand' | 'slide
           </button>
           <button className={tab === 'frontend' ? 'on' : ''} onClick={() => setTab('frontend')}>
             <span>✦ Frontend Editor</span>
+          </button>
+          <button className={tab === 'checkout' ? 'on' : ''} onClick={() => setTab('checkout')}>
+            <span>🛒 Checkout Customizer</span>
           </button>
         </div>
       </div>
@@ -17591,6 +18993,8 @@ function SettingsAdmin({ initialTab = 'store' }: { initialTab?: 'brand' | 'slide
           </div>
         </div>
       </div>}
+
+      {tab === 'checkout' && <CheckoutCustomizerAdmin f={f} setF={setF} />}
 
       {/* Slide Add/Edit Modal */}
       {showSlideModal && (

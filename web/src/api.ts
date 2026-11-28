@@ -171,6 +171,7 @@ export type Settings = {
   homeContent?: Record<'en' | 'bn', Record<string, any>>;
   siteContent?: { sections?: Record<string, boolean>; textOverrides?: Record<string, { en?: string; bn?: string }>; infoPages?: Record<string, Record<'en' | 'bn', { title?: string; body?: string[] }>> };
   fraudDetector?: FraudDetectorSettings;
+  checkoutCustomizer?: any;
 };
 const j = (r: Response) => {
   if (!r.ok) throw new Error('request failed');
