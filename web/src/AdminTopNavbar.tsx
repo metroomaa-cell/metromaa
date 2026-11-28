@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { setStoreLanguage } from './language';
 
 export interface AdminTopNavbarProps {
   searchQuery?: string;
@@ -419,15 +420,21 @@ export function AdminTopNavbar({
 
       {/* Right side: Language, AI, Notifications, Theme, Profile */}
       <div className="sa-top-nav-right">
-        {/* Language Switch */}
-        <button
-          type="button"
+        {/* Language Switch: Segmented Dual Pill */}
+        <div
           className="sa-nav-lang-btn"
-          onClick={onLanguageToggle}
-          title={adminLanguage === 'en' ? 'Switch to Bangla (বাংলায় পরিবর্তন করুন)' : 'Switch to English (ইংরেজিতে পরিবর্তন করুন)'}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 10px', height: 34, borderRadius: 20, cursor: 'pointer' }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 3,
+            padding: '2px 5px',
+            height: 34,
+            borderRadius: 20,
+            background: 'rgba(255, 255, 255, 0.04)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+          }}
         >
-          <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ opacity: 0.7, marginLeft: 2, marginRight: 2 }}>
             <path d="m5 8 6 6" />
             <path d="m4 14 6-6 2-3" />
             <path d="M2 5h12" />
@@ -435,12 +442,45 @@ export function AdminTopNavbar({
             <path d="m22 22-5-10-5 10" />
             <path d="M14 18h6" />
           </svg>
-          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.02em', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ color: adminLanguage === 'en' ? '#38bdf8' : '#64748b', fontWeight: adminLanguage === 'en' ? 800 : 500 }}>EN</span>
-            <span style={{ opacity: 0.35, fontSize: 10 }}>/</span>
-            <span style={{ color: adminLanguage === 'bn' ? '#38bdf8' : '#64748b', fontWeight: adminLanguage === 'bn' ? 800 : 500 }}>বাংলা</span>
-          </span>
-        </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setStoreLanguage('en'); }}
+            style={{
+              padding: '3px 9px',
+              borderRadius: 14,
+              border: adminLanguage === 'en' ? '1px solid rgba(167, 139, 250, 0.6)' : '1px solid transparent',
+              background: adminLanguage === 'en' ? 'linear-gradient(135deg, #8b5cf6, #6366f1)' : 'transparent',
+              color: adminLanguage === 'en' ? '#ffffff' : '#94a3b8',
+              fontSize: 11.5,
+              fontWeight: 800,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              boxShadow: adminLanguage === 'en' ? '0 2px 10px rgba(139, 92, 246, 0.45)' : 'none',
+            }}
+            title="Switch to English (সম্পূর্ণ ইংরেজি মোড)"
+          >
+            EN
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setStoreLanguage('bn'); }}
+            style={{
+              padding: '3px 9px',
+              borderRadius: 14,
+              border: adminLanguage === 'bn' ? '1px solid rgba(167, 139, 250, 0.6)' : '1px solid transparent',
+              background: adminLanguage === 'bn' ? 'linear-gradient(135deg, #8b5cf6, #6366f1)' : 'transparent',
+              color: adminLanguage === 'bn' ? '#ffffff' : '#94a3b8',
+              fontSize: 11.5,
+              fontWeight: 800,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              boxShadow: adminLanguage === 'bn' ? '0 2px 10px rgba(139, 92, 246, 0.45)' : 'none',
+            }}
+            title="Switch to Bangla (সম্পূর্ণ বাংলা মোড)"
+          >
+            বাংলা
+          </button>
+        </div>
 
         {/* Ask Saika AI Command Pill */}
         <button

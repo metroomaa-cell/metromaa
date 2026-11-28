@@ -2099,7 +2099,7 @@ function PdpDirectCodForm({
           <input
             type="text"
             className="pdp-cod-input"
-            placeholder={nameFld ? (nameFld.placeholder !== undefined ? nameFld.placeholder : (language === 'bn' ? 'আপনার নাম *' : 'Your Full Name *')) : (language === 'bn' ? 'আপনার নাম *' : 'Your Full Name *')}
+            placeholder={nameFld ? (nameFld.placeholder !== undefined ? (nameFld.placeholder ? tr(nameFld.placeholder, language) : '') : (language === 'bn' ? 'আপনার নাম *' : 'Your Full Name *')) : (language === 'bn' ? 'আপনার নাম *' : 'Your Full Name *')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
@@ -2107,7 +2107,7 @@ function PdpDirectCodForm({
           <input
             type="tel"
             className="pdp-cod-input"
-            placeholder={phoneFld ? (phoneFld.placeholder !== undefined ? phoneFld.placeholder : (language === 'bn' ? '১১ ডিজিটের মোবাইল নম্বর *' : 'Mobile Number (01XXXXXXXXX) *')) : (language === 'bn' ? '১১ ডিজিটের মোবাইল নম্বর *' : 'Mobile Number (01XXXXXXXXX) *')}
+            placeholder={phoneFld ? (phoneFld.placeholder !== undefined ? (phoneFld.placeholder ? tr(phoneFld.placeholder, language) : '') : (language === 'bn' ? '১১ ডিজিটের মোবাইল নম্বর *' : 'Mobile Number (01XXXXXXXXX) *')) : (language === 'bn' ? '১১ ডিজিটের মোবাইল নম্বর *' : 'Mobile Number (01XXXXXXXXX) *')}
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             required
@@ -2155,7 +2155,7 @@ function PdpDirectCodForm({
           <input
             type="text"
             className="pdp-cod-input"
-            placeholder={addrFld ? (addrFld.placeholder !== undefined ? addrFld.placeholder : (language === 'bn' ? 'বাসা নং, রোড নং, এলাকা / গ্রাম *' : 'House, Road, Area / Village *')) : (language === 'bn' ? 'বাসা নং, রোড নং, এলাকা / গ্রাম *' : 'House, Road, Area / Village *')}
+            placeholder={addrFld ? (addrFld.placeholder !== undefined ? (addrFld.placeholder ? tr(addrFld.placeholder, language) : '') : (language === 'bn' ? 'বাসা নং, রোড নং, এলাকা / গ্রাম *' : 'House, Road, Area / Village *')) : (language === 'bn' ? 'বাসা নং, রোড নং, এলাকা / গ্রাম *' : 'House, Road, Area / Village *')}
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             required
@@ -4344,17 +4344,17 @@ export function Checkout() {
               </div>
               <div className="cobox-b">
                 <div>
-                  <label>{nameFld?.label || tr('Full Name *', language)}</label>
-                  <input className="field" value={f.name} onChange={set('name')} placeholder={nameFld ? (nameFld.placeholder !== undefined ? nameFld.placeholder : tr('Enter your full name', language)) : tr('Enter your full name', language)} />
+                  <label>{nameFld?.label ? tr(nameFld.label, language) : tr('Full Name *', language)}</label>
+                  <input className="field" value={f.name} onChange={set('name')} placeholder={nameFld ? (nameFld.placeholder !== undefined ? (nameFld.placeholder ? tr(nameFld.placeholder, language) : '') : tr('Enter your full name', language)) : tr('Enter your full name', language)} />
                   {nameFld?.helper && <div className="fieldhint">{nameFld.helper}</div>}
                 </div>
                 <div>
-                  <label>{phoneFld?.label || tr('Mobile Number *', language)}</label>
+                  <label>{phoneFld?.label ? tr(phoneFld.label, language) : tr('Mobile Number *', language)}</label>
                   <input
                     className="field checkout-phone-input"
                     value={f.phone}
                     onChange={(e) => setF((s) => ({ ...s, phone: e.target.value.replace(/\D/g, '').slice(0, 11) }))}
-                    placeholder={phoneFld ? (phoneFld.placeholder !== undefined ? phoneFld.placeholder : '01XXXXXXXXX') : '01XXXXXXXXX'}
+                    placeholder={phoneFld ? (phoneFld.placeholder !== undefined ? (phoneFld.placeholder ? tr(phoneFld.placeholder, language) : '') : '01XXXXXXXXX') : '01XXXXXXXXX'}
                     inputMode="tel"
                     maxLength={11}
                   />
@@ -4364,12 +4364,12 @@ export function Checkout() {
                 </div>
                 {altPhoneFld?.enabled && (
                   <div>
-                    <label>{altPhoneFld.label || 'বিকল্প মোবাইল নম্বর (ঐচ্ছিক)'}</label>
+                    <label>{altPhoneFld?.label ? tr(altPhoneFld.label, language) : tr('Alternative Phone (Optional)', language)}</label>
                     <input
                       className="field"
                       value={altPhone}
                       onChange={(e) => setAltPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                      placeholder={altPhoneFld.placeholder !== undefined ? altPhoneFld.placeholder : ''}
+                      placeholder={altPhoneFld.placeholder !== undefined ? (altPhoneFld.placeholder ? tr(altPhoneFld.placeholder, language) : '') : ''}
                       inputMode="tel"
                       maxLength={11}
                     />
@@ -4423,8 +4423,8 @@ export function Checkout() {
                   </div>
 
                   <div className="checkout-address-field">
-                    <label>{addrFld?.label || tr('Detailed Street Address *', language)}</label>
-                    <textarea className="field" value={f.address} onChange={set('address')} placeholder={addrFld ? (addrFld.placeholder !== undefined ? addrFld.placeholder : 'House / Flat / Road, Village, Landmark or Area description') : 'House / Flat / Road, Village, Landmark or Area description'} />
+                    <label>{addrFld?.label ? tr(addrFld.label, language) : tr('Detailed Street Address *', language)}</label>
+                    <textarea className="field" value={f.address} onChange={set('address')} placeholder={addrFld ? (addrFld.placeholder !== undefined ? (addrFld.placeholder ? tr(addrFld.placeholder, language) : '') : tr('House / Flat / Road, Village, Landmark or Area description', language)) : tr('House / Flat / Road, Village, Landmark or Area description', language)} />
                   </div>
 
                   <div>
@@ -4456,8 +4456,8 @@ export function Checkout() {
                   </div>
 
                   <div>
-                    <label>{noteFld?.label || tr('Order Note (Optional)', language)}</label>
-                    <input className="field" value={f.note} onChange={set('note')} placeholder={noteFld ? (noteFld.placeholder !== undefined ? noteFld.placeholder : 'Special delivery instructions, timing or landmarks') : 'Special delivery instructions, timing or landmarks'} />
+                    <label>{noteFld?.label ? tr(noteFld.label, language) : tr('Order Note (Optional)', language)}</label>
+                    <input className="field" value={f.note} onChange={set('note')} placeholder={noteFld ? (noteFld.placeholder !== undefined ? (noteFld.placeholder ? tr(noteFld.placeholder, language) : '') : tr('Special delivery instructions, timing or landmarks', language)) : tr('Special delivery instructions, timing or landmarks', language)} />
                     {noteFld?.helper && <div className="fieldhint">{noteFld.helper}</div>}
                   </div>
 

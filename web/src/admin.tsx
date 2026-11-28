@@ -3206,7 +3206,7 @@ export function Admin() {
 
           {!navq && pinnedPages.some((p) => allowed.includes(p.id)) && (
             <div className="sa-sidebar-shortcuts">
-              <div className="sa-sec-label">PINNED</div>
+              <div className="sa-sec-label">{adminTranslate("PINNED")}</div>
               {pinnedPages.filter((p) => allowed.includes(p.id)).map((p) => (
                 <div className="sa-sub-row" key={`pin-${p.id}-${p.label}`}>
                   <button type="button" className={`sa-sub-item ${cur === p.id && activeSubItem === p.label ? 'on' : ''}`} onClick={() => openSidebarPage(p)} title={p.label}>
@@ -3218,7 +3218,7 @@ export function Admin() {
             </div>
           )}
           {/* Section: OPERATIONS */}
-          <div className="sa-sec-label">OPERATIONS</div>
+          <div className="sa-sec-label">{adminTranslate("OPERATIONS")}</div>
 
           {/* 0. Saika AI — Dedicated Full Control Column */}
           {renderGroup(
@@ -15003,7 +15003,7 @@ export interface CheckoutFieldConfig {
   options?: string[];
 }
 
-const DEFAULT_CHECKOUT_FIELDS: CheckoutFieldConfig[] = [
+const DEFAULT_CHECKOUT_FIELDS_BN: CheckoutFieldConfig[] = [
   {
     id: 'name',
     label: 'আপনার নাম (Full Name)',
@@ -15066,7 +15066,75 @@ const DEFAULT_CHECKOUT_FIELDS: CheckoutFieldConfig[] = [
   },
 ];
 
+const DEFAULT_CHECKOUT_FIELDS_EN: CheckoutFieldConfig[] = [
+  {
+    id: 'name',
+    label: 'Full Name',
+    placeholder: 'Enter your full name',
+    type: 'text',
+    required: true,
+    enabled: true,
+    width: 'half',
+    isSystem: true,
+  },
+  {
+    id: 'phone',
+    label: 'Mobile Number',
+    placeholder: '01XXXXXXXXX',
+    type: 'tel',
+    required: true,
+    enabled: true,
+    width: 'half',
+    isSystem: true,
+  },
+  {
+    id: 'alt_phone',
+    label: 'Alternative Phone',
+    placeholder: 'Alternative contact number (Optional)',
+    type: 'tel',
+    required: false,
+    enabled: false,
+    width: 'full',
+    isSystem: false,
+  },
+  {
+    id: 'district_thana',
+    label: 'District & Thana',
+    placeholder: 'Select District & Thana',
+    type: 'select',
+    required: true,
+    enabled: true,
+    width: 'full',
+    isSystem: true,
+  },
+  {
+    id: 'address',
+    label: 'Full Delivery Address',
+    placeholder: 'House no, road no, area or village name',
+    type: 'textarea',
+    required: true,
+    enabled: true,
+    width: 'full',
+    isSystem: true,
+  },
+  {
+    id: 'note',
+    label: 'Order Note',
+    placeholder: 'Special delivery instructions if any (Optional)',
+    type: 'text',
+    required: false,
+    enabled: true,
+    width: 'full',
+    isSystem: false,
+  },
+];
+
+const DEFAULT_CHECKOUT_FIELDS = DEFAULT_CHECKOUT_FIELDS_BN;
+
 function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (updater: any) => void; onSwitchTab?: (tab: string) => void }) {
+  const adminLanguage = useStoreLanguage();
+  const isEn = adminLanguage === 'en';
+  const defaultFields = isEn ? DEFAULT_CHECKOUT_FIELDS_EN : DEFAULT_CHECKOUT_FIELDS_BN;
   const [scope, setScope] = useState<'store' | 'landing'>('store');
   const [previewDevice, setPreviewDevice] = useState<'mobile' | 'desktop'>('mobile');
   const [showAddFieldModal, setShowAddFieldModal] = useState(false);
@@ -15087,9 +15155,41 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
   const currentConfig = cc[scope] || {};
 
   const getVal = (key: string, defVal: any) => {
-    if (currentConfig[key] !== undefined) return currentConfig[key];
+    if (currentConfig[key] !== undefined && currentConfig[key] !== '') {
+      return isEn ? adminTranslate(currentConfig[key]) : currentConfig[key];
+    }
     if (scope === 'store') {
-      const defaults: Record<string, any> = {
+      const defaults: Record<string, any> = isEn ? {
+        headerTitle: 'Fill out the form below to place your Cash on Delivery order',
+        buttonText: 'Confirm Order',
+        buttonColor: '#16a34a',
+        buttonTextColor: '#ffffff',
+        buttonPulse: true,
+        buttonSubtitle: 'Cash on Delivery · Pay upon delivery',
+        showTrustBadges: true,
+        trustBadge1: '🔒 100% Safe Cash on Delivery (Zero Advance Payment)',
+        trustBadge2: '🚚 Fast & Guaranteed Nationwide Home Delivery in 2-3 Days',
+        trustBadge3: '📦 Opportunity to inspect parcel upon delivery',
+        trustBadge4: '🔄 7-day hassle-free quick replacement warranty',
+        sectionTitleBilling: 'Billing & Delivery Information (Billing details)',
+        sectionTitleProducts: 'Order Summary (Your Products)',
+        sectionTitleShipping: 'Shipping Method & Delivery Charge',
+        paymentTitle: 'Cash on Delivery (Cash on Delivery)',
+        paymentDescription: 'Pay after receiving your order. Fast nationwide home delivery.',
+        showPrivacyNotice: true,
+        privacyDisclaimer: '🔒 Your personal information is strictly protected.',
+        showOrderBump: false,
+        bumpHeadline: '🔥 Special Offer! Add to this order with one click:',
+        bumpTitle: 'Premium Gift Box & Extra Security Packaging',
+        bumpPrice: 190,
+        bumpDescription: 'Check this box to get your order in safe and attractive gift packaging.',
+        showCoupon: false,
+        couponPlaceholder: 'Enter coupon code (if any)...',
+        couponBtnText: 'Apply',
+        stickyMobileButton: true,
+        stickyButtonText: 'Confirm Order (Cash on Delivery)',
+        fields: DEFAULT_CHECKOUT_FIELDS_EN,
+      } : {
         headerTitle: 'ক্যাশ অন ডেলিভারিতে অর্ডার করতে নিচের ফর্মটি পূরণ করুন',
         buttonText: 'অর্ডারটি কনফার্ম করুন',
         buttonColor: '#16a34a',
@@ -15118,11 +15218,47 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
         couponBtnText: 'এপ্লাই করুন',
         stickyMobileButton: true,
         stickyButtonText: 'অর্ডার কনফার্ম করুন (ক্যাশ অন ডেলিভারি)',
-        fields: DEFAULT_CHECKOUT_FIELDS,
+        fields: DEFAULT_CHECKOUT_FIELDS_BN,
       };
       return defaults[key] !== undefined ? defaults[key] : defVal;
     } else {
-      const defaults: Record<string, any> = {
+      const defaults: Record<string, any> = isEn ? {
+        layout: 'single',
+        headerTitle: 'Please provide accurate information below to complete your order',
+        buttonText: 'Order with Cash on Delivery',
+        buttonColor: '#dc2626',
+        buttonTextColor: '#ffffff',
+        buttonPulse: true,
+        buttonSubtitle: 'Direct Cash on Delivery with zero advance payment',
+        showOfferTimer: true,
+        timerMinutes: 15,
+        timerHeadline: '🔥 Special Offer Ends In:',
+        showScarcity: true,
+        scarcityText: '⚡ Only 7 items left in stock! Order quickly',
+        showTrustBadges: true,
+        trustBadge1: '⚡ Premium Quality & Fastest Delivery Guarantee',
+        trustBadge2: '💵 Cash on Delivery - Pay after receiving your order',
+        trustBadge3: '🔄 7-Day Easy & Fast Exchange or Return Facility',
+        trustBadge4: '🛡️ 100% Authentic & Original Brand Guarantee',
+        sectionTitleBilling: 'Your Details (Your details)',
+        sectionTitleProducts: 'Your Products & Quantity (Your Products)',
+        sectionTitleShipping: 'Shipping (Delivery Area)',
+        paymentTitle: 'Cash on Delivery (Cash on Delivery)',
+        paymentDescription: 'Pay after receiving your items without any advance payment.',
+        showPrivacyNotice: true,
+        privacyDisclaimer: '🔒 Your information is strictly protected and confidential.',
+        showOrderBump: false,
+        bumpHeadline: '🔥 Special Offer! Add in one click:',
+        bumpTitle: 'Extra Accessories / Gift Pack',
+        bumpPrice: 190,
+        bumpDescription: 'Add just ৳190 to make your order more attractive.',
+        showCoupon: false,
+        couponPlaceholder: 'Enter promo code...',
+        couponBtnText: 'Apply',
+        stickyMobileButton: true,
+        stickyButtonText: 'Order with Cash on Delivery',
+        fields: DEFAULT_CHECKOUT_FIELDS_EN,
+      } : {
         layout: 'single',
         headerTitle: 'অর্ডার সম্পন্ন করতে নিচের সঠিক তথ্য প্রদান করুন',
         buttonText: 'ক্যাশ অন ডেলিভারিতে অর্ডার করুন',
@@ -15157,7 +15293,7 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
         couponBtnText: 'প্রয়োগ করুন',
         stickyMobileButton: true,
         stickyButtonText: 'ক্যাশ অন ডেলিভারিতে অর্ডার করুন',
-        fields: DEFAULT_CHECKOUT_FIELDS,
+        fields: DEFAULT_CHECKOUT_FIELDS_BN,
       };
       return defaults[key] !== undefined ? defaults[key] : defVal;
     }
@@ -15181,7 +15317,7 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
   };
 
   // Fields handling
-  const rawFields: CheckoutFieldConfig[] = currentConfig.fields || DEFAULT_CHECKOUT_FIELDS;
+  const rawFields: CheckoutFieldConfig[] = (currentConfig.fields && currentConfig.fields.length > 0) ? currentConfig.fields : defaultFields;
 
   const updateField = (id: string, updates: Partial<CheckoutFieldConfig>) => {
     const updated = rawFields.map((fld) => (fld.id === id ? { ...fld, ...updates } : fld));
@@ -15559,7 +15695,7 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
               </label>
               <input
                 type="text"
-                value={headerTitle}
+                value={adminTranslate(headerTitle)}
                 onChange={(e) => updateVal('headerTitle', e.target.value)}
                 placeholder="e.g. ক্যাশ অন ডেলিভারিতে অর্ডার করতে নিচের ফর্মটি পূরণ করুন"
                 style={{ width: '100%', height: 40, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13.5 }}
@@ -16014,7 +16150,7 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                 </label>
                 <input
                   type="text"
-                  value={sectionTitleBilling}
+                  value={adminTranslate(sectionTitleBilling)}
                   onChange={(e) => updateVal('sectionTitleBilling', e.target.value)}
                   placeholder="e.g. বিলিং ও ডেলিভারি তথ্য (Billing details)"
                   style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
@@ -16027,7 +16163,7 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                 </label>
                 <input
                   type="text"
-                  value={sectionTitleProducts}
+                  value={adminTranslate(sectionTitleProducts)}
                   onChange={(e) => updateVal('sectionTitleProducts', e.target.value)}
                   placeholder="e.g. আপনার অর্ডারকৃত পণ্য (Order Summary)"
                   style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
@@ -16040,7 +16176,7 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                 </label>
                 <input
                   type="text"
-                  value={sectionTitleShipping}
+                  value={adminTranslate(sectionTitleShipping)}
                   onChange={(e) => updateVal('sectionTitleShipping', e.target.value)}
                   placeholder="e.g. ডেলিভারি এলাকা ও চার্জ (Shipping Method)"
                   style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
@@ -16066,7 +16202,7 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                   </label>
                   <input
                     type="text"
-                    value={paymentDescription}
+                    value={adminTranslate(paymentDescription)}
                     onChange={(e) => updateVal('paymentDescription', e.target.value)}
                     placeholder="e.g. পণ্য হাতে পেয়ে মূল্য পরিশোধ করুন"
                     style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
@@ -16089,7 +16225,7 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                 {showPrivacyNotice && (
                   <input
                     type="text"
-                    value={privacyDisclaimer}
+                    value={adminTranslate(privacyDisclaimer)}
                     onChange={(e) => updateVal('privacyDisclaimer', e.target.value)}
                     placeholder="e.g. 🔒 আপনার ব্যক্তিগত তথ্যের সর্বোচ্চ গোপনীয়তা রক্ষা করা হবে।"
                     style={{ width: '100%', height: 36, padding: '0 12px', background: '#0f0c1b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#fff', fontSize: 12.5 }}
@@ -16358,12 +16494,12 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
               {/* Simulated Form Body */}
               <div style={{ padding: '18px 16px' }}>
                 <h4 style={{ margin: '0 0 14px', fontSize: 14.5, fontWeight: 700, color: '#0f172a', textAlign: 'center', lineHeight: 1.4 }}>
-                  {headerTitle}
+                  {adminTranslate(headerTitle)}
                 </h4>
 
                 {/* Section Title Billing */}
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 10, paddingBottom: 4, borderBottom: '2px solid #e2e8f0' }}>
-                  {sectionTitleBilling}
+                  {adminTranslate(sectionTitleBilling)}
                 </div>
 
                 {/* Render Fields in Grid */}
@@ -16376,22 +16512,22 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                         <div key={fld.id} style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                           <div>
                             <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#475569', marginBottom: 3 }}>
-                              জেলা (District) {fld.required && '*'}
+                              {isEn ? 'District' : 'জেলা (District)'} {fld.required && '*'}
                             </label>
                             <select disabled style={{ width: '100%', height: 36, padding: '0 6px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: 11.5 }}>
-                              <option>ঢাকা (Dhaka)</option>
+                              <option>{isEn ? 'Dhaka' : 'ঢাকা (Dhaka)'}</option>
                             </select>
                           </div>
                           <div>
                             <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#475569', marginBottom: 3 }}>
-                              থানা / এরিয়া {fld.required && '*'}
+                              {isEn ? 'Thana / Area' : 'থানা / এরিয়া'} {fld.required && '*'}
                             </label>
                             <select disabled style={{ width: '100%', height: 36, padding: '0 6px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: 11.5 }}>
-                              <option>ধানমন্ডি (Dhanmondi)</option>
+                              <option>{isEn ? 'Dhanmondi' : 'ধানমন্ডি (Dhanmondi)'}</option>
                             </select>
                           </div>
                           {fld.helper && (
-                            <small style={{ gridColumn: '1 / -1', fontSize: 10, color: '#64748b', marginTop: -4 }}>{fld.helper}</small>
+                            <small style={{ gridColumn: '1 / -1', fontSize: 10, color: '#64748b', marginTop: -4 }}>{adminTranslate(fld.helper)}</small>
                           )}
                         </div>
                       );
@@ -16401,7 +16537,7 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                       return (
                         <div key={fld.id} style={{ gridColumn: colSpan }}>
                           <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: '#475569', marginBottom: 3 }}>
-                            {fld.label} {fld.required && '*'}
+                            {adminTranslate(fld.label)} {fld.required && '*'}
                           </label>
                           <select disabled style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: 12 }}>
                             {(fld.options && fld.options.length ? fld.options : [fld.placeholder || 'Select option']).map((opt, i) => (
@@ -16409,7 +16545,7 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                             ))}
                           </select>
                           {fld.helper && (
-                            <small style={{ display: 'block', fontSize: 10, color: '#64748b', marginTop: 2 }}>{fld.helper}</small>
+                            <small style={{ display: 'block', fontSize: 10, color: '#64748b', marginTop: 2 }}>{adminTranslate(fld.helper)}</small>
                           )}
                         </div>
                       );
@@ -16419,16 +16555,16 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                       return (
                         <div key={fld.id} style={{ gridColumn: '1 / -1' }}>
                           <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: '#475569', marginBottom: 3 }}>
-                            {fld.label} {fld.required && '*'}
+                            {adminTranslate(fld.label)} {fld.required && '*'}
                           </label>
                           <textarea
                             readOnly
                             rows={2}
-                            placeholder={fld.placeholder !== undefined ? fld.placeholder : ''}
+                            placeholder={fld.placeholder !== undefined ? (fld.placeholder ? adminTranslate(fld.placeholder) : '') : ''}
                             style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: 12, resize: 'none' }}
                           />
                           {fld.helper && (
-                            <small style={{ display: 'block', fontSize: 10, color: '#64748b', marginTop: 2 }}>{fld.helper}</small>
+                            <small style={{ display: 'block', fontSize: 10, color: '#64748b', marginTop: 2 }}>{adminTranslate(fld.helper)}</small>
                           )}
                         </div>
                       );
@@ -16437,15 +16573,15 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                     return (
                       <div key={fld.id} style={{ gridColumn: colSpan }}>
                         <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: '#475569', marginBottom: 3 }}>
-                          {fld.label} {fld.required && '*'}
+                          {adminTranslate(fld.label)} {fld.required && '*'}
                         </label>
                         <input
                           readOnly
-                          placeholder={fld.placeholder !== undefined ? fld.placeholder : ''}
+                          placeholder={fld.placeholder !== undefined ? (fld.placeholder ? adminTranslate(fld.placeholder) : '') : ''}
                           style={{ width: '100%', height: 36, padding: '0 10px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: 12 }}
                         />
                         {fld.helper && (
-                          <small style={{ display: 'block', fontSize: 10, color: '#64748b', marginTop: 2 }}>{fld.helper}</small>
+                          <small style={{ display: 'block', fontSize: 10, color: '#64748b', marginTop: 2 }}>{adminTranslate(fld.helper)}</small>
                         )}
                       </div>
                     );
@@ -16455,10 +16591,10 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                 {/* Section Title Products */}
                 <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid #e2e8f0' }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>
-                    {sectionTitleProducts}
+                    {adminTranslate(sectionTitleProducts)}
                   </div>
                   <div style={{ padding: '8px 10px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
-                    <span>স্মার্ট ওয়াচ প্রো (1×)</span>
+                    <span>{adminTranslate('Smart Watch Pro (1×)')}</span>
                     <strong>৳১,৪৫০</strong>
                   </div>
                 </div>
@@ -16486,15 +16622,15 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                 {/* Section Title Shipping */}
                 <div style={{ marginTop: 14 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>
-                    {sectionTitleShipping}
+                    {adminTranslate(sectionTitleShipping)}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     <div style={{ padding: '8px 10px', borderRadius: 6, border: '2px solid #16a34a', background: '#f0fdf4', fontSize: 11.5, fontWeight: 600, color: '#166534' }}>
-                      <span>✓ ঢাকার ভিতরে</span>
+                      <span>{adminTranslate('✓ Inside Dhaka')}</span>
                       <div style={{ fontSize: 10.5, color: '#15803d' }}>৳{insideFee}</div>
                     </div>
                     <div style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#fff', fontSize: 11.5, color: '#475569' }}>
-                      <span>ঢাকার বাইরে</span>
+                      <span>{adminTranslate('Outside Dhaka')}</span>
                       <div style={{ fontSize: 10.5, color: '#64748b' }}>৳{outsideFee}</div>
                     </div>
                   </div>
@@ -16522,10 +16658,10 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                 <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #cbd5e1' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: '#1e293b' }}>
                     <span>💵</span>
-                    <span>{paymentTitle}</span>
+                    <span>{adminTranslate(paymentTitle)}</span>
                   </div>
                   <div style={{ fontSize: 11, color: '#64748b', marginTop: 3 }}>
-                    {paymentDescription}
+                    {adminTranslate(paymentDescription)}
                   </div>
                 </div>
 
@@ -16553,15 +16689,15 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                       transition: 'all 0.2s',
                     }}
                   >
-                    <span>{btnText} · ৳{1450 + insideFee + (showOrderBump ? Number(bumpPrice) : 0)}</span>
-                    {btnSub && <span style={{ fontSize: 10.5, opacity: 0.9, fontWeight: 500 }}>{btnSub}</span>}
+                    <span>{adminTranslate(btnText)} · ৳{1450 + insideFee + (showOrderBump ? Number(bumpPrice) : 0)}</span>
+                    {btnSub && <span style={{ fontSize: 10.5, opacity: 0.9, fontWeight: 500 }}>{adminTranslate(btnSub)}</span>}
                   </button>
                 </div>
 
                 {/* Privacy Notice */}
                 {showPrivacyNotice && (
                   <div style={{ marginTop: 10, textAlign: 'center', fontSize: 11, color: '#64748b', lineHeight: 1.4 }}>
-                    {privacyDisclaimer}
+                    {adminTranslate(privacyDisclaimer)}
                   </div>
                 )}
 
@@ -16570,19 +16706,19 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
                   <div style={{ marginTop: 12, padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <div style={{ fontSize: 11, color: '#166534', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
                       <span>✓</span>
-                      <span>{badge1}</span>
+                      <span>{adminTranslate(badge1)}</span>
                     </div>
                     <div style={{ fontSize: 11, color: '#0369a1', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
                       <span>✓</span>
-                      <span>{badge2}</span>
+                      <span>{adminTranslate(badge2)}</span>
                     </div>
                     <div style={{ fontSize: 11, color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span>✓</span>
-                      <span>{badge3}</span>
+                      <span>{adminTranslate(badge3)}</span>
                     </div>
                     <div style={{ fontSize: 11, color: '#6d28d9', display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span>✓</span>
-                      <span>{badge4}</span>
+                      <span>{adminTranslate(badge4)}</span>
                     </div>
                   </div>
                 )}
@@ -16592,7 +16728,7 @@ function CheckoutCustomizerAdmin({ f, setF, onSwitchTab }: { f: any; setF: (upda
               {previewDevice === 'mobile' && stickyMobileButton && (
                 <div style={{ position: 'sticky', bottom: 0, left: 0, right: 0, padding: '10px 14px', background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(6px)', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, boxShadow: '0 -4px 12px rgba(0,0,0,0.08)' }}>
                   <div>
-                    <div style={{ fontSize: 10, color: '#64748b' }}>সর্বমোট</div>
+                    <div style={{ fontSize: 10, color: '#64748b' }}>{adminTranslate('Total')}</div>
                     <strong style={{ fontSize: 13, color: '#0f172a' }}>৳{1450 + insideFee + (showOrderBump ? Number(bumpPrice) : 0)}</strong>
                   </div>
                   <button
@@ -22016,6 +22152,7 @@ const WA_QUICK_TEMPLATES = [
 const WA_POPULAR_EMOJIS = ['😊', '👍', '❤️', '🙏', '📦', '✅', '🚚', '🛍️', '🔥', '৳', '📞', '💯', '🤝', '⚡', '🎉', '👌', '⭐', '🕒', '😍', '👋', '🛵', '🌸'];
 
 function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
+  const adminLanguage = useStoreLanguage();
   const [threads, setThreads] = useState<any[]>([]);
   const [browserCallMode, setBrowserCallMode] = useState<'audio' | 'video' | null>(null);
   const [selectedPhone, setSelectedPhone] = useState('');
@@ -22542,11 +22679,11 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                       <span className="wa-inbox-preview-row">
                         <span className="wa-inbox-preview">
                           {t.lastDirection === 'out' && <span className="wa-preview-tick">✓✓ </span>}
-                          {t.lastMessage || 'কোনো মেসেজ প্রিভিউ নেই'}
+                          {t.lastMessage || adminTranslate('No message preview')}
                         </span>
                         <div className="wa-thread-badges">
-                          {t.orderCount > 0 && <span className="wa-badge-order" title={`${t.orderCount} টি অর্ডার`}>🛍️ {t.orderCount}</span>}
-                          {t.cancelCount > 0 && <span className="wa-inbox-risk" title={`${t.cancelCount} টি বাতিল অর্ডার`}>!</span>}
+                          {t.orderCount > 0 && <span className="wa-badge-order" title={adminTranslate(`${t.orderCount} Orders`)}>🛍️ {t.orderCount}</span>}
+                          {t.cancelCount > 0 && <span className="wa-inbox-risk" title={adminTranslate(`${t.cancelCount} Cancelled Orders`)}>!</span>}
                         </div>
                       </span>
                     </span>
@@ -22775,7 +22912,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                   <div className="wa-reply-quote-banner">
                     <div className="wa-reply-bar-accent" />
                     <div className="wa-reply-content">
-                      <strong>{replyingTo.direction === 'out' ? 'আপনি (You)' : contactName}</strong>
+                      <strong>{replyingTo.direction === 'out' ? adminTranslate('You') : contactName}</strong>
                       <p>{replyingTo.text || (replyingTo.mediaType === 'image' ? '📷 ছবি (Photo)' : replyingTo.mediaType === 'audio' ? '🎤 ভয়েস মেসেজ' : 'ফাইল অ্যাটাচমেন্ট')}</p>
                     </div>
                     <button type="button" className="wa-reply-dismiss" onClick={() => setReplyingTo(null)} title={adminTranslate("Dismiss reply")}>✕</button>
@@ -22862,7 +22999,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                       <video src={attachmentPreview} controls />
                     ) : attachment.type.startsWith('audio/') ? (
                       <div className="wa-audio-preview-chip">
-                        <span>{voiceNoteAttachment ? '🎤 রেকর্ড করা ভয়েস নোট' : `♫ ${attachment.name}`}</span>
+                        <span>{voiceNoteAttachment ? adminTranslate('🎤 Recorded Voice Note') : `♫ ${attachment.name}`}</span>
                       </div>
                     ) : (
                       <span className="wa-doc-preview-chip">📄 {attachment.name}</span>
@@ -30766,6 +30903,7 @@ const getDhakaDateKey = (value: Date | string | number = new Date()) => {
 };
 
 function CallsAdmin() {
+  const adminLanguage = useStoreLanguage();
   const [calls, setCalls] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any>({ totalCalls: 0, totalDuration: 0, todayCallsCount: 0, confirmedCallsCount: 0, staffStats: {} });
