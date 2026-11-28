@@ -3016,7 +3016,7 @@ export function Admin() {
           onMouseDown={(e) => {
             e.stopPropagation();
           }}
-          title={sidebarCollapsed ? 'Expand sidebar (সব মেনু দেখুন)' : 'Collapse to icons (শুধু আইকন দেখুন)'}
+          title={sidebarCollapsed ? adminTranslate('Expand sidebar') : adminTranslate('Collapse sidebar')}
           aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14, pointerEvents: 'none' }}>
@@ -3699,7 +3699,7 @@ function GlobalCommandSearch({ onNav, onOrderSelect }: { onNav: (tab: string) =>
           <span style={{ fontSize: 16 }}>🔍</span>
           <input
             autoFocus
-            placeholder="Order ID, ফোন নম্বর, প্রোডাক্ট বা কাস্টমার খুঁজুন..."
+            placeholder={adminTranslate("Search Order ID, phone, product, or customer…")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', fontSize: 14, outline: 'none' }}
@@ -3708,7 +3708,7 @@ function GlobalCommandSearch({ onNav, onOrderSelect }: { onNav: (tab: string) =>
         </div>
         <div style={{ maxHeight: 380, overflowY: 'auto', padding: 12 }}>
           {!q.trim() ? (
-            <div style={{ fontSize: 12.5, color: '#94a3b8', textAlign: 'center', padding: 20 }}>টাইপ শুরু করুন — অর্ডার, ফোন, প্রোডাক্ট বা কাস্টমার সাথে সাথে চলে আসবে।</div>
+            <div style={{ fontSize: 12.5, color: '#94a3b8', textAlign: 'center', padding: 20 }}>{adminTranslate("Start typing to search orders, phone numbers, products or customers instantly.")}</div>
           ) : (
             <>
               {results.orders.length > 0 && (
@@ -3745,7 +3745,7 @@ function GlobalCommandSearch({ onNav, onOrderSelect }: { onNav: (tab: string) =>
                 </div>
               )}
               {results.orders.length === 0 && results.products.length === 0 && results.customers.length === 0 && (
-                <div style={{ fontSize: 12.5, color: '#64748b', textAlign: 'center', padding: 20 }}>কিছুই পাওয়া যায়নি</div>
+                <div style={{ fontSize: 12.5, color: '#64748b', textAlign: 'center', padding: 20 }}>{adminTranslate("No results found")}</div>
               )}
             </>
           )}
@@ -3853,7 +3853,7 @@ function StaffNotificationBell() {
           )}
 
           {data.notifications.length === 0 && data.dueReminders.length === 0 ? (
-            <div style={{ textAlign: 'center', color: '#64748b', fontSize: 12.5, padding: '18px 0' }}>কোনো নতুন নোটিফিকেশন নেই</div>
+            <div style={{ textAlign: 'center', color: '#64748b', fontSize: 12.5, padding: '18px 0' }}>{adminTranslate("No new notifications")}</div>
           ) : (
             data.notifications.map((n) => (
               <div key={n.id} style={{
@@ -3876,13 +3876,13 @@ function StaffNotificationBell() {
                 )}
                 <div style={{ color: '#f8fafc', lineHeight: 1.4 }}>{n.message}</div>
                 {n.escalateReason && (
-                  <div style={{ fontSize: 10.5, color: '#fca5a5', marginTop: 3 }}>কারণ: {n.escalateReason}</div>
+                  <div style={{ fontSize: 10.5, color: '#fca5a5', marginTop: 3 }}>{adminTranslate("Reason:")} {n.escalateReason}</div>
                 )}
                 {n.type === 'wa_escalation' && (
                   <div style={{ marginTop: 8, paddingTop: 7, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                     <textarea
                       rows={2}
-                      placeholder="এখান থেকেই কাস্টমারকে WhatsApp রিপ্লাই লিখুন..."
+                      placeholder={adminTranslate("Write WhatsApp reply to customer here…")}
                       value={replyDrafts[n.id] || ''}
                       onChange={(e) => setReplyDrafts((prev) => ({ ...prev, [n.id]: e.target.value }))}
                       style={{
@@ -3904,7 +3904,7 @@ function StaffNotificationBell() {
                           checked={saveFaqFlags[n.id] !== false}
                           onChange={(e) => setSaveFaqFlags((prev) => ({ ...prev, [n.id]: e.target.checked }))}
                         />
-                        <span>AI-কে শেখান (FAQ)</span>
+                        <span>{adminTranslate("Train AI (FAQ)")}</span>
                       </label>
                       <button
                         type="button"
@@ -3922,7 +3922,7 @@ function StaffNotificationBell() {
                           opacity: sendingId === n.id ? 0.6 : 1,
                         }}
                       >
-                        {sendingId === n.id ? 'পাঠানো হচ্ছে...' : 'WhatsApp-এ পাঠান ➤'}
+                        {sendingId === n.id ? adminTranslate('Sending…') : adminTranslate('Send to WhatsApp ➤')}
                       </button>
                     </div>
                     {replyStatus[n.id] && (
@@ -11542,14 +11542,14 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>এই অর্ডারে কোন স্টাফ বা সিস্টেমে কখন কী আপডেট হয়েছে</div>
+                <div style={{ fontSize: 11, color: '#94a3b8' }}>{adminTranslate("Activity performed on this order by staff or system")}</div>
               </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {o.lastUpdatedBy && (
                 <span style={{ fontSize: 11, color: '#c084fc', background: 'rgba(139, 92, 246, 0.15)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(139, 92, 246, 0.35)', fontWeight: 600 }}>
-                  সর্বশেষ: <strong>{o.lastUpdatedBy.name || o.lastUpdatedBy.username}</strong>
+                  {adminTranslate("Last:")} <strong>{o.lastUpdatedBy.name || o.lastUpdatedBy.username}</strong>
                 </span>
               )}
               {sortedHistory.length > 2 && (
@@ -11570,7 +11570,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                     gap: 4
                   }}
                 >
-                  {historyExpanded ? '▲ কম দেখান (Collapse)' : `▼ সব দেখুন (${sortedHistory.length} টি লগ)`}
+                  {historyExpanded ? adminTranslate('▲ Collapse') : `${adminTranslate('▼ View all')} (${sortedHistory.length} ${adminTranslate('logs')})`}
                 </button>
               )}
             </div>
@@ -11587,7 +11587,8 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
               paddingRight: historyExpanded ? '4px' : '0'
             }}>
               {(historyExpanded ? sortedHistory : sortedHistory.slice(0, 2)).map((h: any, idx: number) => {
-                const dateStr = h.at ? new Date(h.at).toLocaleString('bn-BD', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }) : '';
+                const isBnLang = getStoreLanguage() === 'bn';
+                const dateStr = h.at ? new Date(h.at).toLocaleString(isBnLang ? 'bn-BD' : 'en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }) : '';
                 const staffName = h.staff?.name || h.staff?.username || (h.by ? h.by : '');
                 return (
                   <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, fontSize: 11.5, padding: '7px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 7, borderLeft: '3px solid #8b5cf6' }}>
@@ -11601,9 +11602,9 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                         {h.recordingUrl && (
                           <div style={{ marginTop: 6, padding: '6px 10px', background: 'rgba(56, 189, 248, 0.08)', borderRadius: 6, border: '1px solid rgba(56, 189, 248, 0.25)', display: 'flex', flexDirection: 'column', gap: 4 }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10.5, color: '#38bdf8' }}>
-                              <span>🎧 কল অডিও রেকর্ডিং</span>
+                              <span>🎧 {adminTranslate("Call audio recording")}</span>
                               <a href={h.recordingUrl} download target="_blank" rel="noreferrer" style={{ color: '#38bdf8', textDecoration: 'none', fontWeight: 600 }}>
-                                📥 ডাউনলোড
+                                📥 {adminTranslate("Download")}
                               </a>
                             </div>
                             <audio src={h.recordingUrl} controls preload="none" style={{ width: '100%', height: 28 }} />
@@ -11635,7 +11636,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
             </div>
           ) : (
             <div style={{ fontSize: 11.5, color: '#64748b', fontStyle: 'italic', padding: '8px 0 0' }}>
-              এই অর্ডারে এখনও কোনো অতিরিক্ত লগ নেই। অর্ডারটি এসেছে: {originLabel(o.source)}
+              {adminTranslate("No additional logs recorded for this order yet. Order source:")} {originLabel(o.source)}
             </div>
           )}
         </div>
@@ -20532,14 +20533,14 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
       <header className="wa-inbox-heading">
         <div>
           <span className="wa-inbox-eyebrow"><WhatsAppIcon /> WHATSAPP BUSINESS WEB</span>
-          <h2>লাইভ ইনবক্স ও চ্যাট ক্যানভাস</h2>
-          <p>অফিসিয়াল হোয়াটসঅ্যাপ পিসি স্টাইল লাইভ মেসেজিং, কাস্টমার প্রোফাইল এবং অর্ডার ইন্টেলিজেন্স।</p>
+          <h2>{adminTranslate("Live Inbox & Chat Canvas")}</h2>
+          <p>{adminTranslate("Official WhatsApp PC style live messaging, customer profiles, and order intelligence.")}</p>
         </div>
         <div className="wa-inbox-head-actions">
           <span className={`wa-inbox-connection ${connected ? 'is-connected' : 'is-offline'}`}>
             <i />{connected ? 'WhatsApp Connected' : 'WhatsApp Disconnected'}
           </span>
-          <button type="button" className="sa-btn ghost" onClick={() => void refresh()} disabled={loadingThreads}>↻ রিফ্রেশ</button>
+          <button type="button" className="sa-btn ghost" onClick={() => void refresh()} disabled={loadingThreads}>↻ {adminTranslate("Refresh")}</button>
         </div>
       </header>
 
@@ -20554,8 +20555,8 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
         <div className="wa-drag-overlay">
           <div className="wa-drag-box">
             <span className="wa-drag-icon">📁</span>
-            <strong>ফাইল বা ছবি ড্রপ করুন</strong>
-            <p>অটোমেটিক অ্যাটাচমেন্ট হিসেবে মেসেজে যুক্ত হবে</p>
+            <strong>{adminTranslate("Drop file or photo here")}</strong>
+            <p>{adminTranslate("Will be attached automatically to your message")}</p>
           </div>
         </div>
       )}
@@ -20570,12 +20571,12 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                 <span className="wa-user-avatar-dot" />
               </span>
               <div className="wa-user-info">
-                <strong>ইনবক্স চ্যাট</strong>
-                <span className="wa-thread-count">{threads.length.toLocaleString()} টি কথোপকথন</span>
+                <strong>{adminTranslate("Inbox Chats")}</strong>
+                <span className="wa-thread-count">{threads.length.toLocaleString()} {adminTranslate("chats")}</span>
               </div>
             </div>
             <div className="wa-head-tools">
-              <span className="wa-inbox-list-live"><i /> লাইভ</span>
+              <span className="wa-inbox-list-live"><i /> {adminTranslate("Live")}</span>
               <button type="button" className="wa-icon-btn" onClick={() => void refresh()} title="রিফ্রেশ">↻</button>
             </div>
           </div>
@@ -20587,7 +20588,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="চ্যাট বা মোবাইল নম্বর খুঁজুন…"
+                placeholder={adminTranslate("Search chat or mobile number…")}
               />
               {search && <button type="button" className="wa-search-clear" onClick={() => setSearch('')}>×</button>}
             </label>
@@ -20600,37 +20601,37 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
               className={`wa-filter-chip ${threadFilter === 'all' ? 'active' : ''}`}
               onClick={() => setThreadFilter('all')}
             >
-              সব ({threads.length})
+              {adminTranslate("All")} ({threads.length})
             </button>
             <button
               type="button"
               className={`wa-filter-chip ${threadFilter === 'unread' ? 'active' : ''}`}
               onClick={() => setThreadFilter('unread')}
             >
-              আনরিড
+              {adminTranslate("Unread")}
             </button>
             <button
               type="button"
               className={`wa-filter-chip ${threadFilter === 'orders' ? 'active' : ''}`}
               onClick={() => setThreadFilter('orders')}
             >
-              অর্ডার কাস্টমার
+              {adminTranslate("Order Customers")}
             </button>
             <button
               type="button"
               className={`wa-filter-chip ${threadFilter === 'risk' ? 'active' : ''}`}
               onClick={() => setThreadFilter('risk')}
             >
-              ঝুঁকিপূর্ণ
+              {adminTranslate("High Risk")}
             </button>
           </div>
 
           {/* Thread List */}
           <div className="wa-inbox-thread-list">
             {loadingThreads && threads.length === 0 ? (
-              <div className="wa-inbox-empty"><span className="wa-spinner" /> কথোপকথন লোড হচ্ছে…</div>
+              <div className="wa-inbox-empty"><span className="wa-spinner" /> {adminTranslate("Loading conversations…")}</div>
             ) : visibleThreads.length === 0 ? (
-              <div className="wa-inbox-empty">{search ? 'কোনো চ্যাট খুঁজে পাওয়া যায়নি' : 'এখনও কোনো মেসেজ নেই'}</div>
+              <div className="wa-inbox-empty">{search ? adminTranslate("No chats found") : adminTranslate("No messages yet")}</div>
             ) : (
               visibleThreads.map((t) => {
                 const threadLidJid = t.remoteJid || inferLidJid(t.phone);
@@ -20672,7 +20673,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
               })
             )}
           </div>
-          <div className="wa-inbox-list-foot">রিয়েল-টাইম সিঙ্ক • সিক্রেট শপ এডমিন</div>
+          <div className="wa-inbox-list-foot">{adminTranslate("Real-time sync • Secrate Admin")}</div>
         </aside>
 
         {/* Main Chat Canvas */}
@@ -20690,7 +20691,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                   <span>
                     {profilePhone ? displayPhone(profilePhone) : isLidContact ? 'WhatsApp Contact' : displayPhone(selectedPhone)}
                     <span className="wa-contact-status-dot"> · </span>
-                    <span className="wa-contact-status-text">সক্রিয় (Active)</span>
+                    <span className="wa-contact-status-text">{adminTranslate("Active")}</span>
                   </span>
                 </div>
 
@@ -20699,7 +20700,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                   type="button"
                   className={`wa-icon-btn ${showInChatSearch ? 'is-active' : ''}`}
                   onClick={() => setShowInChatSearch((v) => !v)}
-                  title="মেসেজ সার্চ করুন"
+                  title={adminTranslate("Search messages")}
                 >
                   🔍
                 </button>
@@ -20715,7 +20716,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.2 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.34 1.78.65 2.62a2 2 0 0 1-.45 2.11L8.04 9.72a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.84.31 1.72.53 2.62.65A2 2 0 0 1 22 16.92z" />
                   </svg>
-                  <span>ভয়েস</span>
+                  <span>{adminTranslate("Voice")}</span>
                 </button>
                 <button
                   type="button"
@@ -20728,7 +20729,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                     <rect x="3" y="6" width="13" height="12" rx="2" />
                     <path d="m16 10 5-3v10l-5-3z" />
                   </svg>
-                  <span>ভিডিও</span>
+                  <span>{adminTranslate("Video")}</span>
                 </button>
 
                 {/* Details toggle */}
@@ -20738,7 +20739,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                   onClick={() => setContextOpen((v) => !v)}
                   title="অর্ডার ডিটেইলস প্যানেল"
                 >
-                  ⓘ <span>ডিটেইলস</span>
+                  ⓘ <span>{adminTranslate("Details")}</span>
                 </button>
               </header>
 
@@ -20749,12 +20750,12 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                   <input
                     value={inChatSearchQuery}
                     onChange={(e) => setInChatSearchQuery(e.target.value)}
-                    placeholder="এই চ্যাটের নির্দিষ্ট কোনো মেসেজ খুঁজুন…"
+                    placeholder={adminTranslate("Search in this chat…")}
                     autoFocus
                   />
                   {inChatSearchQuery && (
                     <span className="wa-inchat-matches">
-                      {filteredMessages.length} টি মিল পাওয়া গেছে
+                      {filteredMessages.length} {adminTranslate("matches found")}
                     </span>
                   )}
                   <button type="button" className="wa-inchat-search-close" onClick={() => { setShowInChatSearch(false); setInChatSearchQuery(''); }}>✕</button>
@@ -20776,11 +20777,11 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                 </div>
 
                 {chatData.messages.length === 0 && !loadingMessages ? (
-                  <div className="wa-inbox-empty">এই কথোপকথনে এখনও কোনো মেসেজ নেই। নিচে মেসেজ টাইপ করুন।</div>
+                  <div className="wa-inbox-empty">{adminTranslate("No messages yet in this conversation. Type a message below.")}</div>
                 ) : null}
 
                 {loadingMessages && chatData.messages.length === 0 ? (
-                  <div className="wa-inbox-empty"><span className="wa-spinner" /> মেসেজগুলো লোড হচ্ছে…</div>
+                  <div className="wa-inbox-empty"><span className="wa-spinner" /> {adminTranslate("Loading messages…")}</div>
                 ) : null}
 
                 {filteredMessages.map((m) => {
@@ -20800,7 +20801,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                           type="button"
                           className="wa-bubble-menu-trigger"
                           onClick={() => setActiveBubbleMenuId(isMenuOpen ? null : m.id)}
-                          title="মেসেজ অপশন"
+                          title={adminTranslate("Message options")}
                         >
                           ⌄
                         </button>
@@ -20814,7 +20815,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                                 textareaRef.current?.focus();
                               }}
                             >
-                              ↩️ রিপ্লাই (Reply)
+                              ↩️ {adminTranslate("Reply")}
                             </button>
                             <button
                               type="button"
@@ -20823,7 +20824,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                                 setActiveBubbleMenuId(null);
                               }}
                             >
-                              📋 কপি টেক্সট
+                              📋 {adminTranslate("Copy Text")}
                             </button>
                             {m.mediaUrl && (
                               <a
@@ -20832,7 +20833,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                                 rel="noreferrer"
                                 onClick={() => setActiveBubbleMenuId(null)}
                               >
-                                🔗 নতুন ট্যাবে খুলুন
+                                🔗 {adminTranslate("Open in new tab")}
                               </a>
                             )}
                           </div>
@@ -20854,7 +20855,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                         <WhatsAppInboxMedia message={m} onOpenImage={(imgUrl) => setLightboxImage(imgUrl)} />
                       </div>
 
-                      {m.mediaExpired && <div className="wa-inbox-media-expired">সংরক্ষণ মেয়াদ উত্তীর্ণ হওয়ায় ফাইলটি আর পাওয়া যাচ্ছে না।</div>}
+                      {m.mediaExpired && <div className="wa-inbox-media-expired">{adminTranslate("Media expired or no longer available.")}</div>}
 
                       {/* Message Text & Footer */}
                       <div className="wa-bubble-body">
@@ -20903,7 +20904,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                 {showTemplates && (
                   <div className="wa-templates-panel">
                     <div className="wa-templates-head">
-                      <strong>⚡ দ্রুত উত্তর (Quick Templates)</strong>
+                      <strong>{adminTranslate("⚡ Quick Templates")}</strong>
                       <button type="button" onClick={() => setShowTemplates(false)}>✕</button>
                     </div>
                     <div className="wa-templates-list">
@@ -20999,7 +21000,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                       🗑️ বাতিল
                     </button>
                     <button type="button" className="wa-rec-done" onClick={() => void toggleVoiceNoteRecording()}>
-                      ✓ শেষ করুন
+                      {adminTranslate("✓ Done")}
                     </button>
                   </div>
                 )}
@@ -21049,7 +21050,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                         void sendReply();
                       }
                     }}
-                    placeholder={connected ? 'মেসেজ টাইপ করুন (Enter চাপলে সেন্ড হবে, Ctrl+V দিয়ে ছবি পেস্ট করুন)…' : 'WhatsApp ডিসকানেক্টেড'}
+                    placeholder={connected ? adminTranslate("Type a message (Press Enter to send, Ctrl+V to paste image)…") : adminTranslate("WhatsApp Disconnected")}
                     disabled={!connected || sending || recordingVoiceNote}
                     rows={1}
                   />
@@ -21105,15 +21106,15 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
               <div className="wa-context-card">
                 <div className="wa-card-heading">
                   <span className="wa-heading-icon">🛡️</span>
-                  <strong>কুরিয়ার ইন্টেলিজেন্স রেকর্ড</strong>
+                  <strong>{adminTranslate("Courier Intelligence Record")}</strong>
                 </div>
                 <div className="wa-courier-stats">
                   <div className="wa-stat-box">
-                    <span>মোট অর্ডার</span>
+                    <span>{adminTranslate("Total Orders")}</span>
                     <strong>{chatData.orders.length}</strong>
                   </div>
                   <div className="wa-stat-box success">
-                    <span>ডেলিভারি রেট</span>
+                    <span>{adminTranslate("Delivery Rate")}</span>
                     <strong>
                       {chatData.orders.length > 0
                         ? `${Math.round((chatData.orders.filter((o) => String(o.status || '').toLowerCase() === 'delivered').length / chatData.orders.length) * 100)}%`
@@ -21121,7 +21122,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
                     </strong>
                   </div>
                   <div className="wa-stat-box danger">
-                    <span>বাতিল</span>
+                    <span>{adminTranslate("Cancelled")}</span>
                     <strong>{chatData.orders.filter((o) => ['cancelled', 'returned'].includes(String(o.status || '').toLowerCase())).length}</strong>
                   </div>
                 </div>
@@ -21134,10 +21135,10 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
               <div className="wa-context-card">
                 <div className="wa-card-heading">
                   <span className="wa-heading-icon">🛍️</span>
-                  <strong>স্টোর অর্ডার সমূহ ({chatData.orders.length})</strong>
+                  <strong>{adminTranslate("Store Orders")} ({chatData.orders.length})</strong>
                 </div>
                 {chatData.orders.length === 0 ? (
-                  <div className="wa-inbox-context-empty">এই মোবাইল নম্বরে কোনো স্টোর অর্ডার পাওয়া যায়নি।</div>
+                  <div className="wa-inbox-context-empty">{adminTranslate("No store orders found for this number.")}</div>
                 ) : (
                   chatData.orders.map((o) => (
                     <article className="wa-inbox-order" key={o.id}>
@@ -31834,14 +31835,14 @@ function CustomerCourierDetailModal({
               className="sa-btn ghost sa-mini"
               style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#25D366', borderColor: 'rgba(37, 211, 102, 0.3)' }}
             >
-              💬 WhatsApp চ্যাট
+              💬 {adminTranslate("WhatsApp Chat")}
             </a>
             <a
               href={`tel:${current.phone}`}
               className="sa-btn ghost sa-mini"
               style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
             >
-              📞 কল করুন
+              📞 {adminTranslate("Call")}
             </a>
           </div>
 
@@ -31853,10 +31854,10 @@ function CustomerCourierDetailModal({
               className="sa-btn ghost sa-mini"
               style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
             >
-              {rechecking ? 'API রিফ্রেশ হচ্ছে…' : '🔄 Force API Re-Check'}
+              {rechecking ? adminTranslate("Refreshing API…") : '🔄 ' + adminTranslate("Force API Re-Check")}
             </button>
             <button type="button" onClick={onClose} className="sa-btn primary sa-mini">
-              বন্ধ করুন
+              {adminTranslate("Close")}
             </button>
           </div>
         </div>
@@ -32412,11 +32413,11 @@ function CourierIntelligenceAdmin() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 24 }}>🛡️</span>
               <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#f1f5f9' }}>
-                কুরিয়ার ইন্টেলিজেন্স ও ফ্রড প্রোটেকশন ডেটাবেজ
+                {adminTranslate("Courier Intelligence & Fraud Protection Database")}
               </h2>
             </div>
             <p style={{ margin: '4px 0 0 34px', fontSize: 13, color: '#94a3b8' }}>
-              সকল কাস্টমারের স্থায়ী পার্সেল হিস্ট্রি (Pathao, Steadfast, RedX, Store) — অটোমেটিক যোগ হবে, কিন্তু পূর্বের কোনো ডাটা কখনোই মুছবে না
+              {adminTranslate("Permanent parcel history for all customers (Pathao, Steadfast, RedX, Store) — Automatically synced, historical data is never erased")}
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -32449,7 +32450,7 @@ function CourierIntelligenceAdmin() {
                 }}
               />
               <span style={{ fontWeight: 600 }}>
-                {autoRefresh ? 'লাইভ অটো-রিফ্রেশ (৮ সে.)' : 'অটো-রিফ্রেশ বন্ধ'}
+                {autoRefresh ? adminTranslate("Live Auto-Refresh (8s)") : adminTranslate("Auto-Refresh Paused")}
               </span>
               {lastUpdatedTime && (
                 <span style={{ fontSize: 11, opacity: 0.8, color: autoRefresh ? '#a7f3d0' : '#94a3b8' }}>
@@ -32465,13 +32466,13 @@ function CourierIntelligenceAdmin() {
               style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)', border: 'none', color: '#fff', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}
               title="Steadfast, Pathao বা যেকোনো এক্সেল ফাইল আপলোড করে মার্জ করুন"
             >
-              <span>📤</span> ডাটা আপলোড (Excel/CSV)
+              <span>📤</span> {adminTranslate("Import Data (Excel/CSV)")}
             </button>
             <button type="button" className="sa-btn ghost" onClick={exportCSV} title="সম্পূর্ণ ডেটাবেজ CSV ফরম্যাটে ডাউনলোড করুন">
               📥 Export CSV
             </button>
             <button type="button" className="sa-btn ghost" onClick={() => loadData(q, riskFilter, page, false)} title="ম্যানুয়াল রিলোড করুন">
-              🔄 রিফ্রেশ
+              🔄 {adminTranslate("Refresh")}
             </button>
           </div>
         </div>
@@ -32493,10 +32494,10 @@ function CourierIntelligenceAdmin() {
               <span style={{ fontSize: 24 }}>⚡</span>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9' }}>
-                  কুরিয়ার API অটো-আপগ্রেড (Steadfast, Pathao &amp; BD Courier Bulk Sync)
+                  {adminTranslate("Courier API Auto-Sync (Steadfast, Pathao & BD Courier Bulk Sync)")}
                 </div>
                 <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
-                  সিঙ্গেল সিঙ্গেল ক্লিক ছাড়াই সকল কাস্টমারের পার্সেল হিস্ট্রি কুরিয়ার সার্ভার থেকে ফেচ করে ডাটাবেজ স্বয়ংক্রিয়ভাবে আপগ্রেড করুন
+                  {adminTranslate("Fetch live parcel delivery histories directly from courier servers for all customers without manual clicking")}
                 </div>
               </div>
             </div>
@@ -32509,7 +32510,7 @@ function CourierIntelligenceAdmin() {
                   onClick={() => triggerBatchSync('stop')}
                   style={{ borderColor: '#ef4444', color: '#ef4444', fontSize: 12.5 }}
                 >
-                  ⏸️ পজ / সাময়িক থামান
+                  ⏸️ {adminTranslate("Pause Sync")}
                 </button>
               ) : (
                 <button
@@ -32529,7 +32530,7 @@ function CourierIntelligenceAdmin() {
                     cursor: 'pointer'
                   }}
                 >
-                  <span>🚀</span> সকল কাস্টমার এক ক্লিকে অটো-আপগ্রেড করুন
+                  <span>🚀</span> {adminTranslate("Auto-Sync All Customers (1-Click)")}
                 </button>
               )}
             </div>
@@ -32563,43 +32564,43 @@ function CourierIntelligenceAdmin() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, marginBottom: 18 }}>
           <div style={{ padding: '16px 18px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: 12 }}>
             <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>
-              👥 মোট সেভ করা কাস্টমার
+              👥 {adminTranslate("Total Customers Saved")}
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, color: '#f1f5f9' }}>
               {stats.totalProfiles ? stats.totalProfiles.toLocaleString() : profiles.length}
             </div>
             <div style={{ fontSize: 11.5, color: '#a78bfa', marginTop: 4 }}>
-              স্থায়ী ডেটাবেজে সংরক্ষিত
+              {adminTranslate("Stored in permanent database")}
             </div>
           </div>
 
           <div style={{ padding: '16px 18px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: 12 }}>
             <div style={{ fontSize: 12, color: '#34d399', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>
-              🟢 নিরাপদ ক্রেতা (&gt;80%)
+              🟢 {adminTranslate("Safe Buyer (>80%)")}
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, color: '#34d399' }}>
               {(stats.safeCount || 0).toLocaleString()}
             </div>
             <div style={{ fontSize: 11.5, color: '#a7f3d0', marginTop: 4 }}>
-              উচ্চ সফলতার পার্সেল গ্রহীতা
+              {adminTranslate("High delivery success receiver")}
             </div>
           </div>
 
           <div style={{ padding: '16px 18px', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 12 }}>
             <div style={{ fontSize: 12, color: '#f87171', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>
-              🔴 ঝুঁকিপূর্ণ / রিটার্ন প্রবণ (&lt;50%)
+              🔴 {adminTranslate("High Risk / Return Prone (<50%)")}
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, color: '#f87171' }}>
               {(stats.highRiskCount || 0).toLocaleString()}
             </div>
             <div style={{ fontSize: 11.5, color: '#fecaca', marginTop: 4 }}>
-              ডেলিভারির পূর্বে কথা বলা আবশ্যক
+              {adminTranslate("Must verify before shipment")}
             </div>
           </div>
 
           <div style={{ padding: '16px 18px', background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.25)', borderRadius: 12 }}>
             <div style={{ fontSize: 12, color: '#c4b5fd', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>
-              📦 মোট ভেরিফাইড ডেলিভারি
+              📦 {adminTranslate("Total Verified Deliveries")}
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, color: '#c4b5fd' }}>
               {(stats.totalDelivered || 0).toLocaleString()}
@@ -32614,7 +32615,7 @@ function CourierIntelligenceAdmin() {
         {Array.isArray(stats.courierBreakdown) && stats.courierBreakdown.length > 0 && (
           <div style={{ marginBottom: 20, padding: '14px 18px', background: '#13111c', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: 12 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#c4b5fd', textTransform: 'uppercase', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>🚚</span> কুরিয়ারভিত্তিক সামগ্রিক পার্সেল বিশ্লেষণ (All Couriers Breakdown):
+              <span>🚚</span> {adminTranslate("All Couriers Breakdown:")}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
               {stats.courierBreakdown.map((cb: any, idx: number) => {
@@ -32635,7 +32636,7 @@ function CourierIntelligenceAdmin() {
         {/* Manual Phone Lookup & Live Add Box */}
         <div style={{ padding: '16px 20px', background: '#13111c', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: 12, marginBottom: 20 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#c4b5fd', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span>⚡</span> ম্যানুয়াল নাম্বার চেক / লাইভ কুরিয়ার ফেচ:
+            <span>⚡</span> {adminTranslate("Manual Phone Check / Live Courier Lookup:")}
           </div>
           <form onSubmit={handleManualCheck} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <input
@@ -32656,7 +32657,7 @@ function CourierIntelligenceAdmin() {
             />
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: '#cbd5e1', cursor: 'pointer' }}>
               <input type="checkbox" checked={manualForce} onChange={(e) => setManualForce(e.target.checked)} />
-              <span>লাইভ কুরিয়ার API থেকে ফ্রেশ আপডেট আনুন (Force API Call)</span>
+              <span>{adminTranslate("Fetch fresh live update from Courier APIs (Force API Call)")}</span>
             </label>
             <button
               type="submit"
@@ -32664,7 +32665,7 @@ function CourierIntelligenceAdmin() {
               className="sa-btn primary"
               style={{ height: 38, padding: '0 18px', borderRadius: 8, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
-              {manualBusy ? 'চেক হচ্ছে…' : '🔍 চেক ও সেভ করুন'}
+              {manualBusy ? adminTranslate("Checking…") : '🔍 ' + adminTranslate("Check & Save")}
             </button>
           </form>
 
@@ -32712,7 +32713,7 @@ function CourierIntelligenceAdmin() {
           <form onSubmit={handleSearchSubmit} style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 280px' }}>
             <input
               type="text"
-              placeholder="ফোন নাম্বার, নাম বা এলাকা দিয়ে সার্চ…"
+              placeholder={adminTranslate("Search by phone number, customer name, or location...")}
               value={q}
               onChange={(e) => setQ(e.target.value)}
               style={{
@@ -32728,7 +32729,7 @@ function CourierIntelligenceAdmin() {
               }}
             />
             <button type="submit" className="sa-btn ghost sa-mini" style={{ height: 36 }}>
-              সার্চ
+              {adminTranslate("Search")}
             </button>
             {q && (
               <button
@@ -32741,7 +32742,7 @@ function CourierIntelligenceAdmin() {
                   loadData('', riskFilter, 1);
                 }}
               >
-                রিসেট
+                {adminTranslate("Reset")}
               </button>
             )}
           </form>
@@ -32779,13 +32780,13 @@ function CourierIntelligenceAdmin() {
           <table className="sa-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'rgba(255, 255, 255, 0.02)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>কাস্টমার ও ফোন</th>
-                <th style={{ textAlign: 'center', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>সফলতার হার</th>
-                <th style={{ textAlign: 'center', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>অর্ডার হিস্ট্রি</th>
-                <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>কুরিয়ার ব্রেকডাউন (বিস্তারিত)</th>
-                <th style={{ textAlign: 'center', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>রিস্ক স্ট্যাটাস</th>
-                <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>সর্বশেষ ভেরিফাইড</th>
-                <th style={{ textAlign: 'right', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>অ্যাকশন</th>
+                <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>{adminTranslate("Customer & Phone")}</th>
+                <th style={{ textAlign: 'center', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>{adminTranslate("Success Rate")}</th>
+                <th style={{ textAlign: 'center', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>{adminTranslate("Order History")}</th>
+                <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>{adminTranslate("Courier Breakdown (Details)")}</th>
+                <th style={{ textAlign: 'center', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>{adminTranslate("Risk Status")}</th>
+                <th style={{ textAlign: 'left', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>{adminTranslate("Last Verified")}</th>
+                <th style={{ textAlign: 'right', padding: '12px 14px', fontSize: 12, color: '#94a3b8' }}>{adminTranslate("Actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -32893,7 +32894,7 @@ function CourierIntelligenceAdmin() {
                           style={{ height: 28, fontSize: 11.5, borderRadius: 6, color: '#c4b5fd', borderColor: 'rgba(139, 92, 246, 0.3)' }}
                           title="সকল কুরিয়ারের সম্পূর্ণ ব্রেকডাউন দেখুন"
                         >
-                          👁️ বিস্তারিত
+                          👁️ {adminTranslate("View Details")}
                         </button>
                         <button
                           type="button"
@@ -32903,7 +32904,7 @@ function CourierIntelligenceAdmin() {
                           style={{ height: 28, fontSize: 11.5, borderRadius: 6 }}
                           title="কুরিয়ার API থেকে সর্বশেষ ডাটা ফেচ করে মার্জ করুন"
                         >
-                          {isRecheckingThis ? 'রিফ্রেশ হচ্ছে…' : '🔄 Re-Check'}
+                          {isRecheckingThis ? adminTranslate("Refreshing…") : '🔄 ' + adminTranslate("Re-Check")}
                         </button>
                       </div>
                     </td>
@@ -32925,7 +32926,7 @@ function CourierIntelligenceAdmin() {
         {totalPages > 1 && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, paddingTop: 12, borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
             <div style={{ fontSize: 12, color: '#94a3b8' }}>
-              পৃষ্ঠা {page} / {totalPages} (মোট {total} কাস্টমার)
+              {adminTranslate("Page")} {page} / {totalPages} ({adminTranslate("Total")} {total} {adminTranslate("Customers")})
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
               <button
@@ -32934,7 +32935,7 @@ function CourierIntelligenceAdmin() {
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 className="sa-btn ghost sa-mini"
               >
-                ‹ পূর্ববর্তী
+                ‹ {adminTranslate("Previous Page")}
               </button>
               <button
                 type="button"
@@ -32942,7 +32943,7 @@ function CourierIntelligenceAdmin() {
                 onClick={() => setPage((p) => p + 1)}
                 className="sa-btn ghost sa-mini"
               >
-                পরবর্তী ›
+                {adminTranslate("Next Page")} ›
               </button>
             </div>
           </div>
@@ -33467,7 +33468,7 @@ function StaffAdmin() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: 16, color: '#fff', fontWeight: 700 }}>🟢 Live Staff Presence &amp; Real-time Working Hours</h3>
-                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>কোন স্টাফ বর্তমানে অনলাইনে আছে, কখন লগইন করেছে এবং মোট কতক্ষণ সক্রিয় ছিল</div>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{adminTranslate("See which staff are currently online, login timestamps, and active working duration")}</div>
               </div>
               <button type="button" className="sa-btn ghost sa-mini" onClick={fetchMonitoring}>🔄 Refresh</button>
             </div>
