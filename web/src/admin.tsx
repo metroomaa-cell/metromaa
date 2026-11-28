@@ -2363,6 +2363,64 @@ function applyAdminSettings(
 export function Admin() {
   const adminLanguage = useStoreLanguage();
   const adminText = (text: string) => tr(text, adminLanguage);
+
+  // Global Realtime Bilingual DOM Sync
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const lang = adminLanguage;
+
+    const translateNode = (node: Node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const val = node.nodeValue;
+        if (!val || !val.trim()) return;
+        const parent = node.parentElement;
+        if (!parent) return;
+        const tag = parent.tagName.toUpperCase();
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'CODE' || tag === 'PRE') return;
+        if (parent.closest('.no-auto-tr') || parent.closest('.wa-inbox-message-text') || parent.closest('.wa-preview-text')) return;
+
+        const next = tr(val, lang);
+        if (next !== val) {
+          node.nodeValue = next;
+        }
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as HTMLElement;
+        const tag = el.tagName.toUpperCase();
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'CODE' || tag === 'PRE') return;
+        if (el.closest('.no-auto-tr') || el.closest('.wa-inbox-message-text')) return;
+
+        if (el.hasAttribute('placeholder')) {
+          const ph = el.getAttribute('placeholder') || '';
+          const trPh = tr(ph, lang);
+          if (trPh !== ph) el.setAttribute('placeholder', trPh);
+        }
+        if (el.hasAttribute('title')) {
+          const ttl = el.getAttribute('title') || '';
+          const trTtl = tr(ttl, lang);
+          if (trTtl !== ttl) el.setAttribute('title', trTtl);
+        }
+
+        for (let i = 0; i < el.childNodes.length; i++) {
+          translateNode(el.childNodes[i]);
+        }
+      }
+    };
+
+    translateNode(document.body);
+
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.type === 'childList') {
+          m.addedNodes.forEach(translateNode);
+        } else if (m.type === 'characterData') {
+          translateNode(m.target);
+        }
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [adminLanguage]);
   const [authed, setAuthed] = useState(() => !!getTok());
   const [adminTheme, setAdminTheme] = useState<'dark' | 'light'>(() => {
     try { return localStorage.getItem('sa_admin_theme') === 'light' ? 'light' : 'dark'; } catch { return 'dark'; }
@@ -6244,7 +6302,7 @@ function BulkOrderImportModal({
               <span>Import Orders from Excel / CSV</span>
             </h3>
             <p style={{ margin: '4px 0 0 0', fontSize: 12.5, color: '#94a3b8' }}>
-              এক্সেল (.xlsx, .xls) অথবা CSV ফাইল আপলোড করে এক ক্লিকে সকল অর্ডার ডাটাবেজে যুক্ত করুন
+              {adminTranslate("Upload Excel (.xlsx, .xls) or CSV file to import all orders into database in one click")}
             </p>
           </div>
           <button
@@ -6281,7 +6339,7 @@ function BulkOrderImportModal({
             }}
           >
             <div style={{ fontSize: 13, color: '#cbd5e1' }}>
-              <strong>💡 সঠিক ফরম্যাট দেখতে স্যাম্পল ফাইল ডাউনলোড করুন:</strong>
+              <strong>💡 {adminTranslate("Download sample file to check format:")}</strong>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
@@ -6370,7 +6428,7 @@ function BulkOrderImportModal({
             </div>
             {loading && (
               <div style={{ marginTop: 12, fontSize: 13, color: '#38bdf8' }}>
-                ডাটা পার্স করা হচ্ছে... অনুগ্রহ করে অপেক্ষা করুন ⏳
+                {adminTranslate("Parsing data... please wait ⏳")}
               </div>
             )}
           </div>
@@ -6390,7 +6448,7 @@ function BulkOrderImportModal({
             {/* Status Selection */}
             <div>
               <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                ⚙️ অর্ডারগুলোর প্রাথমিক স্ট্যাটাস (Initial Status):
+                ⚙️ {adminTranslate("Initial Order Status:")}
               </label>
               <select
                 value={defaultStatus}
@@ -6406,8 +6464,8 @@ function BulkOrderImportModal({
                   cursor: 'pointer',
                 }}
               >
-                <option value="confirmed">Confirmed (Ready to ship / কুরিয়ারের জন্য প্রস্তুত)</option>
-                <option value="pending">Pending (কল করে কনফার্ম করা হবে)</option>
+                <option value="confirmed">{adminTranslate("Confirmed (Ready to ship)")}</option>
+                <option value="pending">{adminTranslate("Pending (Verify by call)")}</option>
                 <option value="approved">{adminTranslate("Approved")}</option>
                 <option value="hold">{adminTranslate("Hold")}</option>
                 <option value="shipped">{adminTranslate("Shipped")}</option>
@@ -6420,7 +6478,7 @@ function BulkOrderImportModal({
             {/* Close Box Delivery Toggle */}
             <div>
               <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#cbd5e1', marginBottom: 6 }}>
-                🔒 ক্লোজড বক্স ডেলিভারি (Close Box System):
+                🔒 {adminTranslate("Close Box Delivery System:")}
               </label>
               <label
                 style={{
@@ -6442,7 +6500,7 @@ function BulkOrderImportModal({
                   style={{ width: 16, height: 16, cursor: 'pointer' }}
                 />
                 <span style={{ fontSize: 13, color: defaultCloseBox ? '#fca5a5' : '#cbd5e1', fontWeight: 600 }}>
-                  🔒 Close Box Delivery (মূল্য পরিশোধ ছাড়া খোলা নিষেধ)
+                  🔒 {adminTranslate("Close Box Delivery (Payment before opening)")}
                 </span>
               </label>
               <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'block' }}>
@@ -6465,19 +6523,19 @@ function BulkOrderImportModal({
               >
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                   <span style={{ fontWeight: 700, color: '#f8fafc' }}>
-                    মোট পাওয়া গেছে: {parsedRows.length} টি সারি
+                    {adminTranslate("Total found:")} {parsedRows.length} {adminTranslate("rows")}
                   </span>
                   <span style={{ color: '#4ade80', background: 'rgba(74, 222, 128, 0.15)', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
-                    ✓ যাচাই পাস: {validCount} টি
+                    ✓ {adminTranslate("Valid:")} {validCount}
                   </span>
                   {invalidCount > 0 && (
                     <span style={{ color: '#f87171', background: 'rgba(248, 113, 113, 0.15)', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
-                      ⚠️ ত্রুটিযুক্ত: {invalidCount} টি (বাদ যাবে)
+                      ⚠️ {adminTranslate("Errors:")} {invalidCount} ({adminTranslate("will skip")})
                     </span>
                   )}
                   {duplicateCount > 0 && (
                     <span style={{ color: '#fbbf24', background: 'rgba(251, 191, 36, .12)', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
-                      ⚠ একই ফোন + পণ্য: {duplicateCount} টি
+                      ⚠ {adminTranslate("Duplicates:")} {duplicateCount}
                     </span>
                   )}
                 </div>
@@ -6514,7 +6572,7 @@ function BulkOrderImportModal({
                   onClick={applyCatalogProductToAllRows}
                   style={{ minHeight: 40, padding: '0 16px', borderRadius: 9, border: '1px solid #9b72ff', background: !bulkCatalogSelection ? '#393047' : 'linear-gradient(110deg,#7c3aed,#8b5cf6)', color: '#fff', fontWeight: 700, cursor: !bulkCatalogSelection ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', boxShadow: bulkCatalogSelection ? '0 5px 16px rgba(124,58,237,.28)' : 'none' }}
                 >
-                  সব row-তে প্রয়োগ
+                  {adminTranslate("Apply to all rows")}
                 </button>
               </div>
 
@@ -6683,9 +6741,9 @@ function BulkOrderImportModal({
             }}
           >
             {submitting ? (
-              <span>ইমপোর্ট হচ্ছে... ⏳</span>
+              <span>{adminTranslate("Importing... ⏳")}</span>
             ) : (
-              <span>🚀 {importCount} টি অর্ডার ইমপোর্ট করুন</span>
+              <span>🚀 {adminTranslate("Import")} {importCount} {adminTranslate("Orders")}</span>
             )}
           </button>
         </div>
@@ -9698,7 +9756,7 @@ function ExchangeOrderModal({
             <span style={{ fontSize: 24 }}>🔄</span>
             <div>
               <h3 style={{ margin: 0, fontSize: 17, color: '#f8fafc', fontWeight: 700 }}>Create Exchange Order</h3>
-              <span style={{ fontSize: 12, color: '#94a3b8' }}>মূল অর্ডার: #{originalOrder.id}</span>
+              <span style={{ fontSize: 12, color: '#94a3b8' }}>{adminTranslate("Original Order")}: #{originalOrder.id}</span>
             </div>
           </div>
           <button className="sa-om-close" onClick={onClose} type="button">×</button>
@@ -9713,15 +9771,15 @@ function ExchangeOrderModal({
         {/* Customer & Previous Product Info */}
         <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 12.5 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ color: '#94a3b8' }}>গ্রাহক:</span>
+            <span style={{ color: '#94a3b8' }}>{adminTranslate("Customer")}:</span>
             <strong style={{ color: '#f1f5f9' }}>{originalOrder.customer?.name} ({originalOrder.customer?.phone})</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ color: '#94a3b8' }}>ঠিকানা:</span>
+            <span style={{ color: '#94a3b8' }}>{adminTranslate("Address")}:</span>
             <span style={{ color: '#cbd5e1', textAlign: 'right', maxWidth: 300 }}>{originalOrder.customer?.address}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: '#94a3b8' }}>আগের পণ্য:</span>
+            <span style={{ color: '#94a3b8' }}>{adminTranslate("Previous Product")}:</span>
             <span style={{ color: '#f59e0b', fontWeight: 600, textAlign: 'right', maxWidth: 300 }}>{origItemsSummary}</span>
           </div>
         </div>
@@ -9729,7 +9787,7 @@ function ExchangeOrderModal({
         {/* Replacement Product Selection */}
         <div style={{ marginBottom: 14 }}>
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
-            ১. নতুন কাঙ্ক্ষিত পণ্য বা সাইজ (Replacement Item):
+            1. {adminTranslate("Replacement Item / Size")}:
           </label>
           <select
             className="sa-search"
@@ -9737,7 +9795,7 @@ function ExchangeOrderModal({
             onChange={(e) => onSelectProduct(e.target.value)}
             style={{ width: '100%', marginBottom: 8, background: '#1e1b2e', border: '1px solid rgba(255,255,255,0.15)' }}
           >
-            <option value="">-- ক্যাটালগ থেকে পণ্য নির্বাচন করুন (বা নিচে সরাসরি লিখুন) --</option>
+            <option value="">-- {adminTranslate("Select product from catalog (or type below)")} --</option>
             {allProducts.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} - ৳{p.price}
@@ -9756,7 +9814,7 @@ function ExchangeOrderModal({
         {/* COD Amount / Delivery Fee */}
         <div style={{ marginBottom: 14 }}>
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
-            ২. কালেকশন অ্যামাউন্ট / এক্সচেঞ্জ ডেলিভারি চার্জ (৳ COD):
+            2. {adminTranslate("Collection Amount / Exchange Delivery Charge (৳ COD)")}:
           </label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
             <input
@@ -9766,7 +9824,7 @@ function ExchangeOrderModal({
               onChange={(e) => setCodAmount(Number(e.target.value))}
               style={{ width: 140, background: '#1e1b2e', border: '1px solid rgba(255,255,255,0.15)', fontWeight: 700, fontSize: 15 }}
             />
-            <span style={{ fontSize: 12, color: '#94a3b8' }}>টাকা (কুরিয়ার রাইডার কাস্টমার থেকে নিবে)</span>
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>{adminTranslate("Amount to collect by courier rider")}</span>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             {[0, 80, 100, 120, 150].map((amt) => (
@@ -9786,7 +9844,7 @@ function ExchangeOrderModal({
         {/* Exchange Reason */}
         <div style={{ marginBottom: 14 }}>
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
-            ৩. এক্সচেঞ্জের কারণ / নোট:
+            3. {adminTranslate("Exchange Reason / Note")}:
           </label>
           <input
             className="sa-search"
@@ -9800,7 +9858,7 @@ function ExchangeOrderModal({
         {/* Courier Selection */}
         <div style={{ marginBottom: 14 }}>
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
-            ৪. কুরিয়ার নির্বাচন:
+            4. {adminTranslate("Select Courier")}:
           </label>
           <select
             className="sa-search"
@@ -9824,13 +9882,13 @@ function ExchangeOrderModal({
               checked={autoBookCourier}
               onChange={(e) => setAutoBookCourier(e.target.checked)}
             />
-            <span>কুরিয়ারে সাথে সাথে পার্সেল স্বয়ংক্রিয়ভাবে বুক করুন</span>
+            <span>{adminTranslate("Automatically book parcel on courier immediately")}</span>
           </label>
         </div>
 
         {/* Rider Note Preview */}
         <div style={{ background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: 8, padding: '10px 14px', marginBottom: 20, fontSize: 12, color: '#38bdf8' }}>
-          <strong>🛵 কুরিয়ার রাইডারের জন্য অটোমেটিক নির্দেশনা:</strong>
+          <strong>🛵 {adminTranslate("Automatic courier rider instructions")}:</strong>
           <div style={{ marginTop: 4, fontFamily: 'sans-serif', color: '#e0f2fe' }}>
             [EXCHANGE PARCEL] কাস্টমার থেকে আগের পার্সেলটি রিসিভ করে এই নতুন পার্সেল হ্যান্ডওভার করুন। COD: ৳{codAmount}
           </div>
@@ -9848,7 +9906,7 @@ function ExchangeOrderModal({
             onClick={handleCreate}
             disabled={loading}
           >
-            {loading ? 'এক্সচেঞ্জ তৈরি হচ্ছে…' : '🔄 Confirm & Dispatch Exchange'}
+            {loading ? adminTranslate("Creating exchange…") : '🔄 ' + adminTranslate("Confirm & Dispatch Exchange")}
           </button>
         </div>
       </div>
@@ -10500,7 +10558,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 14, color: '#a78bfa' }}>⚡</span>
                 <span style={{ fontSize: 12.5, fontWeight: 700, color: '#f1f5f9', letterSpacing: '0.2px' }}>
-                  কল সেন্টার অ্যাকশন (১-ক্লিক রেজাল্ট):
+                  {adminTranslate("Call Center Actions (1-Click Results):")}
                 </span>
                 {o.lastCall && (
                   <span style={{ fontSize: 11, color: '#94a3b8', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -10537,7 +10595,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                 title="কথা বলে অর্ডার কনফার্ম করা হয়েছে"
               >
                 <span>✓</span>
-                <span>কনফার্মড (Confirmed)</span>
+                <span>{adminTranslate("Confirmed")}</span>
               </button>
 
               <button
@@ -10561,7 +10619,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                 title="কল করা হয়েছে কিন্তু রিসিভ করেনি"
               >
                 <span>📞</span>
-                <span>রিসিভ করেনি (Hold)</span>
+                <span>{adminTranslate("No Answer (Hold)")}</span>
               </button>
 
               <div style={{ position: 'relative' }}>
@@ -10586,7 +10644,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                   title="পরে কল দেওয়ার সময় নির্ধারণ করুন"
                 >
                   <span>⏰</span>
-                  <span>পরে কল (Later)</span>
+                  <span>{adminTranslate("Call Later")}</span>
                 </button>
                 {showCallLaterMenu && (
                   <div
@@ -10607,10 +10665,10 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                       gap: 4
                     }}
                   >
-                    <button type="button" onClick={() => scheduleCallLater(30, '30 মিনিট পর')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>⏱️ ৩০ মিনিট পর</button>
-                    <button type="button" onClick={() => scheduleCallLater(60, '১ ঘণ্টা পর')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>⏱️ ১ ঘণ্টা পর</button>
-                    <button type="button" onClick={() => scheduleCallLater(240, 'বিকেলে (৫:০০ PM)')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>🌆 বিকেলে (৫:০০ PM)</button>
-                    <button type="button" onClick={() => scheduleCallLater(1440, 'কাল সকালে (১১:০০ AM)')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>🌅 কাল সকালে (১১:০০ AM)</button>
+                    <button type="button" onClick={() => scheduleCallLater(30, '30 মিনিট পর')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>⏱️ {adminTranslate("In 30 mins")}</button>
+                    <button type="button" onClick={() => scheduleCallLater(60, '১ ঘণ্টা পর')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>⏱️ {adminTranslate("In 1 hour")}</button>
+                    <button type="button" onClick={() => scheduleCallLater(240, 'বিকেলে (৫:০০ PM)')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>🌆 {adminTranslate("This evening (5:00 PM)")}</button>
+                    <button type="button" onClick={() => scheduleCallLater(1440, 'কাল সকালে (১১:০০ AM)')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>🌅 {adminTranslate("Tomorrow morning (11:00 AM)")}</button>
                   </div>
                 )}
               </div>
@@ -10637,7 +10695,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                   title="অর্ডার বাতিলের কারণ নির্বাচন করুন"
                 >
                   <span>✕</span>
-                  <span>বাতিল (Cancel)</span>
+                  <span>{adminTranslate("Cancel")}</span>
                 </button>
                 {showCancelMenu && (
                   <div
@@ -10658,11 +10716,11 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                       gap: 4
                     }}
                   >
-                    <button type="button" onClick={() => cancelWithReason('কাস্টমার মত পরিবর্তন করেছে')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>কাস্টমার মত পরিবর্তন করেছে</button>
-                    <button type="button" onClick={() => cancelWithReason('দাম বেশি মনে হয়েছে')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>দাম বেশি মনে হয়েছে</button>
-                    <button type="button" onClick={() => cancelWithReason('ডেলিভারি বেশি দেরি হবে')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>ডেলিভারি বেশি দেরি হবে</button>
-                    <button type="button" onClick={() => cancelWithReason('ভুলবশত অর্ডার করেছিল')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>ভুলবশত অর্ডার করেছিল</button>
-                    <button type="button" onClick={() => cancelWithReason('ফোন রিসিভ করেনি বা বন্ধ')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>ফোন রিসিভ করেনি বা বন্ধ</button>
+                    <button type="button" onClick={() => cancelWithReason('{adminTranslate("Customer changed mind")}')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>কাস্টমার মত পরিবর্তন করেছে</button>
+                    <button type="button" onClick={() => cancelWithReason('{adminTranslate("Price felt too high")}')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>দাম বেশি মনে হয়েছে</button>
+                    <button type="button" onClick={() => cancelWithReason('{adminTranslate("Delivery too slow")}')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>ডেলিভারি বেশি দেরি হবে</button>
+                    <button type="button" onClick={() => cancelWithReason('{adminTranslate("Ordered by mistake")}')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>ভুলবশত অর্ডার করেছিল</button>
+                    <button type="button" onClick={() => cancelWithReason('{adminTranslate("Phone switched off / no answer")}')} style={{ textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11.5 }}>ফোন রিসিভ করেনি বা বন্ধ</button>
                   </div>
                 )}
               </div>
@@ -10689,7 +10747,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                 <span style={{ fontSize: 22 }}>⚠️</span>
                 <div>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: '#f87171' }}>
-                    জেলা ও কুরিয়ার জোন মিসম্যাচ ডিটেকশন!
+                    {adminTranslate("District & Courier Zone Mismatch Detected!")}
                   </div>
                   <div style={{ fontSize: 12, color: '#fca5a5', marginTop: 2 }}>
                     ঠিকানায় জেলা পাওয়া গেছে <strong>"{detectedFromAddr}"</strong>, কিন্তু ডেলিভারি জোন সিলেক্টেড আছে <strong>"Inside Dhaka (৳{delivery})"</strong>। এতে কুরিয়ার বুকিং আটকে যাবে বা ভুল চার্জ হবে।
@@ -11324,11 +11382,11 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
             <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {totalOrders > 1 ? (
                 <span style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.35)', padding: '3px 9px', borderRadius: 6, fontSize: 11.5, fontWeight: 700 }}>
-                  ⭐ Repeat VIP Customer ({totalOrders}টি অর্ডার, মোট ৳{totalRevenue})
+                  ⭐ {adminTranslate("Repeat VIP Customer")} ({totalOrders} {adminTranslate("orders")}, {adminTranslate("Total")} ৳{totalRevenue})
                 </span>
               ) : (
                 <span style={{ background: 'rgba(139, 92, 246, 0.12)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.3)', padding: '3px 9px', borderRadius: 6, fontSize: 11.5, fontWeight: 600 }}>
-                  🆕 নতুন কাস্টমার (1st Order)
+                  🆕 {adminTranslate("New Customer (1st Order)")}
                 </span>
               )}
             </div>
@@ -11363,7 +11421,7 @@ function OrderDrawer({ o, orders, onClose, onSaved }: { o: any; orders?: any[]; 
                             const isLow = Number(matched.stock) <= 5;
                             return (
                               <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: isLow ? 'rgba(239,68,68,0.16)' : 'rgba(16,185,129,0.16)', color: isLow ? '#f87171' : '#34d399', border: `1px solid ${isLow ? 'rgba(239,68,68,0.35)' : 'rgba(16,185,129,0.35)'}` }}>
-                                📦 স্টক: {matched.stock} pcs {isLow ? '(Low!)' : ''}
+                                📦 {adminTranslate("Stock")}: {matched.stock} pcs {isLow ? '(Low!)' : ''}
                               </span>
                             );
                           }
@@ -14650,7 +14708,7 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
         {/* Section 1: Order Cooldown & Limits */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#f59e0b', marginBottom: 12 }}>
-            ⏱️ Order Cooldown &amp; Limits (অর্ডার সীমা ও সময়সীমা)
+            ⏱️ {adminTranslate("Order Cooldown & Limits")}
           </div>
           <div className="sa-sgrid">
             <label>
@@ -14746,7 +14804,7 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
         {/* Section 2: Protection Switches */}
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
           <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#10b981', marginBottom: 12 }}>
-            🛡️ Protection Triggers &amp; Channels (সুরক্ষা নিয়ন্ত্রণ)
+            🛡️ {adminTranslate("Protection Triggers & Channels")}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
             <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -14811,7 +14869,7 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
             <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#60a5fa' }}>
-              💬 Warning Notices (English &amp; বাংলা নোটিশ)
+              💬 {adminTranslate("Warning Notices (Bilingual)")}
             </div>
             <span className="dim small">Shown to customers on the checkout page when an order is blocked</span>
           </div>
@@ -14830,7 +14888,7 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
                 />
               </label>
               <label>
-                Same-Product Limit Warning (বাংলা)
+                {adminTranslate("Same-Product Limit Warning (Bengali)")}
                 <textarea
                   rows={2}
                   value={fd.sameProductNoticeBn ?? ''}
@@ -14854,7 +14912,7 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
                 />
               </label>
               <label>
-                Daily Device Limit Warning (বাংলা)
+                {adminTranslate("Daily Device Limit Warning (Bengali)")}
                 <textarea
                   rows={2}
                   value={fd.maxOrdersNoticeBn ?? ''}
@@ -14878,7 +14936,7 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
                 />
               </label>
               <label>
-                IP Address Limit Warning (বাংলা)
+                {adminTranslate("IP Address Limit Warning (Bengali)")}
                 <textarea
                   rows={2}
                   value={fd.ipLimitNoticeBn ?? ''}
@@ -14901,7 +14959,7 @@ function FraudDetectorAdmin({ embedded = false }: { embedded?: boolean }) {
                 />
               </label>
               <label>
-                Rapid Spam Warning (বাংলা)
+                {adminTranslate("Rapid Spam Warning (Bengali)")}
                 <input
                   value={fd.rapidOrderNoticeBn ?? ''}
                   onChange={(e) => setFd('rapidOrderNoticeBn', e.target.value)}
@@ -19592,7 +19650,7 @@ function FinanceAdmin({ selectedTab, onTabChange }: { selectedTab: 'dashboard' |
         <div className="sa-card" style={{ padding: 18, marginBottom: 18, border: '1px solid rgba(245, 158, 11, 0.35)' }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#fbbf24', marginBottom: 10 }}>💸 Daily Expense &amp; Overhead Tracker (Salary, Rent, Packaging, Loss)</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px 140px auto', gap: 8, marginBottom: 12 }}>
-            <input placeholder="খরচের বিবরণ (যেমন: স্টাফ বেতন, প্যাকেজিং, অফিস ভাড়া)" value={expTitle} onChange={(e) => setExpTitle(e.target.value)} />
+            <input placeholder={adminTranslate("Expense description (e.g. staff salary, packaging, rent)")} value={expTitle} onChange={(e) => setExpTitle(e.target.value)} />
             <select value={expCat} onChange={(e) => setExpCat(e.target.value)}>
               <option value="salary">Staff Salary</option>
               <option value="packaging">Packaging / Box</option>
@@ -19600,7 +19658,7 @@ function FinanceAdmin({ selectedTab, onTabChange }: { selectedTab: 'dashboard' |
               <option value="damage">Damage / Loss</option>
               <option value="general">{adminTranslate("Other")}</option>
             </select>
-            <input type="number" min={1} placeholder="টাকা (৳)" value={expAmt} onChange={(e) => setExpAmt(e.target.value)} />
+            <input type="number" min={1} placeholder={adminTranslate("Amount (৳)")} value={expAmt} onChange={(e) => setExpAmt(e.target.value)} />
             <button type="button" className="sa-btn" onClick={addNewExpense}>+ Add Expense</button>
           </div>
           {(s.expenses || []).length > 0 && (
@@ -20043,7 +20101,7 @@ function WhatsAppInboxMedia({ message, onOpenImage }: { message: any; onOpenImag
   if (message.mediaType === 'image') return (
     <div className="wa-inbox-media-image-wrap" onClick={() => onOpenImage ? onOpenImage(url) : window.open(url, '_blank')}>
       <img className="wa-inbox-media-image" src={url} alt={message.fileName || 'WhatsApp photo'} loading="lazy" />
-      <span className="wa-image-zoom-hint">🔍 প্রিভিউ দেখতে ক্লিক করুন</span>
+      <span className="wa-image-zoom-hint">🔍 {adminTranslate('Click to preview')}</span>
     </div>
   );
   if (message.mediaType === 'video') return (
@@ -20057,7 +20115,7 @@ function WhatsAppInboxMedia({ message, onOpenImage }: { message: any; onOpenImag
       <span className="wa-doc-icon">📄</span>
       <div className="wa-doc-details">
         <strong>{message.fileName || 'Download attachment'}</strong>
-        <small>ফাইল ডাউনলোড করতে ক্লিক করুন</small>
+        <small>{adminTranslate('Click to download file')}</small>
       </div>
       <span className="wa-doc-download-arrow">↓</span>
     </a>
@@ -20094,37 +20152,37 @@ function WhatsAppInboxAvatar({ phone, remoteJid = '', name = '', large = false }
 
 const WA_QUICK_TEMPLATES = [
   {
-    title: 'অর্ডার কনফার্মেশন',
+    title: adminTranslate('Order Confirmation'),
     badge: 'Order Confirm',
     text: (custName?: string, orderId?: string) =>
       `হ্যালো ${custName ? custName : 'ভাইয়া'}! আপনার অর্ডারটি ${orderId ? `(Order ID: ${orderId})` : ''} সফলভাবে কনফার্ম করা হয়েছে।\n\nসাধারণত ঢাকার ভেতরে ২৪-৪৮ ঘণ্টা এবং ঢাকার বাইরে ২-৪ দিনের মধ্যে পার্সেল পৌঁছে যায়। কুরিয়ারে হ্যান্ডওভার করার সাথে সাথে ট্র্যাকিং আপডেট জানিয়ে দেয়া হবে। ধন্যবাদ!`
   },
   {
-    title: 'কুরিয়ারে পাঠানো হয়েছে',
+    title: adminTranslate('Handed over to Courier'),
     badge: 'Dispatched',
     text: (_custName?: string, _orderId?: string) =>
       `আপনার অর্ডারটি প্যাকিং সম্পন্ন করে কুরিয়ারে হ্যান্ডওভার করা হয়েছে। কুরিয়ার থেকে ডেলিভারিম্যান ডেলিভারির পূর্বে আপনার নম্বরে কল করবে। অনুগ্রহ করে ফোনটি সচল রাখুন। ধন্যবাদ!`
   },
   {
-    title: 'ঠিকানা ও ফোন যাচাই',
+    title: adminTranslate('Verify Address & Phone'),
     badge: 'Address Check',
     text: (_custName?: string, _orderId?: string) =>
       `অর্ডারটি দ্রুততম সময়ে ডেলিভারির জন্য অনুগ্রহ করে আপনার পূর্ণাঙ্গ ডেলিভারি ঠিকানা (জেলা, থানা/এলাকা, বাসার ঠিকানা) এবং একটি সচল বিকল্প মোবাইল নম্বর লিখে রিপ্লাই দিন।`
   },
   {
-    title: 'অগ্রিম ডেলিভারি চার্জ',
+    title: adminTranslate('Advance Delivery Charge'),
     badge: 'Advance Fee',
     text: (_custName?: string, _orderId?: string) =>
       `সম্মানিত গ্রাহক, ঢাকার বাইরে ক্যাশ অন ডেলিভারিতে অর্ডার নিশ্চিত করতে ডেলিভারি চার্জ অগ্রিম বিকাশ বা নগদে সেন্ড মানি করতে হবে।\n\nটাকা পাঠিয়ে লাস্ট ৩ ডিজিট জানান, আমরা অর্ডার কনফার্ম করে দিচ্ছি। ধন্যবাদ!`
   },
   {
-    title: 'কল ব্যাক রিকোয়েস্ট',
+    title: adminTranslate('Callback Request'),
     badge: 'Call Back',
     text: (_custName?: string, _orderId?: string) =>
       `হ্যালো! আমরা আপনার অর্ডারের বিষয়ে কথা বলতে কল করেছিলাম কিন্তু সংযোগ পাওয়া যায়নি। ফ্রি হয়ে অনুগ্রহ করে এই নম্বরে একটি কল বা মেসেজ দিন।`
   },
   {
-    title: 'রিটার্ন ও চেক পলিসি',
+    title: adminTranslate('Return & Check Policy'),
     badge: 'Check Policy',
     text: (_custName?: string, _orderId?: string) =>
       `ডেলিভারিম্যানের উপস্থিতিতে পণ্যটি চেক করে রিসিভ করবেন। কোনো ত্রুটি থাকলে ডেলিভারিম্যান থাকা অবস্থাতেই আমাদের জানান।`
@@ -20495,7 +20553,7 @@ function WhatsAppLiveInboxCard({ connected }: { connected: boolean }) {
 
   const copyTextToClipboard = (txt: string) => {
     void navigator.clipboard.writeText(txt);
-    setCopiedToast('ক্লিপবোর্ডে কপি করা হয়েছে!');
+    setCopiedToast(adminTranslate('Copied to clipboard!'));
     setTimeout(() => setCopiedToast(''), 2500);
   };
 
@@ -22942,7 +23000,7 @@ function WhatsAppAdmin() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <b style={{ fontSize: 16, color: '#c084fc' }}>⚡ 24/7 Order Auto-Confirmation Bot (দিন-রাত ২৪ ঘণ্টা অটো কনফার্মেশন)</b>
+                    <b style={{ fontSize: 16, color: '#c084fc' }}>⚡ {adminTranslate("24/7 Order Auto-Confirmation Bot")}</b>
                     <span style={{ fontSize: 11, padding: '2px 9px', borderRadius: 999, background: 'rgba(168, 85, 247, 0.25)', color: '#d8b4fe', border: '1px solid rgba(168, 85, 247, 0.45)', fontWeight: 700 }}>
                       1 = Auto Confirm | 2 = Auto Cancel
                     </span>
@@ -22969,7 +23027,7 @@ function WhatsAppAdmin() {
                   </label>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 14px', background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.35)', borderRadius: 8, color: '#4ade80', fontSize: 13, fontWeight: 700 }}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', animation: 'waPulseDot 1.6s infinite' }} />
-                    ২৪/৭ দিন-রাত সারাক্ষণ সক্রিয় (All Day 24 Hours)
+                    {adminTranslate("24/7 Active All Day")}
                   </div>
                 </div>
 
@@ -23143,7 +23201,7 @@ function WhatsAppAdmin() {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontSize: 16 }}>🚚</span>
-                    <b style={{ fontSize: 14, color: '#c084fc' }}>6. Out for Delivery Alert (কুরিয়ার রাইডার বের হলে অ্যালার্ট)</b>
+                    <b style={{ fontSize: 14, color: '#c084fc' }}>6. {adminTranslate("Out for Delivery Alert")}</b>
                   </div>
                   <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>কুরিয়ার রাইডার ডেলিভারি দিতে বের হলে কাস্টমারকে তাৎক্ষণিক অটো মেসেজ পাঠানো।</div>
                 </div>
@@ -23170,7 +23228,7 @@ function WhatsAppAdmin() {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontSize: 16 }}>⚠️</span>
-                    <b style={{ fontSize: 14, color: '#f87171' }}>7. Failed Delivery Attempt (রিটার্ন প্রতিরোধ অটো অ্যালার্ট)</b>
+                    <b style={{ fontSize: 14, color: '#f87171' }}>7. {adminTranslate("Failed Delivery Attempt (Return Prevention)")}</b>
                   </div>
                   <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>রাইডার ফোন না পেলে বা কাস্টমার না ধরলে রিটার্ন কমাতে তাৎক্ষণিক বিকল্প সময়/ঠিকানা চেয়ে মেসেজ।</div>
                 </div>
@@ -23197,7 +23255,7 @@ function WhatsAppAdmin() {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontSize: 16 }}>⭐</span>
-                    <b style={{ fontSize: 14, color: '#facc15' }}>8. Post-Delivery Review & Unboxing Photo (রিভিউ ও আনবক্সিং কুপন)</b>
+                    <b style={{ fontSize: 14, color: '#facc15' }}>8. {adminTranslate("Post-Delivery Review & Unboxing Photo")}</b>
                   </div>
                   <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>ডেলিভারির ২৪ ঘণ্টা পর কাস্টমারকে ৫-স্টার রিভিউ ও আনবক্সিং ছবির বিনিময়ে ১০০৳ কুপন অফার।</div>
                 </div>
@@ -23224,7 +23282,7 @@ function WhatsAppAdmin() {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontSize: 16 }}>🎁</span>
-                    <b style={{ fontSize: 14, color: '#60a5fa' }}>9. Cancelled Order Win-Back (ফ্রি ডেলিভারিতে অর্ডার ফিরিয়ে আনা)</b>
+                    <b style={{ fontSize: 14, color: '#60a5fa' }}>9. {adminTranslate("Cancelled Order Win-Back (Free Delivery Offer)")}</b>
                   </div>
                   <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>অর্ডার ক্যানসেলের ৪৮ ঘণ্টা পর ফ্রি ডেলিভারি অফার পাঠানো। কাস্টমার "1" চাপলে অটো-রিঅ্যাক্টিভেট হবে।</div>
                 </div>
@@ -28517,7 +28575,7 @@ function WebCallDialer() {
         <div style={{ padding: '12px 16px', background: status === 'ringing' ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(16, 185, 129, 0.08) 100%)' : 'linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(30, 27, 52, 0.95) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: status === 'ringing' ? '#34d399' : '#c4b5fd' }}>
             <span>{direction === 'inbound' ? '📥' : '📞'}</span>
-            <span>{status === 'ringing' ? 'ইনকামিং কল আসছে!' : 'Web IP Softphone'}</span>
+            <span>{status === 'ringing' ? adminTranslate('Incoming call ringing!') : 'Web IP Softphone'}</span>
             <span style={{ fontSize: 9.5, padding: '2px 6px', borderRadius: 999, background: sipStatus === 'registered' ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.18)', color: sipStatus === 'registered' ? '#34d399' : '#fbbf24' }}>
               {sipStatus === 'registered' ? 'SIP Live' : 'Test Mode'}
             </span>
@@ -28570,14 +28628,14 @@ function WebCallDialer() {
                 </div>
               ) : (
                 <div style={{ fontSize: 11, color: '#64748b', marginBottom: 12 }}>
-                  {direction === 'inbound' ? 'নতুন কলার (কোনো পূর্ববর্তী অর্ডার পাওয়া যায়নি)' : 'Direct Call'}
+                  {direction === 'inbound' ? adminTranslate('New caller (no previous orders found)') : 'Direct Call'}
                 </div>
               )}
 
               {target.note && (
                 <div style={{ fontSize: 11.5, color: '#fde68a', background: 'rgba(245, 158, 11, 0.14)', border: '1px solid rgba(245, 158, 11, 0.35)', padding: '8px 10px', borderRadius: 10, marginBottom: 10, textAlign: 'left', lineHeight: 1.45 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 3 }}>
-                    <span style={{ fontWeight: 800, color: '#fbbf24' }}>📝 সাইকা নোট (Smart Call Center)</span>
+                    <span style={{ fontWeight: 800, color: '#fbbf24' }}>📝 {adminTranslate("Saika Notes (Smart Call Center)")}</span>
                     {(target as any).tier && (
                       <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 999, background: 'rgba(56,189,248,0.18)', color: '#38bdf8', fontWeight: 700 }}>
                         {(target as any).tier}
@@ -28694,7 +28752,7 @@ function WebCallDialer() {
                     }}
                   >
                     <span>✅</span>
-                    <span>রিসিভ করুন</span>
+                    <span>{adminTranslate("Answer")}</span>
                   </button>
                   <button
                     type="button"
@@ -28988,7 +29046,7 @@ function CallsAdmin() {
   };
 
   const runAiAutoDispatch = async () => {
-    setAiDispatchMsg('Pending অর্ডার গোনা হচ্ছে...');
+    setAiDispatchMsg(adminTranslate('Counting pending orders...'));
     try {
       const r = await aFetch('/ai-call/auto-dispatch', {
         method: 'POST',
@@ -28999,7 +29057,7 @@ function CallsAdmin() {
         setAiDispatchMsg(`📋 ${r.pendingFound || 0}টি Pending অর্ডার পাওয়া গেছে। স্বয়ংক্রিয় ফোন কল এখনো সংযুক্ত নয়; কল করতে Power Dialer ব্যবহার করুন।`);
       }
     } catch (_) {
-      setAiDispatchMsg('❌ Auto-Dispatch ব্যর্থ হয়েছে');
+      setAiDispatchMsg(adminTranslate('❌ Auto-Dispatch failed'));
     }
   };
 
@@ -29024,7 +29082,7 @@ function CallsAdmin() {
       onStatus: (st, info) => {
         setAiTestCallStatus(st);
         if (st === 'ringing') {
-          setAiTestMessages([{ role: 'sys', text: '📞 রিং হচ্ছে... মাইক্রোফোন অ্যাক্সেস অনুমোদন করুন' }]);
+          setAiTestMessages([{ role: 'sys', text: adminTranslate('📞 Ringing... Please allow microphone access') }]);
         } else if (st === 'connected') {
           const tier = info?.customerTier ? `Tier: ${info.customerTier}` : 'Live AI';
           const ord = info?.orderId ? ` · Order #${String(info.orderId).replace('DOT-', '')}` : '';
@@ -29032,7 +29090,7 @@ function CallsAdmin() {
         } else if (st === 'error') {
           setAiTestMessages((prev) => [...prev, { role: 'sys', text: `⚠️ ${info?.error || 'Live AI কল সংযোগ ব্যর্থ হয়েছে'}` }]);
         } else if (st === 'ended') {
-          setAiTestMessages((prev) => [...prev, { role: 'sys', text: '📵 কল শেষ হয়েছে ও লগ সেভ হয়েছে' }]);
+          setAiTestMessages((prev) => [...prev, { role: 'sys', text: adminTranslate('📵 Call ended and log saved') }]);
           loadData();
         }
       },
@@ -31692,10 +31750,10 @@ function CustomerCourierDetailModal({
             <span style={{ fontSize: 22 }}>🛡️</span>
             <div>
               <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#f1f5f9' }}>
-                কাস্টমার কুরিয়ার ইন্টেলিজেন্স ডসিয়ার (Full Profile)
+                {adminTranslate("Customer Courier Intelligence Dossier (Full Profile)")}
               </h3>
               <p style={{ margin: '2px 0 0 0', fontSize: 12, color: '#94a3b8' }}>
-                স্থায়ী সংরক্ষিত পার্সেল ডেলিভারি ও কুরিয়ারভিত্তিক বিশ্লেষণ
+                {adminTranslate("Permanent parcel delivery history and courier-wise analytics")}
               </p>
             </div>
           </div>
@@ -31773,12 +31831,12 @@ function CustomerCourierDetailModal({
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
                 <thead>
                   <tr style={{ background: 'rgba(255, 255, 255, 0.04)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                    <th style={{ padding: '10px 14px', color: '#94a3b8' }}>কুরিয়ার</th>
-                    <th style={{ padding: '10px 14px', color: '#94a3b8', textAlign: 'center' }}>ডেলিভারি</th>
-                    <th style={{ padding: '10px 14px', color: '#94a3b8', textAlign: 'center' }}>বাতিল / রিটার্ন</th>
-                    <th style={{ padding: '10px 14px', color: '#94a3b8', textAlign: 'center' }}>মোট পার্সেল</th>
-                    <th style={{ padding: '10px 14px', color: '#94a3b8', textAlign: 'center' }}>সফলতার হার</th>
-                    <th style={{ padding: '10px 14px', color: '#94a3b8' }}>সোর্স / স্ট্যাটাস</th>
+                    <th style={{ padding: '10px 14px', color: '#94a3b8' }}>{adminTranslate("Courier")}</th>
+                    <th style={{ padding: '10px 14px', color: '#94a3b8', textAlign: 'center' }}>{adminTranslate("Delivered")}</th>
+                    <th style={{ padding: '10px 14px', color: '#94a3b8', textAlign: 'center' }}>{adminTranslate("Cancelled / Returned")}</th>
+                    <th style={{ padding: '10px 14px', color: '#94a3b8', textAlign: 'center' }}>{adminTranslate("Total Parcels")}</th>
+                    <th style={{ padding: '10px 14px', color: '#94a3b8', textAlign: 'center' }}>{adminTranslate("Success Rate")}</th>
+                    <th style={{ padding: '10px 14px', color: '#94a3b8' }}>{adminTranslate("Source / Status")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -32041,10 +32099,10 @@ function CourierIntelligenceImportModal({
             <span style={{ fontSize: 22 }}>📤</span>
             <div>
               <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#f1f5f9' }}>
-                কুরিয়ার ডাটা বাল্ক আপলোড ও মার্জ (Excel / CSV)
+                {adminTranslate("Courier Data Bulk Upload & Merge (Excel / CSV)")}
               </h3>
               <p style={{ margin: '2px 0 0 0', fontSize: 12, color: '#94a3b8' }}>
-                Steadfast, Pathao, RedX বা কাস্টম ফাইল আপলোড করুন — পূর্বের কোনো ডাটা মুছবে না, শুধু নতুন ডাটা মার্জ হবে
+                {adminTranslate("Upload Steadfast, Pathao, RedX or custom file — existing data will never be erased, new records will merge seamlessly")}
               </p>
             </div>
           </div>
@@ -32145,11 +32203,11 @@ function CourierIntelligenceImportModal({
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                      <th style={{ padding: '6px 10px', color: '#94a3b8', textAlign: 'left' }}>ফোন</th>
-                      <th style={{ padding: '6px 10px', color: '#94a3b8', textAlign: 'left' }}>নাম</th>
-                      <th style={{ padding: '6px 10px', color: '#94a3b8', textAlign: 'left' }}>কুরিয়ার</th>
-                      <th style={{ padding: '6px 10px', color: '#94a3b8', textAlign: 'center' }}>ডেলিভারি</th>
-                      <th style={{ padding: '6px 10px', color: '#94a3b8', textAlign: 'center' }}>বাতিল</th>
+                      <th style={{ padding: '6px 10px', color: '#94a3b8', textAlign: 'left' }}>{adminTranslate("Phone")}</th>
+                      <th style={{ padding: '6px 10px', color: '#94a3b8', textAlign: 'left' }}>{adminTranslate("Name")}</th>
+                      <th style={{ padding: '6px 10px', color: '#94a3b8', textAlign: 'left' }}>{adminTranslate("Courier")}</th>
+                      <th style={{ padding: '6px 10px', color: '#94a3b8', textAlign: 'center' }}>{adminTranslate("Delivered")}</th>
+                      <th style={{ padding: '6px 10px', color: '#94a3b8', textAlign: 'center' }}>{adminTranslate("Cancelled")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -33280,7 +33338,7 @@ function StaffAdmin() {
             <span>👥</span> Staff Management, Live Monitoring &amp; Audit Hub
           </h1>
           <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>
-            রিয়েল-টাইম স্টাফ অ্যাক্টিভিটি ট্র্যাকিং, কর্মঘণ্টা, কেপিআই পারফরম্যান্স ও সুপার এডমিন রিপোর্ট
+            {adminTranslate("Real-time staff activity tracking, working hours, KPI performance and super admin reports")}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -33403,7 +33461,7 @@ function StaffAdmin() {
                   border: monitoring?.autoAssignOrders ? '1px solid rgba(16, 185, 129, 0.45)' : '1px solid rgba(255,255,255,0.12)',
                   color: monitoring?.autoAssignOrders ? '#34d399' : '#94a3b8'
                 }}
-                title="নতুন অর্ডার এলে শুধুমাত্র Active স্টাফদের মাঝে সমানভাবে অটো-অ্যাসাইন হবে"
+                title={adminTranslate("New incoming orders auto-assign equally only among Active staff members")}
               >
                 🧠 Auto-Assign Online: {monitoring?.autoAssignOrders ? 'ON' : 'OFF'}
               </button>
@@ -33820,7 +33878,7 @@ function StaffAdmin() {
                   Super Admin Daily WhatsApp Reporting
                 </h3>
                 <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
-                  প্রতিদিন রাত ১১:০০ টায় স্বয়ংক্রিয়ভাবে সুপার এডমিনের হোয়াটসঅ্যাপে পুরো দিনের স্টাফদের পারফরম্যান্স সামারি পৌঁছে যাবে।
+                  {adminTranslate("Daily staff performance summary automatically sent to super admin WhatsApp at 11:00 PM.")}
                 </div>
               </div>
             </div>
@@ -33835,7 +33893,7 @@ function StaffAdmin() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14, alignItems: 'end' }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 }}>
-                  Super Admin WhatsApp Number (Country Code সহ)
+                  {adminTranslate("Super Admin WhatsApp Number (with country code)")}
                 </label>
                 <input
                   value={reportPhone}
@@ -33853,7 +33911,7 @@ function StaffAdmin() {
                   onClick={sendWhatsAppReportNow}
                   style={{ padding: '10px 20px', background: '#10b981', borderColor: '#10b981', color: '#fff', fontWeight: 700, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}
                 >
-                  {sendingReport ? 'পাঠানো হচ্ছে…' : "🚀 Send Today's Report to WhatsApp Now"}
+                  {sendingReport ? adminTranslate('Sending…') : "🚀 Send Today's Report to WhatsApp Now"}
                 </button>
               </div>
             </div>
@@ -34006,7 +34064,7 @@ function StaffAdmin() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
             <div>
               <h3 style={{ margin: 0, fontSize: 15.5, fontWeight: 700, color: '#fff' }}>
-                ✉️ সকল স্টাফের নিজস্ব ইমেইলে OTP পাঠানোর মেইল সেটআপ (Gmail SMTP)
+                ✉️ {adminTranslate("Send OTP to staff emails via Gmail SMTP")}
               </h3>
               <p className="dim" style={{ margin: '4px 0 0', fontSize: 12.5, lineHeight: 1.5 }}>
                 প্রতিটি স্টাফ যেন লগইনের সময় তার <b>নিজের Gmail/ইমেইলে</b> ভেরিফিকেশন কোড পান, তার জন্য এখানে আপনার স্টোরের Gmail ও <b>16-অক্ষরের Google App Password</b> দিয়ে সেভ করুন।
@@ -34047,7 +34105,7 @@ function StaffAdmin() {
                 onClick={saveQuickGmailSmtp}
                 style={{ width: '100%', padding: '10px 18px' }}
               >
-                {smtpSaving ? 'সেভ হচ্ছে…' : '⚡ Save & Enable Staff Email OTP'}
+                {smtpSaving ? adminTranslate("Saving…") : '⚡ Save & Enable Staff Email OTP'}
               </button>
             </div>
           </div>
